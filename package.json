@@ -1,10 +1,13 @@
 {
   "name": "telinha",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "packageManager": "bun@1.4.2",
-  "workspaces": ["server", "web"],
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
     "build": "bun run --filter @telinha/web build",
     "test": "bun run --filter @telinha/server test",
