@@ -104,7 +104,11 @@ if [ -n "$deployed" ] && [ "$deployed" != "$version" ]; then
 	docker image rm "$image:$deployed" >/dev/null 2>&1 || true
 fi
 
-# Host scripts and units are not updated by a checkout; say so when they drift.
+# A checkout does not touch the installed host scripts and units, so refresh them
+# from the deployed tag when they drift. Same trust as the compose file above.
+# Safe while this script runs: install(1) writes a new file instead of editing
+# the running one in place.
+drift=
 for pair in \
 	ipwatch/tela-ipwatch:/usr/local/sbin/tela-ipwatch \
 	updater/tela-update:/usr/local/sbin/tela-update \
@@ -114,6 +118,13 @@ for pair in \
 	updater/tela-update.service:/etc/systemd/system/tela-update.service \
 	updater/tela-update.timer:/etc/systemd/system/tela-update.timer; do
 	if ! cmp -s "$repo/deploy/${pair%%:*}" "${pair#*:}"; then
-		log "${pair#*:} differs from $target, run: sh $repo/deploy/install.sh"
+		drift="$drift ${pair#*:}"
 	fi
 done
+if [ -n "$drift" ]; then
+	if sh "$repo/deploy/install.sh" >/dev/null 2>&1; then
+		log "host scripts updated from $target:$drift"
+	else
+		log "host scripts differ from $target but install.sh failed, run: sh $repo/deploy/install.sh"
+	fi
+fi
