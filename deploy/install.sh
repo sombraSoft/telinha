@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run as root on the host from the clone: sh /opt/bots/tela/deploy/install.sh
-# Idempotent: re-run after an update changes any host script or unit.
+# Idempotent. tela-update re-runs it after a deploy that changed a host script or unit.
 set -eu
 cd "$(dirname "$0")"
 

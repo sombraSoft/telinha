@@ -90,8 +90,8 @@ sh /opt/bots/tela/deploy/install.sh
 `tela-pin` into `/usr/local/sbin` and the systemd units, and enables
 `tela-ipwatch.timer`. It enables `tela-update.timer` only once all three
 `/etc/telinha/*.env` exist with no empty or `<placeholder>` values; otherwise it
-warns and you re-run it after filling them in. Re-run it also when a release
-changes a host script or unit (`tela-update` logs when they drift).
+warns and you re-run it after filling them in. After each deploy `tela-update`
+re-runs it by itself when a release changed a host script or unit.
 
 `tela-update` runs every 5 minutes (and 3 minutes after boot). It fetches tags,
 picks the pinned tag or the newest stable `vX.Y.Z`, pulls the image first (an
