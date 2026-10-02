@@ -16,7 +16,7 @@ usage() {
 case "${1:-}" in
 "")
 	git -C "$repo" fetch --tags --force --prune --quiet origin 2>/dev/null || echo "(fetch failed, local tags only)"
-	pin=$(tr -d '[:space:]' < "$pinfile" 2>/dev/null || true)
+	pin=$(tr -d '[:space:]' 2>/dev/null < "$pinfile" || true)
 	deployed=$(sed -n 's/^TELINHA_VERSION=//p' "$repo/deploy/.env" 2>/dev/null || true)
 	newest=$(git -C "$repo" tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
 	checkout=$(git -C "$repo" describe --tags --exact-match HEAD 2>/dev/null || git -C "$repo" rev-parse --short HEAD)
