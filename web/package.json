@@ -3,9 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build.ts"
+    "dev": "bun --bun vite",
+    "build": "bun --bun vite build",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
   },
-  "dependencies": {
-    "livekit-client": "2.22.3"
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/bun": "^1.4.2",
+    "livekit-client": "2.22.3",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.2"
   }
 }

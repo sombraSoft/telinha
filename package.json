@@ -9,8 +9,16 @@
     "web"
   ],
   "scripts": {
+    "dev": "bun scripts/dev.ts",
     "build": "bun run --filter @telinha/web build",
-    "test": "bun run --filter @telinha/server test",
+    "test": "bun test ./server ./web",
+    "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p .",
+    "e2e": "playwright test",
     "image": "bun scripts/image.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/bun": "^1.4.2",
+    "typescript": "^6.0.3"
   }
 }
