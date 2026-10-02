@@ -107,7 +107,7 @@ Pin and rollback:
 
 ```
 tela-pin                  # show pin, deployed version, newest stable tag
-tela-pin v1.2.3           # hold at a tag (also pre-releases like v2.0.0-rc.1), deploy now
+tela-pin v0.1.0           # hold at a tag (also pre-releases like v0.2.0-rc.1), deploy now
 tela-pin --unpin          # follow the newest stable tag again
 ```
 
@@ -124,8 +124,8 @@ skips this stack on purpose.
 
 ## One-time GitHub setup
 
-Do steps 1 and 2 before the first push to `main`: that push carries the
-`Release-As: 1.0.0` commit and is what triggers the first release run.
+Do steps 1 and 2 before the first push to `main`: that push triggers the
+first release run.
 
 1. Create a GitHub App with Contents, Issues and Pull requests read and write
    access (the same set `release.yml` requests; release-please labels its PRs
@@ -147,8 +147,10 @@ Do steps 1 and 2 before the first push to `main`: that push carries the
 If the first release run failed (e.g. the secrets were missing), add them and
 run the `release` workflow by hand (Actions -> release -> Run workflow).
 
-The first release is forced to `1.0.0` by a `Release-As: 1.0.0` footer on the
-initial commit.
+Versions stay below 1.0 for now and start at `0.1.0` (forced by a
+`Release-As: 0.1.0` commit footer). `bump-minor-pre-major` is on, so while in 0.x
+a `fix` bumps the patch and a `feat` or breaking change bumps the minor. 1.0.0 only
+happens when a commit carries a `Release-As: 1.0.0` footer.
 
 ## Migrating from the old layout
 
@@ -174,7 +176,7 @@ Old layout: `/opt/bots/tela` holds `compose.yml`, `.env`, `livekit.env`,
 
 ## Roadmap
 
-v2: server rewritten on Bun, frontend on Svelte.
+Next (0.2.0): server rewritten on Bun, frontend on Svelte.
 
 ## License
 
