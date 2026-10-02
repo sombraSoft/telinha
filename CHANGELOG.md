@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/sombraSoft/telinha/compare/v0.2.0-rc.1...v0.2.0) (2026-10-02)
+
+
+### Documentation
+
+* explain codec choice and the HEVC frame crop ([#11](https://github.com/sombraSoft/telinha/issues/11)) ([c32019b](https://github.com/sombraSoft/telinha/commit/c32019b0eb5e9410baaa57ef647377e989f7b670))
+
 ## [0.2.0-rc.1](https://github.com/sombraSoft/telinha/compare/v0.1.1...v0.2.0-rc.1) (2026-10-02)
 
 
