@@ -1,0 +1,68 @@
+/* Theme tokens. Surface values follow Discord's 2025 themes; bg-0 is the
+   deepest layer (the stage), bg-3 the highest (inputs, raised buttons). */
+:root {
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --hover: rgba(151, 151, 159, 0.12);
+  --accent: #5865f2;
+  --accent-hover: #4452bb;
+  --danger: #f23f43;
+  --danger-btn: #d22d39;
+  --success: #23a55a;
+  --warn: #f0b232;
+  /* Lighter than --accent so the ring keeps 3:1 on the grey Ash surfaces. */
+  --focus-ring: #949cf7;
+  /* Over video the backdrop is always dark, whatever the theme. */
+  --scrim: rgba(0, 0, 0, 0.62);
+  --on-scrim: #ffffff;
+}
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-0: #121214;
+  --bg-1: #1a1a1e;
+  --bg-2: #202024;
+  --bg-3: #242429;
+  --text: #efeff1;
+  --text-muted: #96979e;
+  --border: rgba(151, 151, 159, 0.16);
+}
+
+:root[data-theme='ash'] {
+  color-scheme: dark;
+  --bg-0: #2c2d32;
+  --bg-1: #323339;
+  --bg-2: #36373e;
+  --bg-3: #393a41;
+  --text: #f3f3f4;
+  --text-muted: #abacb2;
+  --border: rgba(151, 151, 159, 0.16);
+}
+
+/* Onyx: near-identical surfaces, so borders do the separating. */
+:root[data-theme='onyx'] {
+  color-scheme: dark;
+  --bg-0: #000000;
+  --bg-1: #0a0a0c;
+  --bg-2: #0a0a0c;
+  --bg-3: #0a0a0c;
+  --text: #d4d5d8;
+  --text-muted: #81828a;
+  --border: rgba(151, 151, 159, 0.16);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-0: #f3f3f4;
+  --bg-1: #fbfbfb;
+  --bg-2: #ffffff;
+  --bg-3: #ffffff;
+  --text: #2e2e34;
+  --text-muted: #6c6d76;
+  --border: rgba(151, 151, 159, 0.24);
+  --focus-ring: var(--accent);
+}

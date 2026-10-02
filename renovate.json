@@ -9,6 +9,17 @@
     "enabled": true,
     "schedule": ["* 0-3 1 * *"]
   },
+  "customManagers": [
+    {
+      "description": "LiveKit server binary that dev and E2E download (scripts/livekit.ts)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts/livekit\\.ts$/"],
+      "matchStrings": ["export const LIVEKIT_VERSION = '(?<currentValue>[^']+)'"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "livekit/livekit",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    }
+  ],
   "packageRules": [
     {
       "description": "Non-major updates merge themselves once the required checks pass",
@@ -18,7 +29,7 @@
     },
     {
       "description": "LiveKit (client, server SDK, SFU) must move together and be tested by hand: own group, never automerged",
-      "matchPackageNames": ["livekit-client", "livekit-server-sdk", "livekit/livekit-server"],
+      "matchPackageNames": ["livekit-client", "livekit-server-sdk", "livekit/livekit-server", "livekit/livekit"],
       "groupName": "livekit",
       "automerge": false
     },

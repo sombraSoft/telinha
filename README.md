@@ -27,10 +27,12 @@ compose healthcheck; Caddy never routes it publicly.
 
 | Path | What |
 | --- | --- |
-| `server/` | Node 22 server and Discord bot (`src/index.js`), session/OAuth helpers (`src/auth.js`), tests |
-| `web/` | Plain-JS room page in `src/`; `build.ts` copies it plus `livekit-client` into `web/dist` |
+| `server/` | Bun TypeScript server, run directly (no build step): `index.ts` entry, `config.ts` env parsing, `http.ts` routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
+| `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`); `bun run build` writes `web/dist` |
+| `scripts/dev.ts`, `stack.ts`, `livekit.ts` | Local dev: downloads and starts `livekit-server --dev`, starts the Bun server and Vite, cleans up on exit |
 | `scripts/image.ts` | `bun run image`: local container build plus smoke test |
-| `Dockerfile` | Multi-stage build (Bun build, prod deps, Node 22 alpine runtime) |
+| `e2e/` | Playwright specs (`*.e2e.ts`): login, screen share between two browser contexts, language and theme |
+| `Dockerfile` | Multi-stage build (Bun build, prod deps, Bun alpine runtime) |
 | `deploy/` | Host side: `compose.yml`, `Caddyfile`, `livekit.yaml`, `env/*.example`, `install.sh`, `pin.sh` |
 | `deploy/updater/` | `tela-update` and its systemd service/timer (pull-based CD) |
 | `deploy/ipwatch/` | `tela-ipwatch`: restarts LiveKit when the residential public IP changes |
@@ -38,18 +40,43 @@ compose healthcheck; Caddy never routes it publicly.
 
 ## Development
 
-Needs [Bun](https://bun.sh) 1.4.2 and Node 22+. Works on Windows and Linux.
+Needs only [Bun](https://bun.sh) 1.4.2 (no Node). Works on Windows and Linux.
 
 ```
 bun install --frozen-lockfile
-bun run build     # web/dist
-bun run test      # node --test in server/
-bun run image     # build telinha:dev with docker or podman, then run the smoke test
+bun run dev        # http://localhost:5173/sala/ (Vite HMR + Bun server + LiveKit)
+bun run typecheck  # tsc and svelte-check
+bun run test       # bun test: server and web unit tests
+bun run build      # web/dist
+bun run e2e        # Playwright; needs bun run build first, and a Chromium (bunx playwright install chromium)
+bun run image      # build telinha:dev with docker or podman, then run the smoke test
 ```
 
+`bun run dev` downloads `livekit-server` (pinned in `scripts/livekit.ts`,
+sha256-verified) into `.cache/` on first run and starts it with `--dev`. The
+server runs with `DEV_USER` set (default `1:Dev`, i.e. `<id>:<name>`), a fake
+login that skips Discord and the bot. It is refused unless `PUBLIC_URL` is
+`http://localhost` or `http://127.0.0.1` and `LISTEN` is a loopback address,
+and in that mode every request whose `Host` is not `localhost`, `127.0.0.1` or
+`[::1]` gets a 421, so a reverse proxy in front of it (or a DNS-rebinding page)
+never reaches the fake login. Set `DEV_LOCALE=en` or `pt-BR` to force the
+locale.
+
+Optional env vars beyond the ones in `deploy/env/app.env.example`: `GROUP_NAME`
+(name shown in the UI and bot replies; defaults to the guild name) and
+`LIVEKIT_PUBLIC_URL` (signaling URL the browser uses; defaults to
+`PUBLIC_URL/livekit` as ws/wss).
+
+The page has four themes (Dark, Ash, Onyx, Light; "system" follows the OS) and
+two languages (pt-BR, en). Both are picked in the top bar and kept in
+`localStorage`. By default the language comes from the Discord locale of the
+logged-in user, and the bot answers in the invoker's locale (ephemeral) or the
+server locale (public post).
+
 `bun run image` picks docker, else podman (starting the podman machine if it is
-stopped). The smoke test (also run by the CI `image` job) syntax-checks the
-server, runs the tests and checks that the four web files exist in the image.
+stopped). The smoke test (also run by the CI `image` job) runs the server tests
+in the image, checks that the built page exists and starts the server with
+`DEV_USER` to fetch `/healthz` and `/sala/`.
 
 ## Releases
 
@@ -61,8 +88,14 @@ server, runs the tests and checks that the four web files exist in the image.
    provenance attestation.
 5. Hosts running `tela-update` pick the new tag up within about 5 minutes.
 
+Pre-releases: add a `Release-As: X.Y.Z-rc.N` footer to a commit. `release.yml`
+marks hyphenated tags as GitHub pre-releases, and the image gets only the
+`X.Y.Z-rc.N` tag (no `latest`, no `X.Y`). `tela-update` ignores them unless
+pinned with `tela-pin`.
+
 Required checks on `main`: `test (ubuntu-latest)`, `test (windows-latest)`,
-`lint` (shellcheck + actionlint), `gitleaks`, `image`.
+`lint` (shellcheck + actionlint), `gitleaks`, `image`. The `e2e` job (Playwright
+on ubuntu) also runs on every PR but is not required yet.
 
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
 Dockerfile, `deploy/compose.yml` and GitHub Actions. Non-major updates are
@@ -176,7 +209,7 @@ Old layout: `/opt/bots/tela` holds `compose.yml`, `.env`, `livekit.env`,
 
 ## Roadmap
 
-Next (0.2.0): server rewritten on Bun, frontend on Svelte.
+0.2.0: server rewritten on Bun, frontend on Svelte, light and dark themes, pt-BR and en.
 
 ## License
 

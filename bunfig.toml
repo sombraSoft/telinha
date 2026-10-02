@@ -1,4 +1,4 @@
 [install]
-# Plain flat node_modules: the runtime image runs Node, not Bun, and Node must
-# resolve discord.js etc. from /app/node_modules without Bun's isolated store.
+# Plain flat node_modules: the runtime is Bun now, but hoisted keeps one flat
+# node_modules that the image copies as-is to /app/node_modules.
 linker = "hoisted"

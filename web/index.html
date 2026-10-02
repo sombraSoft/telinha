@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Telinha</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📺</text></svg>" />
+    <script>
+      // Paint the saved theme before the bundle loads (same rules as src/lib/theme.ts).
+      (function () {
+        var c = 'system';
+        try {
+          c = JSON.parse(localStorage.getItem('telinha.theme')) || 'system';
+        } catch (e) {}
+        if (['dark', 'ash', 'onyx', 'light'].indexOf(c) < 0) {
+          c = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', c);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
