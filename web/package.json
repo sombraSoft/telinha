@@ -1,0 +1,11 @@
+{
+  "name": "@telinha/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build.ts"
+  },
+  "dependencies": {
+    "livekit-client": "2.22.3"
+  }
+}

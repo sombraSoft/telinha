@@ -1,0 +1,107 @@
+# Checks every PR (including Release PRs opened by the release app and
+# Renovate PRs). Job names are the required checks in branch protection, so
+# keep them stable.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to a PR supersedes the previous run; main runs always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # Production runtime is Node 22; tests run under the same major.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun run test
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Listed explicitly: tela-update and tela-ipwatch have no extension, and a
+      # missing file should fail the job rather than be silently skipped.
+      - name: shellcheck
+        run: >-
+          shellcheck
+          deploy/install.sh
+          deploy/pin.sh
+          deploy/ipwatch/tela-ipwatch
+          deploy/updater/tela-update
+      # The image bundles shellcheck, so run: blocks are checked too.
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The action lists the PR's commits to scan only those.
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Commenting needs pull-requests: write; the failed check and job
+          # summary are enough.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          # Local checkout, not the default git context, so the PR's tree is built.
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: telinha:ci
+      # Same SMOKE as `bun run image`: syntax, unit tests and web assets inside
+      # the runtime image.
+      - name: smoke
+        run: >-
+          docker run --rm telinha:ci sh -c
+          'node --check server/src/index.js
+          && node --test server/test/*.test.js
+          && test -f web/dist/index.html
+          && test -f web/dist/app.js
+          && test -f web/dist/app.css
+          && test -f web/dist/livekit-client.esm.mjs'

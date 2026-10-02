@@ -1,0 +1,95 @@
+# release-please keeps a Release PR open on main; merging it tags vX.Y.Z and
+# creates the GitHub release, then the image job publishes the matching image.
+# The CT (tela-update) waits for the tag and the image before deploying.
+name: release
+
+on:
+  push:
+    branches: [main]
+  # Recovery: re-run release-please on main by hand (e.g. secrets added late).
+  workflow_dispatch:
+
+permissions: {}
+
+# Never run two releases at once; queued runs wait instead of being cancelled.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    # All writes use the app token below; GITHUB_TOKEN needs nothing.
+    permissions: {}
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # An app token (not GITHUB_TOKEN) so the Release PR triggers ci.yml.
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          # release-please labels its PRs through the issues API.
+          permission-issues: write
+      - id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  image:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/sombrasoft/telinha
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          # The run is a push to main, so the tag comes from release-please.
+          # latest is added automatically for stable semver, not pre-releases.
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v4
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          # The checked-out tag, not the default git context (which is main).
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          # Provenance comes from actions/attest; skip buildx's own so the tag
+          # stays a plain single-platform manifest.
+          provenance: false
+      - uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          # Storage records only exist for organization-owned repos.
+          create-storage-record: false

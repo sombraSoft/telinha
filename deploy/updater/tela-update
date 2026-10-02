@@ -1,0 +1,119 @@
+#!/bin/sh
+# Pull-based CD for Telinha: deploy the tag in /etc/telinha/pin, else the newest
+# stable vX.Y.Z tag of the (public) repo. The image is pulled before the checkout
+# moves, so a fresh tag whose image is still building is just retried next tick.
+# Runs from tela-update.timer and tela-pin; installed to /usr/local/sbin by deploy/install.sh.
+set -eu
+
+repo=/opt/bots/tela
+compose=$repo/deploy/compose.yml
+envfile=$repo/deploy/.env
+pinfile=/etc/telinha/pin
+image=ghcr.io/sombrasoft/telinha
+
+log() {
+	logger -t tela-update -- "$*"
+	# also echo when run by hand (tela-pin); under systemd the journal already has it
+	if [ -t 2 ]; then echo "tela-update: $*" >&2; fi
+}
+
+# One run at a time. Wait rather than skip, so a tela-pin issued during a timer
+# run is still applied right after it.
+exec 9>/run/lock/tela-update.lock
+if ! flock -w 900 9; then
+	log "another run still holds the lock, giving up"
+	exit 1
+fi
+
+# Offline is not fatal: a pin to an already fetched tag must still work.
+if ! git -C "$repo" fetch --tags --force --prune --quiet origin; then
+	log "git fetch failed, using local tags"
+fi
+
+pinned=
+if [ -s "$pinfile" ]; then
+	target=$(tr -d '[:space:]' < "$pinfile")
+	pinned=1
+else
+	target=$(git -C "$repo" tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+fi
+[ -n "$target" ] || exit 0
+
+# The pin file is free text: only accept something that is a valid image tag too.
+if ! printf '%s\n' "$target" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+	log "refusing target '$target' (check $pinfile)"
+	exit 1
+fi
+if ! want=$(git -C "$repo" rev-parse -q --verify "refs/tags/$target^{commit}"); then
+	log "tag $target not found in $repo"
+	exit 1
+fi
+
+version=${target#v}
+have=$(git -C "$repo" rev-parse -q --verify HEAD || true)
+deployed=$(sed -n 's/^TELINHA_VERSION=//p' "$envfile" 2>/dev/null || true)
+deployed_commit=$(sed -n 's/^TELINHA_COMMIT=//p' "$envfile" 2>/dev/null || true)
+# Compare commits, not tag names: an rc and its final release can share a commit,
+# and then only the image version changes.
+if [ "$have" = "$want" ] && [ "$deployed" = "$version" ]; then
+	exit 0
+fi
+
+# Tags arrive with --force, so a moved tag would otherwise deploy silently as root.
+# The deployed version must still point at the commit it was deployed from...
+if [ "$deployed" = "$version" ] && [ -n "$deployed_commit" ] && [ "$deployed_commit" != "$want" ]; then
+	log "tag $target moved from $deployed_commit to $want, refusing (re-tagging a release is not allowed)"
+	exit 1
+fi
+# ...and a target picked automatically must be a release cut from main. A pin is
+# an explicit root decision and may name a tag off main (e.g. a hand-made rc).
+if [ -z "$pinned" ] && ! git -C "$repo" merge-base --is-ancestor "$want" refs/remotes/origin/main; then
+	log "tag $target ($want) is not on origin/main, refusing"
+	exit 1
+fi
+
+if ! docker pull --quiet "$image:$version" >/dev/null 2>&1; then
+	log "image $image:$version not pullable yet, retrying next run"
+	exit 0
+fi
+
+if ! git -C "$repo" checkout --force --quiet "refs/tags/$target"; then
+	log "git checkout $target failed"
+	exit 1
+fi
+
+# Exported so `pull` interpolates too: on the first run there is no deploy/.env yet.
+export TELINHA_VERSION="$version"
+if ! docker compose -f "$compose" pull --quiet; then
+	log "compose pull failed for $target, retrying next run"
+	exit 1
+fi
+# --wait: only record the deploy once telinha's healthcheck passes.
+if ! docker compose -f "$compose" up -d --remove-orphans --wait --wait-timeout 180; then
+	log "compose up failed for $target, retrying next run"
+	exit 1
+fi
+
+# TELINHA_COMMIT is only for the moved-tag check above; compose ignores it.
+printf 'TELINHA_VERSION=%s\nTELINHA_COMMIT=%s\n' "$version" "$want" > "$envfile.tmp"
+mv "$envfile.tmp" "$envfile"
+log "deployed $target (was ${deployed:+v}${deployed:-none})"
+
+# Old app images pile up otherwise; a rollback just pulls again.
+if [ -n "$deployed" ] && [ "$deployed" != "$version" ]; then
+	docker image rm "$image:$deployed" >/dev/null 2>&1 || true
+fi
+
+# Host scripts and units are not updated by a checkout; say so when they drift.
+for pair in \
+	ipwatch/tela-ipwatch:/usr/local/sbin/tela-ipwatch \
+	updater/tela-update:/usr/local/sbin/tela-update \
+	pin.sh:/usr/local/sbin/tela-pin \
+	ipwatch/tela-ipwatch.service:/etc/systemd/system/tela-ipwatch.service \
+	ipwatch/tela-ipwatch.timer:/etc/systemd/system/tela-ipwatch.timer \
+	updater/tela-update.service:/etc/systemd/system/tela-update.service \
+	updater/tela-update.timer:/etc/systemd/system/tela-update.timer; do
+	if ! cmp -s "$repo/deploy/${pair%%:*}" "${pair#*:}"; then
+		log "${pair#*:} differs from $target, run: sh $repo/deploy/install.sh"
+	fi
+done

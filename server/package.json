@@ -1,0 +1,13 @@
+{
+  "name": "@telinha/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "livekit-server-sdk": "^2.19.1"
+  }
+}

@@ -1,0 +1,4 @@
+[install]
+# Plain flat node_modules: the runtime image runs Node, not Bun, and Node must
+# resolve discord.js etc. from /app/node_modules without Bun's isolated store.
+linker = "hoisted"

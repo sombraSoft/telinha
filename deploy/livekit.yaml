@@ -1,0 +1,16 @@
+# LiveKit SFU for Telinha. Keys come from LIVEKIT_KEYS (/etc/telinha/livekit.env).
+# Signaling (HTTP/WS) stays on localhost: Cloudflare Tunnel -> caddy /livekit/* -> 127.0.0.1:7880.
+# Media: TCP 7891 + UDP 7892, forwarded on the router to this host (7881/7882 are taken by another LiveKit).
+port: 7880
+bind_addresses:
+  - 127.0.0.1
+log_level: info
+rtc:
+  tcp_port: 7891
+  udp_port: 7892
+  # public IP via STUN; tela-ipwatch restarts livekit when the residential IP changes
+  use_external_ip: true
+room:
+  auto_create: true
+  empty_timeout: 300
+  departure_timeout: 20

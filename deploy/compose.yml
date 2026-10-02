@@ -1,0 +1,50 @@
+# Telinha: self-hosted screen share behind a Discord login gate.
+#   Cloudflare Tunnel -> caddy 127.0.0.1:8080 -> (telinha login check) -> /sala/ page + /livekit/* signaling
+#   Media: LiveKit SFU on tcp 7891 + udp 7892 (forwarded on the router)
+# Host networking everywhere; web listeners bind to 127.0.0.1.
+# Secrets live outside the clone in /etc/telinha/*.env (see env/*.env.example).
+# TELINHA_VERSION comes from deploy/.env, written by tela-update after each deploy;
+# lives next to this file so plain `docker compose restart <svc>` here keeps working.
+name: tela
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    container_name: livekit
+    restart: unless-stopped
+    network_mode: host
+    command: --config /etc/livekit.yaml
+    env_file: /etc/telinha/livekit.env
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+  telinha:
+    image: ghcr.io/sombrasoft/telinha:${TELINHA_VERSION:?TELINHA_VERSION missing, run tela-update}
+    container_name: telinha
+    restart: unless-stopped
+    network_mode: host
+    env_file: /etc/telinha/app.env
+    mem_limit: 256m
+    healthcheck:
+      # busybox wget ships in node:alpine; port must match LISTEN in app.env
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    container_name: tela-caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    container_name: tela-tunnel
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel --no-autoupdate run
+    env_file: /etc/telinha/tunnel.env
