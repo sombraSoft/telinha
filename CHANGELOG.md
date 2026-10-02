@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0-rc.1](https://github.com/sombraSoft/telinha/compare/v0.1.1...v0.2.0-rc.1) (2026-10-02)
+
+
+### Features
+
+* Bun-native server and Svelte 5 room page ([#7](https://github.com/sombraSoft/telinha/issues/7)) ([a15bb6b](https://github.com/sombraSoft/telinha/commit/a15bb6b1a8c96abf0097ed8625076071b4358492))
+
 ## [0.1.1](https://github.com/sombraSoft/telinha/compare/v0.1.0...v0.1.1) (2026-10-02)
 
 
