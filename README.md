@@ -73,6 +73,14 @@ two languages (pt-BR, en). Both are picked in the top bar and kept in
 logged-in user, and the bot answers in the invoker's locale (ephemeral) or the
 server locale (public post).
 
+Streams use AV1 when the browser has a hardware encoder for it, else H.265
+(Chrome only offers it with one), else H.264, always with an H.264 backup for
+viewers that can't decode the first choice. Hardware HEVC (seen with NVIDIA on
+Windows) sends nothing when any simulcast layer has an odd width or height, so
+the page crops each frame to a multiple of 8 and the lower layers are exactly
+1/2 and 1/4 of it. Known gap: shrinking a live share well below 960 px wide
+drops the top layer (#9).
+
 `bun run image` picks docker, else podman (starting the podman machine if it is
 stopped). The smoke test (also run by the CI `image` job) runs the server tests
 in the image, checks that the built page exists and starts the server with
