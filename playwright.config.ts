@@ -24,7 +24,15 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
-          args: ['--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+          args: [
+            '--use-fake-ui-for-media-stream',
+            '--autoplay-policy=no-user-gesture-required',
+            // LiveKit --dev only offers 127.0.0.1 candidates. Linux Chromium gathers
+            // no loopback candidates and hides host IPs behind mDNS, so ICE never
+            // connects there without these (Windows got by without them).
+            '--allow-loopback-in-peer-connection',
+            '--disable-features=WebRtcHideLocalIpsWithMdns',
+          ],
         },
       },
     },
