@@ -1,0 +1,62 @@
+// Per-viewer preferences, persisted in localStorage (see store.ts).
+import { load, save } from './store';
+import { parseThemeChoice, type ThemeChoice } from './theme';
+import { parseQuality, parseShareSettings, type QualityChoice, type ShareSettings } from './share';
+import type { Locale } from './i18n';
+
+export type LangChoice = 'auto' | Locale;
+const parseLang = (v: unknown): LangChoice => (v === 'pt-BR' || v === 'en' ? v : 'auto');
+
+class Prefs {
+  theme = $state<ThemeChoice>(parseThemeChoice(load('theme', 'system')));
+  lang = $state<LangChoice>(parseLang(load('lang', 'auto')));
+  stats = $state<boolean>(load<unknown>('stats', false) === true);
+  share = $state.raw<ShareSettings>(parseShareSettings(load('share', null)));
+  // Volume/mute per stream identity; read through to storage on first use.
+  #volume = $state<Record<string, number>>({});
+  #muted = $state<Record<string, boolean>>({});
+
+  setTheme(v: ThemeChoice) {
+    this.theme = v;
+    save('theme', v);
+  }
+  setLang(v: LangChoice) {
+    this.lang = v;
+    save('lang', v);
+  }
+  setStats(v: boolean) {
+    this.stats = v;
+    save('stats', v);
+  }
+  setShare(v: ShareSettings) {
+    this.share = v;
+    save('share', v);
+  }
+
+  /** Last quality picked on any tile; new tiles start with it. */
+  quality(): QualityChoice {
+    return parseQuality(load('quality', 'auto'));
+  }
+  setQuality(v: QualityChoice) {
+    save('quality', v);
+  }
+
+  volume(identity: string): number {
+    const v = this.#volume[identity] ?? Number(load(`vol.${identity}`, 100));
+    return Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : 100;
+  }
+  setVolume(identity: string, v: number) {
+    this.#volume[identity] = v;
+    save(`vol.${identity}`, v);
+  }
+  muted(identity: string): boolean {
+    return this.#muted[identity] ?? load<unknown>(`mute.${identity}`, false) === true;
+  }
+  toggleMute(identity: string) {
+    const v = !this.muted(identity);
+    this.#muted[identity] = v;
+    save(`mute.${identity}`, v);
+  }
+}
+
+export const prefs = new Prefs();

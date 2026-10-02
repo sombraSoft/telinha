@@ -41,6 +41,13 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # Config "prerelease: true" would flag every 0.x release (release-please
+      # marks major === 0 as pre-release), so rc tags are marked here instead.
+      - if: steps.release.outputs.release_created == 'true' && contains(steps.release.outputs.tag_name, '-')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh release edit "$TAG" --prerelease --repo "$GITHUB_REPOSITORY"
 
   image:
     needs: release-please

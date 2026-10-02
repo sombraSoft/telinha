@@ -31,13 +31,41 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      # Production runtime is Node 22; tests run under the same major.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
       - run: bun install --frozen-lockfile
-      - run: bun run build
+      - run: bun run typecheck
       - run: bun run test
+      - run: bun run build
+
+  # Browser tests against the real stack (LiveKit --dev + server + built page).
+  # Not a required check yet.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      # scripts/livekit.ts pins the LiveKit version, so its hash is the key.
+      - uses: actions/cache@v6
+        with:
+          path: .cache/livekit
+          key: livekit-${{ runner.os }}-${{ hashFiles('scripts/livekit.ts') }}
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run build
+      - run: bun run e2e
+        env:
+          CI: "true"
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
 
   lint:
     runs-on: ubuntu-latest
@@ -94,14 +122,10 @@ jobs:
           push: false
           load: true
           tags: telinha:ci
-      # Same SMOKE as `bun run image`: syntax, unit tests and web assets inside
-      # the runtime image.
+      # Keep in sync with SMOKE in scripts/image.ts: unit tests, built page
+      # assets, then the real entry point in DEV_USER mode serving /sala/.
       - name: smoke
-        run: >-
-          docker run --rm telinha:ci sh -c
-          'node --check server/src/index.js
-          && node --test server/test/*.test.js
-          && test -f web/dist/index.html
-          && test -f web/dist/app.js
-          && test -f web/dist/app.css
-          && test -f web/dist/livekit-client.esm.mjs'
+        env:
+          SMOKE: >-
+            bun test server/test && test -f web/dist/index.html && ls web/dist/assets/*.js >/dev/null && (DEV_USER=1:smoke PUBLIC_URL=http://localhost:18081 LISTEN=127.0.0.1:18081 COOKIE_SECRET=smoke LIVEKIT_API_KEY=k LIVEKIT_API_SECRET=s bun server/src/index.ts & for i in 1 2 3 4 5 6 7 8 9 10; do wget -qO- http://127.0.0.1:18081/healthz && break; sleep 1; done; wget -qO- http://127.0.0.1:18081/sala/ | grep -q '<div id="app"')
+        run: docker run --rm telinha:ci sh -c "$SMOKE"

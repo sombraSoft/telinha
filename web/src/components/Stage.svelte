@@ -1,0 +1,116 @@
+<script lang="ts">
+  import { t } from '../lib/i18n/i18n.svelte';
+  import type { RoomController } from '../lib/room.svelte';
+  import Tile from './Tile.svelte';
+
+  let { rc }: { rc: RoomController } = $props();
+
+  const streamers = $derived(rc.streamers);
+  const focusMode = $derived(!!rc.focusId);
+  const hint = $derived(t('empty.hint').split('{share}'));
+</script>
+
+<section class="stage">
+  {#if rc.connected && streamers.length === 0}
+    <div class="empty" data-testid="empty-state">
+      <div class="empty-icon" aria-hidden="true">🖥️</div>
+      <p class="title">{t('empty.title')}</p>
+      <p class="muted">{hint[0]}<b>{t('share.start')}</b>{hint[1] ?? ''}</p>
+    </div>
+  {:else if !rc.connected && !rc.fatal}
+    <div class="empty muted">{t('app.connecting')}</div>
+  {/if}
+
+  <!-- One keyed list in a single container: tiles never move in the DOM
+       (moving a <video> pauses it), focus only changes the CSS layout. -->
+  {#if streamers.length}
+    <div class="tiles" class:focus-mode={focusMode} class:single={!focusMode && streamers.length === 1}>
+      {#each streamers as p (p.identity)}
+        <Tile
+          peer={p}
+          viewers={rc.peers.filter((v) => v.identity !== p.identity && v.watching.includes(p.identity))}
+          focused={rc.focusId === p.identity}
+          strip={focusMode && rc.focusId !== p.identity}
+          stats={rc.stats[p.identity]}
+          onfocus={() => rc.toggleFocus(p.identity)}
+          onstop={() => void rc.stopShare()}
+        />
+      {/each}
+    </div>
+  {/if}
+</section>
+
+<style>
+  .stage {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    overflow: auto;
+    background: var(--bg-0);
+  }
+
+  .empty {
+    margin: auto;
+    text-align: center;
+    padding: 24px;
+  }
+  .empty-icon {
+    font-size: 48px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .empty .title {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .empty p {
+    margin: 0;
+  }
+
+  .tiles {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    align-content: center;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* A lone stream fills the stage instead of a 16:9 box that may overflow. */
+  .tiles.single {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .tiles.single :global(.tile) {
+    aspect-ratio: auto;
+  }
+
+  /* Focused tile on top, the others as a strip below it. */
+  .tiles.focus-mode {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+    grid-auto-rows: auto;
+    align-content: stretch;
+  }
+  .tiles.focus-mode :global(.tile.focused) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    aspect-ratio: auto;
+  }
+  .tiles.focus-mode :global(.tile.strip) {
+    max-width: 260px;
+  }
+
+  @media (max-width: 720px) {
+    .stage {
+      padding: 8px;
+    }
+    .tiles {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

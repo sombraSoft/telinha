@@ -1,0 +1,269 @@
+import { describe, expect, test } from 'bun:test';
+import { verify, type Session } from '../src/auth.ts';
+import type { Fetch } from '../src/http.ts';
+import { DEV_ENV, jwtPayload, NOW, PROD_ENV, setup } from './helpers.ts';
+
+const setCookies = (r: Response) => r.headers.getSetCookie();
+const cookieValue = (r: Response, name: string) => {
+  const c = setCookies(r).find((v) => v.startsWith(`${name}=`));
+  return c ? decodeURIComponent(c.slice(name.length + 1).split(';')[0]!) : undefined;
+};
+
+test('/healthz', async () => {
+  const r = await setup().get('/healthz');
+  expect(r.status).toBe(200);
+  expect(r.headers.get('content-type')).toContain('application/json');
+  expect(r.headers.get('cache-control')).toBe('no-store');
+  expect(await r.json()).toEqual({ ok: true, discord: true, dev: false });
+});
+
+describe('/auth/check', () => {
+  test('member -> 204', async () => {
+    const s = setup();
+    expect((await s.get('/auth/check', { cookie: s.sessionCookie() })).status).toBe(204);
+  });
+
+  test('not a member -> 403 localized denied page with the group name', async () => {
+    const s = setup({ members: [] });
+    const r = await s.get('/auth/check', { cookie: s.sessionCookie({ locale: 'pt-BR' }) });
+    expect(r.status).toBe(403);
+    const body = await r.text();
+    expect(body).toContain('Zé, a Telinha é só pra Galera.');
+    expect(body).toContain('lang="pt-BR"');
+    // old session without locale -> Accept-Language
+    const en = await s.get('/auth/check', { cookie: s.sessionCookie(), 'accept-language': 'en-US' });
+    expect(await en.text()).toContain('Zé, Telinha is only for Crew.');
+  });
+
+  test('no session: 302 to login with safe next, 401 for upgrades', async () => {
+    const s = setup();
+    const r = await s.get('/auth/check', { 'x-forwarded-uri': '/sala/?room=abcd' });
+    expect(r.status).toBe(302);
+    expect(r.headers.get('location')).toBe(`/auth/login?next=${encodeURIComponent('/sala/?room=abcd')}`);
+    const evil = await s.get('/auth/check', { 'x-forwarded-uri': '//evil.com' });
+    expect(evil.headers.get('location')).toBe('/auth/login?next=%2F');
+    const ws = await s.get('/auth/check', { upgrade: 'websocket' });
+    expect(ws.status).toBe(401);
+  });
+
+  test('expired or forged session counts as none', async () => {
+    const s = setup();
+    const r = await s.get('/auth/check', { cookie: s.sessionCookie({ exp: NOW - 1 }) });
+    expect(r.status).toBe(302);
+    const forged = await s.get('/auth/check', { cookie: 'telinha=eyJ9.abc' });
+    expect(forged.status).toBe(302);
+  });
+});
+
+describe('Discord OAuth', () => {
+  test('/auth/login sets the state cookie and redirects to Discord', async () => {
+    const s = setup();
+    const r = await s.get('/auth/login?next=/sala/%3Froom%3Dabcd');
+    expect(r.status).toBe(302);
+    const loc = new URL(r.headers.get('location')!);
+    expect(loc.origin + loc.pathname).toBe('https://discord.com/oauth2/authorize');
+    expect(loc.searchParams.get('client_id')).toBe('cid');
+    expect(loc.searchParams.get('scope')).toBe('identify');
+    expect(loc.searchParams.get('prompt')).toBe('none');
+    expect(loc.searchParams.get('redirect_uri')).toBe('https://tela.example.com/auth/callback');
+    const c = setCookies(r)[0]!;
+    expect(c).toStartWith('telinha_state=');
+    for (const f of ['Path=/auth', 'HttpOnly', 'Secure', 'SameSite=Lax', 'Max-Age=600']) expect(c).toContain(f);
+    const st = verify<{ s: string; next: string; exp: number }>(s.config.cookieSecret, cookieValue(r, 'telinha_state'), NOW);
+    expect(st?.s).toBe(loc.searchParams.get('state')!);
+    expect(st?.next).toBe('/sala/?room=abcd');
+  });
+
+  async function loginState(s: ReturnType<typeof setup>, next = '/sala/?room=abcd') {
+    const r = await s.get(`/auth/login?next=${encodeURIComponent(next)}`);
+    return { state: new URL(r.headers.get('location')!).searchParams.get('state')!, cookie: `telinha_state=${encodeURIComponent(cookieValue(r, 'telinha_state')!)}` };
+  }
+
+  const discord = (user: Record<string, unknown>, calls: Array<{ url: string; init?: RequestInit }> = []): Fetch =>
+    async (url, init) => {
+      calls.push({ url, init });
+      if (url.endsWith('/oauth2/token')) return Response.json({ access_token: 'AT' });
+      if (url.endsWith('/users/@me')) return Response.json(user);
+      return new Response(null, { status: 404 });
+    };
+
+  test('/auth/callback stores the Discord locale in the session', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const s = setup({ fetch: discord({ id: '1', username: 'ze', global_name: 'Zé', avatar: 'av', locale: 'pt-BR' }, calls) });
+    const { state, cookie } = await loginState(s);
+    const r = await s.get(`/auth/callback?code=C&state=${state}`, { cookie });
+    expect(r.status).toBe(200);
+    const body = await r.text();
+    expect(body).toContain('location.replace("/sala/?room=abcd")');
+    expect(body).toContain('Entrando…');
+    const sess = verify<Session>(s.config.cookieSecret, cookieValue(r, 'telinha'), NOW);
+    expect(sess).toMatchObject({ id: '1', name: 'Zé', avatar: 'av', locale: 'pt-BR', exp: NOW + 7 * 86400_000 });
+    expect(setCookies(r).some((c) => c.startsWith('telinha_state=;') && c.includes('Max-Age=0'))).toBe(true);
+    const body0 = calls[0]!.init!.body as URLSearchParams;
+    expect(body0.get('code')).toBe('C');
+    expect(body0.get('client_secret')).toBe('csecret');
+    expect((calls[1]!.init!.headers as Record<string, string>).Authorization).toBe('Bearer AT');
+  });
+
+  test('callback: welcome page escapes the next target', async () => {
+    const s = setup({ fetch: discord({ id: '1', username: 'ze' }) });
+    const { state, cookie } = await loginState(s, '/sala/?x=</script><script>alert(1)</script>');
+    const body = await (await s.get(`/auth/callback?code=C&state=${state}`, { cookie })).text();
+    expect(body).not.toContain('</script><script>alert');
+  });
+
+  test('callback: non-member gets 403 and no session', async () => {
+    const s = setup({ members: [], fetch: discord({ id: '9', username: 'nobody', locale: 'en-US' }) });
+    const { state, cookie } = await loginState(s);
+    const r = await s.get(`/auth/callback?code=C&state=${state}`, { cookie });
+    expect(r.status).toBe(403);
+    expect(await r.text()).toContain('nobody, Telinha is only for Crew.');
+    expect(cookieValue(r, 'telinha')).toBeUndefined();
+  });
+
+  test('callback: bad or missing state -> 400 expired page', async () => {
+    const s = setup();
+    const { cookie } = await loginState(s);
+    const r = await s.get('/auth/callback?code=C&state=wrong', { cookie, 'accept-language': 'pt-BR' });
+    expect(r.status).toBe(400);
+    expect(await r.text()).toContain('Login expirou.');
+    expect((await s.get('/auth/callback?code=C&state=x')).status).toBe(400);
+  });
+
+  test('callback: Discord failure -> 502 localized page, path logged without query', async () => {
+    const s = setup({ fetch: async () => new Response(null, { status: 500 }) });
+    const { state, cookie } = await loginState(s);
+    const r = await s.get(`/auth/callback?code=SECRET&state=${state}`, { cookie, 'accept-language': 'en' });
+    expect(r.status).toBe(502);
+    expect(await r.text()).toContain('Something went wrong');
+    const line = s.logs.find((l) => l[0] === 'http error')!;
+    expect(line[1]).toBe('/auth/callback');
+    expect(JSON.stringify(s.logs)).not.toContain('SECRET');
+  });
+});
+
+describe('/auth/token', () => {
+  test('401 / 403 / 400', async () => {
+    const s = setup();
+    const noSession = await s.get('/auth/token?room=abcd');
+    expect(noSession.status).toBe(401);
+    expect(await noSession.json()).toEqual({ error: 'login' });
+    const denied = await setup({ members: [] }).get('/auth/token?room=abcd', { cookie: s.sessionCookie() });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toEqual({ error: 'members' });
+    for (const room of ['', 'abc', 'a'.repeat(41), 'ab cd', 'abcd%2F..']) {
+      const r = await s.get(`/auth/token?room=${room}`, { cookie: s.sessionCookie() });
+      expect(r.status).toBe(400);
+      expect(await r.json()).toEqual({ error: 'room' });
+    }
+  });
+
+  test('200: token, identity, user, group', async () => {
+    const s = setup();
+    const r = await s.get('/auth/token?room=Room_1-x', { cookie: s.sessionCookie({ locale: 'en-GB' }) });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    const body = (await r.json()) as Record<string, any>;
+    expect(body.url).toBe('wss://tela.example.com/livekit');
+    expect(body.identity).toMatch(/^1:[0-9a-f]{6}$/);
+    expect(body.user).toEqual({ id: '1', name: 'Zé', avatar: 'abc', locale: 'en' });
+    expect(body.group).toBe('Crew');
+    const p = jwtPayload(body.token);
+    expect(p.sub).toBe(body.identity);
+    expect(p.name).toBe('Zé');
+    expect(JSON.parse(p.metadata)).toEqual({ id: '1', avatar: 'abc' });
+    expect(p.video).toMatchObject({
+      room: 'Room_1-x', roomJoin: true, canSubscribe: true, canPublish: true, canPublishData: true, canUpdateOwnMetadata: true,
+    });
+    expect(p.video.canPublishSources).toEqual(['screen_share', 'screen_share_audio']);
+    expect(p.exp - p.nbf).toBe(6 * 3600);
+  });
+
+  test('locale falls back to Accept-Language for 0.1.1 sessions', async () => {
+    const s = setup();
+    const r = await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie({ avatar: null }), 'accept-language': 'pt-BR,en;q=0.5' });
+    const body = (await r.json()) as Record<string, any>;
+    expect(body.user).toEqual({ id: '1', name: 'Zé', avatar: null, locale: 'pt-BR' });
+    expect(body.group).toBe('Galera');
+    expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: null });
+  });
+
+  test('LIVEKIT_PUBLIC_URL override', async () => {
+    const s = setup({ env: { ...PROD_ENV, LIVEKIT_PUBLIC_URL: 'ws://localhost:7880' } });
+    const body = (await (await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie() })).json()) as { url: string };
+    expect(body.url).toBe('ws://localhost:7880');
+  });
+});
+
+test('/auth/logout clears the session', async () => {
+  const s = setup();
+  const r = await s.get('/auth/logout', { cookie: s.sessionCookie({ locale: 'pt-BR' }) });
+  expect(r.status).toBe(200);
+  expect(await r.text()).toContain('Saiu da Telinha.');
+  expect(setCookies(r)[0]).toMatch(/^telinha=; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=0$/);
+});
+
+test('redirects: / -> /sala/ (302), /sala -> /sala/ (301), query kept', async () => {
+  const s = setup();
+  const root = await s.get('/?room=abcd');
+  expect(root.status).toBe(302);
+  expect(root.headers.get('location')).toBe('/sala/?room=abcd');
+  const sala = await s.get('/sala?room=abcd');
+  expect(sala.status).toBe(301);
+  expect(sala.headers.get('location')).toBe('/sala/?room=abcd');
+  expect((await s.get('/')).headers.get('location')).toBe('/sala/');
+});
+
+test('unknown paths -> 404', async () => {
+  const s = setup();
+  for (const p of ['/nope', '/auth', '/auth/nope', '/livekit/rtc', '/healthz/x']) expect((await s.get(p)).status).toBe(404);
+});
+
+describe('DEV_USER mode', () => {
+  test('login sets the session immediately and redirects to next', async () => {
+    const s = setup({ env: DEV_ENV });
+    expect(((await (await s.get('/healthz')).json()) as { dev: boolean }).dev).toBe(true);
+    const r = await s.get('/auth/login?next=%2Fsala%2F%3Froom%3Dabcd', { 'accept-language': 'pt-BR' });
+    expect(r.status).toBe(302);
+    expect(r.headers.get('location')).toBe('/sala/?room=abcd');
+    const c = setCookies(r)[0]!;
+    expect(c).not.toContain('Secure');
+    expect(c).toContain('HttpOnly');
+    const sess = verify<Session>(s.config.cookieSecret, cookieValue(r, 'telinha'), NOW);
+    expect(sess).toMatchObject({ id: '1', name: 'Dev', avatar: null, locale: 'pt-BR' });
+
+    const tok = await s.get('/auth/token?room=abcd', { cookie: `telinha=${encodeURIComponent(cookieValue(r, 'telinha')!)}` });
+    expect(tok.status).toBe(200);
+    const body = (await tok.json()) as Record<string, any>;
+    expect(body.identity).toMatch(/^1:[0-9a-f]{6}$/);
+    expect(body.url).toBe('ws://localhost:8081/livekit');
+    expect(body.user.locale).toBe('pt-BR');
+  });
+
+  test('DEV_LOCALE wins over Accept-Language; unsafe next is dropped', async () => {
+    const s = setup({ env: { ...DEV_ENV, DEV_LOCALE: 'en-US' } });
+    const r = await s.get('/auth/login?next=//evil.com', { 'accept-language': 'pt-BR' });
+    expect(r.headers.get('location')).toBe('/');
+    expect(verify<Session>(s.config.cookieSecret, cookieValue(r, 'telinha'), NOW)?.locale).toBe('en-US');
+  });
+
+  test('non-loopback Host gets no fake login', async () => {
+    const s = setup({ env: DEV_ENV });
+    for (const host of ['tela.example.com', 'evil.test:8081', 'localhost.evil.test']) {
+      const r = await s.get('/auth/login', { host });
+      expect(r.status).toBe(421);
+      expect(setCookies(r)).toEqual([]);
+    }
+    for (const host of ['localhost:5173', '127.0.0.1:8081', '[::1]:8081', 'localhost']) {
+      expect((await s.get('/auth/login', { host })).status).toBe(302);
+    }
+    // production ignores Host here (Caddy is the gate)
+    expect((await setup().get('/healthz', { host: 'tela.example.com' })).status).toBe(200);
+  });
+
+  test('only the dev user is a member', async () => {
+    const s = setup({ env: DEV_ENV });
+    expect((await s.get('/auth/check', { cookie: s.sessionCookie({ id: '2' }) })).status).toBe(403);
+    expect((await s.get('/auth/check', { cookie: s.sessionCookie({ id: '1' }) })).status).toBe(204);
+  });
+});

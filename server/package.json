@@ -3,11 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node --test test/*.test.js"
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
     "discord.js": "^14.27.0",
     "livekit-server-sdk": "^2.19.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "typescript": "^6.0.3"
   }
 }
