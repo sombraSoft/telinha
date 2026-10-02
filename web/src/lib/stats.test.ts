@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { qualityLabel, summarize } from './stats';
+import { qualityLabel, streamLabel, summarize, type VideoStats } from './stats';
 
 const report = (stats: Record<string, unknown>[]) => new Map(stats.map((s) => [s.id as string, s]));
 
@@ -80,5 +80,23 @@ describe('qualityLabel', () => {
   test('<h>p<fps>, empty without frames', () => {
     expect(qualityLabel(summarize(report([{ id: 'i', type: 'inbound-rtp', kind: 'video', frameHeight: 720, framesPerSecond: 29.7 }]))?.stats)).toBe('720p30');
     expect(qualityLabel(undefined)).toBe('');
+  });
+});
+
+describe('streamLabel', () => {
+  const out: VideoStats = {
+    out: true, width: 1920, height: 1080, fps: 59, mbps: 8, codec: 'H265', impl: '', limitation: '-', lost: 0, relay: false, rttMs: 1,
+  };
+  test('height, snapped fps and codec for the /tela card', () => {
+    expect(streamLabel(out)).toBe('1080p60 · H265');
+    expect(streamLabel({ ...out, fps: 29, codec: 'av1' })).toBe('1080p30 · AV1');
+    expect(streamLabel({ ...out, height: 720, fps: 14, codec: '' })).toBe('720p15');
+    expect(streamLabel({ ...out, fps: 2 })).toBe('1080p5 · H265');
+  });
+  test('nothing until frames go out, and never for a received stream', () => {
+    expect(streamLabel(undefined)).toBe('');
+    expect(streamLabel({ ...out, height: 0 })).toBe('');
+    expect(streamLabel({ ...out, fps: 0 })).toBe('');
+    expect(streamLabel({ ...out, out: false })).toBe('');
   });
 });

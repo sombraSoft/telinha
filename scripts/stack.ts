@@ -1,7 +1,7 @@
 // Local stack: livekit-server --dev plus the Bun server with a fake DEV_USER
 // login. Used by `bun run dev` (scripts/dev.ts) and, as
 // `bun scripts/stack.ts --e2e`, by Playwright's webServer.
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureLivekit } from './livekit.ts';
@@ -22,6 +22,11 @@ export interface StackOptions {
   webDir?: string;
   /** Extra env for the server (e.g. DEV_LOCALE). */
   env?: Record<string, string>;
+  /** Room lifecycle: close after this long empty, poll this often (server defaults 300 / 5). */
+  closeEmptySeconds?: number;
+  pollSeconds?: number;
+  /** Room registry directory; unset = the server default (.cache/data). */
+  dataDir?: string;
   livekitPorts?: { http: number; tcp: number; udp: number };
 }
 
@@ -140,7 +145,8 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
       '--bind', '127.0.0.1',
       '--node-ip', '127.0.0.1',
       '--keys', 'devkey: secret',
-      '--config-body', `port: ${ports.http}\nlogging:\n  level: info\nrtc:\n  tcp_port: ${ports.tcp}\n  udp_port: ${ports.udp}\n`,
+      // auto_create off as in deploy/livekit.yaml: only the server opens rooms.
+      '--config-body', `port: ${ports.http}\nlogging:\n  level: info\nrtc:\n  tcp_port: ${ports.tcp}\n  udp_port: ${ports.udp}\nroom:\n  auto_create: false\n`,
     ]);
 
     const env: Record<string, string> = {
@@ -152,8 +158,12 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
       LIVEKIT_API_SECRET: 'secret',
       GROUP_NAME: 'Dev',
       WEB_DIR: opts.webDir ?? join(ROOT, 'web', 'dist'),
+      LIVEKIT_API_URL: `http://127.0.0.1:${ports.http}`,
       ...opts.env,
     };
+    if (opts.closeEmptySeconds) env.CLOSE_EMPTY_SECONDS = String(opts.closeEmptySeconds);
+    if (opts.pollSeconds) env.POLL_SECONDS = String(opts.pollSeconds);
+    if (opts.dataDir) env.DATA_DIR = opts.dataDir;
     if (opts.livekitPublicUrl) env.LIVEKIT_PUBLIC_URL = opts.livekitPublicUrl;
     const entry = join('server', 'src', 'index.ts');
     spawn('server', opts.watch ? [process.execPath, '--watch', entry] : [process.execPath, entry], ROOT, env);
@@ -190,8 +200,17 @@ if (import.meta.main) {
     console.error('web/dist is missing: run bun run build first');
     process.exit(1);
   }
+  // Fresh registry per run; a short lifecycle so the closing spec doesn't wait 5 min.
+  const dataDir = join(ROOT, '.cache', 'e2e-data');
+  await rm(dataDir, { recursive: true, force: true });
   try {
-    await startStack({ publicUrl: 'http://localhost:8081', livekitPublicUrl: 'ws://localhost:7880' });
+    await startStack({
+      publicUrl: 'http://localhost:8081',
+      livekitPublicUrl: 'ws://localhost:7880',
+      closeEmptySeconds: Number(process.env.CLOSE_EMPTY_SECONDS) || 4,
+      pollSeconds: Number(process.env.POLL_SECONDS) || 1,
+      dataDir,
+    });
     console.log('[stack] ready on http://localhost:8081/sala/');
   } catch (e) {
     console.error(`[stack] ${e instanceof Error ? e.message : e}`);

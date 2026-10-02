@@ -1,13 +1,14 @@
 // HTTP handler: login gate for Caddy forward_auth (/auth/check), Discord OAuth,
-// LiveKit tokens, the room page (/sala/) and /healthz. Everything external is
-// injected so tests drive it with plain Request objects.
+// LiveKit tokens for open /tela rooms, the room page (/sala/) and /healthz.
+// Everything external is injected so tests drive it with plain Request objects.
 import { randomBytes } from 'node:crypto';
 import { cookie, parseCookies, safeNext, SESSION, sign, STATE, verify, type Session } from './auth.ts';
 import type { Config } from './config.ts';
 import { fromAcceptLanguage, resolveLocale, type Locale } from './i18n.ts';
-import { createToken, newIdentity, ROOM_RE } from './livekit.ts';
+import { createToken, newIdentity, ROOM_RE, type RoomService } from './livekit.ts';
 import * as pages from './pages.ts';
 import type { IsMember } from './roles.ts';
+import type { Registry } from './rooms.ts';
 import type { StaticFiles } from './static.ts';
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -16,6 +17,8 @@ export interface Deps {
   config: Config;
   isMember: IsMember;
   files: StaticFiles;
+  registry: Registry;
+  rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>;
   /** Display name of the group in the given locale. */
   group: (locale: Locale) => string;
   discordReady?: () => boolean;
@@ -49,7 +52,7 @@ const redirect = (status: number, location: string, headers: HeadersInit = {}) =
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
 export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
-  const { config: c, isMember, files, group } = deps;
+  const { config: c, isMember, files, group, registry, rooms } = deps;
   const discordReady = deps.discordReady ?? (() => false);
   const doFetch: Fetch = deps.fetch ?? ((input, init) => fetch(input, init));
   const now = deps.now ?? Date.now;
@@ -136,13 +139,38 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
       return html(200, pages.welcome(locale, st.next), h);
     }
 
-    // LiveKit token for the room page. Members only; may only publish screen share.
+    // LiveKit token for the room page. Members only; may only publish screen
+    // share; only for rooms /tela opened that have not closed yet.
     if (path === '/auth/token') {
       const s = session();
       const room = url.searchParams.get('room') ?? '';
       if (!s) return json(401, { error: 'login' });
       if (!(await isMember(s.id))) return json(403, { error: 'members' });
       if (!ROOM_RE.test(room)) return json(400, { error: 'room' });
+      let rec = registry.get(room);
+      // Dev/E2E have no /tela: any valid room name opens one (closed stays closed).
+      if (!rec && c.dev) {
+        rec = registry.create({
+          room, guildId: '', channelId: '', locale: localeOf(s), openerId: s.id, openerName: s.name, what: null, createdAt: now(),
+        });
+        log('dev room', room);
+      }
+      if (!rec) return json(404, { error: 'unknown' });
+      // Someone is on the way in: the lifecycle must not close it under them.
+      // Before the await below, so a poll during it sees the fresh time.
+      if (rec.closedAt !== null || !registry.touch(room, now())) return json(410, { error: 'closed' });
+      // LiveKit drops an idle room on its own; auto_create is off, so bring it back.
+      try {
+        await rooms.ensureRoom(room);
+      } catch (e) {
+        log('ensureRoom failed', room, (e as Error).message);
+        return json(503, { error: 'livekit' });
+      }
+      // Closed while we waited (e.g. by hand): don't leave a room nobody polls.
+      if (registry.get(room)?.closedAt !== null) {
+        await rooms.deleteRoom(room).catch((e: unknown) => log('deleteRoom failed', room, (e as Error).message));
+        return json(410, { error: 'closed' });
+      }
       const identity = newIdentity(s.id, random);
       const avatar = s.avatar ?? null;
       const locale = localeOf(s);

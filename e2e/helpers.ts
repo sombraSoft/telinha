@@ -7,12 +7,15 @@ export function newRoom(prefix = 'e2e'): string {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/** Opens a room and waits until the DEV_USER login round-trip is done. */
-export async function openRoom(page: Page, room?: string): Promise<string> {
-  await page.goto(room ? `/sala/?room=${room}` : '/sala/');
+/**
+ * Opens a room and waits until the DEV_USER login round-trip is done. In dev
+ * mode the server opens an unknown valid room on first use (there is no /tela).
+ */
+export async function openRoom(page: Page, room: string): Promise<string> {
+  await page.goto(`/sala/?room=${room}`);
   await expect(page.getByTestId('me')).toContainText('Dev');
   const current = new URL(page.url()).searchParams.get('room');
-  expect(current).toMatch(/^[A-Za-z0-9_-]{4,40}$/);
+  expect(current).toBe(room);
   return current!;
 }
 

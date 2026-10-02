@@ -90,7 +90,7 @@
 {#if rc.fatal}
   <div class="fatal" data-testid="fatal" role="alert">
     <div class="card" tabindex="-1" {@attach focusFirst}>
-      <p>{noticeText(rc.fatal.notice)}</p>
+      <p data-testid="notice">{noticeText(rc.fatal.notice)}</p>
       {#if rc.fatal.reload}
         <button class="btn primary" onclick={() => location.reload()}>{t('fatal.reload')}</button>
       {/if}

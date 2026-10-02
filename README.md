@@ -1,8 +1,9 @@
 # Telinha
 
 Self-hosted screen share for a Discord group. Members log in with Discord, a
-role check gates entry, and the `/tela` slash command posts a fresh room link
-in the allowed channels. Media goes through a [LiveKit](https://livekit.io) SFU.
+role check gates entry, and the `/tela` slash command opens a room and posts
+its live status card in the allowed channels. Media goes through a
+[LiveKit](https://livekit.io) SFU.
 
 Why: Discord Go Live is blocked in Brazil.
 
@@ -27,11 +28,11 @@ compose healthcheck; Caddy never routes it publicly.
 
 | Path | What |
 | --- | --- |
-| `server/` | Bun TypeScript server, run directly (no build step): `index.ts` entry, `config.ts` env parsing, `http.ts` routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
+| `server/` | Bun TypeScript server, run directly (no build step): `index.ts` entry, `config.ts` env parsing, `http.ts` routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the `/tela` status card, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
 | `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`); `bun run build` writes `web/dist` |
 | `scripts/dev.ts`, `stack.ts`, `livekit.ts` | Local dev: downloads and starts `livekit-server --dev`, starts the Bun server and Vite, cleans up on exit |
 | `scripts/image.ts` | `bun run image`: local container build plus smoke test |
-| `e2e/` | Playwright specs (`*.e2e.ts`): login, screen share between two browser contexts, language and theme |
+| `e2e/` | Playwright specs (`*.e2e.ts`): login, screen share between two browser contexts, language and theme, room closing |
 | `Dockerfile` | Multi-stage build (Bun build, prod deps, Bun alpine runtime) |
 | `deploy/` | Host side: `compose.yml`, `Caddyfile`, `livekit.yaml`, `env/*.example`, `install.sh`, `pin.sh` |
 | `deploy/updater/` | `tela-update` and its systemd service/timer (pull-based CD) |
@@ -60,12 +61,51 @@ login that skips Discord and the bot. It is refused unless `PUBLIC_URL` is
 and in that mode every request whose `Host` is not `localhost`, `127.0.0.1` or
 `[::1]` gets a 421, so a reverse proxy in front of it (or a DNS-rebinding page)
 never reaches the fake login. Set `DEV_LOCALE=en` or `pt-BR` to force the
-locale.
+locale. There is no `/tela` in dev, so any valid room name
+(`/sala/?room=test1`) opens a room on first use; it still closes like a real
+one (`CLOSE_EMPTY_SECONDS=30 bun run dev` to watch that happen). The dev
+registry lives in `.cache/data/`; the E2E stack uses a fresh `.cache/e2e-data/`
+with `CLOSE_EMPTY_SECONDS=4` and `POLL_SECONDS=1`.
 
-Optional env vars beyond the ones in `deploy/env/app.env.example`: `GROUP_NAME`
-(name shown in the UI and bot replies; defaults to the guild name) and
-`LIVEKIT_PUBLIC_URL` (signaling URL the browser uses; defaults to
-`PUBLIC_URL/livekit` as ws/wss).
+Optional env vars (all listed, commented out, in `deploy/env/app.env.example`):
+`GROUP_NAME` (name shown in the UI and bot replies; defaults to the guild
+name), `LIVEKIT_PUBLIC_URL` (signaling URL the browser uses; defaults to
+`PUBLIC_URL/livekit` as ws/wss), `LIVEKIT_API_URL` (LiveKit HTTP API the server
+calls; default `http://127.0.0.1:7880`), `CLOSE_EMPTY_SECONDS` (default 300),
+`POLL_SECONDS` (default 5) and `DATA_DIR` (room registry; `/data` in the
+image, `.cache/data/` otherwise).
+
+## Room lifecycle
+
+A Telinha link does not live forever:
+
+- Only `/tela` creates rooms. The server records the room in
+  `DATA_DIR/telinha.sqlite`, creates it in LiveKit through the RoomService API
+  and posts the card. LiveKit runs with `room.auto_create: false`, so an old
+  token (they last 6 h) cannot bring a closed room back.
+- Every `POLL_SECONDS` the server lists the participants of each open room.
+  The `/tela` message is a live card: who is streaming (with the quality the
+  page reports, e.g. `1080p60 · H265`), who is watching, and since when. It is
+  edited only when it changes, at most every 5 s, without pinging anyone.
+- A room closes for good after `CLOSE_EMPTY_SECONDS` with nobody in it, or
+  that long after `/tela` when nobody ever joined. The server deletes the
+  LiveKit room and turns the card into a summary (how long it lasted, everyone
+  who came) without the button.
+- The page needs a room from `/tela`: without one, or for an unknown or closed
+  room, it shows a notice pointing to `/tela` (the token endpoint answers 404
+  or 410).
+
+While a room is open the server keeps it in LiveKit, so a LiveKit restart
+(tela-ipwatch, an image bump) only blips it: the page fetches a new token and
+rejoins once (a stream has to be shared again). `tela-update` restarts
+LiveKit or Caddy when a release changes `livekit.yaml` or the `Caddyfile`.
+
+Card edits use the bot token, so the bot must still see the channel. If the
+message is deleted, or the bot can't edit it (403), the room keeps its
+lifecycle and the card is left alone. A closed card that could not be sent
+yet is retried after a restart.
+The registry is the `telinha-data` volume in `deploy/compose.yml`; losing it
+only means the links of rooms open at that moment stop working.
 
 The page has four themes (Dark, Ash, Onyx, Light; "system" follows the OS) and
 two languages (pt-BR, en). Both are picked in the top bar and kept in

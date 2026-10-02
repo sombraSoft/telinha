@@ -18,6 +18,9 @@ try {
     webDir: existsSync(join(dist, 'index.html')) ? dist : await placeholderWebDir(),
     env: process.env.DEV_LOCALE ? { DEV_LOCALE: process.env.DEV_LOCALE } : {},
     devUser: process.env.DEV_USER,
+    // e.g. CLOSE_EMPTY_SECONDS=30 to watch a room close without waiting 5 min
+    closeEmptySeconds: Number(process.env.CLOSE_EMPTY_SECONDS) || undefined,
+    pollSeconds: Number(process.env.POLL_SECONDS) || undefined,
   });
   stack.spawn('vite', [process.execPath, 'run', '--filter', '@telinha/web', 'dev']);
   console.log('\n  open http://localhost:5173/sala/\n');

@@ -61,11 +61,15 @@ export const en = {
   'audio.unlock': 'Click to turn the sound on',
   'conn.reconnecting': 'Reconnecting…',
   'conn.reconnected': 'Reconnected.',
+  'conn.rejoinedShare': 'Reconnected. Your stream stopped: share again.',
   'fatal.members': 'Telinha is only for members of the group.',
   'fatal.join': 'Could not join the room.',
   'fatal.disconnected': 'You left the room (connection lost).',
   'fatal.error': 'Error: {error}',
   'fatal.reload': 'Reload',
+  'notice.noRoom': 'Open a Telinha with /tela on Discord.',
+  'notice.unknown': 'This Telinha does not exist. Open one with /tela on Discord.',
+  'notice.closed': 'This Telinha has ended. Open another with /tela on Discord.',
 };
 
 export type MessageKey = keyof typeof en;
