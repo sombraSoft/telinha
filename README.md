@@ -201,6 +201,7 @@ Logs:
 ```
 journalctl -t tela-update
 journalctl -t tela-ipwatch
+journalctl -t telinha        # server: logins (and why one failed), /tela, rooms
 ```
 
 The compose file lives in `deploy/`, not at the repo top level, so the weekly
