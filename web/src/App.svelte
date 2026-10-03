@@ -66,7 +66,7 @@
   <main class="body">
     <Stage {rc} />
     <PeopleList {rc} />
-    <!-- In the body, not the viewport: the top bar wraps taller on phones. -->
+    <!-- In the body, not the viewport, so it sits below the top bar whatever its height. -->
     {#if rc.connected && !rc.canPlaybackAudio}
       <button class="btn primary unlock" data-testid="audio-unlock" onclick={() => rc.startAudio()}>
         <span aria-hidden="true">🔊</span>

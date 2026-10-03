@@ -46,7 +46,9 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
     expect(fps).toBeGreaterThanOrEqual(20);
     await expect(tile.getByTestId('tile-quality')).toContainText('720p');
 
-    await sub.getByTestId('stats-toggle').click();
+    await sub.getByTestId('settings-button').click();
+    await sub.getByTestId('debug-toggle').check();
+    await sub.keyboard.press('Escape');
     // No GPU in CI: software H264 (or VP8). Locally AV1/H265 may win the pick.
     const codecs = process.env.CI ? /H264|VP8/i : /H264|VP8|VP9|H265|AV1/i;
     await expect(tile).toContainText(codecs, { timeout: 15_000 });

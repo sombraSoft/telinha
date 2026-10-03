@@ -3,16 +3,9 @@
   import { prefs } from '../lib/prefs.svelte';
   import type { RoomController } from '../lib/room.svelte';
   import { FRAME_RATES, RESOLUTIONS, parseShareSettings } from '../lib/share';
-  import { codecCaps } from '../lib/stats';
 
   let { rc }: { rc: RoomController } = $props();
 
-  const caps = codecCaps();
-  const capsLine = $derived(
-    caps
-      .map((c) => t('stats.caps', { codec: c.codec, send: c.send ? '✓' : '✗', recv: c.recv ? '✓' : '✗' }))
-      .join(' · '),
-  );
   const codecInfo = $derived(
     rc.share ? `${rc.share.codec.toUpperCase()} · ${rc.share.audio ? t('share.withSound') : t('share.noSound')}` : '',
   );
@@ -41,7 +34,6 @@
       </select>
     </label>
     {#if codecInfo}<span class="info">{codecInfo}</span>{/if}
-    {#if prefs.stats}<span class="info">{capsLine}</span>{/if}
   </div>
 
   <button

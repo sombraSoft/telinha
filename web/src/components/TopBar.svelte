@@ -1,29 +1,17 @@
 <script lang="ts">
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
-  import { prefs, type LangChoice } from '../lib/prefs.svelte';
   import type { RoomController } from '../lib/room.svelte';
-  import { THEME_CHOICES, parseThemeChoice } from '../lib/theme';
+  import SettingsMenu from './SettingsMenu.svelte';
 
   let { rc }: { rc: RoomController } = $props();
-
-  // Language names stay in their own language so anyone can find theirs.
-  const LANGS: { value: LangChoice; label?: string }[] = [
-    { value: 'auto' },
-    { value: 'pt-BR', label: 'Português' },
-    { value: 'en', label: 'English' },
-  ];
 </script>
 
+<!-- Three columns: the side ones share the leftover width equally, so the
+     title sits in the middle of the viewport whatever is beside it. -->
 <header class="top">
-  <div class="brand">
-    <span class="logo" aria-hidden="true">📺</span>
-    <span class="title">Telinha</span>
-    {#if rc.group}<span class="chip">{rc.group}</span>{/if}
+  <div class="left">
     {#if rc.roomName}<span class="muted room">{t('top.room', { name: rc.roomName })}</span>{/if}
-  </div>
-
-  <div class="actions">
     <button
       class="btn ghost"
       data-testid="copy-link"
@@ -32,40 +20,15 @@
       onclick={() => void rc.copyLink()}>
       <span aria-hidden="true">🔗</span><span class="label">{t('top.copyLink')}</span>
     </button>
-    <button
-      class="btn ghost icon"
-      data-testid="stats-toggle"
-      aria-pressed={prefs.stats}
-      aria-label={t('top.stats')}
-      title={t('top.stats')}
-      onclick={() => prefs.setStats(!prefs.stats)}>📊</button
-    >
-    <select
-      class="select"
-      name="theme"
-      data-testid="theme-select"
-      aria-label={t('top.theme')}
-      title={t('top.theme')}
-      value={prefs.theme}
-      onchange={(e) => prefs.setTheme(parseThemeChoice(e.currentTarget.value))}
-    >
-      {#each THEME_CHOICES as c (c)}
-        <option value={c}>{t(`theme.${c}`)}</option>
-      {/each}
-    </select>
-    <select
-      class="select"
-      name="lang"
-      data-testid="lang-select"
-      aria-label={t('top.language')}
-      title={t('top.language')}
-      value={prefs.lang}
-      onchange={(e) => prefs.setLang(LANGS.find((l) => l.value === e.currentTarget.value)?.value ?? 'auto')}
-    >
-      {#each LANGS as l (l.value)}
-        <option value={l.value}>{l.label ?? t('lang.auto')}</option>
-      {/each}
-    </select>
+  </div>
+
+  <div class="brand">
+    <span class="logo" aria-hidden="true">📺</span>
+    <span class="title">Telinha</span>
+  </div>
+
+  <div class="right">
+    <SettingsMenu />
     {#if rc.user}
       <div class="me" data-testid="me">
         <img class="avatar" src={avatarUrl(rc.user.id, rc.user.avatar)} alt="" />
@@ -77,21 +40,31 @@
 
 <style>
   .top {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     padding: 8px 16px;
     background: var(--bg-1);
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .left,
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
+  }
+  .right {
+    /* SettingsMenu's popover anchors here. */
+    position: relative;
+    justify-content: flex-end;
   }
   .brand {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-width: 0;
-    white-space: nowrap;
   }
   .title {
     font-weight: 700;
@@ -100,52 +73,51 @@
   .logo {
     font-size: 18px;
   }
-  .chip {
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: var(--bg-3);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 600;
-  }
   .room {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 13px;
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
   }
   .me {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+    max-width: 180px;
     margin-left: 4px;
     padding: 3px 10px 3px 3px;
     border-radius: 999px;
     background: var(--bg-2);
     border: 1px solid var(--border);
     font-weight: 600;
-    max-width: 180px;
   }
   .me .name {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   @media (max-width: 720px) {
     .top {
-      flex-wrap: wrap;
+      gap: 8px;
       padding: 8px 12px;
     }
     .room,
     .label {
       display: none;
+    }
+    /* Hidden visually but still read, so the chip isn't an unnamed avatar. */
+    .me .name {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .me {
+      margin-left: 0;
+      padding: 3px;
     }
   }
 </style>
