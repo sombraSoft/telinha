@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/sombraSoft/telinha/compare/v0.3.1...v0.4.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename the slash command /tela to /telinha ([#19](https://github.com/sombraSoft/telinha/issues/19))
+
+### Features
+
+* rename the slash command /tela to /telinha ([#19](https://github.com/sombraSoft/telinha/issues/19)) ([5a3f34a](https://github.com/sombraSoft/telinha/commit/5a3f34a3c0abc896ed8796481b9807609731f6d9))
+
 ## [0.3.1](https://github.com/sombraSoft/telinha/compare/v0.3.0...v0.3.1) (2026-10-03)
 
 
