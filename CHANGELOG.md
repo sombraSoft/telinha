@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/sombraSoft/telinha/compare/v0.3.0...v0.3.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **server:** log why a login failed and keep logs across deploys ([#17](https://github.com/sombraSoft/telinha/issues/17)) ([af2c823](https://github.com/sombraSoft/telinha/commit/af2c8238cfeb0f6d67ec9c83ed1cc80fa1fd784f))
+
 ## [0.3.0](https://github.com/sombraSoft/telinha/compare/v0.3.0-rc.1...v0.3.0) (2026-10-03)
 
 
