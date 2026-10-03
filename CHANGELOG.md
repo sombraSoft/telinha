@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/sombraSoft/telinha/compare/v0.5.0...v0.5.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **server:** use the server nickname in the room ([#25](https://github.com/sombraSoft/telinha/issues/25)) ([a65ae11](https://github.com/sombraSoft/telinha/commit/a65ae11082697720c39811779bbdab162e41406b))
+
 ## [0.5.0](https://github.com/sombraSoft/telinha/compare/v0.5.0-rc.1...v0.5.0) (2026-10-03)
 
 
