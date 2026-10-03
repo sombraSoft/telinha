@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0-rc.1](https://github.com/sombraSoft/telinha/compare/v0.4.0...v0.5.0-rc.1) (2026-10-03)
+
+
+### Features
+
+* room page refresh (settings menu, share dock and modal, member list) ([#21](https://github.com/sombraSoft/telinha/issues/21)) ([508198d](https://github.com/sombraSoft/telinha/commit/508198d37f7e13aaa8f8057dc08cf5f5690e538a))
+
 ## [0.4.0](https://github.com/sombraSoft/telinha/compare/v0.3.1...v0.4.0) (2026-10-03)
 
 
