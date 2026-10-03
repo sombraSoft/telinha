@@ -247,6 +247,58 @@ describe('/auth/token', () => {
   });
 });
 
+describe('/auth/members', () => {
+  const list = [
+    { id: '1', name: 'Zé', avatar: 'abc', status: 'online' as const },
+    { id: '2', name: 'Bia', avatar: null, status: 'offline' as const },
+  ];
+
+  test('401 without a session, 403 without the role', async () => {
+    const s = setup({ directory: () => list });
+    const none = await s.get('/auth/members');
+    expect(none.status).toBe(401);
+    expect(await none.json()).toEqual({ error: 'login' });
+    const forged = await s.get('/auth/members', { cookie: 'telinha=eyJ9.abc' });
+    expect(forged.status).toBe(401);
+    const denied = await setup({ members: [], directory: () => list }).get('/auth/members', { cookie: s.sessionCookie() });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toEqual({ error: 'members' });
+  });
+
+  test('200: the directory as is, never cached', async () => {
+    const s = setup({ directory: () => list });
+    const r = await s.get('/auth/members', { cookie: s.sessionCookie() });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    expect(r.headers.get('content-type')).toContain('application/json');
+    expect(await r.json()).toEqual({ members: list });
+  });
+
+  test('bot not ready yet: an empty list, not an error', async () => {
+    const s = setup();
+    const r = await s.get('/auth/members', { cookie: s.sessionCookie() });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ members: [] });
+    const nul = setup({ directory: () => null });
+    expect(await (await nul.get('/auth/members', { cookie: nul.sessionCookie() })).json()).toEqual({ members: [] });
+  });
+
+  test('DEV_USER: the fixed preview list, still behind the login', async () => {
+    const s = setup({ env: DEV_ENV, directory: () => list });
+    expect((await s.get('/auth/members')).status).toBe(401);
+    expect((await s.get('/auth/members', { cookie: s.sessionCookie({ id: '2' }) })).status).toBe(403);
+    const r = await s.get('/auth/members', { cookie: s.sessionCookie({ id: '1', name: 'Dev' }) });
+    expect(r.status).toBe(200);
+    const { members } = (await r.json()) as { members: Array<{ id: string; name: string; avatar: string | null; status: string }> };
+    expect(members).toHaveLength(8);
+    expect(members.find((m) => m.id === '1')).toEqual({ id: '1', name: 'Dev', avatar: null, status: 'online' });
+    expect(new Set(members.map((m) => m.status))).toEqual(new Set(['online', 'idle', 'dnd', 'offline']));
+    // production never serves the fake list
+    const prod = setup({ directory: () => list });
+    expect(await (await prod.get('/auth/members', { cookie: prod.sessionCookie() })).json()).toEqual({ members: list });
+  });
+});
+
 test('/auth/logout clears the session', async () => {
   const s = setup();
   const r = await s.get('/auth/logout', { cookie: s.sessionCookie({ locale: 'pt-BR' }) });

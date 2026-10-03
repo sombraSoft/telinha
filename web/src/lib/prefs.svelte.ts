@@ -15,6 +15,8 @@ class Prefs {
   share = $state.raw<ShareSettings>(parseShareSettings(load('share', null)));
   /** People list open or collapsed; null until the user picks, so each viewport keeps its default. */
   people = $state<boolean | null>(parsePeople(load('people', null)));
+  /** The Offline section of the people list is open (collapsed by default). */
+  offline = $state<boolean>(load<unknown>('offline', false) === true);
   // Volume/mute per stream identity; read through to storage on first use.
   #volume = $state<Record<string, number>>({});
   #muted = $state<Record<string, boolean>>({});
@@ -38,6 +40,10 @@ class Prefs {
   setPeople(v: boolean) {
     this.people = v;
     save('people', v);
+  }
+  setOffline(v: boolean) {
+    this.offline = v;
+    save('offline', v);
   }
 
   /** Last quality picked on any tile; new tiles start with it. */

@@ -1,11 +1,13 @@
 // HTTP handler: login gate for Caddy forward_auth (/auth/check), Discord OAuth,
-// LiveKit tokens for open /telinha rooms, the room page (/sala/) and /healthz.
+// LiveKit tokens for open /telinha rooms, the member list (/auth/members), the
+// room page (/sala/) and /healthz.
 // Everything external is injected so tests drive it with plain Request objects.
 import { randomBytes } from 'node:crypto';
 import { cookie, parseCookies, safeNext, SESSION, sign, STATE, verify, type Session } from './auth.ts';
 import type { Config } from './config.ts';
 import { fromAcceptLanguage, resolveLocale, type Locale } from './i18n.ts';
 import { createToken, newIdentity, ROOM_RE, type RoomService } from './livekit.ts';
+import { devMembers, type DirMember } from './members.ts';
 import * as pages from './pages.ts';
 import type { IsMember } from './roles.ts';
 import type { Registry } from './rooms.ts';
@@ -22,6 +24,8 @@ export interface Deps {
   /** Display name of the group in the given locale. */
   group: (locale: Locale) => string;
   discordReady?: () => boolean;
+  /** Role members with their status (members.ts); null until the bot has fetched them. */
+  members?: () => DirMember[] | null;
   /** Used only for the Discord OAuth calls. */
   fetch?: Fetch;
   now?: () => number;
@@ -64,6 +68,7 @@ export function uaFamily(ua: string | null): string {
 export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
   const { config: c, isMember, files, group, registry, rooms } = deps;
   const discordReady = deps.discordReady ?? (() => false);
+  const members = deps.members ?? (() => null);
   const doFetch: Fetch = deps.fetch ?? ((input, init) => fetch(input, init));
   const now = deps.now ?? Date.now;
   const random = deps.random ?? ((n: number) => randomBytes(n));
@@ -215,6 +220,17 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
       return json(200, {
         url: c.livekitUrl, token, identity, user: { id: s.id, name: s.name, avatar, locale }, group: group(locale),
       });
+    }
+
+    // Who else has the role, for the page's Online / Offline lists. Caddy lets
+    // /auth/* through without forward_auth, so the session and role are checked
+    // here, as for the token.
+    if (path === '/auth/members') {
+      const s = session();
+      if (!s) return json(401, { error: 'login' });
+      if (!(await isMember(s.id))) return json(403, { error: 'members' });
+      // Dev has no bot: a fixed list to preview the page with.
+      return json(200, { members: c.dev ? devMembers(c.dev) : (members() ?? []) });
     }
 
     if (path === '/auth/logout') {

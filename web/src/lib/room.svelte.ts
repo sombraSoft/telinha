@@ -33,6 +33,8 @@ export type Stream = {
 
 export type Peer = {
   identity: string;
+  /** Discord id (the identity is "<discord id>:<tab>") */
+  id: string;
   name: string;
   avatar: string;
   local: boolean;
@@ -74,6 +76,7 @@ function peerOf(p: Participant, local: boolean): Peer {
   const apub = p.getTrackPublication(Track.Source.ScreenShareAudio);
   return {
     identity: p.identity,
+    id,
     name: p.name || p.identity,
     avatar: avatarUrl(id, meta.avatar),
     local,

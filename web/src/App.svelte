@@ -6,11 +6,13 @@
   import TopBar from './components/TopBar.svelte';
   import { tileElement, toggleFullscreen } from './lib/fullscreen';
   import { currentLocale, t } from './lib/i18n/i18n.svelte';
+  import { MembersFeed } from './lib/members.svelte';
   import { prefs } from './lib/prefs.svelte';
   import { RoomController, noticeText } from './lib/room.svelte';
   import { resolveTheme } from './lib/theme';
 
   const rc = new RoomController();
+  const members = new MembersFeed();
   /** Space the share dock needs at the stage bottom while it sits at home. */
   let dockClear = $state(0);
 
@@ -43,7 +45,9 @@
     lightQuery.addEventListener('change', onScheme);
     narrowQuery.addEventListener('change', onNarrow);
     void rc.start();
+    const stopMembers = members.start();
     return () => {
+      stopMembers();
       lightQuery.removeEventListener('change', onScheme);
       narrowQuery.removeEventListener('change', onNarrow);
     };
@@ -101,7 +105,7 @@
         {/if}
       </div>
     </div>
-    <PeopleList {rc} open={peopleOpen} ontoggle={togglePeople} />
+    <PeopleList {rc} members={members.list} open={peopleOpen} ontoggle={togglePeople} />
     <!-- In the body, not the viewport, so it sits below the top bar whatever its height. -->
     {#if rc.connected && !rc.canPlaybackAudio}
       <button class="btn primary unlock" data-testid="audio-unlock" onclick={() => rc.startAudio()}>

@@ -1,13 +1,15 @@
 // /telinha: opens a room and posts its live status card in the allowed channels.
 // Replies only the caller sees use their client locale; the card uses the
-// guild locale.
+// guild locale. Also keeps the member directory (members.ts) current.
 import {
-  Client, GatewayIntentBits, InteractionContextType, Locale as DLocale, MessageFlags, REST, Routes, SlashCommandBuilder,
+  Client, GatewayIntentBits, InteractionContextType, Locale as DLocale, MessageFlags, Options, REST, Routes,
+  SlashCommandBuilder, Status, type GuildMember, type PartialGuildMember,
 } from 'discord.js';
 import { randomBytes } from 'node:crypto';
 import type { Card } from './card.ts';
 import type { Config } from './config.ts';
 import { dicts, resolveLocale, t, type Locale } from './i18n.ts';
+import { memberData, type Directory } from './members.ts';
 import type { RoomService } from './livekit.ts';
 import type { Registry, RoomRecord } from './rooms.ts';
 
@@ -113,9 +115,24 @@ export function editCard(rest: REST) {
 export function startBot(o: {
   config: Config; rest: REST; group: (l: Locale) => string; log: (...a: unknown[]) => void;
   registry: Registry; rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>; render: (rec: RoomRecord) => Card;
+  directory: Directory;
 }): Client {
-  const { config: c, rest, group, log } = o;
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const { config: c, rest, group, log, directory } = o;
+  // GuildMembers and GuildPresences are privileged: both must be switched on
+  // in the Developer Portal (Bot tab), or login fails with "disallowed intents".
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences],
+    makeCache: Options.cacheWithLimits({
+      ...Options.DefaultMakeCacheSettings,
+      // Presences carry activities and change all the time: cache only the
+      // role members' (read once by loadMembers); the directory keeps its own
+      // copy of everyone's status from the events.
+      PresenceManager: {
+        maxSize: 0,
+        keepOverLimit: (p) => p.guild?.members.cache.get(p.userId)?.roles.cache.has(c.roleId) ?? false,
+      },
+    }),
+  });
   const command = buildCommand().toJSON();
 
   async function registerCommand() {
@@ -127,12 +144,69 @@ export function startBot(o: {
     }
   }
 
+  // The whole guild once per gateway session (members, roles and presences of
+  // the online ones); the events below keep it current from there. A failed
+  // load (fetch timeout, Discord hiccup) tries again: 30 s, 1, 2, 4... up to
+  // 10 min, until one works or a new session starts over.
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  let failures = 0;
+  async function loadMembers() {
+    if (retry) clearTimeout(retry);
+    retry = null;
+    const guild = client.guilds.cache.get(c.guildId);
+    // Down in an outage: guildAvailable loads it once it is back.
+    if (!guild?.available) return;
+    try {
+      const all = [...(await guild.members.fetch({ withPresences: true })).values()];
+      directory.reset(all.map((m) => memberData(m, c.roleId)), all.map((m) => [m.id, m.presence?.status]));
+      failures = 0;
+      log(`members: ${directory.size} with the role`);
+    } catch (e) {
+      const wait = Math.min(30_000 * 2 ** failures++, 600_000);
+      log(`members not loaded, again in ${wait / 1000} s`, (e as Error).message);
+      retry = setTimeout(() => void loadMembers(), wait);
+    }
+  }
+  const ours = (m: GuildMember | PartialGuildMember) => m.guild.id === c.guildId;
+  const upsert = (m: GuildMember) => {
+    if (ours(m)) directory.upsert(memberData(m, c.roleId));
+  };
+
   client.once('clientReady', () => {
     log(`logged in as ${client.user?.tag}`);
     void registerCommand();
   });
+  // Every fresh session (the first one and after a re-identify): events from
+  // while the bot was away are lost, so start over.
+  client.on('shardReady', () => void loadMembers());
   client.on('guildCreate', (g) => {
-    if (g.id === c.guildId) void registerCommand();
+    if (g.id !== c.guildId) return;
+    void registerCommand();
+    void loadMembers();
+  });
+  // Back from an outage (it was down when the session started). Every session
+  // start also brings guilds back this way, before shardReady: that one loads.
+  client.on('guildAvailable', (g) => {
+    if (g.id === c.guildId && g.shard.status === Status.Ready) void loadMembers();
+  });
+  client.on('guildMemberAdd', upsert);
+  client.on('guildMemberUpdate', (_old, m) => upsert(m));
+  // A member discord.js had not cached comes as "available" instead of
+  // "update". Add only: a presence for an uncached member also fires it, with
+  // a member built without roles.
+  client.on('guildMemberAvailable', (m) => {
+    if (!m.partial && m.roles.cache.has(c.roleId)) upsert(m);
+  });
+  client.on('guildMemberRemove', (m) => {
+    if (ours(m)) directory.remove(m.id);
+  });
+  client.on('presenceUpdate', (_old, p) => {
+    if (p.guild?.id === c.guildId) directory.presence(p.userId, p.status);
+  });
+  // Global name or avatar changed: re-read the member.
+  client.on('userUpdate', (_old, u) => {
+    const m = client.guilds.cache.get(c.guildId)?.members.cache.get(u.id);
+    if (m) upsert(m);
   });
 
   client.on('interactionCreate', async (i) => {
