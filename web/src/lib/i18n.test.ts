@@ -25,8 +25,10 @@ describe('dictionaries', () => {
       expect(placeholders(ptBR[key])).toEqual(placeholders(en[key]));
     }
   });
-  test('pt-BR keeps the 0.1.1 wording', () => {
-    expect(ptBR['share.start']).toBe('Transmitir');
+  test('pt-BR keeps the chosen wording', () => {
+    // The dock button names the action; the modal's confirm keeps the old word.
+    expect(ptBR['share.start']).toBe('Compartilhar tela');
+    expect(ptBR['share.goLive']).toBe('Transmitir');
     expect(ptBR['share.stop']).toBe('Parar transmissão');
     expect(ptBR['empty.title']).toBe('Ninguém transmitindo ainda.');
     expect(ptBR['top.copyLink']).toBe('Copiar link');
@@ -45,7 +47,7 @@ describe('format', () => {
     expect(format('pt-BR', 'share.applied', { res: '720p', fps: 30 })).toBe('Agora: 720p 30 fps');
   });
   test('leaves unknown placeholders alone', () => {
-    expect(format('en', 'empty.hint')).toBe('Click {share} to share your screen.');
+    expect(format('en', 'empty.hint')).toBe('Click {share} to start.');
     expect(format('en', 'tile.volume', {})).toBe('Volume of {name}');
   });
 });

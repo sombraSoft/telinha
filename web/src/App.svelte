@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import PeopleList from './components/PeopleList.svelte';
+  import PeopleList, { PEOPLE_ID } from './components/PeopleList.svelte';
   import ShareDock from './components/ShareDock.svelte';
   import Stage from './components/Stage.svelte';
   import TopBar from './components/TopBar.svelte';
@@ -16,6 +16,19 @@
 
   const lightQuery = matchMedia('(prefers-color-scheme: light)');
   let prefersLight = $state(lightQuery.matches);
+  // Same breakpoint as the CSS below, where the people list moves under the stage.
+  const narrowQuery = matchMedia('(max-width: 720px)');
+  let narrow = $state(narrowQuery.matches);
+  // Open beside the stage, collapsed under it on phones, until the user picks.
+  const peopleOpen = $derived(prefs.people ?? !narrow);
+  function togglePeople() {
+    // A collapsing list turns inert: focus inside it would drop to <body>, so
+    // it moves to the edge handle, which stays put.
+    if (peopleOpen && document.getElementById(PEOPLE_ID)?.contains(document.activeElement)) {
+      document.querySelector<HTMLElement>('[data-testid="people-handle"]')?.focus();
+    }
+    prefs.setPeople(!peopleOpen);
+  }
 
   $effect(() => {
     document.documentElement.dataset.theme = resolveTheme(prefs.theme, prefersLight);
@@ -26,9 +39,14 @@
 
   onMount(() => {
     const onScheme = () => (prefersLight = lightQuery.matches);
+    const onNarrow = () => (narrow = narrowQuery.matches);
     lightQuery.addEventListener('change', onScheme);
+    narrowQuery.addEventListener('change', onNarrow);
     void rc.start();
-    return () => lightQuery.removeEventListener('change', onScheme);
+    return () => {
+      lightQuery.removeEventListener('change', onScheme);
+      narrowQuery.removeEventListener('change', onNarrow);
+    };
   });
 
   // Move focus into the fatal card: its button if there is one, else the card.
@@ -66,8 +84,8 @@
 
 <!-- Behind the fatal overlay nothing may be focused or operated. -->
 <div class="app" inert={!!rc.fatal}>
-  <TopBar {rc} />
-  <main class="body">
+  <TopBar {rc} {peopleOpen} ontogglepeople={togglePeople} />
+  <main class="body" class:people-open={peopleOpen}>
     <!-- The dock floats over the stage only, never over the people list; toasts
          sit just above the dock's home spot there. -->
     <div class="stage-col" style:--dock-clear="{dockClear}px">
@@ -83,7 +101,7 @@
         {/if}
       </div>
     </div>
-    <PeopleList {rc} />
+    <PeopleList {rc} open={peopleOpen} ontoggle={togglePeople} />
     <!-- In the body, not the viewport, so it sits below the top bar whatever its height. -->
     {#if rc.connected && !rc.canPlaybackAudio}
       <button class="btn primary unlock" data-testid="audio-unlock" onclick={() => rc.startAudio()}>
@@ -112,17 +130,28 @@
     height: 100vh;
     height: 100dvh;
   }
+  /* --side-w is a registered <length> (base.css), so it animates: it drives
+     the people column and, halved, how far the stage's centred things move
+     right to sit on the window centre instead of the stage centre. */
   .body {
+    --side-w: 0px;
+    --stage-shift: calc(var(--side-w) / 2);
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-columns: minmax(0, 1fr) var(--side-w);
     min-height: 0;
+    transition: --side-w 0.2s ease;
+  }
+  .body.people-open {
+    --side-w: var(--people-w);
   }
   .stage-col {
     position: relative;
     display: grid;
     min-width: 0;
     min-height: 0;
+    /* For cqw: centred things clamp their shift to the stage width. */
+    container-type: inline-size;
   }
 
   .unlock {
@@ -147,6 +176,8 @@
     /* Just above the share dock in its home spot (bottom-centre of the stage). */
     bottom: max(16px, var(--dock-clear, 0px));
     transform: translateX(-50%);
+    /* On the window centre like the dock, as far as the stage allows. */
+    translate: clamp(0px, var(--stage-shift), (100cqw - 100%) / 2 - 16px) 0;
     z-index: 10;
     width: max-content;
     max-width: calc(100% - 32px);
@@ -194,7 +225,9 @@
   }
 
   @media (max-width: 720px) {
+    /* The list sits under the stage: the stage centre is the window centre. */
     .body {
+      --stage-shift: 0px;
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr) auto;
     }

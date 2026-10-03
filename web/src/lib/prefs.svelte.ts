@@ -6,12 +6,15 @@ import type { Locale } from './i18n';
 
 export type LangChoice = 'auto' | Locale;
 const parseLang = (v: unknown): LangChoice => (v === 'pt-BR' || v === 'en' ? v : 'auto');
+const parsePeople = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null);
 
 class Prefs {
   theme = $state<ThemeChoice>(parseThemeChoice(load('theme', 'system')));
   lang = $state<LangChoice>(parseLang(load('lang', 'auto')));
   stats = $state<boolean>(load<unknown>('stats', false) === true);
   share = $state.raw<ShareSettings>(parseShareSettings(load('share', null)));
+  /** People list open or collapsed; null until the user picks, so each viewport keeps its default. */
+  people = $state<boolean | null>(parsePeople(load('people', null)));
   // Volume/mute per stream identity; read through to storage on first use.
   #volume = $state<Record<string, number>>({});
   #muted = $state<Record<string, boolean>>({});
@@ -31,6 +34,10 @@ class Prefs {
   setShare(v: ShareSettings) {
     this.share = v;
     save('share', v);
+  }
+  setPeople(v: boolean) {
+    this.people = v;
+    save('people', v);
   }
 
   /** Last quality picked on any tile; new tiles start with it. */

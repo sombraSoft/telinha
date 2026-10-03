@@ -135,8 +135,8 @@ test('the dock drags inside the stage, persists, and double-click sends it home'
   await expect(grip).toHaveAttribute('title', /double-click/);
   const home = await dockBox(page);
   const stage = (await page.locator('.stage').boundingBox())!;
-  // Home: bottom-centre of the stage, not of the window (the people list is beside it).
-  expect(Math.abs(home.x + home.width / 2 - (stage.x + stage.width / 2))).toBeLessThan(2);
+  // Home: bottom, centred on the window even with the people list open beside the stage.
+  expect(Math.abs(home.x + home.width / 2 - page.viewportSize()!.width / 2)).toBeLessThan(2);
 
   // Dragged far past the top-left corner: clamped inside the stage.
   const g = (await grip.boundingBox())!;

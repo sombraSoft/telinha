@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
-  import { DOCK_MARGIN, clampTo, homeOf, nearHome, parseDockPos, placeDock, toFraction, type Point } from '../lib/dock';
+  import { DOCK_MARGIN, clampTo, homeOf, nearHome, parseDockPos, placeDock, toFraction, type Point, type Screen } from '../lib/dock';
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomController } from '../lib/room.svelte';
   import { canShareScreen } from '../lib/share';
@@ -23,6 +23,9 @@
   let stageH = $state(0);
   let dockW = $state(0);
   let dockH = $state(0);
+  let area = $state<HTMLDivElement>();
+  let windowW = $state(window.innerWidth);
+  let stageLeft = $state(0);
   /** Stored centre as a fraction of the stage; null = home (bottom-centre). */
   let frac = $state.raw<Point | null>(parseDockPos(load('dock', null)));
   let drag = $state.raw<{ dx: number; dy: number; at: Point } | null>(null);
@@ -34,8 +37,17 @@
 
   const stage = $derived({ width: stageW, height: stageH });
   const dock = $derived({ width: dockW, height: dockH });
+  // Home is centred on the window, so it stays put while the people list opens or closes.
+  const screen = $derived<Screen>({ stageLeft, width: windowW });
   // Derived from the sizes, so it re-clamps whenever the stage or dock resizes.
-  const pos = $derived(drag?.at ?? placeDock(frac, dock, stage));
+  const pos = $derived(drag?.at ?? placeDock(frac, dock, stage, screen));
+
+  // The stage's left edge only moves when the layout does, which resizes it or the window.
+  $effect(() => {
+    void stageW;
+    void windowW;
+    stageLeft = area?.getBoundingClientRect().left ?? 0;
+  });
 
   const codecInfo = $derived(
     rc.share ? `${rc.share.codec.toUpperCase()} · ${rc.share.audio ? t('share.withSound') : t('share.noSound')}` : '',
@@ -89,7 +101,7 @@
     if (!drag) return;
     const at = drag.at;
     drag = null;
-    if (nearHome(at, homeOf(dock, stage))) goHome();
+    if (nearHome(at, homeOf(dock, stage, screen))) goHome();
     else place(toFraction(at, stage));
   }
 
@@ -125,9 +137,11 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={windowW} />
+
 {#if canShare}
   <!-- Spans the stage only, so the dock can't be dragged over the people list. -->
-  <div class="area" bind:clientWidth={stageW} bind:clientHeight={stageH}>
+  <div class="area" bind:this={area} bind:clientWidth={stageW} bind:clientHeight={stageH}>
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions (double click = the grip's Home key) -->
     <div
       class="dock"

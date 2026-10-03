@@ -1,18 +1,27 @@
 // Where the floating share dock sits over the stage. Pure geometry (no DOM),
 // so it is unit-tested. Positions are the dock's centre in stage pixels; what
 // is stored is that centre as a fraction of the stage size (survives resizes),
-// or null for "home" (bottom-centre), which also follows the dock's own size.
+// or null for "home" (bottom, centred on the window), which also follows the
+// dock's own size.
 
 export type Point = { x: number; y: number };
 export type Size = { width: number; height: number };
+/** Where the stage sits in the window: its left edge and the window width (px). */
+export type Screen = { stageLeft: number; width: number };
 
 /** Gap kept between the dock and the stage edges. */
 export const DOCK_MARGIN = 16;
 /** Released this close to home, the dock snaps back there. */
 export const SNAP_RADIUS = 24;
 
-export function homeOf(dock: Size, stage: Size, margin = DOCK_MARGIN): Point {
-  return clampTo({ x: stage.width / 2, y: stage.height - margin - dock.height / 2 }, dock, stage, margin);
+/**
+ * Bottom, centred on the window rather than the stage (the people list beside
+ * the stage would pull it off-centre), but never out of the stage: when the
+ * stage is too narrow it moves only as far as it must. No screen = stage centre.
+ */
+export function homeOf(dock: Size, stage: Size, screen?: Screen, margin = DOCK_MARGIN): Point {
+  const x = screen ? screen.width / 2 - screen.stageLeft : stage.width / 2;
+  return clampTo({ x, y: stage.height - margin - dock.height / 2 }, dock, stage, margin);
 }
 
 /** Keeps the whole dock inside the stage; centred on an axis the stage is too small for. */
@@ -30,8 +39,8 @@ export function nearHome(p: Point, home: Point, radius = SNAP_RADIUS): boolean {
 }
 
 /** The pixel position for a stored fraction (null = home), clamped to the stage. */
-export function placeDock(frac: Point | null, dock: Size, stage: Size): Point {
-  if (!frac) return homeOf(dock, stage);
+export function placeDock(frac: Point | null, dock: Size, stage: Size, screen?: Screen): Point {
+  if (!frac) return homeOf(dock, stage, screen);
   return clampTo({ x: frac.x * stage.width, y: frac.y * stage.height }, dock, stage);
 }
 

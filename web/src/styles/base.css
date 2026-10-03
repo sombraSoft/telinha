@@ -21,6 +21,17 @@ body {
   height: 100%;
 }
 
+/* Width of the open people list. --side-w is its animated column width (App):
+   registered so a transition can interpolate it. */
+:root {
+  --people-w: 260px;
+}
+@property --side-w {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
 button,
 select,
 input {

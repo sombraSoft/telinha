@@ -63,6 +63,9 @@
     margin: auto;
     text-align: center;
     padding: 24px;
+    /* Centred on the window, not the stage, while the people list is open
+       (App sets the shift); as far as the stage leaves room on the right. */
+    translate: clamp(0px, var(--stage-shift, 0px), (100cqw - 100%) / 2 - 16px) 0;
   }
   .empty-icon {
     font-size: 48px;
@@ -115,7 +118,8 @@
   @media (max-width: 720px) {
     .stage {
       padding: 8px;
-      padding-bottom: max(8px, var(--dock-clear, 0px));
+      /* The people list's tab pokes 20px up into the stage's bottom edge. */
+      padding-bottom: max(28px, var(--dock-clear, 0px));
     }
     .tiles {
       grid-template-columns: minmax(0, 1fr);

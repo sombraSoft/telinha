@@ -8,12 +8,11 @@ test('language picker switches the UI text', async ({ page }) => {
   await page.getByTestId('settings-button').click();
   await page.getByTestId('lang-select').selectOption('pt-BR');
   await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
-  await expect(share).toContainText('Transmitir');
+  await expect(share).toContainText('Compartilhar tela');
 
   await page.getByTestId('lang-select').selectOption('en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-  await expect(share).not.toContainText('Transmitir');
-  await expect(share).toHaveText(/\S/);
+  await expect(share).toContainText('Share screen');
 });
 
 test('theme picker applies and survives a reload', async ({ page }) => {

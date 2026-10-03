@@ -13,6 +13,35 @@ describe('homeOf', () => {
   });
 });
 
+describe('homeOf on the screen centre', () => {
+  const y = 600 - DOCK_MARGIN - 26;
+  test('people list open: centred on the window, not the stage', () => {
+    // 1260 px window, stage from 0 to 1000, the list takes the other 260.
+    expect(homeOf(dock, stage, { stageLeft: 0, width: 1260 })).toEqual({ x: 630, y });
+  });
+  test('people list collapsed: window centre is the stage centre', () => {
+    expect(homeOf(dock, stage, { stageLeft: 0, width: 1000 })).toEqual(homeOf(dock, stage));
+  });
+  test('a stage that does not start at the window edge', () => {
+    expect(homeOf(dock, stage, { stageLeft: 100, width: 1200 })).toEqual({ x: 500, y });
+  });
+  test('a narrow stage shifts only as far as it stays inside', () => {
+    // Window centre 450 would put the dock's right edge past 400 - margin.
+    const narrow = { width: 400, height: 600 };
+    expect(homeOf(dock, narrow, { stageLeft: 0, width: 900 })).toEqual({ x: 400 - DOCK_MARGIN - 100, y });
+    // Partly: wanted 260, still fits (260 + 100 <= 384).
+    expect(homeOf(dock, narrow, { stageLeft: 0, width: 520 })).toEqual({ x: 260, y });
+  });
+  test('a stage narrower than the dock still centres it in the stage', () => {
+    expect(homeOf(dock, { width: 180, height: 600 }, { stageLeft: 0, width: 440 }).x).toBe(90);
+  });
+  test('placeDock(null) uses it; dragged positions ignore it', () => {
+    const screen = { stageLeft: 0, width: 1260 };
+    expect(placeDock(null, dock, stage, screen)).toEqual({ x: 630, y });
+    expect(placeDock({ x: 0.25, y: 0.5 }, dock, stage, screen)).toEqual({ x: 250, y: 300 });
+  });
+});
+
 describe('clampTo', () => {
   test('inside positions are left alone', () => {
     expect(clampTo({ x: 300, y: 200 }, dock, stage)).toEqual({ x: 300, y: 200 });

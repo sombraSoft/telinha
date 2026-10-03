@@ -2,9 +2,11 @@
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomController } from '../lib/room.svelte';
+  import { PEOPLE_ID } from './PeopleList.svelte';
   import SettingsMenu from './SettingsMenu.svelte';
 
-  let { rc }: { rc: RoomController } = $props();
+  let { rc, peopleOpen, ontogglepeople }: { rc: RoomController; peopleOpen: boolean; ontogglepeople: () => void } =
+    $props();
 </script>
 
 <!-- Three columns: the side ones share the leftover width equally, so the
@@ -28,6 +30,25 @@
   </div>
 
   <div class="right">
+    <!-- 👥 drawn in currentColor (the emoji ignores it): readable on every theme, follows hover. -->
+    <button
+      class="btn ghost icon people"
+      data-testid="people-toggle"
+      aria-label={t('people.toggle')}
+      title={t('people.toggle')}
+      aria-expanded={peopleOpen}
+      aria-controls={PEOPLE_ID}
+      onclick={ontogglepeople}
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="8" r="3.5" />
+          <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+          <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" />
+          <path d="M18 14.3c2.1.7 3.5 2.8 3.5 5.7" />
+        </g>
+      </svg>
+    </button>
     <SettingsMenu />
     {#if rc.user}
       <div class="me" data-testid="me">
@@ -79,6 +100,13 @@
     text-overflow: ellipsis;
     font-size: 13px;
   }
+  .people svg {
+    display: block;
+  }
+  .people[aria-expanded='true'] {
+    background: var(--hover);
+    color: var(--text);
+  }
   .me {
     display: flex;
     align-items: center;
@@ -115,9 +143,22 @@
       clip-path: inset(50%);
       white-space: nowrap;
     }
+    /* The avatar never squeezes: the right group is tight on small phones. */
     .me {
+      flex: none;
       margin-left: 0;
       padding: 3px;
+    }
+  }
+  /* Room for the right group's three buttons on the smallest phones. */
+  @media (max-width: 360px) {
+    .top {
+      gap: 4px;
+      padding: 8px;
+    }
+    .left,
+    .right {
+      gap: 2px;
     }
   }
 </style>
