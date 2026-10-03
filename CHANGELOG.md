@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/sombraSoft/telinha/compare/v0.3.0-rc.1...v0.3.0) (2026-10-03)
+
+
+### Documentation
+
+* note the channel permissions the live card needs ([#15](https://github.com/sombraSoft/telinha/issues/15)) ([8a8d826](https://github.com/sombraSoft/telinha/commit/8a8d826a1e0bf9c58b934e33a973c6deb49c054a))
+
 ## [0.3.0-rc.1](https://github.com/sombraSoft/telinha/compare/v0.2.0...v0.3.0-rc.1) (2026-10-03)
 
 
