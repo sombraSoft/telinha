@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/sombraSoft/telinha/compare/v0.5.0-rc.1...v0.5.0) (2026-10-03)
+
+
+### Bug Fixes
+
+* **server:** take the room avatar from the member directory ([#23](https://github.com/sombraSoft/telinha/issues/23)) ([75f6042](https://github.com/sombraSoft/telinha/commit/75f6042f9517665baa6c13b70fa2d9996eb89df3))
+
 ## [0.5.0-rc.1](https://github.com/sombraSoft/telinha/compare/v0.4.0...v0.5.0-rc.1) (2026-10-03)
 
 
