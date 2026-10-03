@@ -2,6 +2,7 @@
 // and streaming (rebuilt on every room event), sharing, stats and notices.
 // Components read the snapshot; LiveKit objects are never made reactive.
 import {
+  DisconnectReason,
   Room,
   RoomEvent,
   Track,
@@ -15,9 +16,9 @@ import { avatarUrl, discordIdOf, parseMeta } from './avatar';
 import { setUserLocale, t } from './i18n/i18n.svelte';
 import type { Locale, MessageKey, Params } from './i18n';
 import { prefs } from './prefs.svelte';
-import { isValidRoom, randomRoom } from './room-name';
+import { isValidRoom } from './room-name';
 import { applyLive, startShare, stopShare, type Share, type ShareSettings } from './share';
-import { summarize, type ByteSample, type VideoStats } from './stats';
+import { streamLabel, summarize, type ByteSample, type VideoStats } from './stats';
 
 export type TokenUser = { id: string; name: string; avatar: string | null; locale: Locale };
 type TokenResponse = { url: string; token: string; identity: string; user: TokenUser; group: string };
@@ -107,6 +108,11 @@ export class RoomController {
   #room: Room | null = null;
   #pending = false;
   #lastWatching: string | null = null;
+  /** Last "stream" attribute sent (quality for the /tela card) and when; null = that send failed. */
+  #lastStream: string | null = '';
+  #lastStreamAt = 0;
+  /** When the page last rejoined after an unexpected disconnect. */
+  #rejoinedAt = 0;
   #prevBytes = new Map<string, ByteSample>();
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
   #toastId = 0;
@@ -121,21 +127,14 @@ export class RoomController {
   }
 
   async #start() {
-    let name = new URLSearchParams(location.search).get('room');
-    if (!isValidRoom(name)) {
-      name = randomRoom();
-      history.replaceState(null, '', `?room=${name}`);
-    }
+    // Rooms only come from /tela now; there is nothing to join without one.
+    const name = new URLSearchParams(location.search).get('room');
+    if (!isValidRoom(name)) return this.#fail({ key: 'notice.noRoom' }, false);
     this.roomName = name;
 
-    const r = await fetch(`/auth/token?room=${encodeURIComponent(name)}`);
-    if (r.status === 401) {
-      location.href = `/auth/login?next=${encodeURIComponent(location.pathname + location.search)}`;
-      return;
-    }
-    if (r.status === 403) return this.#fail({ key: 'fatal.members' }, false);
-    if (!r.ok) return this.#fail({ key: 'fatal.join' }, true);
-    const { url, token, user, group } = (await r.json()) as TokenResponse;
+    const tok = await this.#token();
+    if (!tok) return;
+    const { url, token, user, group } = tok;
     this.user = user;
     this.group = group;
     setUserLocale(user.locale);
@@ -146,13 +145,61 @@ export class RoomController {
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => (this.canPlaybackAudio = room.canPlaybackAudio));
     room.on(RoomEvent.Reconnecting, () => this.notify({ key: 'conn.reconnecting' }, 10000));
     room.on(RoomEvent.Reconnected, () => this.notify({ key: 'conn.reconnected' }));
-    room.on(RoomEvent.Disconnected, () => this.#fail({ key: 'fatal.disconnected' }, true));
+    room.on(RoomEvent.Disconnected, (reason) => void this.#disconnected(room, reason));
 
     await room.connect(url, token);
     this.connected = true;
     this.canPlaybackAudio = room.canPlaybackAudio;
     this.refresh();
     setInterval(() => void this.#updateStats(), 1000);
+  }
+
+  /** A token for this room, or null when the page already shows why not (or went to log in). */
+  async #token(): Promise<TokenResponse | null> {
+    const r = await fetch(`/auth/token?room=${encodeURIComponent(this.roomName)}`);
+    if (r.status === 401) {
+      location.href = `/auth/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+      return null;
+    }
+    if (r.ok) return (await r.json()) as TokenResponse;
+    if (r.status === 403) this.#fail({ key: 'fatal.members' }, false);
+    else if (r.status === 404) this.#fail({ key: 'notice.unknown' }, false);
+    else if (r.status === 410) this.#fail({ key: 'notice.closed' }, false);
+    else this.#fail({ key: 'fatal.join' }, true);
+    return null;
+  }
+
+  async #disconnected(room: Room, reason?: DisconnectReason) {
+    // The server deletes a room when it closes it.
+    if (reason === DisconnectReason.ROOM_DELETED) return this.#fail({ key: 'notice.closed' }, false);
+    // A LiveKit restart forgets every room, and with auto_create off the SDK's
+    // own reconnect is refused. A fresh token makes the server bring the room
+    // back (or says it has closed). Once a minute at most, so it can't loop.
+    if (reason === DisconnectReason.CLIENT_INITIATED || Date.now() - this.#rejoinedAt < 60_000) {
+      return this.#fail({ key: 'fatal.disconnected' }, true);
+    }
+    this.#rejoinedAt = Date.now();
+    this.connected = false;
+    const s = this.share;
+    if (s) {
+      this.share = null;
+      await stopShare(room.localParticipant, s);
+    }
+    this.notify({ key: 'conn.reconnecting' }, 10000);
+    try {
+      const tok = await this.#token();
+      if (!tok) return;
+      await room.connect(tok.url, tok.token);
+    } catch (e) {
+      console.error(e);
+      return this.#fail({ key: 'fatal.disconnected' }, true);
+    }
+    // A new participant: its attributes start empty.
+    this.#lastWatching = null;
+    this.#lastStream = '';
+    this.connected = true;
+    this.notify({ key: s ? 'conn.rejoinedShare' : 'conn.reconnected' }, s ? 6000 : 3000);
+    this.refresh();
   }
 
   #fail(notice: Notice, reload: boolean) {
@@ -245,6 +292,7 @@ export class RoomController {
     if (!room || !s) return;
     this.share = null;
     await stopShare(room.localParticipant, s);
+    this.#publishStream('', true);
     this.refresh();
   }
 
@@ -288,5 +336,19 @@ export class RoomController {
     const live = new Set(this.streamers.map((p) => p.identity));
     for (const id of this.#prevBytes.keys()) if (!live.has(id)) this.#prevBytes.delete(id);
     this.stats = next;
+    const me = this.me;
+    if (this.share && me) this.#publishStream(streamLabel(next[me.identity]));
+  }
+
+  // Tell the server what this stream looks like (for the /tela card): only
+  // on change, at most every 5 s. setAttributes only touches the given key,
+  // so "watching" is left alone.
+  #publishStream(value: string, now = false) {
+    const room = this.#room;
+    if (!room || !this.connected || value === this.#lastStream) return;
+    if (!now && Date.now() - this.#lastStreamAt < 5000) return;
+    this.#lastStream = value;
+    this.#lastStreamAt = Date.now();
+    room.localParticipant.setAttributes({ stream: value }).catch(() => (this.#lastStream = null));
   }
 }

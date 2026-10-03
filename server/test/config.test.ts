@@ -18,13 +18,22 @@ describe('loadConfig', () => {
     expect(c.secureCookies).toBe(true);
     expect(c.groupName).toBeUndefined();
     expect(c.webDir.replaceAll('\\', '/')).toEndWith('web/dist/');
+    expect(c.livekitApiUrl).toBe('http://127.0.0.1:7880');
+    expect(c.dataDir.replaceAll('\\', '/')).toEndWith('.cache/data/');
+    expect(c.closeEmptySeconds).toBe(300);
+    expect(c.pollSeconds).toBe(5);
   });
 
   test('optional overrides', () => {
     const c = loadConfig({
       ...PROD_ENV, GROUP_NAME: 'Crew', LIVEKIT_PUBLIC_URL: 'wss://lk.example.com', WEB_DIR: '/srv/web',
       LISTEN: '[::1]:9000', SESSION_DAYS: '1', ROLE_CACHE_SECONDS: '10',
+      LIVEKIT_API_URL: 'http://10.0.0.5:7880/', DATA_DIR: '/data', CLOSE_EMPTY_SECONDS: '4', POLL_SECONDS: '1',
     });
+    expect(c.livekitApiUrl).toBe('http://10.0.0.5:7880');
+    expect(c.dataDir).toBe('/data');
+    expect(c.closeEmptySeconds).toBe(4);
+    expect(c.pollSeconds).toBe(1);
     expect(c.groupName).toBe('Crew');
     expect(c.livekitUrl).toBe('wss://lk.example.com');
     expect(c.webDir).toBe('/srv/web');
@@ -44,6 +53,8 @@ describe('loadConfig', () => {
 
   test('bad numbers and LISTEN', () => {
     expect(() => loadConfig({ ...PROD_ENV, SESSION_DAYS: 'x' })).toThrow('bad SESSION_DAYS');
+    expect(() => loadConfig({ ...PROD_ENV, CLOSE_EMPTY_SECONDS: '0' })).toThrow('bad CLOSE_EMPTY_SECONDS');
+    expect(() => loadConfig({ ...PROD_ENV, POLL_SECONDS: '-1' })).toThrow('bad POLL_SECONDS');
     expect(() => loadConfig({ ...PROD_ENV, LISTEN: '8081' })).toThrow('bad LISTEN');
   });
 });

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 import { fakeDisplayMedia, newRoom, openRoom } from './helpers.ts';
 
 test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser }) => {
@@ -54,6 +55,15 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
     // The subscriber's focused tile is announced back to the publisher.
     const own = pub.locator('[data-testid="tile"][data-local="true"]');
     await expect(own.getByTestId('tile-viewers')).toContainText('1', { timeout: 15_000 });
+
+    // The streamer reports its quality for the /tela card (read by the server's poller).
+    const lk = new RoomServiceClient('http://127.0.0.1:7880', 'devkey', 'secret');
+    await expect
+      .poll(async () => {
+        const ps = await lk.listParticipants(room);
+        return ps.find((p) => p.tracks.some((t) => t.source === TrackSource.SCREEN_SHARE))?.attributes.stream ?? '';
+      }, { timeout: 15_000 })
+      .toMatch(/^720p\d+ · [A-Z0-9]+$/);
   } finally {
     await pubCtx.close();
     await subCtx.close();

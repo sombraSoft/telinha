@@ -4,6 +4,7 @@ import { loadConfig } from '../src/config.ts';
 import { createHandler, type Deps, type Fetch } from '../src/http.ts';
 import type { Locale } from '../src/i18n.ts';
 import { devIsMember } from '../src/roles.ts';
+import { openRegistry } from '../src/rooms.ts';
 import { staticFromEntries } from '../src/static.ts';
 
 export const PROD_ENV = {
@@ -32,16 +33,30 @@ export interface Setup {
   members?: string[];
   fetch?: Fetch;
   isMember?: Deps['isMember'];
+  /** Rooms opened by /tela before the test; default: the names the tests use. */
+  rooms?: string[];
+  ensureRoom?: (room: string) => Promise<void>;
 }
 
 export function setup(o: Setup = {}) {
   const config = loadConfig(o.env ?? PROD_ENV);
   const logs: unknown[][] = [];
   const members = new Set(o.members ?? ['1']);
+  const registry = openRegistry(':memory:');
+  for (const room of o.rooms ?? ['abcd', 'Room_1-x']) {
+    registry.create({ room, guildId: '100', channelId: '300', locale: 'en', openerId: '1', openerName: 'Zé', what: null, createdAt: NOW - 1000 });
+  }
+  const ensured: string[] = [];
+  const deleted: string[] = [];
   const handler = createHandler({
     config,
     isMember: o.isMember ?? (config.dev ? devIsMember(config.dev.id) : async (id) => members.has(id)),
     files: FILES,
+    registry,
+    rooms: {
+      ensureRoom: o.ensureRoom ?? (async (room) => void ensured.push(room)),
+      deleteRoom: async (room) => void deleted.push(room),
+    },
     group: (l: Locale) => (l === 'pt-BR' ? 'Galera' : 'Crew'),
     discordReady: () => true,
     fetch: o.fetch ?? (async () => { throw new Error('no fetch in this test'); }),
@@ -54,7 +69,7 @@ export function setup(o: Setup = {}) {
     handler(new Request(`${base}${path}`, { headers }));
   const sessionCookie = (s: Partial<Session> = {}) =>
     `telinha=${encodeURIComponent(sign(config.cookieSecret, { id: '1', name: 'Zé', avatar: 'abc', exp: NOW + 60_000, ...s }))}`;
-  return { config, handler, get, logs, sessionCookie };
+  return { config, handler, get, logs, sessionCookie, registry, ensured, deleted };
 }
 
 export function jwtPayload(token: string): Record<string, any> {

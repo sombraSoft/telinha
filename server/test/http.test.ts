@@ -188,6 +188,43 @@ describe('/auth/token', () => {
     expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: null });
   });
 
+  test('only rooms /tela opened: unknown 404, closed 410, nothing minted or created', async () => {
+    const s = setup();
+    const unknown = await s.get('/auth/token?room=never-opened', { cookie: s.sessionCookie() });
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toEqual({ error: 'unknown' });
+    expect(s.registry.get('never-opened')).toBeNull();
+
+    s.registry.close('abcd', NOW - 1);
+    const closed = await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie() });
+    expect(closed.status).toBe(410);
+    expect(await closed.json()).toEqual({ error: 'closed' });
+    expect(s.ensured).toEqual([]);
+  });
+
+  test('open room: LiveKit room ensured before the token, room kept alive', async () => {
+    const s = setup();
+    expect((await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie() })).status).toBe(200);
+    expect(s.ensured).toEqual(['abcd']);
+    // a token is not a join: the card's duration ignores it
+    expect(s.registry.get('abcd')).toMatchObject({ lastTokenAt: NOW, lastSeenAt: null, firstJoinAt: null, seen: [] });
+  });
+
+  test('closed while LiveKit was being asked: 410 and the room it made is deleted', async () => {
+    const s = setup({ ensureRoom: async (room) => void s.registry.close(room, NOW) });
+    const r = await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie() });
+    expect(r.status).toBe(410);
+    expect(await r.json()).toEqual({ error: 'closed' });
+    expect(s.deleted).toEqual(['abcd']);
+  });
+
+  test('LiveKit down -> 503, no token', async () => {
+    const s = setup({ ensureRoom: async () => { throw new Error('ECONNREFUSED'); } });
+    const r = await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie() });
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'livekit' });
+  });
+
   test('LIVEKIT_PUBLIC_URL override', async () => {
     const s = setup({ env: { ...PROD_ENV, LIVEKIT_PUBLIC_URL: 'ws://localhost:7880' } });
     const body = (await (await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie() })).json()) as { url: string };
@@ -259,6 +296,19 @@ describe('DEV_USER mode', () => {
     }
     // production ignores Host here (Caddy is the gate)
     expect((await setup().get('/healthz', { host: 'tela.example.com' })).status).toBe(200);
+  });
+
+  test('an unknown valid room opens on first use; a closed one stays closed', async () => {
+    const s = setup({ env: DEV_ENV, rooms: [] });
+    const r = await s.get('/auth/token?room=e2e-room', { cookie: s.sessionCookie({ id: '1', name: 'Dev', locale: 'pt-BR' }) });
+    expect(r.status).toBe(200);
+    expect(s.registry.get('e2e-room')).toMatchObject({
+      openerId: '1', openerName: 'Dev', locale: 'pt-BR', messageId: null, createdAt: NOW, closedAt: null,
+    });
+    expect(s.ensured).toEqual(['e2e-room']);
+    s.registry.close('e2e-room', NOW);
+    const again = await s.get('/auth/token?room=e2e-room', { cookie: s.sessionCookie({ id: '1' }) });
+    expect(again.status).toBe(410);
   });
 
   test('only the dev user is a member', async () => {

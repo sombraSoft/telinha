@@ -1,5 +1,6 @@
-// LiveKit access tokens: members may join, watch and only publish screen share.
-import { AccessToken, TrackSource } from 'livekit-server-sdk';
+// LiveKit access tokens (members may join, watch and only publish screen
+// share) and the RoomService calls the room lifecycle needs.
+import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 
 export const ROOM_RE = /^[A-Za-z0-9_-]{4,40}$/;
 
@@ -19,4 +20,55 @@ export async function createToken(o: {
     canPublishSources: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO],
   });
   return at.toJwt();
+}
+
+/** What the lifecycle reads from a participant (a subset of ParticipantInfo). */
+export interface LiveParticipant {
+  identity: string;
+  metadata: string;
+  attributes: Record<string, string>;
+  tracks: { source: TrackSource }[];
+}
+
+export interface RoomService {
+  /** Idempotent: LiveKit returns the existing room when it is still there. */
+  ensureRoom(room: string): Promise<void>;
+  /** [] when LiveKit has no such room (never created, or dropped when idle). */
+  listParticipants(room: string): Promise<LiveParticipant[]>;
+  /** No-op when the room is already gone. */
+  deleteRoom(room: string): Promise<void>;
+}
+
+export const isNotFound = (e: unknown) => {
+  const err = e as { status?: unknown; code?: unknown } | null;
+  return err?.status === 404 || err?.code === 'not_found';
+};
+
+export function roomService(o: {
+  url: string; key: string; secret: string; closeEmptySeconds: number;
+}): RoomService {
+  const client = new RoomServiceClient(o.url, o.key, o.secret);
+  return {
+    async ensureRoom(room) {
+      // auto_create is off, so this is the only way a room comes to exist.
+      // emptyTimeout outlives our own close so LiveKit never drops a room
+      // before anyone had the chance to open the link.
+      await client.createRoom({ name: room, emptyTimeout: o.closeEmptySeconds + 120, departureTimeout: 20 });
+    },
+    async listParticipants(room) {
+      try {
+        return await client.listParticipants(room);
+      } catch (e) {
+        if (isNotFound(e)) return [];
+        throw e;
+      }
+    },
+    async deleteRoom(room) {
+      try {
+        await client.deleteRoom(room);
+      } catch (e) {
+        if (!isNotFound(e)) throw e;
+      }
+    },
+  };
 }

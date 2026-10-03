@@ -94,6 +94,21 @@ if ! docker compose -f "$compose" up -d --remove-orphans --wait --wait-timeout 1
 	exit 1
 fi
 
+# compose only recreates a container whose service definition changed, and
+# LiveKit and Caddy read their bind-mounted config once at start: restart them
+# when the deployed tag changed that file (e.g. livekit.yaml's auto_create).
+if [ -n "$have" ]; then
+	for pair in livekit:livekit.yaml caddy:Caddyfile; do
+		if ! git -C "$repo" diff --quiet "$have" "$want" -- "deploy/${pair#*:}"; then
+			if docker compose -f "$compose" restart "${pair%%:*}" >/dev/null 2>&1; then
+				log "restarted ${pair%%:*}: deploy/${pair#*:} changed"
+			else
+				log "deploy/${pair#*:} changed but restarting ${pair%%:*} failed, run: docker compose -f $compose restart ${pair%%:*}"
+			fi
+		fi
+	done
+fi
+
 # TELINHA_COMMIT is only for the moved-tag check above; compose ignores it.
 printf 'TELINHA_VERSION=%s\nTELINHA_COMMIT=%s\n' "$version" "$want" > "$envfile.tmp"
 mv "$envfile.tmp" "$envfile"

@@ -94,3 +94,15 @@ export function codecCaps(): CodecCaps[] {
     recv: has(recv, `video/${codec}`),
   }));
 }
+
+/**
+ * What the streamer's page reports to the server for the /tela card, e.g.
+ * "1080p60 · H265". fps snaps to a multiple of 5 so the jitter of a live
+ * encoder (59, 60, 58) doesn't edit the Discord message every few seconds.
+ */
+export function streamLabel(s: VideoStats | undefined): string {
+  if (!s?.out || !s.height || !s.fps) return '';
+  const fps = Math.max(5, Math.round(s.fps / 5) * 5);
+  const codec = s.codec.toUpperCase();
+  return codec ? `${s.height}p${fps} · ${codec}` : `${s.height}p${fps}`;
+}

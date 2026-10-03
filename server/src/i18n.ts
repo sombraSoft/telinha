@@ -44,6 +44,18 @@ const en = {
   opened: '📺 **{who}** opened a Telinha{what}',
   tip: '-# Only {group} can join (Discord login). To stream with game sound: Google Chrome → **Window** tab → pick the game and tick app audio (just the game, not Discord).',
   open: 'Open Telinha',
+  telaFailed: 'Could not open a Telinha right now. Try again in a moment.',
+  cardStreaming: '🔴 Streaming: {list}',
+  cardWatching: '👀 Watching: {list}',
+  cardOpenedAt: '⏱️ Opened {when}',
+  cardClosed: '📺 Telinha by **{who}** ended{what}',
+  cardLasted: '⏱️ Lasted {duration}',
+  cardNobody: '⏱️ Nobody joined',
+  cardSeen: '👥 Stopped by: {list}',
+  durLessMin: 'less than 1 min',
+  durMin: '{m} min',
+  durHours: '{h}h {m}min',
+  durHoursOnly: '{h}h',
 } as const;
 
 export type Key = keyof typeof en;
@@ -67,6 +79,18 @@ const ptBR: Dict = {
   opened: '📺 **{who}** abriu uma telinha{what}',
   tip: '-# Só {group} entram (login com Discord). Pra transmitir com som do jogo: Google Chrome → aba **Janela** → escolhe o jogo e marca o áudio do app (só o jogo, sem o Discord).',
   open: 'Abrir telinha',
+  telaFailed: 'Não deu pra abrir a telinha agora. Tenta de novo daqui a pouco.',
+  cardStreaming: '🔴 Transmitindo: {list}',
+  cardWatching: '👀 Assistindo: {list}',
+  cardOpenedAt: '⏱️ Aberta {when}',
+  cardClosed: '📺 Telinha de **{who}** encerrada{what}',
+  cardLasted: '⏱️ Durou {duration}',
+  cardNobody: '⏱️ Ninguém entrou',
+  cardSeen: '👥 Passaram por aqui: {list}',
+  durLessMin: 'menos de 1 min',
+  durMin: '{m} min',
+  durHours: '{h}h {m}min',
+  durHoursOnly: '{h}h',
 };
 
 export const dicts: Record<Locale, Dict> = { en, 'pt-BR': ptBR };

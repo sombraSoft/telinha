@@ -1,12 +1,15 @@
-// /tela: posts a fresh room link in the allowed channels. Replies only the
-// caller sees use their client locale; the public post uses the guild locale.
+// /tela: opens a room and posts its live status card in the allowed channels.
+// Replies only the caller sees use their client locale; the card uses the
+// guild locale.
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, GatewayIntentBits, InteractionContextType, Locale as DLocale,
-  MessageFlags, REST, Routes, SlashCommandBuilder,
+  Client, GatewayIntentBits, InteractionContextType, Locale as DLocale, MessageFlags, REST, Routes, SlashCommandBuilder,
 } from 'discord.js';
 import { randomBytes } from 'node:crypto';
+import type { Card } from './card.ts';
 import type { Config } from './config.ts';
 import { dicts, resolveLocale, t, type Locale } from './i18n.ts';
+import type { RoomService } from './livekit.ts';
+import type { Registry, RoomRecord } from './rooms.ts';
 
 export function buildCommand() {
   return new SlashCommandBuilder()
@@ -28,44 +31,88 @@ export interface TelaInput {
   /** interaction.guildLocale */
   guildLocale: string | null | undefined;
   allowed: boolean;
+  guildId: string;
   channelId: string;
   channelIds: string[];
+  userId: string;
   who: string;
   what: string | null;
-  room: string;
-  publicUrl: string;
-  group: (l: Locale) => string;
 }
 
-export interface TelaReply {
+export interface Ephemeral {
   content: string;
-  flags?: MessageFlags.Ephemeral;
-  components?: ActionRowBuilder<ButtonBuilder>[];
+  flags: MessageFlags.Ephemeral;
   allowedMentions: { parse: [] };
 }
 
-export function telaReply(i: TelaInput): TelaReply {
+export type TelaPayload = (Card & { flags?: undefined }) | Ephemeral;
+
+const ephemeral = (content: string): Ephemeral => ({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+
+/** The ephemeral refusal, or null when this caller may open a room here. */
+export function telaDenied(
+  i: Pick<TelaInput, 'locale' | 'allowed' | 'channelId' | 'channelIds'>, group: (l: Locale) => string,
+): Ephemeral | null {
   const me = resolveLocale(i.locale);
-  if (!i.allowed) {
-    return { content: t(me, 'onlyGroup', { group: i.group(me) }), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } };
-  }
+  if (!i.allowed) return ephemeral(t(me, 'onlyGroup', { group: group(me) }));
   if (!i.channelIds.includes(i.channelId)) {
     const where = i.channelIds.map((c) => `<#${c}>`).join(t(me, 'or'));
-    return { content: t(me, 'wrongChannel', { where }), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } };
+    return ephemeral(t(me, 'wrongChannel', { where }));
   }
-  const l = resolveLocale(i.guildLocale);
-  const link = `${i.publicUrl}/sala/?room=${i.room}`;
-  return {
-    content: `${t(l, 'opened', { who: i.who, what: i.what ? `: ${i.what}` : '' })}\n${t(l, 'tip', { group: i.group(l) })}`,
-    components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(t(l, 'open')).setEmoji('📺').setURL(link),
-    )],
-    allowedMentions: { parse: [] },
+  return null;
+}
+
+export interface TelaDeps {
+  registry: Registry;
+  rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>;
+  /** The open card with nobody in it yet. */
+  render: (rec: RoomRecord) => Card;
+  /** Sends the interaction reply; returns where the public card landed. */
+  reply: (p: TelaPayload) => Promise<{ channelId: string; messageId: string } | null>;
+  newRoom: () => string;
+  now: () => number;
+  group: (l: Locale) => string;
+  log: (...a: unknown[]) => void;
+}
+
+export async function handleTela(i: TelaInput, d: TelaDeps): Promise<void> {
+  const denied = telaDenied(i, d.group);
+  if (denied) {
+    await d.reply(denied);
+    return;
+  }
+  const room = d.newRoom();
+  const rec = d.registry.create({
+    room, guildId: i.guildId, channelId: i.channelId, locale: resolveLocale(i.guildLocale),
+    openerId: i.userId, openerName: i.who, what: i.what, createdAt: d.now(),
+  });
+  try {
+    await d.rooms.ensureRoom(room);
+    const posted = await d.reply(d.render(rec));
+    if (!posted) throw new Error('no message in the interaction response');
+    d.registry.setMessage(room, posted.channelId, posted.messageId);
+    d.log('tela', i.userId, room);
+  } catch (e) {
+    // A room without its card would be a link nobody can see the state of.
+    d.log('tela failed', room, (e as Error).message);
+    d.registry.close(room, d.now());
+    await d.rooms.deleteRoom(room).catch(() => {});
+    await d.reply(ephemeral(t(resolveLocale(i.locale), 'telaFailed')));
+  }
+}
+
+/** Card edits go through REST: the interaction token behind the reply expires after 15 min. */
+export function editCard(rest: REST) {
+  return async (channelId: string, messageId: string, card: Card): Promise<void> => {
+    await rest.patch(Routes.channelMessage(channelId, messageId), {
+      body: { content: card.content, components: card.components, allowed_mentions: { parse: [] } },
+    });
   };
 }
 
 export function startBot(o: {
   config: Config; rest: REST; group: (l: Locale) => string; log: (...a: unknown[]) => void;
+  registry: Registry; rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>; render: (rec: RoomRecord) => Card;
 }): Client {
   const { config: c, rest, group, log } = o;
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -94,21 +141,35 @@ export function startBot(o: {
       const roles = i.member?.roles;
       const hasRole = Array.isArray(roles) ? roles.includes(c.roleId) : Boolean(roles?.cache.has(c.roleId));
       const member = i.member && 'displayName' in i.member ? i.member.displayName : null;
-      const room = randomBytes(9).toString('base64url');
-      const reply = telaReply({
+      await handleTela({
         locale: i.locale,
         guildLocale: i.guildLocale,
         allowed: i.guildId === c.guildId && hasRole,
+        guildId: i.guildId ?? '',
         channelId: i.channelId,
         channelIds: c.channelIds,
+        userId: i.user.id,
         who: member ?? i.user.globalName ?? i.user.username,
         what: i.options.getString('what'),
-        room,
-        publicUrl: c.publicUrl,
+      }, {
+        registry: o.registry,
+        rooms: o.rooms,
+        render: o.render,
+        async reply(p) {
+          if (p.flags) {
+            // after a failed public reply the interaction may already be acknowledged
+            await (i.replied || i.deferred ? i.followUp(p) : i.reply(p));
+            return null;
+          }
+          const res = await i.reply({ ...p, withResponse: true });
+          const m = res.resource?.message;
+          return m ? { channelId: m.channelId, messageId: m.id } : null;
+        },
+        newRoom: () => randomBytes(9).toString('base64url'),
+        now: Date.now,
         group,
+        log,
       });
-      await i.reply(reply);
-      if (!reply.flags) log('tela', i.user.id, room);
     } catch (e) {
       log('tela error', (e as Error).message);
     }

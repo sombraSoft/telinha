@@ -22,6 +22,13 @@ export interface Config {
   livekitKey: string;
   livekitSecret: string;
   livekitUrl: string;
+  /** LiveKit HTTP API (RoomService) as the server reaches it. */
+  livekitApiUrl: string;
+  /** Holds telinha.sqlite (the room registry). */
+  dataDir: string;
+  /** A room closes for good after this long with nobody in it. */
+  closeEmptySeconds: number;
+  pollSeconds: number;
   groupName?: string;
   webDir: string;
   /** Secure cookie flag; off only for plain-http (dev) PUBLIC_URL. */
@@ -89,6 +96,10 @@ export function loadConfig(env: Env): Config {
     livekitKey: get('LIVEKIT_API_KEY'),
     livekitSecret: get('LIVEKIT_API_SECRET'),
     livekitUrl: opt('LIVEKIT_PUBLIC_URL') ?? `${publicUrl.replace(/^http/, 'ws')}/livekit`,
+    livekitApiUrl: get('LIVEKIT_API_URL', 'http://127.0.0.1:7880').replace(/\/$/, ''),
+    dataDir: opt('DATA_DIR') ?? fileURLToPath(new URL('../../.cache/data/', import.meta.url)),
+    closeEmptySeconds: num('CLOSE_EMPTY_SECONDS', '300'),
+    pollSeconds: num('POLL_SECONDS', '5'),
     groupName: opt('GROUP_NAME'),
     webDir: opt('WEB_DIR') ?? fileURLToPath(new URL('../../web/dist/', import.meta.url)),
     secureCookies: !publicUrl.startsWith('http://'),

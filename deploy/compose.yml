@@ -25,6 +25,9 @@ services:
     network_mode: host
     env_file: /etc/telinha/app.env
     mem_limit: 256m
+    volumes:
+      # room registry (telinha.sqlite): closed rooms must stay closed across updates
+      - telinha-data:/data
     healthcheck:
       # busybox wget ships in oven/bun:alpine; port must match LISTEN in app.env
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/healthz"]
@@ -48,3 +51,6 @@ services:
     network_mode: host
     command: tunnel --no-autoupdate run
     env_file: /etc/telinha/tunnel.env
+
+volumes:
+  telinha-data: {}

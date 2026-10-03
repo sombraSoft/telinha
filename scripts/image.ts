@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const TAG = 'telinha:dev';
 // Keep in sync with the image job in .github/workflows/ci.yml: unit tests,
 // built page assets, then the real entry point in DEV_USER mode serving /sala/.
-const SMOKE = `bun test server/test && test -f web/dist/index.html && ls web/dist/assets/*.js >/dev/null && (DEV_USER=1:smoke PUBLIC_URL=http://localhost:18081 LISTEN=127.0.0.1:18081 COOKIE_SECRET=smoke LIVEKIT_API_KEY=k LIVEKIT_API_SECRET=s bun server/src/index.ts & for i in 1 2 3 4 5 6 7 8 9 10; do wget -qO- http://127.0.0.1:18081/healthz && break; sleep 1; done; wget -qO- http://127.0.0.1:18081/sala/ | grep -q '<div id="app"')`;
+const SMOKE = `bun test server/test && test -f web/dist/index.html && ls web/dist/assets/*.js >/dev/null && (DEV_USER=1:smoke PUBLIC_URL=http://localhost:18081 LISTEN=127.0.0.1:18081 DATA_DIR=/tmp/smoke COOKIE_SECRET=smoke LIVEKIT_API_KEY=k LIVEKIT_API_SECRET=s bun server/src/index.ts & for i in 1 2 3 4 5 6 7 8 9 10; do wget -qO- http://127.0.0.1:18081/healthz && break; sleep 1; done; wget -qO- http://127.0.0.1:18081/sala/ | grep -q '<div id="app"')`;
 
 const step = (s: string) => console.log(`\n==> ${s}`);
 // Skip .cmd/.bat shims (e.g. a docker.cmd wrapping podman on Windows): Bun

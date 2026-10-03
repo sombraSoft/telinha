@@ -63,9 +63,13 @@ export const ptBR: Messages = {
   'audio.unlock': 'Clique pra ativar o som',
   'conn.reconnecting': 'Reconectando…',
   'conn.reconnected': 'Reconectado.',
+  'conn.rejoinedShare': 'Reconectado. Sua transmissão parou: compartilhe de novo.',
   'fatal.members': 'A Telinha é só pra membros do grupo.',
   'fatal.join': 'Não deu pra entrar na sala.',
   'fatal.disconnected': 'Saiu da sala (conexão caiu).',
   'fatal.error': 'Erro: {error}',
   'fatal.reload': 'Recarregar',
+  'notice.noRoom': 'Abra uma telinha com /tela no Discord.',
+  'notice.unknown': 'Essa telinha não existe. Abra uma com /tela no Discord.',
+  'notice.closed': 'Essa telinha foi encerrada. Abra outra com /tela no Discord.',
 };
