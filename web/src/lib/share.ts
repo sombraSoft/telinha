@@ -13,8 +13,33 @@ export const RESOLUTIONS = [720, 1080, 1440] as const;
 export const FRAME_RATES = [15, 30, 60] as const;
 export type Res = (typeof RESOLUTIONS)[number];
 export type Fps = (typeof FRAME_RATES)[number];
-export type ShareSettings = { res: Res; fps: Fps };
-export const DEFAULT_SHARE: ShareSettings = { res: 1080, fps: 60 };
+// Discord-style presets; any other res x fps pick is 'custom'.
+export const PRESETS = ['smooth', 'readable', 'custom'] as const;
+export type Preset = (typeof PRESETS)[number];
+export const PRESET_SETTINGS: Record<Exclude<Preset, 'custom'>, { res: Res; fps: Fps }> = {
+  smooth: { res: 1080, fps: 60 },
+  readable: { res: 1440, fps: 15 },
+};
+/** audio: whether to ask the picker for sound at all. */
+export type ShareSettings = { res: Res; fps: Fps; preset: Preset; audio: boolean };
+export const DEFAULT_SHARE: ShareSettings = { ...PRESET_SETTINGS.smooth, preset: 'smooth', audio: true };
+
+/** The preset these values match, else 'custom'. */
+export function presetOf(res: Res, fps: Fps): Preset {
+  if (res === PRESET_SETTINGS.smooth.res && fps === PRESET_SETTINGS.smooth.fps) return 'smooth';
+  if (res === PRESET_SETTINGS.readable.res && fps === PRESET_SETTINGS.readable.fps) return 'readable';
+  return 'custom';
+}
+
+/** Phones have no screen capture: no share controls there at all. */
+export const canShareScreen = (): boolean =>
+  typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function';
+
+// Text stays sharp for readability; everything else keeps its frame rate.
+// Never 'maintain-framerate': it collapsed screen shares to 359x201.
+export const contentHintOf = (p: Preset): 'detail' | 'motion' => (p === 'readable' ? 'detail' : 'motion');
+export const degradationOf = (p: Preset): RTCDegradationPreference =>
+  p === 'readable' ? 'maintain-resolution' : 'balanced';
 
 // Top-layer bitrate (kbps) per resolution x fps. The SFU sends viewers lower
 // simulcast layers when their tile is small or their connection is weak.
@@ -38,13 +63,23 @@ export function parseQuality(v: unknown): QualityChoice {
   return (QUALITY_CHOICES as readonly unknown[]).includes(v) ? (v as QualityChoice) : 'auto';
 }
 
+/**
+ * Stored settings, field by field. Before 0.5 only {res, fps} was stored: the
+ * preset then follows from the values, and audio stays on as it always was.
+ * A named preset whose values don't match falls back the same way.
+ */
 export function parseShareSettings(v: unknown): ShareSettings {
-  const o = (v && typeof v === 'object' ? v : {}) as { res?: unknown; fps?: unknown };
-  const res = Number(o.res);
-  const fps = Number(o.fps);
+  const o = (v && typeof v === 'object' ? v : {}) as { res?: unknown; fps?: unknown; preset?: unknown; audio?: unknown };
+  const r = Number(o.res);
+  const f = Number(o.fps);
+  const res = (RESOLUTIONS as readonly number[]).includes(r) ? (r as Res) : DEFAULT_SHARE.res;
+  const fps = (FRAME_RATES as readonly number[]).includes(f) ? (f as Fps) : DEFAULT_SHARE.fps;
+  const matched = presetOf(res, fps);
   return {
-    res: (RESOLUTIONS as readonly number[]).includes(res) ? (res as Res) : DEFAULT_SHARE.res,
-    fps: (FRAME_RATES as readonly number[]).includes(fps) ? (fps as Fps) : DEFAULT_SHARE.fps,
+    res,
+    fps,
+    preset: o.preset === 'custom' ? 'custom' : matched,
+    audio: typeof o.audio === 'boolean' ? o.audio : DEFAULT_SHARE.audio,
   };
 }
 
@@ -118,14 +153,16 @@ type DisplayOptions = DisplayMediaStreamOptions & {
   surfaceSwitching?: 'include' | 'exclude';
 };
 
-export function displayMediaOptions(res: Res, fps: Fps): DisplayOptions {
+/** Without audio the picker shows no sound option at all. */
+export function displayMediaOptions(res: Res, fps: Fps, audio = true): DisplayOptions {
+  const surfaces = { selfBrowserSurface: 'exclude', surfaceSwitching: 'include' } as const;
+  if (!audio) return { video: captureConstraints(res, fps), audio: false, ...surfaces };
   return {
     video: captureConstraints(res, fps),
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 },
     systemAudio: 'include',
     windowAudio: 'window', // Chrome: offer the game window's own audio (no Discord voices)
-    selfBrowserSurface: 'exclude',
-    surfaceSwitching: 'include',
+    ...surfaces,
   };
 }
 
@@ -173,10 +210,14 @@ export type ShareOutcome =
 
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export async function startShare(lp: LocalParticipant, { res, fps }: ShareSettings, onEnded: () => void): Promise<ShareOutcome> {
+export async function startShare(
+  lp: LocalParticipant,
+  { res, fps, preset, audio: withAudio }: ShareSettings,
+  onEnded: () => void,
+): Promise<ShareOutcome> {
   let stream: MediaStream;
   try {
-    stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions(res, fps));
+    stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions(res, fps, withAudio));
   } catch (e) {
     // NotAllowedError = the user closed the picker
     if ((e as { name?: unknown } | null)?.name === 'NotAllowedError') return { kind: 'cancelled' };
@@ -191,7 +232,7 @@ export async function startShare(lp: LocalParticipant, { res, fps }: ShareSettin
   const codec = await pickCodec();
   const aligned = alignedTrack(v);
   const sent = aligned ?? v;
-  sent.contentHint = 'motion';
+  sent.contentHint = contentHintOf(preset);
   const { width, height } = await settledSize(sent);
   // No size (shouldn't happen for screen capture): let livekit pick layers.
   const layers = width && height ? simulcastLayers(width, height, fps) : undefined;
@@ -206,7 +247,7 @@ export async function startShare(lp: LocalParticipant, { res, fps }: ShareSettin
         screenShareEncoding: { maxBitrate: KBPS[res][fps] * 1000, maxFramerate: fps },
         screenShareSimulcastLayers: layers,
         simulcast: true,
-        degradationPreference: 'balanced',
+        degradationPreference: degradationOf(preset),
       })
     ).videoTrack;
     if (!video) throw new Error('no published video track');
@@ -241,13 +282,22 @@ export async function stopShare(lp: LocalParticipant, share: Share): Promise<voi
   share.stream.getTracks().forEach((t) => t.stop());
 }
 
-/** Change resolution/fps while live, without picking the screen again. Throws on failure. */
-export async function applyLive(share: Share, { res, fps }: ShareSettings): Promise<void> {
+/** Change resolution/fps/preset while live, without picking the screen again. Throws on failure. */
+export async function applyLive(share: Share, { res, fps, preset }: ShareSettings): Promise<void> {
   // On the raw capture; the aligned copy follows its new size.
   await share.capture.applyConstraints(captureConstraints(res, fps));
   const sender = share.video.sender;
   if (!sender) throw new Error('no video sender');
+  // The hint goes on the sent track (the aligned copy when there is one).
+  share.video.mediaStreamTrack.contentHint = contentHintOf(preset);
   const params = sender.getParameters();
   tuneEncodings(params.encodings, res, fps);
   await sender.setParameters(params);
+  // After our setParameters, not alongside it: livekit applies it to every
+  // sender of the track (the backup codec's too), one at a time.
+  const degradation = degradationOf(preset);
+  await share.video.setDegradationPreference(degradation);
+  // A full reconnect republishes with these options (the publication holds the
+  // same object): without this it would go back to the preference of the start.
+  if (share.video.publishOptions) share.video.publishOptions.degradationPreference = degradation;
 }

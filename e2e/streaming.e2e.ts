@@ -11,7 +11,11 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
   try {
     const pub = await pubCtx.newPage();
     await openRoom(pub, room);
+    // The dock opens the share modal; Go live (default: 1080p60, capped by the 720p canvas) starts it.
     await pub.getByTestId('share-button').click();
+    await expect(pub.getByTestId('share-modal')).toBeVisible();
+    await pub.getByTestId('share-go-live').click();
+    await expect(pub.getByTestId('share-modal')).toBeHidden();
     await expect(pub.locator('[data-testid="tile"][data-local="true"]')).toBeVisible();
 
     const sub = await subCtx.newPage();

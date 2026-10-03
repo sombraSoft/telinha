@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import PeopleList from './components/PeopleList.svelte';
-  import ShareBar from './components/ShareBar.svelte';
+  import ShareDock from './components/ShareDock.svelte';
   import Stage from './components/Stage.svelte';
   import TopBar from './components/TopBar.svelte';
   import { tileElement, toggleFullscreen } from './lib/fullscreen';
@@ -11,6 +11,8 @@
   import { resolveTheme } from './lib/theme';
 
   const rc = new RoomController();
+  /** Space the share dock needs at the stage bottom while it sits at home. */
+  let dockClear = $state(0);
 
   const lightQuery = matchMedia('(prefers-color-scheme: light)');
   let prefersLight = $state(lightQuery.matches);
@@ -37,7 +39,9 @@
   function onKeydown(e: KeyboardEvent) {
     if (rc.fatal) return;
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-    if (e.target instanceof Element && e.target.closest('input, select, textarea, [contenteditable]')) return;
+    if (e.target instanceof Element && e.target.closest('input, select, textarea, [contenteditable], dialog')) return;
+    // A modal owns the keyboard, even when a click left focus on the body.
+    if (document.querySelector('dialog[open]')) return;
     switch (e.key) {
       case 'Escape':
         if (rc.focusId && !document.fullscreenElement) rc.setFocus(null);
@@ -64,7 +68,21 @@
 <div class="app" inert={!!rc.fatal}>
   <TopBar {rc} />
   <main class="body">
-    <Stage {rc} />
+    <!-- The dock floats over the stage only, never over the people list; toasts
+         sit just above the dock's home spot there. -->
+    <div class="stage-col" style:--dock-clear="{dockClear}px">
+      <Stage {rc} />
+      <ShareDock {rc} bind:clearance={dockClear} />
+      <!-- The live region exists from the start; screen readers often skip a
+           role=status element that is inserted together with its text. -->
+      <div class="toast-region" role="status" aria-live="polite">
+        {#if rc.toast}
+          {#key rc.toast.id}
+            <div class="toast" data-testid="toast">{noticeText(rc.toast)}</div>
+          {/key}
+        {/if}
+      </div>
+    </div>
     <PeopleList {rc} />
     <!-- In the body, not the viewport, so it sits below the top bar whatever its height. -->
     {#if rc.connected && !rc.canPlaybackAudio}
@@ -74,17 +92,6 @@
       </button>
     {/if}
   </main>
-  <ShareBar {rc} />
-</div>
-
-<!-- The live region exists from the start; screen readers often skip a
-     role=status element that is inserted together with its text. -->
-<div class="toast-region" role="status" aria-live="polite">
-  {#if rc.toast}
-    {#key rc.toast.id}
-      <div class="toast" data-testid="toast">{noticeText(rc.toast)}</div>
-    {/key}
-  {/if}
 </div>
 
 {#if rc.fatal}
@@ -101,7 +108,7 @@
 <style>
   .app {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
     height: 100vh;
     height: 100dvh;
   }
@@ -109,6 +116,12 @@
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 260px;
+    min-height: 0;
+  }
+  .stage-col {
+    position: relative;
+    display: grid;
+    min-width: 0;
     min-height: 0;
   }
 
@@ -121,13 +134,22 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
+  /* Zero-height strip on the stage bottom: out of the grid, the toast's anchor. */
+  .toast-region {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
   .toast {
-    position: fixed;
+    position: absolute;
     left: 50%;
-    bottom: 84px;
+    /* Just above the share dock in its home spot (bottom-centre of the stage). */
+    bottom: max(16px, var(--dock-clear, 0px));
     transform: translateX(-50%);
     z-index: 10;
-    max-width: calc(100vw - 32px);
+    width: max-content;
+    max-width: calc(100% - 32px);
     padding: 10px 14px;
     border-radius: var(--radius-sm);
     background: var(--bg-3);

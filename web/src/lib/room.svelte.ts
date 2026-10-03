@@ -98,6 +98,8 @@ export class RoomController {
   canPlaybackAudio = $state(true);
   share = $state.raw<Share | null>(null);
   busy = $state(false);
+  /** A live quality change is being applied. */
+  applying = $state(false);
   stats = $state.raw<Record<string, VideoStats>>({});
   toast = $state.raw<(Notice & { id: number }) | null>(null);
   fatal = $state.raw<Fatal | null>(null);
@@ -116,6 +118,8 @@ export class RoomController {
   #prevBytes = new Map<string, ByteSample>();
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
   #toastId = 0;
+  /** The last live quality change; the next one waits for it. */
+  #applying: Promise<void> = Promise.resolve();
 
   async start(): Promise<void> {
     try {
@@ -261,14 +265,11 @@ export class RoomController {
     room.localParticipant.setAttributes({ watching: value }).catch(() => (this.#lastWatching = null));
   }
 
-  async toggleShare() {
-    if (this.share) await this.stopShare();
-    else await this.startShare();
-  }
-
-  async startShare() {
+  /** Starts with the given settings (saved for next time), else the saved ones. */
+  async startShare(settings?: ShareSettings) {
     const room = this.#room;
     if (!room || this.busy || this.share) return;
+    if (settings) prefs.setShare(settings);
     this.busy = true;
     try {
       const out = await startShare(room.localParticipant, prefs.share, () => void this.stopShare());
@@ -279,7 +280,8 @@ export class RoomController {
         return;
       }
       this.share = out.share;
-      if (!out.share.audio) this.notify({ key: 'share.noSoundTip' }, 7000);
+      // Only when sound was asked for: then it was missed in the picker.
+      if (!out.share.audio && prefs.share.audio) this.notify({ key: 'share.noSoundTip' }, 7000);
     } finally {
       this.busy = false;
       this.refresh();
@@ -296,15 +298,27 @@ export class RoomController {
     this.refresh();
   }
 
+  /** Saves the settings and applies them to the live share, one apply at a time. */
   async setShareSettings(settings: ShareSettings) {
     prefs.setShare(settings);
+    // Two applies at once would fight over the same sender's parameters.
+    const run = this.#applying.then(() => this.#applyLive(settings));
+    this.#applying = run;
+    this.applying = true;
+    await run;
+    if (this.#applying === run) this.applying = false;
+  }
+
+  async #applyLive(settings: ShareSettings) {
     const s = this.share;
     if (!s) return;
     try {
       await applyLive(s, settings);
-      const res = settings.res === 1440 ? t('share.sourceShort') : `${settings.res}p`;
-      this.notify({ key: 'share.applied', params: { res, fps: settings.fps } });
+      if (this.share !== s) return;
+      this.notify({ key: 'share.applied', params: { res: `${settings.res}p`, fps: settings.fps } });
     } catch (e) {
+      // Stopped mid-apply: the stopped track failing is no news.
+      if (this.share !== s) return;
       this.notify({ key: 'share.applyFailed', params: { error: messageOf(e) } }, 5000);
     }
   }

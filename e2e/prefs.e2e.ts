@@ -48,6 +48,7 @@ test('settings menu closes on Escape and outside clicks', async ({ page }) => {
   // Something inert, so the click can't also trigger whatever sits behind.
   await page.locator('header .title').click();
   await expect(menu).toHaveCount(0);
+  await expect(page.getByTestId('share-modal')).toBeHidden();
   await expect(page.getByTestId('share-button')).not.toContainText('⏹');
 });
 

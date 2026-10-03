@@ -5,11 +5,15 @@ import {
   alignDown,
   QUALITY,
   captureConstraints,
+  contentHintOf,
+  degradationOf,
   displayMediaOptions,
   parseQuality,
   parseShareSettings,
+  presetOf,
   simulcastLayers,
   tuneEncodings,
+  type ShareSettings,
 } from './share';
 
 describe('KBPS', () => {
@@ -87,6 +91,29 @@ describe('capture options', () => {
       surfaceSwitching: 'include',
     });
   });
+  test('without audio the picker gets no sound request at all', () => {
+    expect(displayMediaOptions(1440, 15, false)).toEqual({
+      video: captureConstraints(1440, 15),
+      audio: false,
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include',
+    });
+  });
+});
+
+describe('presets', () => {
+  test('values pick their preset, anything else is custom', () => {
+    expect(presetOf(1080, 60)).toBe('smooth');
+    expect(presetOf(1440, 15)).toBe('readable');
+    expect(presetOf(1440, 60)).toBe('custom');
+    expect(presetOf(720, 15)).toBe('custom');
+  });
+  test('readability keeps detail and resolution; the rest keeps motion, balanced', () => {
+    expect([contentHintOf('readable'), degradationOf('readable')]).toEqual(['detail', 'maintain-resolution']);
+    for (const p of ['smooth', 'custom'] as const) {
+      expect([contentHintOf(p), degradationOf(p)]).toEqual(['motion', 'balanced']);
+    }
+  });
 });
 
 describe('tuneEncodings', () => {
@@ -127,10 +154,28 @@ describe('stored settings', () => {
     expect(parseQuality('ultra')).toBe('auto');
     expect(parseQuality(null)).toBe('auto');
   });
-  test('share settings fall back per field', () => {
-    expect(parseShareSettings({ res: 720, fps: 30 })).toEqual({ res: 720, fps: 30 });
-    expect(parseShareSettings({ res: '1440', fps: '15' })).toEqual({ res: 1440, fps: 15 });
-    expect(parseShareSettings({ res: 999, fps: 30 })).toEqual({ res: 1080, fps: 30 });
-    expect(parseShareSettings(null)).toEqual({ res: 1080, fps: 60 });
+  test('share settings: the old {res, fps} format still loads, audio on', () => {
+    expect(parseShareSettings({ res: 720, fps: 30 })).toEqual({ res: 720, fps: 30, preset: 'custom', audio: true });
+    expect(parseShareSettings({ res: '1440', fps: '15' })).toEqual({ res: 1440, fps: 15, preset: 'readable', audio: true });
+    expect(parseShareSettings({ res: 1080, fps: 60 })).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
+  });
+  test('share settings: the new format round-trips', () => {
+    const stored: ShareSettings[] = [
+      { res: 1080, fps: 60, preset: 'smooth', audio: false },
+      { res: 1440, fps: 15, preset: 'readable', audio: true },
+      { res: 720, fps: 60, preset: 'custom', audio: false },
+      // Custom picked on purpose keeps the motion hint even on preset values.
+      { res: 1440, fps: 15, preset: 'custom', audio: true },
+    ];
+    for (const v of stored) expect(parseShareSettings(JSON.parse(JSON.stringify(v)))).toEqual(v);
+  });
+  test('share settings: garbage falls back per field to Smoother video with sound', () => {
+    expect(parseShareSettings(null)).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
+    expect(parseShareSettings('1080p')).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
+    expect(parseShareSettings([720, 30])).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
+    expect(parseShareSettings({ res: 999, fps: 30, audio: 'no' })).toEqual({ res: 1080, fps: 30, preset: 'custom', audio: true });
+    // A preset name that doesn't match the values follows the values.
+    expect(parseShareSettings({ res: 720, fps: 15, preset: 'smooth' })).toEqual({ res: 720, fps: 15, preset: 'custom', audio: true });
+    expect(parseShareSettings({ res: 1440, fps: 15, preset: 'ultra', audio: false })).toEqual({ res: 1440, fps: 15, preset: 'readable', audio: false });
   });
 });
