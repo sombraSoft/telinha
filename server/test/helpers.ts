@@ -36,6 +36,8 @@ export interface Setup {
   /** Rooms opened by /telinha before the test; default: the names the tests use. */
   rooms?: string[];
   ensureRoom?: (room: string) => Promise<void>;
+  /** The bot's member directory; unset = not ready yet. */
+  directory?: Deps['members'];
 }
 
 export function setup(o: Setup = {}) {
@@ -59,6 +61,7 @@ export function setup(o: Setup = {}) {
     },
     group: (l: Locale) => (l === 'pt-BR' ? 'Galera' : 'Crew'),
     discordReady: () => true,
+    members: o.directory,
     fetch: o.fetch ?? (async () => { throw new Error('no fetch in this test'); }),
     now: () => NOW,
     random: (n) => new Uint8Array(n).fill(0xab),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { THEMES, parseThemeChoice, resolveTheme } from './theme';
+import { THEMES, THEME_CHOICES, parseThemeChoice, resolveTheme } from './theme';
 
 describe('theme', () => {
   test('explicit themes win over the OS', () => {
@@ -11,6 +11,9 @@ describe('theme', () => {
   test('system follows prefers-color-scheme', () => {
     expect(resolveTheme('system', true)).toBe('light');
     expect(resolveTheme('system', false)).toBe('dark');
+  });
+  test('the picker offers system and every theme once', () => {
+    expect([...THEME_CHOICES].sort()).toEqual(['system' as const, ...THEMES].sort());
   });
   test('stored values are validated', () => {
     expect(parseThemeChoice('onyx')).toBe('onyx');

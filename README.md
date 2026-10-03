@@ -28,11 +28,11 @@ compose healthcheck; Caddy never routes it publicly.
 
 | Path | What |
 | --- | --- |
-| `server/` | Bun TypeScript server, run directly (no build step): `index.ts` entry, `config.ts` env parsing, `http.ts` routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the `/telinha` status card, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
+| `server/` | Bun TypeScript server, run directly (no build step): `index.ts` entry, `config.ts` env parsing, `http.ts` routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the `/telinha` status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
 | `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`); `bun run build` writes `web/dist` |
 | `scripts/dev.ts`, `stack.ts`, `livekit.ts` | Local dev: downloads and starts `livekit-server --dev`, starts the Bun server and Vite, cleans up on exit |
 | `scripts/image.ts` | `bun run image`: local container build plus smoke test |
-| `e2e/` | Playwright specs (`*.e2e.ts`): login, screen share between two browser contexts, language and theme, room closing |
+| `e2e/` | Playwright specs (`*.e2e.ts`): login, screen share between two browser contexts, language and theme, the member list, room closing |
 | `Dockerfile` | Multi-stage build (Bun build, prod deps, Bun alpine runtime) |
 | `deploy/` | Host side: `compose.yml`, `Caddyfile`, `livekit.yaml`, `env/*.example`, `install.sh`, `pin.sh` |
 | `deploy/updater/` | `tela-update` and its systemd service/timer (pull-based CD) |
@@ -62,10 +62,11 @@ and in that mode every request whose `Host` is not `localhost`, `127.0.0.1` or
 `[::1]` gets a 421, so a reverse proxy in front of it (or a DNS-rebinding page)
 never reaches the fake login. Set `DEV_LOCALE=en` or `pt-BR` to force the
 locale. There is no `/telinha` in dev, so any valid room name
-(`/sala/?room=test1`) opens a room on first use; it still closes like a real
-one (`CLOSE_EMPTY_SECONDS=30 bun run dev` to watch that happen). The dev
-registry lives in `.cache/data/`; the E2E stack uses a fresh `.cache/e2e-data/`
-with `CLOSE_EMPTY_SECONDS=4` and `POLL_SECONDS=1`.
+(`/sala/?room=test1`) opens a room on first use, and the member list is a
+fixed preview (the dev user plus seven made-up members, some offline); a room
+still closes like a real one (`CLOSE_EMPTY_SECONDS=30 bun run dev` to watch
+that happen). The dev registry lives in `.cache/data/`; the E2E stack uses a
+fresh `.cache/e2e-data/` with `CLOSE_EMPTY_SECONDS=4` and `POLL_SECONDS=1`.
 
 Optional env vars (all listed, commented out, in `deploy/env/app.env.example`):
 `GROUP_NAME` (name shown in the UI and bot replies; defaults to the guild
@@ -129,6 +130,23 @@ drops the top layer (#9).
 stopped). The smoke test (also run by the CI `image` job) runs the server tests
 in the image, checks that the built page exists and starts the server with
 `DEV_USER` to fetch `/healthz` and `/sala/`.
+
+## Member list
+
+Beside who is in the room, the people list shows everyone else with the role,
+Discord style: **Online** (online, idle, do not disturb) and **Offline**
+(collapsed until opened; the choice is kept in `localStorage`). The page polls
+`GET /auth/members` every 15 s while the tab is visible; it answers
+`{ members: [{ id, name, avatar, status }] }` (`no-store`), 401 without a
+session and 403 without the role, checked by the handler itself since Caddy
+lets `/auth/*` through ungated. Until the bot has loaded the guild the list is
+empty.
+
+The bot fetches the guild's members once per gateway session and keeps the
+directory current from member and presence events, so it needs two
+**privileged intents**: Developer Portal -> the app -> Bot -> **Server Members
+Intent** and **Presence Intent**. Without them the bot fails to log in
+("disallowed intents"). Only the role members' presences are cached.
 
 ## Releases
 

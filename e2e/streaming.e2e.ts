@@ -11,7 +11,11 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
   try {
     const pub = await pubCtx.newPage();
     await openRoom(pub, room);
+    // The dock opens the share modal; Go live (default: 1080p60, capped by the 720p canvas) starts it.
     await pub.getByTestId('share-button').click();
+    await expect(pub.getByTestId('share-modal')).toBeVisible();
+    await pub.getByTestId('share-go-live').click();
+    await expect(pub.getByTestId('share-modal')).toBeHidden();
     await expect(pub.locator('[data-testid="tile"][data-local="true"]')).toBeVisible();
 
     const sub = await subCtx.newPage();
@@ -46,7 +50,9 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
     expect(fps).toBeGreaterThanOrEqual(20);
     await expect(tile.getByTestId('tile-quality')).toContainText('720p');
 
-    await sub.getByTestId('stats-toggle').click();
+    await sub.getByTestId('settings-button').click();
+    await sub.getByTestId('debug-toggle').check();
+    await sub.keyboard.press('Escape');
     // No GPU in CI: software H264 (or VP8). Locally AV1/H265 may win the pick.
     const codecs = process.env.CI ? /H264|VP8/i : /H264|VP8|VP9|H265|AV1/i;
     await expect(tile).toContainText(codecs, { timeout: 15_000 });

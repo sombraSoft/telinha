@@ -11,6 +11,7 @@ import { createHandler } from './http.ts';
 import { t, type Locale } from './i18n.ts';
 import { createLifecycle } from './lifecycle.ts';
 import { roomService } from './livekit.ts';
+import { createDirectory } from './members.ts';
 import { createRoleChecker, devIsMember, restGetMember, type IsMember } from './roles.ts';
 import { openRegistry } from './rooms.ts';
 import { loadStatic } from './static.ts';
@@ -27,6 +28,8 @@ const rooms = roomService({
 
 let isMember: IsMember;
 let discordReady = () => false;
+// Filled by the bot; stays "not ready" (an empty list) in dev, where http.ts serves a fixed one.
+const directory = createDirectory();
 let guildName = (): string | undefined => undefined;
 // GROUP_NAME, else the guild's name once the bot sees it, else "members".
 const group = (l: Locale) => config.groupName ?? guildName() ?? t(l, 'members');
@@ -41,7 +44,7 @@ if (config.dev) {
 } else {
   const rest = new REST().setToken(config.discordToken);
   isMember = createRoleChecker({ getMember: restGetMember(rest, config.guildId), roleId: config.roleId, ttlMs: config.roleTtlMs });
-  const client = startBot({ config, rest, group, log, registry, rooms, render: (rec) => render(rec) });
+  const client = startBot({ config, rest, group, log, registry, rooms, render: (rec) => render(rec), directory });
   discordReady = () => client.isReady();
   guildName = () => client.guilds.cache.get(config.guildId)?.name;
   editMessage = editCard(rest);
@@ -54,6 +57,6 @@ createLifecycle({
 const server = Bun.serve({
   hostname: config.host,
   port: config.port,
-  fetch: createHandler({ config, isMember, files, group, registry, rooms, discordReady: () => discordReady(), log }),
+  fetch: createHandler({ config, isMember, files, group, registry, rooms, discordReady: () => discordReady(), members: () => directory.list(), log }),
 });
 log(`gate on ${server.hostname}:${server.port}; rooms in ${config.dataDir}`);

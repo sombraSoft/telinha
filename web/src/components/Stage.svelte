@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomController } from '../lib/room.svelte';
+  import { canShareScreen } from '../lib/share';
   import Tile from './Tile.svelte';
 
   let { rc }: { rc: RoomController } = $props();
@@ -8,6 +9,8 @@
   const streamers = $derived(rc.streamers);
   const focusMode = $derived(!!rc.focusId);
   const hint = $derived(t('empty.hint').split('{share}'));
+  // Phones get no Share button, so no hint pointing at one either.
+  const canShare = canShareScreen();
 </script>
 
 <section class="stage">
@@ -15,7 +18,9 @@
     <div class="empty" data-testid="empty-state">
       <div class="empty-icon" aria-hidden="true">🖥️</div>
       <p class="title">{t('empty.title')}</p>
-      <p class="muted">{hint[0]}<b>{t('share.start')}</b>{hint[1] ?? ''}</p>
+      {#if canShare}
+        <p class="muted">{hint[0]}<b>{t('share.start')}</b>{hint[1] ?? ''}</p>
+      {/if}
     </div>
   {:else if !rc.connected && !rc.fatal}
     <div class="empty muted">{t('app.connecting')}</div>
@@ -48,6 +53,8 @@
     display: flex;
     flex-direction: column;
     padding: 16px;
+    /* Keeps the bottom free for the share dock at home (App sets it). */
+    padding-bottom: max(16px, var(--dock-clear, 0px));
     overflow: auto;
     background: var(--bg-0);
   }
@@ -56,6 +63,9 @@
     margin: auto;
     text-align: center;
     padding: 24px;
+    /* Centred on the window, not the stage, while the people list is open
+       (App sets the shift); as far as the stage leaves room on the right. */
+    translate: clamp(0px, var(--stage-shift, 0px), (100cqw - 100%) / 2 - 16px) 0;
   }
   .empty-icon {
     font-size: 48px;
@@ -108,6 +118,8 @@
   @media (max-width: 720px) {
     .stage {
       padding: 8px;
+      /* The people list's tab pokes 20px up into the stage's bottom edge. */
+      padding-bottom: max(28px, var(--dock-clear, 0px));
     }
     .tiles {
       grid-template-columns: minmax(0, 1fr);

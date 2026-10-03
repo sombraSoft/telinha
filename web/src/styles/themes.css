@@ -1,5 +1,6 @@
 /* Theme tokens. Surface values follow Discord's 2025 themes; bg-0 is the
-   deepest layer (the stage), bg-3 the highest (inputs, raised buttons). */
+   deepest layer (the stage), bg-3 the highest (inputs, raised buttons).
+   [data-theme-preview] applies a theme to one element (the settings swatches). */
 :root {
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -21,7 +22,8 @@
 }
 
 :root,
-:root[data-theme='dark'] {
+:root[data-theme='dark'],
+[data-theme-preview='dark'] {
   color-scheme: dark;
   --bg-0: #121214;
   --bg-1: #1a1a1e;
@@ -32,7 +34,8 @@
   --border: rgba(151, 151, 159, 0.16);
 }
 
-:root[data-theme='ash'] {
+:root[data-theme='ash'],
+[data-theme-preview='ash'] {
   color-scheme: dark;
   --bg-0: #2c2d32;
   --bg-1: #323339;
@@ -44,7 +47,8 @@
 }
 
 /* Onyx: near-identical surfaces, so borders do the separating. */
-:root[data-theme='onyx'] {
+:root[data-theme='onyx'],
+[data-theme-preview='onyx'] {
   color-scheme: dark;
   --bg-0: #000000;
   --bg-1: #0a0a0c;
@@ -55,7 +59,8 @@
   --border: rgba(151, 151, 159, 0.16);
 }
 
-:root[data-theme='light'] {
+:root[data-theme='light'],
+[data-theme-preview='light'] {
   color-scheme: light;
   --bg-0: #f3f3f4;
   --bg-1: #fbfbfb;

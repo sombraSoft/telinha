@@ -1,29 +1,19 @@
 <script lang="ts">
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
-  import { prefs, type LangChoice } from '../lib/prefs.svelte';
   import type { RoomController } from '../lib/room.svelte';
-  import { THEME_CHOICES, parseThemeChoice } from '../lib/theme';
+  import { PEOPLE_ID } from './PeopleList.svelte';
+  import SettingsMenu from './SettingsMenu.svelte';
 
-  let { rc }: { rc: RoomController } = $props();
-
-  // Language names stay in their own language so anyone can find theirs.
-  const LANGS: { value: LangChoice; label?: string }[] = [
-    { value: 'auto' },
-    { value: 'pt-BR', label: 'Português' },
-    { value: 'en', label: 'English' },
-  ];
+  let { rc, peopleOpen, ontogglepeople }: { rc: RoomController; peopleOpen: boolean; ontogglepeople: () => void } =
+    $props();
 </script>
 
+<!-- Three columns: the side ones share the leftover width equally, so the
+     title sits in the middle of the viewport whatever is beside it. -->
 <header class="top">
-  <div class="brand">
-    <span class="logo" aria-hidden="true">📺</span>
-    <span class="title">Telinha</span>
-    {#if rc.group}<span class="chip">{rc.group}</span>{/if}
+  <div class="left">
     {#if rc.roomName}<span class="muted room">{t('top.room', { name: rc.roomName })}</span>{/if}
-  </div>
-
-  <div class="actions">
     <button
       class="btn ghost"
       data-testid="copy-link"
@@ -32,40 +22,34 @@
       onclick={() => void rc.copyLink()}>
       <span aria-hidden="true">🔗</span><span class="label">{t('top.copyLink')}</span>
     </button>
+  </div>
+
+  <div class="brand">
+    <span class="logo" aria-hidden="true">📺</span>
+    <span class="title">Telinha</span>
+  </div>
+
+  <div class="right">
+    <!-- 👥 drawn in currentColor (the emoji ignores it): readable on every theme, follows hover. -->
     <button
-      class="btn ghost icon"
-      data-testid="stats-toggle"
-      aria-pressed={prefs.stats}
-      aria-label={t('top.stats')}
-      title={t('top.stats')}
-      onclick={() => prefs.setStats(!prefs.stats)}>📊</button
+      class="btn ghost icon people"
+      data-testid="people-toggle"
+      aria-label={t('people.toggle')}
+      title={t('people.toggle')}
+      aria-expanded={peopleOpen}
+      aria-controls={PEOPLE_ID}
+      onclick={ontogglepeople}
     >
-    <select
-      class="select"
-      name="theme"
-      data-testid="theme-select"
-      aria-label={t('top.theme')}
-      title={t('top.theme')}
-      value={prefs.theme}
-      onchange={(e) => prefs.setTheme(parseThemeChoice(e.currentTarget.value))}
-    >
-      {#each THEME_CHOICES as c (c)}
-        <option value={c}>{t(`theme.${c}`)}</option>
-      {/each}
-    </select>
-    <select
-      class="select"
-      name="lang"
-      data-testid="lang-select"
-      aria-label={t('top.language')}
-      title={t('top.language')}
-      value={prefs.lang}
-      onchange={(e) => prefs.setLang(LANGS.find((l) => l.value === e.currentTarget.value)?.value ?? 'auto')}
-    >
-      {#each LANGS as l (l.value)}
-        <option value={l.value}>{l.label ?? t('lang.auto')}</option>
-      {/each}
-    </select>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="8" r="3.5" />
+          <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+          <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" />
+          <path d="M18 14.3c2.1.7 3.5 2.8 3.5 5.7" />
+        </g>
+      </svg>
+    </button>
+    <SettingsMenu />
     {#if rc.user}
       <div class="me" data-testid="me">
         <img class="avatar" src={avatarUrl(rc.user.id, rc.user.avatar)} alt="" />
@@ -77,21 +61,31 @@
 
 <style>
   .top {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     padding: 8px 16px;
     background: var(--bg-1);
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .left,
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
+  }
+  .right {
+    /* SettingsMenu's popover anchors here. */
+    position: relative;
+    justify-content: flex-end;
   }
   .brand {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-width: 0;
-    white-space: nowrap;
   }
   .title {
     font-weight: 700;
@@ -100,52 +94,71 @@
   .logo {
     font-size: 18px;
   }
-  .chip {
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: var(--bg-3);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 600;
-  }
   .room {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 13px;
   }
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .people svg {
+    display: block;
+  }
+  .people[aria-expanded='true'] {
+    background: var(--hover);
+    color: var(--text);
   }
   .me {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+    max-width: 180px;
     margin-left: 4px;
     padding: 3px 10px 3px 3px;
     border-radius: 999px;
     background: var(--bg-2);
     border: 1px solid var(--border);
     font-weight: 600;
-    max-width: 180px;
   }
   .me .name {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   @media (max-width: 720px) {
     .top {
-      flex-wrap: wrap;
+      gap: 8px;
       padding: 8px 12px;
     }
     .room,
     .label {
       display: none;
+    }
+    /* Hidden visually but still read, so the chip isn't an unnamed avatar. */
+    .me .name {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    /* The avatar never squeezes: the right group is tight on small phones. */
+    .me {
+      flex: none;
+      margin-left: 0;
+      padding: 3px;
+    }
+  }
+  /* Room for the right group's three buttons on the smallest phones. */
+  @media (max-width: 360px) {
+    .top {
+      gap: 4px;
+      padding: 8px;
+    }
+    .left,
+    .right {
+      gap: 2px;
     }
   }
 </style>
