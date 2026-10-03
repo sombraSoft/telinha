@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0-rc.1](https://github.com/sombraSoft/telinha/compare/v0.2.0...v0.3.0-rc.1) (2026-10-03)
+
+
+### Features
+
+* /tela rooms close themselves and keep their card live ([#13](https://github.com/sombraSoft/telinha/issues/13)) ([640f7ab](https://github.com/sombraSoft/telinha/commit/640f7ab3779ba818a22493550748c400eb2ff9d9))
+
 ## [0.2.0](https://github.com/sombraSoft/telinha/compare/v0.2.0-rc.1...v0.2.0) (2026-10-02)
 
 
