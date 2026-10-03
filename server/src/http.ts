@@ -51,6 +51,16 @@ const redirect = (status: number, location: string, headers: HeadersInit = {}) =
 // host, or a DNS-rebound page, must not get the fake login.
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
+/** Coarse browser family for login logs (enough to spot in-app browsers). */
+export function uaFamily(ua: string | null): string {
+  if (!ua) return 'none';
+  if (/Discord/i.test(ua)) return 'discord-app';
+  const mobile = /Mobile|Android|iPhone|iPad/i.test(ua) ? '-mobile' : '';
+  const name = /Edg\//.test(ua) ? 'edge' : /OPR\//.test(ua) ? 'opera' : /Firefox\//.test(ua) ? 'firefox'
+    : /Chrome\//.test(ua) ? 'chrome' : /Safari\//.test(ua) ? 'safari' : 'other';
+  return name + mobile;
+}
+
 export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
   const { config: c, isMember, files, group, registry, rooms } = deps;
   const discordReady = deps.discordReady ?? (() => false);
@@ -108,7 +118,19 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
     if (path === '/auth/callback') {
       const st = verify<OAuthState>(c.cookieSecret, cookies[STATE], now());
       const code = url.searchParams.get('code');
-      if (!st || !code || url.searchParams.get('state') !== st.s) return html(400, pages.expired(acceptLocale));
+      // Every failed step gets one line: a failed login must be explainable later.
+      const fail = (why: string) => log('login failed', why, `ua=${uaFamily(req.headers.get('user-agent'))}`);
+      const discordError = url.searchParams.get('error');
+      if (discordError) {
+        fail(`discord ${discordError}${url.searchParams.get('error_description') ? `: ${url.searchParams.get('error_description')!.slice(0, 120)}` : ''}`);
+        return html(400, pages.expired(acceptLocale));
+      }
+      if (!st || !code || url.searchParams.get('state') !== st.s) {
+        fail(!cookies[STATE] ? 'no state cookie (callback opened in another browser?)'
+          : !st ? 'state cookie invalid or expired'
+            : !code ? 'no code' : 'state mismatch');
+        return html(400, pages.expired(acceptLocale));
+      }
       const tok = await doFetch(`${DISCORD_API}/oauth2/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -117,10 +139,17 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
           client_id: c.clientId, client_secret: c.clientSecret,
         }),
       });
-      if (!tok.ok) throw new Error(`token exchange ${tok.status}`);
+      if (!tok.ok) {
+        const body = (await tok.text().catch(() => '')).slice(0, 200);
+        fail(`token exchange ${tok.status} ${body}`);
+        throw new Error(`token exchange ${tok.status}`);
+      }
       const { access_token } = (await tok.json()) as { access_token: string };
       const me = await doFetch(`${DISCORD_API}/users/@me`, { headers: { Authorization: `Bearer ${access_token}` } });
-      if (!me.ok) throw new Error(`users/@me ${me.status}`);
+      if (!me.ok) {
+        fail(`users/@me ${me.status}`);
+        throw new Error(`users/@me ${me.status}`);
+      }
       const user = (await me.json()) as {
         id: string; username: string; global_name?: string | null; avatar?: string | null; locale?: string;
       };
@@ -130,8 +159,14 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
         ...(user.locale ? { locale: user.locale } : {}),
       };
       const locale = localeOf(s);
-      const ok = await isMember(user.id);
-      log('login', user.id, name, ok ? 'ok' : 'denied');
+      let ok: boolean;
+      try {
+        ok = await isMember(user.id);
+      } catch (e) {
+        fail(`role check for ${user.id}: ${(e as Error).message}`);
+        throw e;
+      }
+      log('login', user.id, name, ok ? 'ok' : 'denied', `ua=${uaFamily(req.headers.get('user-agent'))}`);
       if (!ok) return html(403, pages.denied(locale, name, group(locale)), { 'Set-Cookie': clearState() });
       const h = new Headers();
       h.append('Set-Cookie', sessionCookie(s));

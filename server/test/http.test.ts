@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { verify, type Session } from '../src/auth.ts';
-import type { Fetch } from '../src/http.ts';
+import { uaFamily, type Fetch } from '../src/http.ts';
 import { DEV_ENV, jwtPayload, NOW, PROD_ENV, setup } from './helpers.ts';
 
 const setCookies = (r: Response) => r.headers.getSetCookie();
@@ -128,6 +128,21 @@ describe('Discord OAuth', () => {
     expect(r.status).toBe(400);
     expect(await r.text()).toContain('Login expirou.');
     expect((await s.get('/auth/callback?code=C&state=x')).status).toBe(400);
+  });
+
+  test('callback: every failed step is logged with its reason and browser family', async () => {
+    const s = setup();
+    const { state, cookie } = await loginState(s);
+    const android = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36';
+    await s.get(`/auth/callback?code=C&state=${state}`, { 'user-agent': android });
+    await s.get('/auth/callback?code=C&state=wrong', { cookie });
+    await s.get('/auth/callback?error=access_denied&error_description=The+resource+owner+denied', { cookie });
+    const fails = s.logs.filter((l) => l[0] === 'login failed').map((l) => `${l[1]} | ${l[2]}`);
+    expect(fails).toEqual([
+      'no state cookie (callback opened in another browser?) | ua=chrome-mobile',
+      'state mismatch | ua=none',
+      'discord access_denied: The resource owner denied | ua=none',
+    ]);
   });
 
   test('callback: Discord failure -> 502 localized page, path logged without query', async () => {
@@ -316,4 +331,11 @@ describe('DEV_USER mode', () => {
     expect((await s.get('/auth/check', { cookie: s.sessionCookie({ id: '2' }) })).status).toBe(403);
     expect((await s.get('/auth/check', { cookie: s.sessionCookie({ id: '1' }) })).status).toBe(204);
   });
+});
+
+test('uaFamily spots in-app and mobile browsers', () => {
+  expect(uaFamily(null)).toBe('none');
+  expect(uaFamily('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1')).toBe('safari-mobile');
+  expect(uaFamily('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/154.0 Safari/537.36 Edg/154.0')).toBe('edge');
+  expect(uaFamily('Mozilla/5.0 (Linux; Android 14) Discord/250.0')).toBe('discord-app');
 });

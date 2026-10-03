@@ -25,6 +25,12 @@ services:
     network_mode: host
     env_file: /etc/telinha/app.env
     mem_limit: 256m
+    # journald keeps the log across container recreation (every deploy), so a
+    # failed login can still be looked up later: journalctl -t telinha
+    logging:
+      driver: journald
+      options:
+        tag: telinha
     volumes:
       # room registry (telinha.sqlite): closed rooms must stay closed across updates
       - telinha-data:/data
