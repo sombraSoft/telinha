@@ -203,17 +203,18 @@ describe('/auth/token', () => {
     expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: null });
   });
 
-  test('avatar from the member directory wins over the session one', async () => {
-    const dir = [{ id: '1', name: 'Zé', avatar: 'fresh', status: 'online' as const }];
+  test('name and avatar from the member directory win over the session ones', async () => {
+    const dir = [{ id: '1', name: 'Zé da Galera', avatar: 'fresh', status: 'online' as const }];
     const fresh = setup({ directory: () => dir });
     const r = await fresh.get('/auth/token?room=abcd', { cookie: fresh.sessionCookie({ avatar: null }) });
     const body = (await r.json()) as Record<string, any>;
-    expect(body.user.avatar).toBe('fresh');
+    expect(body.user).toMatchObject({ name: 'Zé da Galera', avatar: 'fresh' });
+    expect(jwtPayload(body.token).name).toBe('Zé da Galera');
     expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: 'fresh' });
     // Not in the directory (or the bot not ready): the session's avatar.
     const s = setup({ directory: () => [] });
     const kept = (await (await s.get('/auth/token?room=abcd', { cookie: s.sessionCookie({ avatar: 'old' }) })).json()) as Record<string, any>;
-    expect(kept.user.avatar).toBe('old');
+    expect(kept.user).toMatchObject({ name: 'Zé', avatar: 'old' });
   });
 
   test('only rooms /telinha opened: unknown 404, closed 410, nothing minted or created', async () => {

@@ -212,15 +212,18 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
         return json(410, { error: 'closed' });
       }
       const identity = newIdentity(s.id, random);
-      // The bot's directory is live; the session only has the avatar from login
-      // (none at all for sessions older than the avatar field).
-      const avatar = members()?.find((m) => m.id === s.id)?.avatar ?? s.avatar ?? null;
+      // The bot's directory is live and has the server nick; the session only has
+      // the name and avatar from login (no avatar at all for sessions older than
+      // the avatar field).
+      const me = members()?.find((m) => m.id === s.id);
+      const name = me?.name ?? s.name;
+      const avatar = me?.avatar ?? s.avatar ?? null;
       const locale = localeOf(s);
       const token = await createToken({
-        key: c.livekitKey, secret: c.livekitSecret, room, identity, name: s.name, id: s.id, avatar,
+        key: c.livekitKey, secret: c.livekitSecret, room, identity, name, id: s.id, avatar,
       });
       return json(200, {
-        url: c.livekitUrl, token, identity, user: { id: s.id, name: s.name, avatar, locale }, group: group(locale),
+        url: c.livekitUrl, token, identity, user: { id: s.id, name, avatar, locale }, group: group(locale),
       });
     }
 
