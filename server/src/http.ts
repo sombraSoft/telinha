@@ -1,5 +1,5 @@
 // HTTP handler: login gate for Caddy forward_auth (/auth/check), Discord OAuth,
-// LiveKit tokens for open /tela rooms, the room page (/sala/) and /healthz.
+// LiveKit tokens for open /telinha rooms, the room page (/sala/) and /healthz.
 // Everything external is injected so tests drive it with plain Request objects.
 import { randomBytes } from 'node:crypto';
 import { cookie, parseCookies, safeNext, SESSION, sign, STATE, verify, type Session } from './auth.ts';
@@ -175,7 +175,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
     }
 
     // LiveKit token for the room page. Members only; may only publish screen
-    // share; only for rooms /tela opened that have not closed yet.
+    // share; only for rooms /telinha opened that have not closed yet.
     if (path === '/auth/token') {
       const s = session();
       const room = url.searchParams.get('room') ?? '';
@@ -183,7 +183,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
       if (!(await isMember(s.id))) return json(403, { error: 'members' });
       if (!ROOM_RE.test(room)) return json(400, { error: 'room' });
       let rec = registry.get(room);
-      // Dev/E2E have no /tela: any valid room name opens one (closed stays closed).
+      // Dev/E2E have no /telinha: any valid room name opens one (closed stays closed).
       if (!rec && c.dev) {
         rec = registry.create({
           room, guildId: '', channelId: '', locale: localeOf(s), openerId: s.id, openerName: s.name, what: null, createdAt: now(),

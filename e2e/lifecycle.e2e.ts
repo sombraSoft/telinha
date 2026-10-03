@@ -3,8 +3,8 @@ import { newRoom, openRoom } from './helpers.ts';
 
 test('/sala/ without a room: a notice, no token request', async ({ browser }) => {
   for (const [locale, text] of [
-    ['en-US', 'Open a Telinha with /tela on Discord.'],
-    ['pt-BR', 'Abra uma telinha com /tela no Discord.'],
+    ['en-US', 'Open a Telinha with /telinha on Discord.'],
+    ['pt-BR', 'Abra uma telinha com /telinha no Discord.'],
   ] as const) {
     const ctx = await browser.newContext({ locale });
     try {
@@ -48,7 +48,7 @@ test('a room closes for good once it sat empty', async ({ browser }) => {
       .toBe(410);
 
     await later.goto(`/sala/?room=${room}`);
-    await expect(later.getByTestId('notice')).toHaveText('This Telinha has ended. Open another with /tela on Discord.');
+    await expect(later.getByTestId('notice')).toHaveText('This Telinha has ended. Open another with /telinha on Discord.');
     await expect(later.getByTestId('me')).toHaveCount(0);
     await expect(later.getByTestId('fatal').getByRole('button')).toHaveCount(0);
   } finally {

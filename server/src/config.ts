@@ -85,7 +85,7 @@ export function loadConfig(env: Env): Config {
     clientSecret: discord('DISCORD_CLIENT_SECRET'),
     guildId: discord('GUILD_ID'),
     roleId: discord('ROLE_ID'),
-    // /tela only works in these channels, e.g. a chat visitors can't see
+    // /telinha only works in these channels, e.g. a chat visitors can't see
     channelIds: discord('CHANNEL_IDS').split(',').map((c) => c.trim()).filter(Boolean),
     publicUrl,
     cookieSecret: get('COOKIE_SECRET'),

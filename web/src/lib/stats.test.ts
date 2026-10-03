@@ -87,7 +87,7 @@ describe('streamLabel', () => {
   const out: VideoStats = {
     out: true, width: 1920, height: 1080, fps: 59, mbps: 8, codec: 'H265', impl: '', limitation: '-', lost: 0, relay: false, rttMs: 1,
   };
-  test('height, snapped fps and codec for the /tela card', () => {
+  test('height, snapped fps and codec for the /telinha card', () => {
     expect(streamLabel(out)).toBe('1080p60 · H265');
     expect(streamLabel({ ...out, fps: 29, codec: 'av1' })).toBe('1080p30 · AV1');
     expect(streamLabel({ ...out, height: 720, fps: 14, codec: '' })).toBe('720p15');

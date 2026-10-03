@@ -33,7 +33,7 @@ export interface Setup {
   members?: string[];
   fetch?: Fetch;
   isMember?: Deps['isMember'];
-  /** Rooms opened by /tela before the test; default: the names the tests use. */
+  /** Rooms opened by /telinha before the test; default: the names the tests use. */
   rooms?: string[];
   ensureRoom?: (room: string) => Promise<void>;
 }

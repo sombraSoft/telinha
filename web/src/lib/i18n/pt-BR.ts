@@ -69,7 +69,7 @@ export const ptBR: Messages = {
   'fatal.disconnected': 'Saiu da sala (conexão caiu).',
   'fatal.error': 'Erro: {error}',
   'fatal.reload': 'Recarregar',
-  'notice.noRoom': 'Abra uma telinha com /tela no Discord.',
-  'notice.unknown': 'Essa telinha não existe. Abra uma com /tela no Discord.',
-  'notice.closed': 'Essa telinha foi encerrada. Abra outra com /tela no Discord.',
+  'notice.noRoom': 'Abra uma telinha com /telinha no Discord.',
+  'notice.unknown': 'Essa telinha não existe. Abra uma com /telinha no Discord.',
+  'notice.closed': 'Essa telinha foi encerrada. Abra outra com /telinha no Discord.',
 };

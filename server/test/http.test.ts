@@ -203,7 +203,7 @@ describe('/auth/token', () => {
     expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: null });
   });
 
-  test('only rooms /tela opened: unknown 404, closed 410, nothing minted or created', async () => {
+  test('only rooms /telinha opened: unknown 404, closed 410, nothing minted or created', async () => {
     const s = setup();
     const unknown = await s.get('/auth/token?room=never-opened', { cookie: s.sessionCookie() });
     expect(unknown.status).toBe(404);

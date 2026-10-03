@@ -9,7 +9,7 @@ export function newRoom(prefix = 'e2e'): string {
 
 /**
  * Opens a room and waits until the DEV_USER login round-trip is done. In dev
- * mode the server opens an unknown valid room on first use (there is no /tela).
+ * mode the server opens an unknown valid room on first use (there is no /telinha).
  */
 export async function openRoom(page: Page, room: string): Promise<string> {
   await page.goto(`/sala/?room=${room}`);
