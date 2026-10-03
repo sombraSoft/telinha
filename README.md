@@ -87,6 +87,10 @@ A Telinha link does not live forever:
   The `/tela` message is a live card: who is streaming (with the quality the
   page reports, e.g. `1080p60 · H265`), who is watching, and since when. It is
   edited only when it changes, at most every 5 s, without pinging anyone.
+  Editing goes through the bot's REST API, so the bot needs **View Channel**
+  and **Read Message History** in the `/tela` channels (slash-command replies
+  alone need neither). Without them the card stays as posted (logged once as
+  "card not editable"), and everything else works.
 - A room closes for good after `CLOSE_EMPTY_SECONDS` with nobody in it, or
   that long after `/tela` when nobody ever joined. The server deletes the
   LiveKit room and turns the card into a summary (how long it lasted, everyone
