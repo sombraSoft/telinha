@@ -212,7 +212,9 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
         return json(410, { error: 'closed' });
       }
       const identity = newIdentity(s.id, random);
-      const avatar = s.avatar ?? null;
+      // The bot's directory is live; the session only has the avatar from login
+      // (none at all for sessions older than the avatar field).
+      const avatar = members()?.find((m) => m.id === s.id)?.avatar ?? s.avatar ?? null;
       const locale = localeOf(s);
       const token = await createToken({
         key: c.livekitKey, secret: c.livekitSecret, room, identity, name: s.name, id: s.id, avatar,
