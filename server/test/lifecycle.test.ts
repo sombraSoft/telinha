@@ -108,7 +108,7 @@ describe('presence', () => {
 });
 
 describe('closing', () => {
-  test('5 min after /tela when nobody ever joined', async () => {
+  test('5 min after /telinha when nobody ever joined', async () => {
     const s = setup();
     await s.tickAt(4 * MIN + 59_000);
     expect(s.registry.get(NEW.room)!.closedAt).toBeNull();

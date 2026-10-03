@@ -1,4 +1,4 @@
-// Room registry on bun:sqlite. Every valid room comes from /tela (or the dev
+// Room registry on bun:sqlite. Every valid room comes from /telinha (or the dev
 // login), and a closed room stays closed: the token endpoint refuses it.
 import { Database } from 'bun:sqlite';
 import type { Locale } from './i18n.ts';

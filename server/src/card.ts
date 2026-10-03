@@ -1,4 +1,4 @@
-// The /tela message as a live status card. Pure: the lifecycle compares the
+// The /telinha message as a live status card. Pure: the lifecycle compares the
 // rendered payloads and only edits Discord when they differ.
 import {
   ButtonStyle, ComponentType, escapeMarkdown, type APIActionRowComponent, type APIButtonComponentWithURL,
@@ -68,7 +68,7 @@ function fit(l: Locale, parts: (string | List)[]): string {
 const mention = (id: string) => `<@${id}>`;
 
 /**
- * Member-typed text (display name, /tela's "what") as plain text: no
+ * Member-typed text (display name, /telinha's "what") as plain text: no
  * markdown, masked links or mention/channel/timestamp tags in a message the
  * bot authored (allowedMentions only stops the pings, not the rendering).
  */

@@ -1,4 +1,4 @@
-// /tela: opens a room and posts its live status card in the allowed channels.
+// /telinha: opens a room and posts its live status card in the allowed channels.
 // Replies only the caller sees use their client locale; the card uses the
 // guild locale.
 import {
@@ -13,7 +13,7 @@ import type { Registry, RoomRecord } from './rooms.ts';
 
 export function buildCommand() {
   return new SlashCommandBuilder()
-    .setName('tela')
+    .setName('telinha')
     .setDescription(dicts.en.cmdDescription)
     .setDescriptionLocalizations({ [DLocale.PortugueseBR]: dicts['pt-BR'].cmdDescription })
     .setContexts(InteractionContextType.Guild)
@@ -91,10 +91,10 @@ export async function handleTela(i: TelaInput, d: TelaDeps): Promise<void> {
     const posted = await d.reply(d.render(rec));
     if (!posted) throw new Error('no message in the interaction response');
     d.registry.setMessage(room, posted.channelId, posted.messageId);
-    d.log('tela', i.userId, room);
+    d.log('telinha', i.userId, room);
   } catch (e) {
     // A room without its card would be a link nobody can see the state of.
-    d.log('tela failed', room, (e as Error).message);
+    d.log('telinha failed', room, (e as Error).message);
     d.registry.close(room, d.now());
     await d.rooms.deleteRoom(room).catch(() => {});
     await d.reply(ephemeral(t(resolveLocale(i.locale), 'telaFailed')));
@@ -121,9 +121,9 @@ export function startBot(o: {
   async function registerCommand() {
     try {
       await rest.put(Routes.applicationGuildCommands(client.application!.id, c.guildId), { body: [command] });
-      log('/tela registered');
+      log('/telinha registered');
     } catch (e) {
-      log('/tela not registered yet (bot not in guild?)', (e as Error).message);
+      log('/telinha not registered yet (bot not in guild?)', (e as Error).message);
     }
   }
 
@@ -136,7 +136,7 @@ export function startBot(o: {
   });
 
   client.on('interactionCreate', async (i) => {
-    if (!i.isChatInputCommand() || i.commandName !== 'tela') return;
+    if (!i.isChatInputCommand() || i.commandName !== 'telinha') return;
     try {
       const roles = i.member?.roles;
       const hasRole = Array.isArray(roles) ? roles.includes(c.roleId) : Boolean(roles?.cache.has(c.roleId));

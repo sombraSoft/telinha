@@ -1,4 +1,4 @@
-// Server-side strings (HTML pages + /tela). en is the source of keys and the
+// Server-side strings (HTML pages + /telinha). en is the source of keys and the
 // fallback; the Dict type forces pt-BR to define every key.
 export type Locale = 'pt-BR' | 'en';
 export const LOCALES: readonly Locale[] = ['pt-BR', 'en'];
@@ -39,7 +39,7 @@ const en = {
   cmdDescription: 'Open a Telinha room to share your screen',
   optWhatDescription: 'What are you streaming? e.g. Elden Ring',
   onlyGroup: 'Telinha is only for {group}.',
-  wrongChannel: 'Use /tela in {where}.',
+  wrongChannel: 'Use /telinha in {where}.',
   or: ' or ',
   opened: '📺 **{who}** opened a Telinha{what}',
   tip: '-# Only {group} can join (Discord login). To stream with game sound: Google Chrome → **Window** tab → pick the game and tick app audio (just the game, not Discord).',
@@ -74,7 +74,7 @@ const ptBR: Dict = {
   cmdDescription: 'Abre uma telinha pra compartilhar a tela',
   optWhatDescription: 'O que vai passar? ex: Elden Ring',
   onlyGroup: 'A Telinha é só pra {group}.',
-  wrongChannel: 'Usa o /tela no {where}.',
+  wrongChannel: 'Usa o /telinha no {where}.',
   or: ' ou ',
   opened: '📺 **{who}** abriu uma telinha{what}',
   tip: '-# Só {group} entram (login com Discord). Pra transmitir com som do jogo: Google Chrome → aba **Janela** → escolhe o jogo e marca o áudio do app (só o jogo, sem o Discord).',

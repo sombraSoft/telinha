@@ -108,7 +108,7 @@ export class RoomController {
   #room: Room | null = null;
   #pending = false;
   #lastWatching: string | null = null;
-  /** Last "stream" attribute sent (quality for the /tela card) and when; null = that send failed. */
+  /** Last "stream" attribute sent (quality for the /telinha card) and when; null = that send failed. */
   #lastStream: string | null = '';
   #lastStreamAt = 0;
   /** When the page last rejoined after an unexpected disconnect. */
@@ -127,7 +127,7 @@ export class RoomController {
   }
 
   async #start() {
-    // Rooms only come from /tela now; there is nothing to join without one.
+    // Rooms only come from /telinha now; there is nothing to join without one.
     const name = new URLSearchParams(location.search).get('room');
     if (!isValidRoom(name)) return this.#fail({ key: 'notice.noRoom' }, false);
     this.roomName = name;
@@ -340,7 +340,7 @@ export class RoomController {
     if (this.share && me) this.#publishStream(streamLabel(next[me.identity]));
   }
 
-  // Tell the server what this stream looks like (for the /tela card): only
+  // Tell the server what this stream looks like (for the /telinha card): only
   // on change, at most every 5 s. setAttributes only touches the given key,
   // so "watching" is left alone.
   #publishStream(value: string, now = false) {

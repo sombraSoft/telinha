@@ -56,7 +56,7 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
     const own = pub.locator('[data-testid="tile"][data-local="true"]');
     await expect(own.getByTestId('tile-viewers')).toContainText('1', { timeout: 15_000 });
 
-    // The streamer reports its quality for the /tela card (read by the server's poller).
+    // The streamer reports its quality for the /telinha card (read by the server's poller).
     const lk = new RoomServiceClient('http://127.0.0.1:7880', 'devkey', 'secret');
     await expect
       .poll(async () => {

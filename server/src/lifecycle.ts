@@ -1,6 +1,6 @@
 // Room lifecycle: polls LiveKit for every open room, records who came, closes a
-// room for good after it sat empty for CLOSE_EMPTY_SECONDS (counted from /tela
-// when nobody ever joined) and keeps the /tela message up to date as a card.
+// room for good after it sat empty for CLOSE_EMPTY_SECONDS (counted from /telinha
+// when nobody ever joined) and keeps the /telinha message up to date as a card.
 import { TrackSource } from 'livekit-server-sdk';
 import type { Card, Live } from './card.ts';
 import type { LiveParticipant, RoomService } from './livekit.ts';
@@ -140,7 +140,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
     if (!rec.messageId) return;
     let st = cards.get(rec.room);
     if (!st) {
-      // /tela posted the open card with nobody in it.
+      // /telinha posted the open card with nobody in it.
       st = {
         channelId: rec.channelId, messageId: rec.messageId, next: 0, pending: null, fails: 0, dead: false, closed: false,
         sent: JSON.stringify(render({ ...rec, closedAt: null }, NOBODY)),

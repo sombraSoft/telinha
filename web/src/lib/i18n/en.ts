@@ -67,9 +67,9 @@ export const en = {
   'fatal.disconnected': 'You left the room (connection lost).',
   'fatal.error': 'Error: {error}',
   'fatal.reload': 'Reload',
-  'notice.noRoom': 'Open a Telinha with /tela on Discord.',
-  'notice.unknown': 'This Telinha does not exist. Open one with /tela on Discord.',
-  'notice.closed': 'This Telinha has ended. Open another with /tela on Discord.',
+  'notice.noRoom': 'Open a Telinha with /telinha on Discord.',
+  'notice.unknown': 'This Telinha does not exist. Open one with /telinha on Discord.',
+  'notice.closed': 'This Telinha has ended. Open another with /telinha on Discord.',
 };
 
 export type MessageKey = keyof typeof en;

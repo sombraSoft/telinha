@@ -1,6 +1,6 @@
 // Telinha: Discord login gate in front of the LiveKit room page (Caddy
 // forward_auth calls /auth/check on every request), the room page itself
-// (/sala/), the /tela slash command and the room lifecycle. See README.md.
+// (/sala/), the /telinha slash command and the room lifecycle. See README.md.
 import { REST } from 'discord.js';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

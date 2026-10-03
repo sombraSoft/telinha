@@ -11,7 +11,7 @@ rtc:
   # public IP via STUN; tela-ipwatch restarts livekit when the residential IP changes
   use_external_ip: true
 room:
-  # Only telinha creates rooms (on /tela, and again before a token if LiveKit
+  # Only telinha creates rooms (on /telinha, and again before a token if LiveKit
   # dropped an idle one). Off, a 6 h token for a closed room can't bring it back.
   auto_create: false
   empty_timeout: 300

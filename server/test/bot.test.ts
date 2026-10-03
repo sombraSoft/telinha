@@ -43,7 +43,7 @@ function setup(o: { ensureFails?: boolean; replyFails?: boolean } = {}) {
 
 test('command: English base with pt-BR localizations', () => {
   const c = buildCommand().toJSON();
-  expect(c.name).toBe('tela');
+  expect(c.name).toBe('telinha');
   expect(c.description_localizations?.['pt-BR']).toBe('Abre uma telinha pra compartilhar a tela');
   const [opt] = c.options as Array<{ name: string; name_localizations?: Record<string, string>; max_length?: number; required?: boolean; description_localizations?: Record<string, string> }>;
   expect(opt!.name).toBe('what');
@@ -64,9 +64,9 @@ describe('telaDenied', () => {
   });
 
   test('wrong channel: lists allowed channels in the caller locale', () => {
-    expect(telaDenied({ ...base, channelId: '999' }, group)!.content).toBe('Use /tela in <#300> or <#301>.');
+    expect(telaDenied({ ...base, channelId: '999' }, group)!.content).toBe('Use /telinha in <#300> or <#301>.');
     const pt = telaDenied({ ...base, channelId: '999', locale: 'pt-BR' }, group)!;
-    expect(pt.content).toBe('Usa o /tela no <#300> ou <#301>.');
+    expect(pt.content).toBe('Usa o /telinha no <#300> ou <#301>.');
     expect(pt.flags).toBe(MessageFlags.Ephemeral);
   });
 
