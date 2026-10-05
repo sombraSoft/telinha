@@ -83,6 +83,7 @@ describe('loadStatic', () => {
 test('contentType', () => {
   expect(contentType('a.webmanifest')).toBe('application/manifest+json');
   expect(contentType('a.PNG')).toBe('image/png');
+  expect(contentType('a.webp')).toBe('image/webp');
   expect(contentType('a.ico')).toBe('image/x-icon');
   expect(contentType('a.json')).toBe('application/json');
   expect(contentType('a.bin')).toBe('application/octet-stream');
