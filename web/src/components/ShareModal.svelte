@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import head from '../assets/telinha-head.webp';
   import { t } from '../lib/i18n/i18n.svelte';
   import { prefs } from '../lib/prefs.svelte';
   import type { RoomController } from '../lib/room.svelte';
@@ -110,7 +111,7 @@
       ><span aria-hidden="true">✕</span></button
     >
 
-    <div class="glyph" aria-hidden="true">📺</div>
+    <img class="glyph" src={head} alt="" width="106" height="112" draggable="false" />
     <h2 id="{id}-title">{t('share.modalTitle')}</h2>
 
     <label class="heading" for="{id}-preset">{t('share.streamQuality')}</label>
@@ -216,8 +217,9 @@
   }
   .glyph {
     align-self: center;
-    font-size: 40px;
-    line-height: 1;
+    width: auto;
+    height: 56px;
+    user-select: none;
   }
   h2 {
     margin: 8px 0 20px;

@@ -2,6 +2,7 @@
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomController } from '../lib/room.svelte';
+  import head from '../assets/telinha-head.webp';
   import { PEOPLE_ID } from './PeopleList.svelte';
   import SettingsMenu from './SettingsMenu.svelte';
 
@@ -25,7 +26,7 @@
   </div>
 
   <div class="brand">
-    <span class="logo" aria-hidden="true">📺</span>
+    <img class="logo" src={head} alt="" width="106" height="112" draggable="false" />
     <span class="title">Telinha</span>
   </div>
 
@@ -92,7 +93,10 @@
     font-size: 16px;
   }
   .logo {
-    font-size: 18px;
+    display: block;
+    width: auto;
+    height: 28px;
+    user-select: none;
   }
   .room {
     min-width: 0;
