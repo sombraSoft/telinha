@@ -3,6 +3,7 @@
   import type { RoomController } from '../lib/room.svelte';
   import { canShareScreen } from '../lib/share';
   import Tile from './Tile.svelte';
+  import mascot from '../assets/telinha.webp';
 
   let { rc }: { rc: RoomController } = $props();
 
@@ -16,7 +17,7 @@
 <section class="stage">
   {#if rc.connected && streamers.length === 0}
     <div class="empty" data-testid="empty-state">
-      <div class="empty-icon" aria-hidden="true">🖥️</div>
+      <img class="mascot" src={mascot} alt="" width="480" height="490" draggable="false" />
       <p class="title">{t('empty.title')}</p>
       {#if canShare}
         <p class="muted">{hint[0]}<b>{t('share.start')}</b>{hint[1] ?? ''}</p>
@@ -67,10 +68,13 @@
        (App sets the shift); as far as the stage leaves room on the right. */
     translate: clamp(0px, var(--stage-shift, 0px), (100cqw - 100%) / 2 - 16px) 0;
   }
-  .empty-icon {
-    font-size: 48px;
-    line-height: 1;
-    margin-bottom: 8px;
+  /* Shrinks on short windows so the text below stays in view. */
+  .mascot {
+    display: block;
+    width: auto;
+    height: clamp(96px, 30dvh, 240px);
+    margin: 0 auto 12px;
+    user-select: none;
   }
   .empty .title {
     margin: 0 0 4px;
