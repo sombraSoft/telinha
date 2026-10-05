@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/sombraSoft/telinha/compare/v0.5.1...v0.6.0) (2026-10-05)
+
+
+### Features
+
+* **web:** add the Telinha mascot ([#27](https://github.com/sombraSoft/telinha/issues/27)) ([a4d6317](https://github.com/sombraSoft/telinha/commit/a4d63179344db1eef553c6309a2d74ac21b63a8f))
+
 ## [0.5.1](https://github.com/sombraSoft/telinha/compare/v0.5.0...v0.5.1) (2026-10-03)
 
 
