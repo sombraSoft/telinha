@@ -25,7 +25,7 @@ const t = (k: string) => UI[k]![locale];
   <tbody>
     {rows.map((r) => (
       <tr>
-        <td><code>{r.key}</code></td>
+        <td><code class="ref-name">{r.key}</code></td>
         <td>{r.probed ? <code>{r.def}</code> : codeSegments(r.def).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>
         <td>{codeSegments(r.required).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>
         <td>{codeSegments(r.notes).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>

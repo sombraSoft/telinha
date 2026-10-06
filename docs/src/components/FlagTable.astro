@@ -58,7 +58,7 @@ const withSets = rows.some((r) => r.sets);
   <tbody>
     {actionRows.map((r) => (
       <tr class:list={[{ internal: r.internal }]}>
-        <td><code>{r.action}</code></td>
+        <td><code class="ref-name">{r.action}</code></td>
         <td>{codeSegments(r.meaning).map((s, i) => (i % 2 ? <code>{s}</code> : s))}{r.internal && <> {t('internal')}</>}</td>
       </tr>
     ))}
@@ -72,7 +72,7 @@ const withSets = rows.some((r) => r.sets);
   <tbody>
     {rows.map((r) => (
       <tr class:list={[{ internal: r.internal }]}>
-        <td><code>{r.flag}</code></td>
+        <td><code class="ref-name">{r.flag}</code></td>
         <td>{r.perPlatform
           ? r.perPlatform.map(([os, v], i) => <>{i > 0 && '; '}{os}: {v ? <code>{v}</code> : t('none')}</>)
           : r.value && <code>{r.value}</code>}</td>
