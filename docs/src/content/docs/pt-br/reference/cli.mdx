@@ -27,7 +27,7 @@ um comando vão depois dele.
 
 `run` é o padrão: `telinha` sozinho faz o mesmo. Ele aceita só as opções
 globais. Num terminal ainda sem `telinha.env`, ele oferece iniciar o
-assistente, e depois de um clique duplo espera o Enter para a janela não sumir.
+setup, e depois de um clique duplo espera o Enter para a janela não sumir.
 Só um `run` por pasta de instalação: um segundo (uma execução no console com o
 serviço de pé) deixa o primeiro em paz e sai com 1 dizendo
 `Telinha is already running (pid N)`.
@@ -38,15 +38,27 @@ serviço de pé) deixa o primeiro em paz e sai com 1 dizendo
 
 <FlagTable locale="pt-BR" command="setup" />
 
-Com `--non-interactive` (implícito sem terminal), cada resposta vem das
-opções, depois do ambiente (qualquer chave do `telinha.env`), depois do arquivo
-existente. Uma resposta faltando sai com 2 dizendo qual opção ou variável.
+Num terminal, o setup abre telas cheias: os passos na lateral esquerda (Onde,
+Endereço, Discord, Portas, Atualizações, Revisão, Instalação), uma pergunta de
+cada vez num cartão com uma dica, depois a Revisão e uma lista de Instalação ao
+vivo; [Teclas](#teclas) lista as teclas. O `--yes` conta como respondida toda
+pergunta que já tem resposta, venha ela de uma opção, do `telinha.env`
+existente ou da sugestão da própria máquina, então as telas abrem na primeira
+pergunta sem resposta (muitas vezes o token do bot) ou na Revisão quando todas
+têm; nada é gravado antes de você aplicar lá. Uma regra que uma opção quebra
+(por exemplo `--host home --public-url https://x.example` sem `--advanced`)
+aparece como um aviso no primeiro cartão, e essa opção não é usada como padrão.
+
+Com `--non-interactive` (implícito sem terminal) nada abre: cada resposta vem
+das opções, depois do ambiente (qualquer chave do `telinha.env`), depois do
+arquivo existente, e a execução imprime linhas simples. Uma opção que quebra
+uma regra, ou uma resposta faltando, sai com 2 dizendo qual opção ou variável.
 Obrigatórias: `--public-url` (ou `--duckdns-domain`), o token do bot, o client
 secret, `--guild`, `--role`, `--channels`, mais o token do túnel ou do DuckDNS
 nesses modos.
 
-O `--host home|vps` (ou o `HOSTING`) escolhe os mesmos padrões que o
-assistente interativo escolheria; sem ele quem decide é o arquivo existente,
+O `--host home|vps` (ou o `HOSTING`) escolhe os mesmos padrões que as
+telas do setup escolheriam; sem ele quem decide é o arquivo existente,
 senão um palpite pela máquina, que é `home` a não ser que ela claramente seja
 uma VPS. Em casa, `--duckdns-domain` quer dizer HTTPS na `--https-port` (8443)
 com um certificado pelo DuckDNS, e `--ingress tunnel` um Cloudflare Tunnel; ali
@@ -68,8 +80,10 @@ o `--duckdns-domain` é servido direto na 443.
 
 <FlagTable locale="pt-BR" command="doctor" />
 
-Sai com 1 quando uma verificação ou o teste pelo celular falhou. As
-verificações estão em [Verificações do doctor](/telinha/pt-br/reference/doctor-checks/).
+Sai com 1 quando uma verificação ou o teste pelo celular falhou. Num terminal o
+doctor é uma lista interativa ([Teclas](#teclas)); sem um, ou com `--json`, ele
+imprime linhas simples (veja [Doctor e solução de problemas](/telinha/pt-br/guides/doctor/)).
+As verificações estão em [Verificações do doctor](/telinha/pt-br/reference/doctor-checks/).
 
 ## telinha update
 
@@ -99,6 +113,57 @@ unidade de usuário (`~/.config/systemd/user/telinha.service`,
 `systemctl --user`) em vez da do sistema; no Windows recebe a conta com que a
 tarefa do Agendador de Tarefas roda, que a instalação elevada passa junto com
 `--sid`.
+
+## Teclas
+
+As telas do setup e a lista do doctor leem estas teclas. A ajuda de teclas na
+última linha do terminal sempre mostra as que valem na tela em que você está.
+
+**Setup**
+
+| Tecla | O que faz |
+| --- | --- |
+| `↑` `↓` (ou `k` `j`) | Move entre as opções |
+| `1`-`9` | Escolhe a opção com aquele número |
+| `Enter` | Escolhe a opção, ou confirma uma resposta digitada |
+| `Espaço` | Marca ou desmarca uma opção numa escolha múltipla (os canais) |
+| `a` | Marca todas, ou nenhuma, numa escolha múltipla |
+| `Esc` ou `←` | Volta para a pergunta anterior; as respostas ficam. Na lista de passos, volta para o cartão. Desligado enquanto a instalação roda |
+| `Tab` | Foca a lista de passos; ali `↑` `↓` movem, `Enter` ou `→` pulam para um passo já respondido, e `Esc` volta. Abaixo de 80 colunas a lista fica escondida e o `Tab` mostra ela no lugar do cartão |
+| `Ctrl+U` | Limpa um campo de texto |
+| Colar | Num campo de texto ou de segredo, com o atalho de colar do terminal (`Ctrl+V`, muitas vezes `Ctrl+Shift+V`) |
+| `Ctrl+R` | Mostra ou esconde um segredo digitado ou colado |
+| `PgUp` `PgDn` | Rola uma Revisão longa |
+| `Ctrl+C` | Sai do setup. Durante a instalação, aperte duas vezes: parar no meio pode deixar uma instalação pela metade |
+
+Um campo de segredo mostra bolinhas, nunca o texto, e diz só quantos caracteres
+foram digitados ou que o texto foi colado. Na Revisão um segredo aparece como
+`definido`, `mantido` ou `gerado`.
+
+**Doctor**
+
+| Tecla | O que faz |
+| --- | --- |
+| `↑` `↓` (ou `k` `j`) | Move entre as linhas |
+| `Enter`, `Espaço` ou `→` | Abre ou fecha uma linha: os detalhes e, quando ela não está ok, como corrigir |
+| `r` | Roda todas as verificações de novo |
+| `p` | Começa um novo teste pelo celular |
+| `s` | Para de esperar o celular |
+| `q` ou `Esc` | Sai (dentro do setup, volta ao último cartão). `Ctrl+C` sai do comando inteiro (código de saída 130 no `telinha doctor`) |
+
+## Cores
+
+As telas usam a cor de texto e de fundo do próprio terminal, e a cor de destaque
+da Telinha no foco. Elas descobrem se o terminal é claro ou escuro perguntando
+a ele, depois pelo `COLORFGBG`, senão supõem escuro; alguns terminais, o console
+antigo do Windows entre eles, não respondem, então defina `TELINHA_THEME` como
+`light` ou `dark` para forçar um. Com `NO_COLOR` definido, toda cor vira a do
+próprio terminal.
+
+```
+TELINHA_THEME=light telinha setup     # ou dark
+NO_COLOR=1 telinha doctor
+```
 
 ## Códigos de saída
 

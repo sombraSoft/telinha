@@ -1,12 +1,9 @@
-// Discord side of setup: a small REST client over an injected fetch, and the
-// questions that turn a bot token into DISCORD_*, GUILD_ID, ROLE_ID and
-// CHANNEL_IDS. Nobody copies ids: the client id comes from the token, the
-// rest is picked from lists the bot can see.
+// Discord side of setup: a small REST client over an injected fetch, the
+// helpers that turn its lists into choices, and the check the install runs:
+// the client id comes from the token, the intents are switched on, and the
+// server, role and channels must be ones the bot can see.
 import { COMMAND_RE } from '../../config.ts';
-import { askSecret, pause, SetupAbort, type Values, type Wizard } from './steps.ts';
-
-/** Invite rounds before the guild step gives up (a bot that never joins, or --yes answering everything). */
-const MAX_INVITE_ROUNDS = 5;
+import type { Values, Wizard } from './steps.ts';
 
 const API = 'https://discord.com/api/v10';
 /** VIEW_CHANNEL + SEND_MESSAGES + READ_MESSAGE_HISTORY: card edits need view + history. */
@@ -152,246 +149,13 @@ export function pickableRoles(roles: DiscordRole[], guildId: string): DiscordRol
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** Retry or give up after an error that is not the user's answer (network, Discord down). */
-async function retryOrAbort(w: Wizard, e: unknown): Promise<void> {
-  w.term.fail(w.s('discordUnreachable', { error: errMsg(e) }));
-  if (!(await w.term.confirm(w.s('tryAgain'), true, { id: 'retry' }))) throw new SetupAbort(w.s('discordGiveUp'), 1);
-}
-
 /**
- * The interactive Discord step. `values` holds the current answers (re-run:
- * the existing file) and receives the new ones.
- */
-export async function askDiscord(w: Wizard, values: Values, o: { publicUrl: string; presetGuild?: string; presetRole?: string; presetChannels?: string[] }): Promise<void> {
-  const { term, s } = w;
-  term.step(s('discordTitle'));
-  for (const l of s('discordTokenHelp').split('\n')) term.info(l);
-
-  // 1. Token -> application (client id, flags, redirects).
-  let current: string | undefined = values.DISCORD_TOKEN || undefined;
-  let client: DiscordSetup;
-  let app: DiscordApplication;
-  for (;;) {
-    const token = await askSecret(w, { id: 'DISCORD_TOKEN', question: s('discordTokenQ'), current });
-    client = w.deps.discord(token);
-    const spin = term.spinner(s('discordChecking'));
-    try {
-      app = await client.application();
-      spin.stop(s('discordBot', { name: app.name, id: app.id }));
-      values.DISCORD_TOKEN = token;
-      values.DISCORD_CLIENT_ID = app.id;
-      break;
-    } catch (e) {
-      if (e instanceof DiscordError && e.status === 401) {
-        spin.fail(s('discordTokenRejected'));
-        current = undefined;
-        continue;
-      }
-      spin.fail(s('discordChecking'));
-      await retryOrAbort(w, e);
-    }
-  }
-
-  // 2. Privileged intents: the API may switch on the limited ones.
-  if (hasIntents(app.flags)) {
-    term.ok(s('intentsOk'));
-  } else {
-    let on = false;
-    try {
-      app.flags = await client.enableLimitedIntents(app.flags);
-      on = hasIntents(app.flags);
-    } catch (e) {
-      term.warn(s('intentsApiFailed', { error: errMsg(e) }));
-    }
-    if (on) term.ok(s('intentsOn'));
-    // The Bot page toggles by hand, re-checked up to three times.
-    for (let tries = 0; !on && tries < 3; tries++) {
-      for (const l of s('intentsManual').split('\n')) term.info(l);
-      await pause(w, s('pressEnterDone'), 'intents');
-      try {
-        app = await client.application();
-      } catch (e) {
-        term.warn(errMsg(e));
-      }
-      on = hasIntents(app.flags);
-      if (on) term.ok(s('intentsOk'));
-    }
-    if (!on) term.warn(s('intentsGiveUp'));
-  }
-
-  // 3. Client secret, checked with a client_credentials grant.
-  for (const l of s('secretHelp').split('\n')) term.info(l);
-  let secretCurrent: string | undefined = values.DISCORD_CLIENT_SECRET || undefined;
-  for (;;) {
-    const secret = await askSecret(w, { id: 'DISCORD_CLIENT_SECRET', question: s('secretQ'), current: secretCurrent });
-    let ok: boolean;
-    try {
-      ok = await client.checkClientSecret(app.id, secret);
-    } catch (e) {
-      term.warn(s('secretUnchecked', { error: errMsg(e) }));
-      ok = true;
-    }
-    if (ok) {
-      values.DISCORD_CLIENT_SECRET = secret;
-      term.ok(s('secretOk'));
-      break;
-    }
-    term.fail(s('secretRejected'));
-    secretCurrent = undefined;
-  }
-
-  // 4. Redirect URI: the API cannot add it, so show it and re-read until it is there.
-  const redirect = `${o.publicUrl.replace(/\/$/, '')}/auth/callback`;
-  if (app.redirectUris.includes(redirect)) {
-    term.ok(s('redirectOk'));
-  } else {
-    for (const l of s('redirectHelp').split('\n')) term.info(l);
-    term.line(`    ${term.style.bold(term.link(redirect))}`);
-    let found = false;
-    for (let i = 0; i < 5 && !found; i++) {
-      const next = await term.select(s('redirectQ'), [
-        { value: 'check', label: s('redirectCheck') },
-        { value: 'skip', label: s('redirectSkip') },
-      ], 0, { id: 'redirect' });
-      if (next === 'skip') break;
-      try {
-        found = (await client.application()).redirectUris.includes(redirect);
-      } catch (e) {
-        term.warn(errMsg(e));
-      }
-      if (!found) term.warn(s('redirectMissing'));
-    }
-    if (found) term.ok(s('redirectOk'));
-    else term.warn(s('redirectSkipped', { uri: redirect }));
-  }
-
-  // 5. Guild: one the bot is in; invite it when needed. The browser opens at
-  // most once per run, and a bot still in no server after a few rounds ends
-  // the wizard with the link instead of asking forever.
-  let browserOpened = false;
-  let inviteRounds = 0;
-  const invite = async (guildId?: string) => {
-    const url = client.inviteUrl(app.id, guildId);
-    if (++inviteRounds > MAX_INVITE_ROUNDS) throw new SetupAbort(s('guildGiveUp', { url }), 1);
-    for (const l of s('inviteHelp').split('\n')) term.info(l);
-    term.line(`    ${term.link(url)}`);
-    if (!browserOpened && (await term.confirm(s('openBrowser'), true, { id: 'open-browser' }))) {
-      browserOpened = true;
-      try {
-        await w.deps.openUrl(url);
-      } catch {
-        term.warn(s('openFailed'));
-      }
-    }
-    await pause(w, s('pressEnterInvited'), 'invite');
-  };
-  let guild: { id: string; name: string };
-  let wanted = o.presetGuild ?? values.GUILD_ID;
-  for (;;) {
-    let guilds: { id: string; name: string }[];
-    try {
-      guilds = await client.guilds();
-    } catch (e) {
-      await retryOrAbort(w, e);
-      continue;
-    }
-    if (!guilds.length) {
-      term.warn(s('guildNone'));
-      await invite();
-      continue;
-    }
-    if (o.presetGuild && !guilds.some((g) => g.id === o.presetGuild)) {
-      term.warn(s('guildMissing', { id: o.presetGuild }));
-      await invite(o.presetGuild);
-      wanted = undefined;
-      o.presetGuild = undefined;
-      continue;
-    }
-    const items = guilds.map((g) => ({ value: g.id, label: g.name }));
-    items.push({ value: '', label: s('guildOther') });
-    const def = Math.max(0, guilds.findIndex((g) => g.id === wanted));
-    const id = await term.select(s('guildQ'), items, def, { id: 'guild' });
-    if (!id) {
-      await invite();
-      continue;
-    }
-    guild = guilds.find((g) => g.id === id)!;
-    break;
-  }
-  values.GUILD_ID = guild.id;
-
-  // 6. Role.
-  let roles: DiscordRole[] = [];
-  for (;;) {
-    try {
-      roles = pickableRoles(await client.roles(guild.id), guild.id);
-      break;
-    } catch (e) {
-      await retryOrAbort(w, e);
-    }
-  }
-  const roleItems = roles.map((r) => ({ value: r.id, label: `@${r.name}` }));
-  roleItems.push({ value: guild.id, label: s('roleEveryone') });
-  const prevRole = o.presetRole ?? values.ROLE_ID;
-  term.info(s('roleHelp'));
-  values.ROLE_ID = await term.select(s('roleQ'), roleItems, Math.max(0, roleItems.findIndex((r) => r.value === prevRole)), { id: 'role' });
-
-  // 7. Channels, grouped under their category.
-  let channels: { channel: DiscordChannel; category: string | null }[] = [];
-  for (;;) {
-    try {
-      channels = sortChannels(await client.channels(guild.id));
-      break;
-    } catch (e) {
-      await retryOrAbort(w, e);
-    }
-  }
-  if (!channels.length) throw new SetupAbort(s('channelsNone', { guild: guild.name }), 1);
-  const prevChannels = (o.presetChannels ?? (values.CHANNEL_IDS ?? '').split(',')).map((c) => c.trim()).filter((c) => channels.some((x) => x.channel.id === c));
-  term.info(s('channelsHelp'));
-  const picked = await term.multiselect(s('channelsQ'), channels.map(({ channel, category }) => ({
-    value: channel.id,
-    label: category ? `${category} › #${channel.name}` : `#${channel.name}`,
-  })), { min: 1, preselected: prevChannels, id: 'channels' });
-  values.CHANNEL_IDS = picked.join(',');
-
-  // 8. Command and group names.
-  values.COMMAND_NAME = await term.text(s('commandQ'), {
-    default: values.COMMAND_NAME || 'telinha',
-    id: 'command',
-    validate: (v) => (validCommand(v) ? null : s('commandBad')),
-  });
-  values.GROUP_NAME = await term.text(s('groupQ', { name: guild.name }), { default: values.GROUP_NAME || '', id: 'group' });
-}
-
-/** --no-discord-check: the ids are typed, nothing is looked up. */
-export async function askDiscordOffline(w: Wizard, values: Values): Promise<void> {
-  const { term, s } = w;
-  term.step(s('discordTitle'));
-  term.warn(s('discordOffline'));
-  const snowflake = (v: string) => (SNOWFLAKE_RE.test(v) ? null : s('idBad'));
-  values.DISCORD_TOKEN = await askSecret(w, { id: 'DISCORD_TOKEN', question: s('discordTokenQ'), current: values.DISCORD_TOKEN || undefined });
-  values.DISCORD_CLIENT_ID = await term.text(s('clientIdQ'), { default: values.DISCORD_CLIENT_ID || undefined, validate: snowflake, required: true, id: 'client-id' });
-  values.DISCORD_CLIENT_SECRET = await askSecret(w, { id: 'DISCORD_CLIENT_SECRET', question: s('secretQ'), current: values.DISCORD_CLIENT_SECRET || undefined });
-  values.GUILD_ID = await term.text(s('guildIdQ'), { default: values.GUILD_ID || undefined, validate: snowflake, required: true, id: 'guild' });
-  values.ROLE_ID = await term.text(s('roleIdQ'), { default: values.ROLE_ID || undefined, validate: snowflake, required: true, id: 'role' });
-  values.CHANNEL_IDS = await term.text(s('channelIdsQ'), {
-    default: values.CHANNEL_IDS || undefined,
-    required: true,
-    id: 'channels',
-    validate: (v) => (v.split(',').map((c) => c.trim()).every((c) => SNOWFLAKE_RE.test(c)) ? null : s('idBad')),
-  });
-  values.COMMAND_NAME = await term.text(s('commandQ'), { default: values.COMMAND_NAME || 'telinha', id: 'command', validate: (v) => (validCommand(v) ? null : s('commandBad')) });
-  values.GROUP_NAME = await term.text(s('groupQ', { name: '-' }), { default: values.GROUP_NAME || '', id: 'group' });
-}
-
-/**
- * Non-interactive: the same checks without questions. Fills the client id
+ * The install's Discord check (read-only except the intents). Fills the client id
  * from the token and switches the intents on; returns the problems found
  * (empty = all good). The redirect URI is only a warning (doctor re-checks).
  */
 export async function checkDiscord(w: Wizard, values: Values, publicUrl: string): Promise<string[]> {
-  const { term, s } = w;
+  const { out, s } = w;
   const client = w.deps.discord(values.DISCORD_TOKEN!);
   let app: DiscordApplication;
   try {
@@ -399,26 +163,26 @@ export async function checkDiscord(w: Wizard, values: Values, publicUrl: string)
   } catch (e) {
     return [e instanceof DiscordError && e.status === 401 ? s('discordTokenRejected') : s('discordUnreachable', { error: errMsg(e) })];
   }
-  term.ok(s('discordBot', { name: app.name, id: app.id }));
-  if (values.DISCORD_CLIENT_ID && values.DISCORD_CLIENT_ID !== app.id) term.warn(s('clientIdMismatch', { given: values.DISCORD_CLIENT_ID, id: app.id }));
+  out.ok(s('discordBot', { name: app.name, id: app.id }));
+  if (values.DISCORD_CLIENT_ID && values.DISCORD_CLIENT_ID !== app.id) out.warn(s('clientIdMismatch', { given: values.DISCORD_CLIENT_ID, id: app.id }));
   values.DISCORD_CLIENT_ID = app.id;
   const problems: string[] = [];
   if (!hasIntents(app.flags)) {
     try {
       app.flags = await client.enableLimitedIntents(app.flags);
     } catch (e) {
-      term.warn(s('intentsApiFailed', { error: errMsg(e) }));
+      out.warn(s('intentsApiFailed', { error: errMsg(e) }));
     }
-    if (hasIntents(app.flags)) term.ok(s('intentsOn'));
-    else term.warn(s('intentsGiveUp'));
+    if (hasIntents(app.flags)) out.ok(s('intentsOn'));
+    else out.warn(s('intentsGiveUp'));
   }
   try {
     if (!(await client.checkClientSecret(app.id, values.DISCORD_CLIENT_SECRET!))) problems.push(s('secretRejected'));
   } catch (e) {
-    term.warn(s('secretUnchecked', { error: errMsg(e) }));
+    out.warn(s('secretUnchecked', { error: errMsg(e) }));
   }
   const redirect = `${publicUrl.replace(/\/$/, '')}/auth/callback`;
-  if (!app.redirectUris.includes(redirect)) term.warn(s('redirectSkipped', { uri: redirect }));
+  if (!app.redirectUris.includes(redirect)) out.warn(s('redirectSkipped', { uri: redirect }));
   try {
     const guilds = await client.guilds();
     const guild = guilds.find((g) => g.id === values.GUILD_ID);

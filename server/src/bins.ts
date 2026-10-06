@@ -100,10 +100,33 @@ export function caddyRelease(tag: string, fetchFn: FetchFn): CaddyRelease {
   };
 }
 
-export async function download(url: string, fetchFn: FetchFn = fetch): Promise<Uint8Array> {
+/** Bytes received so far, and the size when the server said it (Content-Length). */
+export type ProgressFn = (received: number, total: number | null) => void;
+
+export async function download(url: string, fetchFn: FetchFn = fetch, onProgress?: ProgressFn): Promise<Uint8Array> {
   const res = await fetchFn(url);
   if (!res.ok) throw new Error(`GET ${url}: ${res.status} ${res.statusText}`);
-  return new Uint8Array(await res.arrayBuffer());
+  if (!onProgress || !res.body) return new Uint8Array(await res.arrayBuffer());
+  // Streamed only when someone watches: the setup screens draw a bar from it.
+  const total = Number(res.headers.get('content-length')) || null;
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  onProgress(0, total);
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    onProgress(received, total);
+  }
+  const out = new Uint8Array(received);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out;
 }
 
 export function sha256(data: Uint8Array): string {
@@ -130,6 +153,8 @@ export type EnsureOptions = {
   /** Required when caddy is among the tools. */
   release?: CaddyRelease;
   log?: (msg: string) => void;
+  /** Download progress per tool (bytes); optional, nothing else changes without it. */
+  progress?: (tool: Tool, received: number, total: number | null) => void;
   fetch?: FetchFn;
 };
 
@@ -175,7 +200,8 @@ export async function ensureBinaries(names: Tool[], o: EnsureOptions): Promise<E
       if (!expected) throw new Error(`SHA256SUMS of ${version} has no ${spec.asset}`);
     }
     log(`[bins] downloading ${spec.asset}`);
-    const data = await download(spec.url, o.fetch);
+    const progress = o.progress;
+    const data = await download(spec.url, o.fetch, progress && ((received, total) => progress(name, received, total)));
     const actual = sha256(data);
     // Verify before touching the disk so a bad download never gets extracted.
     if (actual !== expected) throw new Error(`${spec.asset}: sha256 ${actual}, expected ${expected}`);
@@ -231,6 +257,7 @@ export async function ensureBinariesForConfig(
     arch?: string;
     which?: (name: string) => string | null;
     compiled?: boolean;
+    progress?: EnsureOptions['progress'];
   } = {},
 ): Promise<EnsureResult> {
   const os = hostOs(o.platform);
@@ -242,7 +269,7 @@ export async function ensureBinariesForConfig(
   for (const name of toolsFor(config)) {
     try {
       const release = name === 'caddy' ? (o.release ?? (await resolveCaddyRelease(fetchFn, o.compiled))) : undefined;
-      const r = await ensureBinaries([name], { os, arch, outDir: paths.bin, versions, release, log, fetch: fetchFn });
+      const r = await ensureBinaries([name], { os, arch, outDir: paths.bin, versions, release, log, progress: o.progress, fetch: fetchFn });
       Object.assign(result.paths, r.paths);
       result.changed.push(...r.changed);
     } catch (e) {

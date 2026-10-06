@@ -1,0 +1,27 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`chrome sidebar states, summaries cut to the column, focus keys 1`] = `
+"╭─ steps ────────────────╮
+│ ✔ Where                │
+│   A computer at home,… │
+│                        │
+│ ✖ Address              │
+│                        │
+│ ❯ Discord              │
+│                        │
+│ ○ Install  ‹           │
+│                        │
+│ Pick a step to jump to │
+╰────────────────────────╯
+"
+`;
+
+exports[`chrome header, footer, status icons, bar 1`] = `
+"  \\ /
+ ╭───╮ telinha doctor                                                     vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+✔ ! ✖ – ○ █████░░░░░
+ ↑↓ move  enter details  q quit
+"
+`;

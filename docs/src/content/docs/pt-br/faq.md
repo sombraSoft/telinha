@@ -41,7 +41,7 @@ Podem, desde que cada uma tenha um `COMMAND_NAME` diferente (e o seu próprio ap
 
 ## Como mudo as configurações?
 
-Rode `telinha setup` de novo: cada pergunta já vem com o valor atual, os segredos oferecem `(manter o atual)`, os segredos gerados continuam os mesmos, e as chaves que o assistente não administra (`ACME_EMAIL`, `SESSION_DAYS`, ...) ficam guardadas numa seção `Other settings` do arquivo. Na revisão final dá para gerar um novo segredo de cookie, o que desloga todo mundo. Um serviço rodando reinicia com o arquivo novo; uma execução no console precisa ser reiniciada à mão. Ou edite o `telinha.env` e reinicie (`telinha service restart`, ou reinicie o contêiner). Todas as chaves estão em [Configuração](/telinha/pt-br/reference/configuration/).
+Rode `telinha setup` de novo: cada pergunta já vem com o valor atual, o Enter mantém um segredo como está, os segredos gerados continuam os mesmos, e as chaves que o setup não administra (`ACME_EMAIL`, `SESSION_DAYS`, ...) ficam guardadas numa seção `Other settings` do arquivo. Na Revisão dá para gerar um novo segredo de cookie, o que desloga todo mundo. Um serviço rodando reinicia com o arquivo novo; uma execução no console precisa ser reiniciada à mão. Ou edite o `telinha.env` e reinicie (`telinha service restart`, ou reinicie o contêiner). Todas as chaves estão em [Configuração](/telinha/pt-br/reference/configuration/).
 
 ## Onde ficam os meus dados?
 

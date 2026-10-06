@@ -1,6 +1,6 @@
 ---
 title: Aplicativo do Discord
-description: Crie o aplicativo do Discord que a Telinha usa no login e veja o que o assistente de configuração faz por você.
+description: Crie o aplicativo do Discord que a Telinha usa no login e veja o que o setup faz por você.
 sidebar:
   order: 7
 ---
@@ -9,9 +9,9 @@ import { Steps } from '@astrojs/starlight/components';
 
 A Telinha precisa de um aplicativo do Discord só dela: o bot publica os cards
 das salas e responde ao comando de barra, e o login OAuth2 deixa as pessoas
-entrarem. O assistente (`telinha setup`) faz quase tudo pela API do Discord e
+entrarem. O setup (`telinha setup`) faz quase tudo pela API do Discord e
 espera enquanto você faz os poucos cliques que ele não consegue fazer. Você
-também pode fazer tudo antes de rodar o assistente.
+também pode fazer tudo antes de rodar o setup.
 
 Você precisa de uma conta do Discord e, no servidor onde a Telinha vai
 ficar, da permissão **Gerenciar servidor** (*Manage Server*), para adicionar
@@ -21,7 +21,7 @@ o bot.
 O Developer Portal segue o idioma da sua conta do Discord. Esta página dá os
 nomes dos menus em português, com o nome em inglês entre parênteses na
 primeira vez; se o portal aparecer em inglês, use os nomes entre parênteses.
-O assistente mostra os nomes em inglês.
+O setup mostra os nomes em inglês.
 :::
 
 ## Crie o aplicativo
@@ -47,7 +47,7 @@ O assistente mostra os nomes em inglês.
    O Discord mostra o token uma vez só; se você perder, redefina de novo (o
    antigo para de funcionar).
 
-3. Cole quando o assistente pedir. Ele confere o token na hora e mostra o
+3. Cole quando o setup pedir. Ele confere o token na hora e mostra o
    nome do bot. Ele também tira o ID do cliente do token, então você nunca
    precisa copiar esse ID.
 
@@ -67,8 +67,9 @@ bot precisa de duas intents privilegiadas: **Intent de membros do servidor**
 (*Server Members Intent*) e **Intent de presença** (*Presence Intent*). Sem
 elas, o bot nem consegue entrar no Discord.
 
-O assistente liga as duas pela API. Se o Discord não deixar, o assistente
-pede para você ligar e confere de novo a cada tentativa:
+O setup liga as duas pela API durante a instalação. Se o Discord não
+deixar, a linha **App do Discord** da instalação avisa que elas continuam
+desligadas; ligue à mão:
 
 <Steps>
 
@@ -94,12 +95,12 @@ desligada.
 2. Em **Segredo do cliente** (*Client Secret*), clique em **Redefinir
    segredo** (*Reset Secret*) e copie.
 
-3. Cole quando o assistente pedir. Ele pergunta na hora ao Discord se o
+3. Cole quando o setup pedir. Ele pergunta na hora ao Discord se o
    segredo bate com o aplicativo e pede de novo se não bater.
 
 </Steps>
 
-O ID do cliente é o ID do aplicativo. O assistente tira esse ID do token do
+O ID do cliente é o ID do aplicativo. O setup tira esse ID do token do
 bot, então nunca pergunta; você só digita com `--no-discord-check`
 (`--client-id`).
 
@@ -108,11 +109,11 @@ bot, então nunca pergunta; você só digita com `--no-discord-check`
 Depois do login, o Discord manda as pessoas de volta para
 `<PUBLIC_URL>/auth/callback`, e só para endereços que o aplicativo lista.
 **Essa é a única coisa que a API do Discord não deixa configurar**, então o
-assistente mostra o endereço e espera você:
+setup mostra o endereço e espera você:
 
 <Steps>
 
-1. Copie o endereço que o assistente mostra. Com
+1. Copie o endereço que o setup mostra. Com
    `PUBLIC_URL=https://telinha.example.com`, ele é
    `https://telinha.example.com/auth/callback`; com um endereço do DuckDNS em
    casa ele leva a porta, como em
@@ -123,20 +124,21 @@ assistente mostra o endereço e espera você:
 
 3. Clique em **Salvar alterações**.
 
-4. De volta ao assistente, escolha conferir de novo. Ele lê o aplicativo
-   até o redirect aparecer.
+4. De volta ao setup, escolha *Adicionei: verificar de novo*. Ele lê o
+   aplicativo até o redirect aparecer.
 
 </Steps>
 
-Você pode pular esse passo no assistente; a verificação `discord-redirect`
-do `telinha doctor` avisa depois. O redirect precisa bater exatamente com o
-`PUBLIC_URL`, porta incluída. Se você mudar o `PUBLIC_URL`, adicione o
-redirect novo.
+Você pode pular esse passo (*Pular por enquanto*); a verificação
+`discord-redirect` do `telinha doctor` avisa depois. O redirect precisa bater
+exatamente com o `PUBLIC_URL`, porta incluída. Se você mudar o `PUBLIC_URL`,
+adicione o redirect novo.
 
 ## Convide o bot
 
 Quando o bot ainda não está em nenhum servidor, ou não está no que você
-quer, o assistente mostra um link de convite e oferece abrir no navegador:
+quer (*Outro servidor (adicionar o bot)*), o setup mostra um link de
+convite e oferece abrir no navegador:
 
 <Steps>
 
@@ -145,7 +147,8 @@ quer, o assistente mostra um link de convite e oferece abrir no navegador:
 
 2. Confira as permissões e clique em **Autorizar** (*Authorize*).
 
-3. De volta ao assistente, aperte Enter. Ele lista os servidores de novo.
+3. De volta ao setup, escolha *Adicionei o bot: verificar de novo*. Ele
+   lista os servidores de novo.
 
 </Steps>
 
@@ -162,7 +165,7 @@ log diz `card not editable`), e todo o resto funciona.
 
 ## Servidor, cargo, canais e nomes
 
-O assistente escolhe tudo a partir de listas; ninguém copia ID:
+O setup escolhe tudo a partir de listas; ninguém copia ID:
 
 - **Servidor** (`GUILD_ID`): um dos servidores em que o bot está. Uma
   Telinha atende um servidor.
@@ -181,9 +184,9 @@ O assistente escolhe tudo a partir de listas; ninguém copia ID:
 Para mudar qualquer um deles depois, rode o `telinha setup` de novo: cada
 pergunta começa no valor atual, e os segredos oferecem manter o atual.
 
-## O que o assistente faz e o que você clica
+## O que o setup faz e o que você clica
 
-| O assistente | Você |
+| O setup | Você |
 | --- | --- |
 | Confere o token do bot e tira dele o ID do cliente | Cria o aplicativo, redefine o token e cola |
 | Liga as duas intents privilegiadas | Só se o Discord recusar: liga na página **Bot** |

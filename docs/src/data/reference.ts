@@ -54,15 +54,15 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   DISCORD_TOKEN: {
     section: 'discord', required: yes,
     notes: {
-      en: 'Bot token: Developer Portal → your app → Bot → Reset Token. On the same page switch on Server Members Intent and Presence Intent (the wizard does it through the API).',
-      'pt-BR': 'Token do bot: Developer Portal → seu app → Bot → Reset Token. Na mesma página, ligue Server Members Intent e Presence Intent (o assistente faz isso pela API).',
+      en: 'Bot token: Developer Portal → your app → Bot → Reset Token. On the same page switch on Server Members Intent and Presence Intent (the setup does it through the API).',
+      'pt-BR': 'Token do bot: Developer Portal → seu app → Bot → Reset Token. Na mesma página, ligue Server Members Intent e Presence Intent (o setup faz isso pela API).',
     },
   },
   DISCORD_CLIENT_ID: {
     section: 'discord', required: yes,
     notes: {
-      en: 'The application id (OAuth2 page). The wizard reads it from the bot token.',
-      'pt-BR': 'O id da aplicação (página OAuth2). O assistente lê do token do bot.',
+      en: 'The application id (OAuth2 page). The setup reads it from the bot token.',
+      'pt-BR': 'O id da aplicação (página OAuth2). O setup lê do token do bot.',
     },
   },
   DISCORD_CLIENT_SECRET: {
@@ -110,8 +110,8 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   COOKIE_SECRET: {
     section: 'discord', required: yes,
     notes: {
-      en: 'Random; `openssl rand -base64 48`. The wizard generates it; a new one logs everyone out.',
-      'pt-BR': 'Aleatório; `openssl rand -base64 48`. O assistente gera; um novo desloga todo mundo.',
+      en: 'Random; `openssl rand -base64 48`. The setup generates it; a new one logs everyone out.',
+      'pt-BR': 'Aleatório; `openssl rand -base64 48`. O setup gera; um novo desloga todo mundo.',
     },
   },
   SESSION_DAYS: {
@@ -137,8 +137,8 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   HOSTING: {
     section: 'ingress', required: no, default: { en: 'unset', 'pt-BR': 'vazio' },
     notes: {
-      en: '`home` or `vps`: where Telinha runs, as answered in `telinha setup`. A re-run of the wizard starts from it and the doctor words its advice by it; `telinha run` behaves the same either way.',
-      'pt-BR': '`home` ou `vps`: onde a Telinha roda, como respondido no `telinha setup`. Uma nova rodada do assistente parte dele e o doctor ajusta os conselhos por ele; o `telinha run` se comporta igual nos dois casos.',
+      en: '`home` or `vps`: where Telinha runs, as answered in `telinha setup`. A re-run of the setup starts from it and the doctor words its advice by it; `telinha run` behaves the same either way.',
+      'pt-BR': '`home` ou `vps`: onde a Telinha roda, como respondido no `telinha setup`. Uma nova rodada do setup parte dele e o doctor ajusta os conselhos por ele; o `telinha run` se comporta igual nos dois casos.',
     },
   },
   INGRESS: {
@@ -223,15 +223,15 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   LIVEKIT_API_KEY: {
     section: 'media', required: yes,
     notes: {
-      en: 'Any key you make up (`openssl rand -hex 16`); handed to LiveKit through its environment. The wizard generates it.',
-      'pt-BR': 'Qualquer chave que você inventar (`openssl rand -hex 16`); entregue ao LiveKit pelo ambiente. O assistente gera.',
+      en: 'Any key you make up (`openssl rand -hex 16`); handed to LiveKit through its environment. The setup generates it.',
+      'pt-BR': 'Qualquer chave que você inventar (`openssl rand -hex 16`); entregue ao LiveKit pelo ambiente. O setup gera.',
     },
   },
   LIVEKIT_API_SECRET: {
     section: 'media', required: yes,
     notes: {
-      en: 'Its secret, 32+ characters (`openssl rand -base64 32`). The wizard generates it.',
-      'pt-BR': 'O segredo correspondente, 32+ caracteres (`openssl rand -base64 32`). O assistente gera.',
+      en: 'Its secret, 32+ characters (`openssl rand -base64 32`). The setup generates it.',
+      'pt-BR': 'O segredo correspondente, 32+ caracteres (`openssl rand -base64 32`). O setup gera.',
     },
   },
   LIVEKIT_PORT: {
@@ -258,8 +258,8 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   UPNP: {
     section: 'media', required: no, probe: (c) => (c.upnp ? 'auto' : 'off'), default: 'auto',
     notes: {
-      en: '`auto` asks the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and in direct mode `HTTPS_PORT` when the `PUBLIC_URL` port is not 443 (8443 at home), while Telinha runs; never 80 or 443. `off` when you forward by hand; the wizard sets `off` on a VPS.',
-      'pt-BR': '`auto` pede ao roteador (UPnP IGD, NAT-PMP ou PCP) para encaminhar as portas de mídia, e no modo direct a `HTTPS_PORT` quando a porta da `PUBLIC_URL` não é 443 (8443 em casa), enquanto a Telinha roda; nunca a 80 nem a 443. `off` quando você encaminha à mão; o assistente põe `off` numa VPS.',
+      en: '`auto` asks the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and in direct mode `HTTPS_PORT` when the `PUBLIC_URL` port is not 443 (8443 at home), while Telinha runs; never 80 or 443. `off` when you forward by hand; the setup sets `off` on a VPS.',
+      'pt-BR': '`auto` pede ao roteador (UPnP IGD, NAT-PMP ou PCP) para encaminhar as portas de mídia, e no modo direct a `HTTPS_PORT` quando a porta da `PUBLIC_URL` não é 443 (8443 em casa), enquanto a Telinha roda; nunca a 80 nem a 443. `off` quando você encaminha à mão; o setup põe `off` numa VPS.',
     },
   },
   LIVEKIT_NODE_IP: {
@@ -333,8 +333,8 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   LOCALE: {
     section: 'native', required: no, default: { en: 'the system language', 'pt-BR': 'o idioma do sistema' },
     notes: {
-      en: '`en` or `pt-BR` for the command line and the wizard; the pages follow the browser. `--lang` overrides it.',
-      'pt-BR': '`en` ou `pt-BR` para a linha de comando e o assistente; as páginas seguem o navegador. `--lang` sobrepõe.',
+      en: '`en` or `pt-BR` for the command line and the setup; the pages follow the browser. `--lang` overrides it.',
+      'pt-BR': '`en` ou `pt-BR` para a linha de comando e o setup; as páginas seguem o navegador. `--lang` sobrepõe.',
     },
   },
 
@@ -413,10 +413,13 @@ export const GLOBAL_FLAG_DOCS: Record<string, FlagDoc> = {
     en: 'The install directory (same as `TELINHA_HOME`); every path follows it.',
     'pt-BR': 'A pasta da instalação (o mesmo que `TELINHA_HOME`); todos os caminhos seguem ela.',
   },
-  yes: { en: 'Accept the defaults without asking.', 'pt-BR': 'Aceita os padrões sem perguntar.' },
+  yes: {
+    en: 'Setup only: every question that already has an answer (from a flag, the existing file or the machine) counts as answered, so the setup screens open on the first question with none, or on the Review when all have one. Nothing is written before you apply there.',
+    'pt-BR': 'Só no setup: toda pergunta que já tem resposta (de uma opção, do arquivo existente ou da máquina) conta como respondida, então as telas de configuração abrem na primeira pergunta sem resposta, ou na Revisão quando todas têm. Nada é gravado antes de você aplicar lá.',
+  },
   'non-interactive': {
-    en: 'Never prompt (implied without a terminal). `setup` then takes every answer from flags, the environment and the existing file, and exits 2 naming what is missing.',
-    'pt-BR': 'Nunca pergunta (implícito sem terminal). O `setup` então tira cada resposta das opções, do ambiente e do arquivo existente, e sai com 2 dizendo o que falta.',
+    en: 'Never open screens or ask (implied without a terminal). `setup` then takes every answer from flags, the environment and the existing file, prints plain lines, and exits 2 naming a flag that breaks a rule or what is missing. On a terminal the same flag mistakes show as a notice in the screens instead.',
+    'pt-BR': 'Nunca abre telas nem pergunta (implícito sem terminal). O `setup` então tira cada resposta das opções, do ambiente e do arquivo existente, imprime linhas simples e sai com 2 dizendo a opção que quebra uma regra ou o que falta. Num terminal os mesmos erros de opção aparecem como um aviso nas telas.',
   },
   help: { en: 'Print the help of `telinha` or of the command.', 'pt-BR': 'Mostra a ajuda da `telinha` ou do comando.' },
   version: { en: 'Print the version line and exit.', 'pt-BR': 'Mostra a linha de versão e sai.' },

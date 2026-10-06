@@ -1,8 +1,10 @@
-// `telinha doctor [--json] [--no-phone] [--local]`: runs the checks with a live
-// table, then (with the service running) the phone test: a one-time link and
-// QR code the user opens on mobile data, which measures the HTTPS, LiveKit
-// signaling, TCP and UDP media paths from outside the network. Exit 1 when
-// anything failed.
+// `telinha doctor [--json] [--no-phone] [--local]`: runs the checks, then (with
+// the service running) the phone test: a one-time link and QR code the user
+// opens on mobile data, which measures the HTTPS, LiveKit signaling, TCP and
+// UDP media paths from outside the network. Exit 1 when anything failed.
+// On a terminal it is an interactive checklist (loaded on demand, so plain
+// runs and the docs generator never load the UI); otherwise, and with --json,
+// a plain table.
 import { existsSync } from 'node:fs';
 import { loadConfig, type Config } from '../config.ts';
 import { CHECKS, checkTitle, runChecks } from '../doctor/checks.ts';
@@ -16,7 +18,8 @@ import { readState, statePath } from '../update/state.ts';
 import { nodeFs } from '../update/types.ts';
 import { GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, type ParsedArgs } from './args.ts';
 import { createControlClient, type ControlClient, type DoctorReport, type DoctorSessionState } from './control.ts';
-import { defineStrings, ts } from './strings.ts';
+import { doctorStrings, type DoctorStrKey } from './doctor-strings.ts';
+import { ts } from './strings.ts';
 import { createTerm, type Term, type TermOut } from './term.ts';
 
 // --no-phone is the parser's --no-<boolean>.
@@ -26,70 +29,10 @@ export const DOCTOR_SPEC = { flags: { ...GLOBAL_FLAGS, ...DOCTOR_FLAGS } } as co
 /** How long the CLI waits for the phone. */
 export const PHONE_WAIT_MS = 10 * 60_000;
 // Under Bun.serve's 10 s idle timeout: the service lifts it for control calls (http.ts), this is the margin.
-const POLL_MS = 8_000;
+export const PHONE_POLL_MS = 8_000;
 
-const t = defineStrings({
-  checking: 'Checking {title}...',
-  summary: '{ok} ok, {warn} warning(s), {fail} failure(s), {skip} skipped',
-  phoneTitle: 'Phone test',
-  phoneOpen: 'Open this on your phone with Wi-Fi OFF (mobile data):',
-  phoneWaiting: 'Waiting up to 10 minutes... (Ctrl+C to skip)',
-  phoneOpened: 'Opened on the phone, testing...',
-  phoneSkipped: 'Phone test skipped.',
-  phoneExpired: 'The link expired before the phone finished the test. Run telinha doctor again.',
-  phoneNotRunning: 'Start Telinha to run the phone test (telinha service start).',
-  phoneNoTty: 'Phone test skipped: it needs an interactive terminal (or pass --no-phone).',
-  phoneError: 'Phone test could not start: {error}',
-  rowHttps: 'HTTPS',
-  rowSignaling: 'LiveKit connection',
-  rowPublish: 'Sending video',
-  rowInitial: 'First path',
-  rowUdp: 'UDP {port}',
-  rowTcp: 'TCP {port}',
-  latency: '{ms} ms',
-  initialPath: '{protocol} to {ip}, {ms} ms',
-  initialNone: 'no media path',
-  works: 'works',
-  worksRtt: 'works, {ms} ms',
-  failed: 'failed',
-  hintSignaling: 'Telinha is not reachable at PUBLIC_URL from the internet: check the DNS, TLS and router checks above.',
-  hintBoth: 'The HTTP side works, but the media ports are closed: open TCP {tcp} and UDP {udp} to this machine (router forwarding at home; the provider\'s firewall or security group on a VPS; and this machine\'s own firewall).',
-  hintUdp: 'UDP {udp} is not reachable from the internet: open it to this machine (router forwarding, or the VPS provider\'s firewall); video falls back to TCP, with more delay.',
-  hintTcp: 'TCP {tcp} is not reachable from the internet: open it to this machine (router forwarding, or the VPS provider\'s firewall); it is needed where UDP is blocked.',
-  hintIp: 'LiveKit advertises {ip}, which is not the public IP {publicIp}: check LIVEKIT_NODE_IP.',
-  phoneAllGood: 'The phone reached Telinha over UDP and TCP.',
-}, {
-  checking: 'Verificando {title}...',
-  summary: '{ok} ok, {warn} aviso(s), {fail} falha(s), {skip} pulada(s)',
-  phoneTitle: 'Teste no celular',
-  phoneOpen: 'Abra isto no celular com o Wi-Fi DESLIGADO (dados móveis):',
-  phoneWaiting: 'Esperando até 10 minutos... (Ctrl+C pula)',
-  phoneOpened: 'Aberto no celular, testando...',
-  phoneSkipped: 'Teste no celular pulado.',
-  phoneExpired: 'O link expirou antes de o celular terminar o teste. Rode telinha doctor de novo.',
-  phoneNotRunning: 'Inicie a Telinha pra fazer o teste no celular (telinha service start).',
-  phoneNoTty: 'Teste no celular pulado: ele precisa de um terminal interativo (ou use --no-phone).',
-  phoneError: 'O teste no celular não pôde começar: {error}',
-  rowHttps: 'HTTPS',
-  rowSignaling: 'Conexão com o LiveKit',
-  rowPublish: 'Envio de vídeo',
-  rowInitial: 'Primeiro caminho',
-  rowUdp: 'UDP {port}',
-  rowTcp: 'TCP {port}',
-  latency: '{ms} ms',
-  initialPath: '{protocol} até {ip}, {ms} ms',
-  initialNone: 'nenhum caminho de mídia',
-  works: 'funciona',
-  worksRtt: 'funciona, {ms} ms',
-  failed: 'falhou',
-  hintSignaling: 'A Telinha não é acessível pela internet no PUBLIC_URL: veja as verificações de DNS, TLS e roteador acima.',
-  hintBoth: 'O lado HTTP funciona, mas as portas de mídia estão fechadas: libere TCP {tcp} e UDP {udp} pra esta máquina (redirecionamento no roteador em casa; o firewall ou security group do provedor numa VPS; e o firewall desta máquina).',
-  hintUdp: 'A porta UDP {udp} não é acessível pela internet: libere pra esta máquina (redirecionamento no roteador, ou o firewall do provedor da VPS); o vídeo cai pro TCP, com mais atraso.',
-  hintTcp: 'A porta TCP {tcp} não é acessível pela internet: libere pra esta máquina (redirecionamento no roteador, ou o firewall do provedor da VPS); ela é necessária onde o UDP é bloqueado.',
-  hintIp: 'O LiveKit anuncia {ip}, que não é o IP público {publicIp}: confira o LIVEKIT_NODE_IP.',
-  phoneAllGood: 'O celular chegou na Telinha por UDP e TCP.',
-});
-type StrKey = Parameters<typeof t>[1];
+const t = doctorStrings;
+type StrKey = DoctorStrKey;
 
 export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'doctorSession' | 'doctorWait'>;
 
@@ -105,7 +48,19 @@ export interface DoctorCliDeps {
   /** Registers a Ctrl+C handler for the phone wait; returns its remover. */
   onInterrupt?: (fn: () => void) => () => void;
   checkTimeoutMs?: number;
+  /** Runs the interactive doctor on a terminal (tests swap it). */
+  tui?: DoctorTuiRunner;
 }
+
+export type DoctorTuiRunner = (o: { ctx: CliContext; flags: { phone?: boolean; local?: boolean }; deps: DoctorCliDeps }) => Promise<number>;
+
+// Both imports are dynamic: nothing on the plain path may load Solid/OpenTUI.
+const tuiRunner: DoctorTuiRunner = async (o) => {
+  const { prepareTui } = await import('../tui/load.ts');
+  await prepareTui();
+  const { runDoctorTui } = await import('../tui/doctor/index.tsx');
+  return runDoctorTui(o);
+};
 
 export interface PhoneOutcome {
   status: CheckStatus;
@@ -151,7 +106,7 @@ export async function buildCheckContext(ctx: CliContext, o: { local: boolean; co
   };
 }
 
-/** Plain-language hints for a phone report (keys of this file's dictionary with their params). */
+/** Plain-language hints for a phone report (doctorStrings keys with their params). */
 export function phoneHints(r: DoctorReport, ports: { tcp: number; udp: number }, publicIp?: string | null): { key: StrKey; params: Record<string, string | number> }[] {
   const p = { tcp: ports.tcp, udp: ports.udp };
   if (!r.signaling.ok) return [{ key: 'hintSignaling', params: p }];
@@ -162,6 +117,34 @@ export function phoneHints(r: DoctorReport, ports: { tcp: number; udp: number },
   const ip = r.initial?.candidateIp;
   if (ip && publicIp && ip !== publicIp && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) out.push({ key: 'hintIp', params: { ip, publicIp } });
   return out;
+}
+
+export interface PhoneRow {
+  id: 'https' | 'signaling' | 'publish' | 'initial' | 'udp' | 'tcp';
+  ok: boolean;
+  label: string;
+  value: string;
+}
+
+export function mediaPorts(config: Config | null): { tcp: number; udp: number } {
+  return { tcp: config?.mediaTcpPort ?? 7881, udp: config?.mediaUdpPort ?? 7882 };
+}
+
+/** The phone report as labelled rows, in the order both renderers show them. */
+export function phoneRows(r: DoctorReport, ports: { tcp: number; udp: number }, s: (key: StrKey, params?: Record<string, string | number>) => string): PhoneRow[] {
+  const ok = (v: boolean, rtt?: number) => (v ? (rtt !== undefined ? s('worksRtt', { ms: rtt }) : s('works')) : s('failed'));
+  const why = (v: { ok: boolean; error?: string }) => (!v.ok && v.error ? `: ${v.error}` : '');
+  return [
+    { id: 'https', ok: r.https.ok, label: s('rowHttps'), value: r.https.ok ? (r.https.latencyMs !== null ? s('latency', { ms: r.https.latencyMs }) : s('works')) : s('failed') },
+    { id: 'signaling', ok: r.signaling.ok, label: s('rowSignaling'), value: r.signaling.ok ? s('works') : `${s('failed')}${why(r.signaling)}` },
+    { id: 'publish', ok: r.publish.ok, label: s('rowPublish'), value: r.publish.ok ? s('works') : `${s('failed')}${why(r.publish)}` },
+    {
+      id: 'initial', ok: !!r.initial, label: s('rowInitial'),
+      value: r.initial ? s('initialPath', { protocol: r.initial.protocol.toUpperCase(), ip: r.initial.candidateIp ?? '?', ms: r.initial.rttMs ?? '?' }) : s('initialNone'),
+    },
+    { id: 'udp', ok: r.udp.ok, label: s('rowUdp', { port: ports.udp }), value: `${ok(r.udp.ok, r.udp.rttMs)}${why(r.udp)}` },
+    { id: 'tcp', ok: r.tcp.ok, label: s('rowTcp', { port: ports.tcp }), value: `${ok(r.tcp.ok, r.tcp.rttMs)}${why(r.tcp)}` },
+  ];
 }
 
 export function phoneStatus(r: DoctorReport): CheckStatus {
@@ -182,6 +165,7 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps
   }
   const json = !!flags.json;
   const local = !!flags.local;
+  if (!json && ctx.tty) return (deps.tui ?? tuiRunner)({ ctx, flags: { phone: flags.phone, local }, deps });
   const now = deps.now ?? Date.now;
   const L = ctx.locale;
   const s = (key: StrKey, params?: Record<string, string | number>) => t(L, key, params);
@@ -286,7 +270,7 @@ async function phoneTest(o: {
   let state: DoctorSessionState = { state: 'pending' };
   try {
     while (!skipped && o.now() < deadline) {
-      const next = await Promise.race([control.doctorWait(session.id, Math.min(POLL_MS, deadline - o.now())), interrupted]);
+      const next = await Promise.race([control.doctorWait(session.id, Math.min(PHONE_POLL_MS, deadline - o.now())), interrupted]);
       if (!next) break;
       if (next.state === 'opened' && state.state === 'pending') term.info(s('phoneOpened'));
       state = next;
@@ -305,21 +289,11 @@ async function phoneTest(o: {
     return { status: skipped ? 'skip' : 'warn' };
   }
   const r = state.report;
-  const ports = { tcp: o.config?.mediaTcpPort ?? 7881, udp: o.config?.mediaUdpPort ?? 7882 };
-  const ok = (v: boolean, rtt?: number) => (v ? (rtt !== undefined ? s('worksRtt', { ms: rtt }) : s('works')) : s('failed'));
-  const rows: [boolean, string, string][] = [
-    [r.https.ok, s('rowHttps'), r.https.ok ? (r.https.latencyMs !== null ? s('latency', { ms: r.https.latencyMs }) : s('works')) : s('failed')],
-    [r.signaling.ok, s('rowSignaling'), r.signaling.ok ? s('works') : `${s('failed')}${r.signaling.error ? `: ${r.signaling.error}` : ''}`],
-    [r.publish.ok, s('rowPublish'), r.publish.ok ? s('works') : `${s('failed')}${r.publish.error ? `: ${r.publish.error}` : ''}`],
-    [!!r.initial, s('rowInitial'), r.initial
-      ? s('initialPath', { protocol: r.initial.protocol.toUpperCase(), ip: r.initial.candidateIp ?? '?', ms: r.initial.rttMs ?? '?' })
-      : s('initialNone')],
-    [r.udp.ok, s('rowUdp', { port: ports.udp }), `${ok(r.udp.ok, r.udp.rttMs)}${!r.udp.ok && r.udp.error ? `: ${r.udp.error}` : ''}`],
-    [r.tcp.ok, s('rowTcp', { port: ports.tcp }), `${ok(r.tcp.ok, r.tcp.rttMs)}${!r.tcp.ok && r.tcp.error ? `: ${r.tcp.error}` : ''}`],
-  ];
-  const w = Math.max(...rows.map(([, label]) => label.length));
-  for (const [good, label, value] of rows) {
-    term.line(`${good ? term.style.green('✓') : term.style.red('✗')} ${label.padEnd(w)}  ${value}`);
+  const ports = mediaPorts(o.config);
+  const rows = phoneRows(r, ports, s);
+  const w = Math.max(...rows.map((row) => row.label.length));
+  for (const row of rows) {
+    term.line(`${row.ok ? term.style.green('✓') : term.style.red('✗')} ${row.label.padEnd(w)}  ${row.value}`);
   }
   const hints = phoneHints(r, ports, o.config?.livekitNodeIp ?? null);
   const status = phoneStatus(r);

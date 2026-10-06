@@ -1,6 +1,6 @@
 #!/bin/sh
 # Image smoke test, run inside the image from /app (scripts/image.ts and the CI
-# image job): unit tests, page assets, the bundled binaries, then the real entry
+# image job): unit tests, the terminal UI, page assets, the bundled binaries, then the real entry
 # point in DEV_USER mode supervising livekit-server. busybox wget plus bun.
 set -eu
 
@@ -17,6 +17,11 @@ step() {
 
 step 'unit tests'
 bun test server/test
+
+step 'terminal UI from source'
+# Outside bun test there is no bunfig preload: this proves prepareTui() registers the
+# Solid transform at runtime and the musl native library loads (a key press must re-render).
+TELINHA_SMOKE_TUI=1 bun server/src/index.ts --version || fail 'the terminal UI smoke failed'
 
 step 'page assets'
 test -f web/dist/index.html || fail 'web/dist/index.html missing'

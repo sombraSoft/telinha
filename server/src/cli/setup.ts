@@ -1,15 +1,16 @@
 // `telinha setup`: the questions that make telinha.env, then (natively) the
-// binaries, the service, the router probe and doctor. Interactive on a TTY;
-// `--non-interactive` takes every answer from flags, the environment and the
-// existing file (secrets never from flags); `--docker` runs inside the image
-// and only writes the file.
+// binaries, the service, the router probe and doctor. On a terminal the setup
+// screens ask and show the install (setup/ui.ts is their contract; main.ts
+// loads them); `--non-interactive`, or no terminal, takes every answer from
+// flags, the environment and the existing file (secrets never from flags) and
+// prints plain lines. Both end in the same answers -> values -> tasks.
+// `--docker` runs inside the image and only writes the file.
 import { constants as fsc, existsSync } from 'node:fs';
 import { chmod, copyFile, lchown, lstat, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises';
 import { arch as osArch } from 'node:os';
 import { posix } from 'node:path';
 import { ensureBinariesForConfig } from '../bins.ts';
 import { portInUse } from '../children.ts';
-import type { Config } from '../config.ts';
 import { createDuckDns } from '../ddns.ts';
 import { mergeEnv, parseEnvFile } from '../envfile.ts';
 import { probe } from '../nat/index.ts';
@@ -17,17 +18,20 @@ import { lookupPublicIp, resolveA, tlsInfo } from '../netinfo.ts';
 import { defaultSpawn, serviceManager } from '../service/index.ts';
 import { assertOneStdin, GLOBAL_FLAGS, parseArgs, readSecretSource, UsageError, type ArgSpec, type CliContext, type ParsedArgs } from './args.ts';
 import { createControlClient } from './control.ts';
-import { checkDiscord, askDiscord, askDiscordOffline, createDiscordSetup, SNOWFLAKE_RE, validCommand } from './setup/discord.ts';
-import { askAddress, DEFAULT_HOME_HTTPS_PORT, extractTunnelToken, homeChoice, parseDuckDomain, takenPort, validTunnelToken } from './setup/domain.ts';
-import { MANAGED_KEYS, type PreviousEnv } from './setup/envwrite.ts';
-import { defaultOsName, detectHost, inferHosting, routerLabel, SSLIP_RE, type HostInfo, type Hosting } from './setup/host.ts';
-import {
-  askMediaPorts, downloadBinaries, generateSecrets, nextSteps, review, routerStep, serviceStep, SetupAbort, startAndDoctor,
-  validateValues, writeConfig, type SetupDeps, type SetupFs, type Values, type Wizard,
-} from './setup/steps.ts';
+import { at } from './setup/apply-strings.ts';
+import { planTasks, runApply, silentOut, TASKS, todoLines, type ApplyHooks, type ApplyOptions, type ApplyResult, type ApplyTarget, type SecretMemo, type TaskId, type TaskLine, type TaskStatus } from './setup/apply.ts';
+import { createDiscordSetup } from './setup/discord.ts';
+import { MANAGED_KEYS } from './setup/envwrite.ts';
+import { defaultOsName, detectHost, routerLabel, type HostInfo } from './setup/host.ts';
+import type { ModelEnv, Text } from './setup/model.ts';
+import { q } from './setup/qstrings.ts';
+import { answersFromFlags, resolveValues, type ResolveBase } from './setup/resolve.ts';
+import { SetupSession } from './setup/session.ts';
+import { nextSteps, SetupAbort, UNPRIVILEGED_PORT_START, validateValues, type SetupDeps, type SetupFs, type Values, type Wizard } from './setup/steps.ts';
 import { t, type SKey } from './setup/strings.ts';
+import type { SetupUi, SetupUiResult } from './setup/ui.ts';
 import { ts, type Locale, type Params } from './strings.ts';
-import { createTerm, NeedsInputError, type Term } from './term.ts';
+import { createTerm, type Out } from './term.ts';
 
 export type { SetupDeps } from './setup/steps.ts';
 
@@ -71,6 +75,7 @@ const SECRETS = [
   ['TUNNEL_TOKEN', 'tunnel-token-file'],
   ['DUCKDNS_TOKEN', 'duckdns-token-file'],
 ] as const;
+type SecretKey = (typeof SECRETS)[number][0];
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -138,6 +143,7 @@ async function openUrl(url: string, platform: NodeJS.Platform): Promise<void> {
 export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
   const platform = process.platform;
   const isRoot = process.getuid?.() === 0;
+  const control = createControlClient({ paths: ctx.paths, envFile: ctx.envFile, env: ctx.env });
   return {
     term: (locale) => createTerm({ tty: o.tty, yes: ctx.yes, locale }),
     fetch,
@@ -145,8 +151,8 @@ export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
     ddns: ({ domain, token }) => createDuckDns({ domain, token, fetch, log: () => {} }),
     discord: (token) => createDiscordSetup({ token, fetch, version: ctx.version }),
     serviceManager: ({ user }) => serviceManager({ platform, isRoot, user, paths: ctx.paths, envFile: ctx.envFile, env: ctx.env }),
-    control: createControlClient({ paths: ctx.paths, envFile: ctx.envFile, env: ctx.env }),
-    bins: (config, paths, log) => ensureBinariesForConfig(config, paths, log),
+    control,
+    bins: (config, paths, log, progress) => ensureBinariesForConfig(config, paths, log, { progress }),
     spawn: defaultSpawn,
     spawnInteractive: async (cmd) => {
       try {
@@ -171,24 +177,19 @@ export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
     sleep: (ms) => Bun.sleep(ms),
     // Imported on use: doctor pulls in the checks and the QR renderer.
     doctor: async (c) => (await import('./doctor.ts')).run({ flags: {}, positionals: c.argv.slice(1), rest: [] }, c),
+    async doctorChecks(c, onResult) {
+      const [{ buildCheckContext }, { CHECKS, runChecks }] = await Promise.all([import('./doctor.ts'), import('../doctor/checks.ts')]);
+      let done = 0;
+      return runChecks(CHECKS, await buildCheckContext(c, { local: false, control }), (r) => onResult?.(r, ++done, CHECKS.length));
+    },
     execPath: process.execPath,
     which: (cmd) => Bun.which(cmd),
     certReady: async (host, port) => (await tlsInfo(host, port, 5000, '127.0.0.1')).authorized,
   };
 }
 
-function makeWizard(ctx: CliContext, deps: SetupDeps, locale: Locale, host: HostInfo, o: { interactive: boolean; docker: boolean; term?: Term }): Wizard {
-  return {
-    ctx,
-    deps,
-    term: o.term ?? deps.term(locale),
-    locale,
-    s: (key: SKey, params?: Params) => t(locale, key, params),
-    keepCurrent: ts(locale, 'keepCurrent'),
-    host,
-    interactive: o.interactive,
-    docker: o.docker,
-  };
+function makeWizard(ctx: CliContext, deps: SetupDeps, locale: Locale, host: HostInfo, o: { docker: boolean; out: Out }): Wizard {
+  return { ctx, deps, out: o.out, locale, s: (key: SKey, params?: Params) => t(locale, key, params), host, docker: o.docker };
 }
 
 /** Managed keys from the file, overridden by the environment (the rule `run` applies). */
@@ -220,8 +221,8 @@ async function detect(ctx: CliContext, deps: SetupDeps, docker: boolean): Promis
   });
 }
 
-/** Where the file is, as its reader sees it: inside the image, the host's path (install-docker.sh passes it). */
-interface Loaded { file: string; shown: string; previous: PreviousEnv | null; values: Values }
+/** The file to write and the managed values it holds now. */
+interface Loaded extends ApplyTarget { values: Values }
 
 /** install-docker.sh's layout, for an image run without TELINHA_HOST_ENV. */
 const DOCKER_HOST_ENV = '/opt/telinha/config/telinha.env';
@@ -235,338 +236,244 @@ async function load(ctx: CliContext, deps: SetupDeps, docker: boolean): Promise<
   return { file, shown, previous, values: currentValues(previous?.vars ?? {}, ctx.env) };
 }
 
-/** Validates, renders and writes; a config loadConfig rejects is never written. */
-async function save(w: Wizard, l: Loaded, values: Values) {
-  const { text, config } = validateValues(values, l.previous, w.ctx.paths.home, { compiled: w.ctx.compiled });
-  await writeConfig(w, l.file, text, l.shown);
-  return config;
-}
-
-/** Steps 8-11: everything after the file, natively. */
-async function afterWrite(w: Wizard, l: Loaded, values: Values, config: Pick<Config, 'media' | 'ingress'>, flags: Flags, hosting: Hosting): Promise<number> {
-  await downloadBinaries(w, config);
-  const wasRunning = await w.deps.control.available().catch(() => false);
-  let installed = false;
-  if (!flags['no-service']) installed = await serviceStep(w, values, { firewall: !flags['no-firewall'] });
-  if (!flags['no-upnp']) await routerStep(w, values, hosting);
-  const code = await startAndDoctor(w, { installed, wasRunning, doctor: !flags['no-doctor'], values });
-  nextSteps(w, values, { file: l.shown });
-  return code;
-}
-
-async function interactive(ctx: CliContext, deps: SetupDeps, flags: Flags): Promise<number> {
-  const docker = !!flags.docker;
-  const l = await load(ctx, deps, docker);
-  const values = l.values;
-  // Flags given next to a TTY become the defaults of their questions.
-  const pre = await collectNonInteractive(ctx, flags, values);
-  if (pre.errors.length) {
-    for (const e of pre.errors) ctx.stderr(e);
-    return 2;
-  }
-  let locale = ctx.locale;
-  let term = deps.term(locale);
-  term.line(term.style.bold(t(locale, 'welcome')));
-  for (const line of t(locale, 'welcomeHelp', { file: l.shown }).split('\n')) term.info(line);
-
-  // 1. Language: asked once, then LOCALE remembers it.
-  if (flags.lang) {
-    values.LOCALE = locale;
-  } else if (!values.LOCALE) {
-    locale = await term.select<Locale>('Language / Idioma', [
-      { value: 'en', label: 'English' },
-      { value: 'pt-BR', label: 'Português (Brasil)' },
-    ], locale === 'pt-BR' ? 1 : 0, { id: 'lang' });
-    values.LOCALE = locale;
-  }
-
-  // 2. The machine.
-  const spin = term.spinner(t(locale, 'hostChecking'));
-  const host = await detect(ctx, deps, docker);
-  spin.stop(t(locale, 'hostChecked'));
-  // One terminal for the whole run (keys typed ahead stay buffered); a new one only for a new language.
-  const w = makeWizard(ctx, deps, locale, host, { interactive: true, docker, term: locale === ctx.locale ? term : undefined });
-  term = w.term;
-  const { s } = w;
-  term.info(hostLine(w));
-  // 3. Home or a rented server: the machine only suggests, the file's answer wins.
-  const hostings: { value: Hosting; label: string; hint: string }[] = [
-    { value: 'home', label: s('hostingHome'), hint: s('hostingHomeHint') },
-    { value: 'vps', label: s('hostingVps'), hint: s('hostingVpsHint') },
-  ];
-  term.step(s('hostingTitle'));
-  const guessed = inferHosting(values, host);
-  const hosting = await term.select(s('hostingQ'), hostings, hostings.findIndex((x) => x.value === guessed), { id: 'hosting' });
-
-  // 4-6. Address, media ports, Discord.
-  await askAddress(w, values, hosting, { httpsPort: flags['https-port'] });
-  await askMediaPorts(w, values);
-  if (flags['no-discord-check']) await askDiscordOffline(w, values);
-  else await askDiscord(w, values, { publicUrl: values.PUBLIC_URL!, presetGuild: flags.guild, presetRole: flags.role, presetChannels: flags.channels?.split(',') });
-
-  // Updates are the native binary's business; Docker has telinha-update.
-  if (ctx.compiled && !docker) {
-    term.step(s('updatesTitle'));
-    term.info(s('updatesHelp'));
-    values.AUTO_UPDATE = (await term.confirm(s('autoUpdateQ'), values.AUTO_UPDATE !== 'off', { id: 'auto-update' })) ? 'on' : 'off';
-  }
-
-  // 6-7. Secrets, review, write.
-  const made = generateSecrets(values, deps.random);
-  if (await review(w, values, { made, previous: l.previous })) generateSecrets(values, deps.random, true);
-  const config = await save(w, l, values);
-  if (docker) {
-    nextSteps(w, values, { file: l.shown });
-    return 0;
-  }
-  return afterWrite(w, l, values, config, flags, hosting);
-}
-
-/** The hostname of a URL; '' when it does not parse. */
-function urlHost(url: string | undefined): string {
-  try {
-    return new URL(url ?? '').hostname;
-  } catch {
-    return '';
-  }
-}
-
-/** host:port of a URL for comparing; '' when it does not parse. */
-function urlOrigin(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.hostname}:${u.port || '443'}`;
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Answers from flags over the environment over the file; returns what is
- * missing and what is wrong. `o.host`, the detected machine, comes with a
- * non-interactive run: it settles home vs VPS and enforces the home rules
- * (no 80/443 without --advanced). The interactive pre-pass passes none: there
- * the flags are the questions' defaults and the questions decide.
- */
-export async function collectNonInteractive(ctx: CliContext, flags: Flags, values: Values, o: { stdin?: () => Promise<string>; host?: HostInfo } = {}): Promise<{ missing: string[]; errors: string[] }> {
-  const s = (key: SKey, params?: Params) => t(ctx.locale, key, params);
-  const errors: string[] = [];
-  // The file as loaded, before any flag lands: a re-run on the same path keeps
-  // its ports and an advanced home file counts as confirmed; a switch starts
-  // from the new path's defaults.
-  const before: Values = { ...values };
-  const was = {
-    advanced: homeChoice(before) === 'advanced',
-    highPort: before.ACME_DNS === 'duckdns',
-    vps: before.HOSTING === 'vps',
-    vpsDirect: before.HOSTING === 'vps' && (before.INGRESS || 'direct') === 'direct',
-    ingress: before.INGRESS || 'direct',
-  };
-  const set = (key: string, v: string | undefined) => {
-    if (v !== undefined) values[key] = v.trim();
-  };
-  const oneOf = (flag: string, v: string | undefined, allowed: string[]) => {
-    if (v !== undefined && !allowed.includes(v)) errors.push(s('badFlagValue', { flag: `--${flag}`, value: v, allowed: allowed.join(' | ') }));
-    return v;
-  };
-  const port = (flag: string, key: string, v: string | undefined) => {
-    if (v === undefined) return;
-    if (!/^\d+$/.test(v) || Number(v) > 65535) errors.push(s('badFlagValue', { flag: `--${flag}`, value: v, allowed: '0-65535' }));
-    values[key] = v;
-  };
-
-  set('HOSTING', oneOf('host', flags.host, ['home', 'vps']));
-  set('PUBLIC_URL', flags['public-url']?.replace(/\/$/, ''));
-  set('INGRESS', oneOf('ingress', flags.ingress, ['direct', 'tunnel', 'external']));
-  port('http-port', 'HTTP_PORT', flags['http-port']);
-  port('https-port', 'HTTPS_PORT', flags['https-port']);
-  port('media-tcp', 'MEDIA_TCP_PORT', flags['media-tcp']);
-  port('media-udp', 'MEDIA_UDP_PORT', flags['media-udp']);
-  set('LIVEKIT_NODE_IP', flags['node-ip']);
-  set('DISCORD_CLIENT_ID', flags['client-id']);
-  set('GUILD_ID', flags.guild);
-  set('ROLE_ID', flags.role);
-  set('CHANNEL_IDS', flags.channels?.split(',').map((c) => c.trim()).filter(Boolean).join(','));
-  set('COMMAND_NAME', flags.command);
-  set('GROUP_NAME', flags.group);
-  set('UPNP', oneOf('upnp', flags.upnp, ['auto', 'off']));
-  set('AUTO_UPDATE', oneOf('auto-update', flags['auto-update'], ['on', 'off']));
-  if (flags.lang) values.LOCALE = ctx.locale;
-  if (flags['duckdns-domain'] !== undefined) {
-    const d = parseDuckDomain(flags['duckdns-domain']);
-    if (!d) errors.push(s('badFlagValue', { flag: '--duckdns-domain', value: flags['duckdns-domain'], allowed: 'a-z 0-9 -' }));
-    else {
-      values.DDNS_PROVIDER = 'duckdns';
-      values.DUCKDNS_DOMAIN = d;
-      if (!flags['public-url']) values.PUBLIC_URL = `https://${d}.duckdns.org`;
-      // DuckDNS lives in direct mode only: a tunnel or proxy file switching to it becomes direct.
-      if (flags.ingress === undefined) values.INGRESS = 'direct';
-      else if (flags.ingress === 'tunnel' || flags.ingress === 'external') {
-        errors.push(s('badFlagValue', { flag: '--ingress', value: flags.ingress, allowed: 'direct (with --duckdns-domain)' }));
-      }
-      // At home the name means the high port unless --advanced says 80/443 (the
-      // interactive pre-pass reads this as the "no domain on Cloudflare" default).
-      if (!flags.advanced) values.ACME_DNS = 'duckdns';
-    }
-  }
-
+/** Secrets from the environment or their -file flags (env wins); never from a flag's value. */
+async function readSecrets(ctx: CliContext, flags: Flags, stdin?: () => Promise<string>): Promise<Partial<Record<SecretKey, string>>> {
   assertOneStdin(SECRETS.map(([, f]) => flags[f]), ctx.locale);
+  const out: Partial<Record<SecretKey, string>> = {};
   for (const [key, fileFlag] of SECRETS) {
-    const v = await readSecretSource({ env: ctx.env[key], file: flags[fileFlag], stdin: o.stdin });
-    if (v) values[key] = v;
+    const v = await readSecretSource({ env: ctx.env[key], file: flags[fileFlag], stdin });
+    if (v) out[key] = v;
   }
-  // The dashboard's install command, pasted whole into the file, still works.
-  if (values.TUNNEL_TOKEN) values.TUNNEL_TOKEN = extractTunnelToken(values.TUNNEL_TOKEN);
-  // A --public-url on another host leaves DuckDNS: its keys go, or the updater
-  // keeps writing the old name and the rules below take the file's name as given.
-  if (flags['public-url'] !== undefined && flags['duckdns-domain'] === undefined && values.DUCKDNS_DOMAIN && urlHost(values.PUBLIC_URL) !== `${values.DUCKDNS_DOMAIN}.duckdns.org`) {
-    values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.ACME_DNS = '';
-  }
-  // A switch to a tunnel or a proxy needs that path's own address: the old one
-  // (a DuckDNS name, an IP) is not what Cloudflare or the proxy serves.
-  if ((values.INGRESS === 'tunnel' || values.INGRESS === 'external') && values.INGRESS !== was.ingress && flags['public-url'] === undefined) values.PUBLIC_URL = '';
-  // Where it runs: --host or HOSTING, else the VPS-only keys (the file's or the
-  // flags', read before the node IP below may go), else the machine.
-  const hosting = o.host ? inferHosting(values, o.host) : null;
-  // A pinned IP belongs to sslip.io: switching away (or to DuckDNS, which follows
-  // the IP) without --node-ip drops it, or DuckDNS and LiveKit keep a stale one.
-  const modeChanged = flags.ingress !== undefined || flags['duckdns-domain'] !== undefined || flags['public-url'] !== undefined;
-  if (flags['node-ip'] === undefined && (modeChanged || values.DDNS_PROVIDER === 'duckdns') && !SSLIP_RE.test(values.PUBLIC_URL ?? '')) {
-    values.LIVEKIT_NODE_IP = '';
-  }
+  return out;
+}
 
-  const ingress = values.INGRESS || 'direct';
-  if (hosting) {
-    values.HOSTING = hosting;
-    values.INGRESS = ingress;
-    if (hosting === 'home') {
-      // A plain re-run of an advanced home file (--guild, a new token) is already
-      // confirmed; a run that changes the address or the ports must say so again.
-      const advanced = flags.advanced || (was.advanced && !modeChanged && flags['https-port'] === undefined && flags['http-port'] === undefined);
-      if (ingress === 'direct' && values.DUCKDNS_DOMAIN && !advanced) {
-        // Home connections block 80/443: HTTPS on a high port that the URL carries, the certificate through the DuckDNS API.
-        const https = flags['https-port'] ?? (was.highPort ? before.HTTPS_PORT || undefined : undefined) ?? DEFAULT_HOME_HTTPS_PORT;
-        const taken = takenPort(values, Number(https));
-        if (Number(https) < 1024 || (flags['http-port'] !== undefined && flags['http-port'] !== '0')) errors.push(s('homeNeedsAdvanced'));
-        else if (taken) errors.push(s('badFlagValue', { flag: '--https-port', value: https, allowed: `1024-65535, != ${taken}` }));
-        const url = `https://${values.DUCKDNS_DOMAIN}.duckdns.org:${https}`;
-        if (flags['public-url'] !== undefined && urlOrigin(values.PUBLIC_URL ?? '') !== urlOrigin(url)) {
-          errors.push(s('badFlagValue', { flag: '--public-url', value: flags['public-url'], allowed: url }));
-        }
-        values.HTTPS_PORT = https;
-        values.HTTP_PORT = '0';
-        values.ACME_DNS = 'duckdns';
-        values.DDNS_PROVIDER = 'duckdns';
-        values.PUBLIC_URL = url;
-      } else if (ingress !== 'tunnel' && !advanced) {
-        // Direct without DuckDNS or an own proxy: both lean on 80/443 or on the user's own setup.
-        errors.push(s('homeNeedsAdvanced'));
-      } else if (ingress === 'direct') {
-        // Confirmed: the certificate comes over 80/443 (or the ports given), as on a VPS.
-        values.HTTPS_PORT = flags['https-port'] ?? ((was.advanced && values.HTTPS_PORT) || '443');
-        values.HTTP_PORT = flags['http-port'] ?? ((was.advanced && values.HTTP_PORT) || '80');
-        values.ACME_DNS = '';
-        if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined) values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
-      }
-    } else if (ingress === 'direct') {
-      // A VPS has 80/443: the certificate comes over them, DuckDNS included.
-      values.HTTPS_PORT = flags['https-port'] ?? ((was.vpsDirect && values.HTTPS_PORT) || '443');
-      values.HTTP_PORT = flags['http-port'] ?? ((was.vpsDirect && values.HTTP_PORT) || '80');
-      values.ACME_DNS = '';
-      if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined) values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
-    }
-  }
-  if (flags.upnp === undefined) {
-    // A VPS has no router to ask; at home the media ports (and the HTTPS port) need it.
-    // The VPS path wrote off by itself, so a VPS file moving home starts from auto again
-    // (the interactive pre-pass too: --host home makes it the question's default).
-    const leftVps = was.vps && (hosting ?? values.HOSTING) === 'home' && ctx.env.UPNP === undefined;
-    if (hosting === 'vps') values.UPNP = 'off';
-    else if (leftVps) values.UPNP = 'auto';
-    else if (hosting) values.UPNP = values.UPNP || 'auto';
-  }
-
-  // Keys the chosen mode does not use go away (a re-run may switch modes).
-  if (ingress !== 'tunnel') values.TUNNEL_TOKEN = '';
-  if (ingress !== 'direct') values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.HTTP_PORT = values.HTTPS_PORT = values.ACME_DNS = '';
-  if (values.ACME_DNS !== 'duckdns') values.ACME_DNS = '';
-  if (values.COMMAND_NAME && !validCommand(values.COMMAND_NAME)) errors.push(s('commandBad'));
-  if (values.TUNNEL_TOKEN && !validTunnelToken(values.TUNNEL_TOKEN)) errors.push(s('tunnelTokenBad'));
-  for (const [key, flag] of [['DISCORD_CLIENT_ID', 'client-id'], ['GUILD_ID', 'guild'], ['ROLE_ID', 'role']] as const) {
-    if (values[key] && !SNOWFLAKE_RE.test(values[key]!)) errors.push(s('badFlagValue', { flag: `--${flag}`, value: values[key]!, allowed: s('idAllowed') }));
-  }
-  if (values.CHANNEL_IDS && !values.CHANNEL_IDS.split(',').every((c) => SNOWFLAKE_RE.test(c))) {
-    errors.push(s('badFlagValue', { flag: '--channels', value: values.CHANNEL_IDS, allowed: s('idAllowed') }));
-  }
-
-  const missing: string[] = [];
-  const need = (key: string, what: string) => {
-    if (!values[key]) missing.push(what);
+/** What the questions may look at besides the answers (the machine comes later). */
+function modelEnv(ctx: CliContext, deps: SetupDeps, flags: Flags, file: Values, o: { docker: boolean; portStart: number | null }): Omit<ModelEnv, 'lookups' | 'host'> {
+  return {
+    platform: deps.platform, isRoot: deps.isRoot, docker: o.docker, compiled: ctx.compiled,
+    offline: !!flags['no-discord-check'], langFlag: !!flags.lang,
+    flags: { noService: !!flags['no-service'], noUpnp: !!flags['no-upnp'], noFirewall: !!flags['no-firewall'], noDoctor: !!flags['no-doctor'] },
+    file, unprivilegedPortStart: o.portStart, locale: ctx.locale,
   };
-  const secret = (key: string, flag: string) => s('missingSecret', { env: key, flag: `--${flag}` });
-  need('PUBLIC_URL', '--public-url');
-  need('DISCORD_TOKEN', secret('DISCORD_TOKEN', 'discord-token-file'));
-  need('DISCORD_CLIENT_SECRET', secret('DISCORD_CLIENT_SECRET', 'client-secret-file'));
-  if (flags['no-discord-check']) need('DISCORD_CLIENT_ID', '--client-id');
-  need('GUILD_ID', '--guild');
-  need('ROLE_ID', '--role');
-  need('CHANNEL_IDS', '--channels');
-  if (ingress === 'tunnel') need('TUNNEL_TOKEN', secret('TUNNEL_TOKEN', 'tunnel-token-file'));
-  // The same token serves the DNS record and the certificate.
-  if (values.DDNS_PROVIDER === 'duckdns' || values.ACME_DNS === 'duckdns') need('DUCKDNS_TOKEN', secret('DUCKDNS_TOKEN', 'duckdns-token-file'));
-  return { missing, errors };
+}
+
+function applyOptions(ctx: CliContext, flags: Flags, docker: boolean, o: Pick<ApplyOptions, 'sysctl' | 'rotateCookie' | 'doctorMode' | 'secrets'>): ApplyOptions {
+  return {
+    docker, compiled: ctx.compiled,
+    flags: { noService: !!flags['no-service'], noFirewall: !!flags['no-firewall'], noUpnp: !!flags['no-upnp'], noDoctor: !!flags['no-doctor'], offline: !!flags['no-discord-check'] },
+    ...o,
+  };
+}
+
+const textOf = (locale: Locale, x: Text) => ('raw' in x ? x.raw : q(locale, x.key, x.params));
+
+/** The plain run's task headers (the setup screens show the task labels instead). */
+const HEADERS: Partial<Record<TaskId, SKey>> = {
+  discord: 'discordTitle', binaries: 'binsTitle', service: 'serviceTitle', router: 'routerTitle', start: 'startTitle', doctor: 'doctorTitle',
+};
+
+/** Lines as they come, a header when a task starts, and no one to ask. */
+function plainHooks(w: Wizard): ApplyHooks {
+  const started = new Set<TaskId>();
+  return {
+    emit(e) {
+      if (e.status !== 'running' || started.has(e.id)) return;
+      started.add(e.id);
+      const header = HEADERS[e.id];
+      if (header) w.out.step(w.s(header));
+    },
+    // Up to the file a failure leaves nothing written; after it, what is left still helps.
+    decide: async (id) => (id === 'discord' || id === 'duckdns' || id === 'config' ? 'abort' : 'skip'),
+    withTerminal: (fn) => fn(),
+  };
 }
 
 async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o: { stdin?: () => Promise<string> }): Promise<number> {
   const docker = !!flags.docker;
   const l = await load(ctx, deps, docker);
-  const values = l.values;
   // The machine first: without --host it is what tells home from VPS.
   const host = await detect(ctx, deps, docker);
-  const { missing, errors } = await collectNonInteractive(ctx, flags, values, { ...o, host });
-  if (errors.length || missing.length) {
-    for (const e of errors) ctx.stderr(e);
-    if (missing.length) ctx.stderr(t(ctx.locale, 'missing', { list: missing.join(', ') }));
+  const secrets = await readSecrets(ctx, flags, o.stdin);
+  const env: ModelEnv = { ...modelEnv(ctx, deps, flags, l.values, { docker, portStart: null }), host, lookups: {} };
+  const r = answersFromFlags(flags, env, { secrets, locale: ctx.locale, lenient: false, advanced: !!flags.advanced, env: ctx.env });
+  if (r.errors.length || r.missing.length) {
+    for (const e of r.errors) ctx.stderr(textOf(ctx.locale, e));
+    if (r.missing.length) ctx.stderr(q(ctx.locale, 'missing', { list: r.missing.join(', ') }));
     return 2;
   }
-  const w = makeWizard(ctx, deps, ctx.locale, host, { interactive: false, docker });
-  const { term, s } = w;
-  term.info(hostLine(w));
-
-  if (!flags['no-discord-check']) {
-    term.step(s('discordTitle'));
-    const problems = await checkDiscord(w, values, values.PUBLIC_URL!);
-    if (problems.length) {
-      for (const p of problems) term.fail(p);
-      return 1;
-    }
-  }
-  if (values.DDNS_PROVIDER === 'duckdns') {
-    const ddns = deps.ddns({ domain: values.DUCKDNS_DOMAIN!, token: values.DUCKDNS_TOKEN! });
-    await ddns.update(host.publicIp ?? '');
-    const last = ddns.last();
-    if (!last?.ok) {
-      term.fail(s('duckFailed', { error: last?.error ?? '?' }));
-      return 1;
-    }
-    term.ok(s('duckOk', { name: `${values.DUCKDNS_DOMAIN}.duckdns.org`, ip: host.publicIp ?? '?' }));
-  }
-  generateSecrets(values, deps.random);
-  let config;
-  try {
-    config = await save(w, l, values);
-  } catch (e) {
-    term.fail(s('configInvalid', { error: errMsg(e) }));
-    return 1;
-  }
-  if (docker) {
-    nextSteps(w, values, { file: l.shown });
-    return 0;
-  }
-  return afterWrite(w, l, values, config, flags, inferHosting(values, host));
+  const values = resolveValues(r.answers, env, { file: l.values, host, locale: ctx.locale, langFlag: !!flags.lang, docker, compiled: ctx.compiled });
+  const w = makeWizard(ctx, deps, ctx.locale, host, { docker, out: deps.term(ctx.locale) });
+  w.out.info(hostLine(w));
+  const opts = applyOptions(ctx, flags, docker, { sysctl: 'auto', rotateCookie: false, doctorMode: 'cli' });
+  const result = await runApply(w, l, values, planTasks(values, opts), opts, plainHooks(w));
+  if (result.kind !== 'done') return 1;
+  nextSteps(w, values, { file: l.shown });
+  return result.code;
 }
 
-export async function run(_args: ParsedArgs, ctx: CliContext, deps: Partial<SetupDeps> = {}, o: { stdin?: () => Promise<string> } = {}): Promise<number> {
+/** ip_unprivileged_port_start, read once: whether a Linux user needs the sudo step for 80/443. */
+async function portStart(deps: SetupDeps): Promise<number | null> {
+  if (deps.platform !== 'linux') return null;
+  const n = Number((await deps.fs.readText(UNPRIVILEGED_PORT_START).catch(() => null))?.trim() ?? NaN);
+  return Number.isInteger(n) ? n : null;
+}
+
+/** One task's latest attempt, as the setup screens' row has it. */
+interface RanTask {
+  status: TaskStatus;
+  lines: TaskLine[];
+  /** The line that ended the task's spinner ("Service installed"). */
+  result: TaskLine | null;
+  spinning: boolean;
+}
+
+/** What the plain epilogue needs from the task list the screens showed. */
+interface Ran { plan: TaskId[]; tasks: Map<TaskId, RanTask> }
+
+function tracker(): { ran: Ran; track(plan: TaskId[]): (e: Parameters<ApplyHooks['emit']>[0]) => void } {
+  const ran: Ran = { plan: [], tasks: new Map() };
+  return {
+    ran,
+    track(plan) {
+      ran.plan = plan;
+      ran.tasks.clear();
+      return (e) => {
+        let t = ran.tasks.get(e.id);
+        // A bare 'running' starts an attempt (a retry starts clean), as on the screens.
+        if (!t || (e.status === 'running' && !e.detail && !e.lines && !e.progress && !e.checks)) {
+          t = { status: e.status, lines: [], result: null, spinning: false };
+          ran.tasks.set(e.id, t);
+        }
+        t.status = e.status;
+        if (e.detail !== undefined) t.spinning = true;
+        if (e.lines?.length) {
+          if (t.spinning) t.result = e.lines[0]!;
+          t.spinning = false;
+          t.lines.push(...e.lines);
+        }
+      };
+    },
+  };
+}
+
+/** The line a task's summary row shows: what its spinner ended with, the failure, or the line that says it all. */
+function headline(id: TaskId, t: RanTask): TaskLine | undefined {
+  // The router's lines are a list to read top down (what was found, what is left to do).
+  if (id === 'router') return t.lines[0];
+  if (t.status === 'fail') return t.lines.findLast((l) => l.kind === 'fail') ?? t.lines.at(-1);
+  return t.result ?? t.lines.find((l) => l.kind === 'ok') ?? t.lines.at(-1);
+}
+
+/** One row per task that ran: ✓/!/✗/– label: its headline; under it what is left to do (todoLines). */
+function summary(out: Out, locale: Locale, ran: Ran): void {
+  const rows = ran.plan.filter((id) => ['ok', 'warn', 'fail', 'skipped'].includes(ran.tasks.get(id)?.status ?? ''));
+  if (!rows.length) return;
+  out.step(at(locale, 'summaryTitle'));
+  const mark = (k: TaskLine['kind']) => (k === 'ok' ? out.style.green('✓') : k === 'warn' ? out.style.yellow('!') : k === 'fail' ? out.style.red('✗') : ' ');
+  for (const id of rows) {
+    const t = ran.tasks.get(id)!;
+    const label = at(locale, TASKS[id].label);
+    const head = headline(id, t);
+    const [first = '', ...more] = head?.text.split('\n') ?? [];
+    const line = head ? `${label}: ${first}` : label;
+    if (t.status === 'ok') out.ok(line);
+    else if (t.status === 'warn') out.warn(line);
+    else if (t.status === 'fail') out.fail(line);
+    else out.line(`${out.style.dim('–')} ${line}`);
+    for (const m of more) out.line(`  ${m}`);
+    for (const l of todoLines(id, t.lines)) {
+      if (l === head) continue;
+      const [a = '', ...rest] = l.text.split('\n');
+      out.line(`    ${mark(l.kind)} ${a}`);
+      for (const r of rest) out.line(`      ${r}`);
+    }
+  }
+}
+
+async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags: Flags, o: { stdin?: () => Promise<string>; offer: { envFile: string } | null }): Promise<number | null> {
+  const docker = !!flags.docker;
+  const l = await load(ctx, deps, docker);
+  // Detection takes seconds offline: the first question shows while it runs.
+  const detecting = detect(ctx, deps, docker);
+  const secrets = await readSecrets(ctx, flags, o.stdin);
+  const envBase = modelEnv(ctx, deps, flags, l.values, { docker, portStart: await portStart(deps) });
+  // Flags next to a terminal are the questions' defaults; a rule they break is a notice on the first card, not an exit.
+  const pre = answersFromFlags(flags, { ...envBase, host: null, lookups: {} }, { secrets, locale: ctx.locale, lenient: true, advanced: !!flags.advanced, env: ctx.env });
+  const base: ResolveBase = { file: l.values, host: null, locale: ctx.locale, langFlag: !!flags.lang, docker, compiled: ctx.compiled };
+  const session = new SetupSession({
+    env: envBase, host: null, base, locale: ctx.locale, deps,
+    preset: pre.answers, presetErrors: pre.errors, acceptDefaults: ctx.yes, rerun: l.previous !== null,
+  });
+  const host = detecting.then((h) => {
+    session.setHost(h);
+    return h;
+  });
+  host.catch(() => {});
+
+  const memo: SecretMemo = { made: {} };
+  const { ran, track } = tracker();
+  let applied: Values | null = null;
+  // Across re-applies: an earlier attempt's telinha.env stays on disk whatever the last one did.
+  let wroteAny = false;
+  const apply = async (a: { rotateCookie: boolean }, hooks: ApplyHooks): Promise<ApplyResult> => {
+    const h = await host;
+    const values = session.values();
+    const opts = applyOptions(ctx, flags, docker, { sysctl: session.applyOptions().sysctl ?? 'auto', rotateCookie: a.rotateCookie, doctorMode: 'data', secrets: memo });
+    const plan = planTasks(values, opts);
+    const record = track(plan);
+    applied = values;
+    const w = makeWizard(ctx, deps, session.locale, h, { docker, out: silentOut() });
+    const emit: ApplyHooks['emit'] = (e) => {
+      record(e);
+      if (e.id === 'config' && (e.status === 'ok' || e.status === 'warn')) wroteAny = true;
+      hooks.emit(e);
+    };
+    return runApply(w, l, values, plan, opts, { ...hooks, emit });
+  };
+  const doctor = docker || flags['no-doctor'] ? null : {
+    buildContext: async () => (await import('./doctor.ts')).buildCheckContext({ ...ctx, locale: session.locale }, { local: false, control: deps.control }),
+    control: deps.control,
+    config: () => {
+      if (!applied) return null;
+      try {
+        return validateValues(applied, l.previous, ctx.paths.home, { compiled: ctx.compiled }).config;
+      } catch {
+        return null;
+      }
+    },
+  };
+
+  let result: SetupUiResult;
+  try {
+    result = await ui.run({ ctx, version: ctx.version, docker, session, apply, offer: o.offer, doctor, shownFile: l.shown });
+  } finally {
+    session.dispose();
+  }
+
+  // The screens are gone: what stays in the terminal is plain.
+  const locale = session.locale;
+  const out = deps.term(locale);
+  if (result.kind === 'declined') return null;
+  const config = ran.tasks.get('config')?.status;
+  const wrote = config === 'ok' || config === 'warn';
+  // The last attempt did not get to the file, an earlier one did: say so instead of "nothing was written".
+  const notWritten = () => (wroteAny ? out.warn(t(locale, 'wroteEarlier', { file: l.shown })) : ctx.stderr(t(locale, 'aborted')));
+  if (result.kind === 'quit' || result.result.kind === 'back') {
+    if (wrote || wroteAny) summary(out, locale, ran);
+    if (!wrote) notWritten();
+    return result.kind === 'quit' && result.reason === 'ctrl-c' ? 130 : 1;
+  }
+  const r = result.result;
+  summary(out, locale, ran);
+  if (r.kind === 'aborted') {
+    if (!r.wrote) notWritten();
+    return 1;
+  }
+  nextSteps(makeWizard(ctx, deps, locale, await host, { docker, out }), r.values, { file: l.shown });
+  return r.code;
+}
+
+async function setup(ctx: CliContext, deps: Partial<SetupDeps>, o: { stdin?: () => Promise<string>; offer: { envFile: string } | null }): Promise<number | null> {
   let flags: Flags;
   try {
     flags = parseArgs(ctx.argv, SETUP_SPEC, { locale: ctx.locale }).flags;
@@ -577,17 +484,16 @@ export async function run(_args: ParsedArgs, ctx: CliContext, deps: Partial<Setu
     return 2;
   }
   // ctx.tty is false with --non-interactive or without a terminal.
-  const isInteractive = ctx.tty && !flags['non-interactive'];
-  const d: SetupDeps = { ...defaultDeps(ctx, { tty: isInteractive }), ...deps };
+  const tty = ctx.tty && !flags['non-interactive'];
+  const d: SetupDeps = { ...defaultDeps(ctx, { tty }), ...deps };
   try {
-    return isInteractive ? await interactive(ctx, d, flags) : await nonInteractive(ctx, d, flags, o);
+    if (tty && d.ui) return await interactive(ctx, d, d.ui, flags, o);
+    // A terminal without the setup screens (main.ts always passes them) runs the plain path.
+    if (o.offer) d.term(ctx.locale).warn(ts(ctx.locale, 'noConfig', { path: o.offer.envFile }));
+    return await nonInteractive(ctx, d, flags, o);
   } catch (e) {
     if (e instanceof UsageError) {
       ctx.stderr(e.message);
-      return 2;
-    }
-    if (e instanceof NeedsInputError) {
-      ctx.stderr(t(ctx.locale, 'missing', { list: e.questionId }));
       return 2;
     }
     if (e instanceof SetupAbort) {
@@ -599,13 +505,16 @@ export async function run(_args: ParsedArgs, ctx: CliContext, deps: Partial<Setu
   }
 }
 
+export async function run(_args: ParsedArgs, ctx: CliContext, deps: Partial<SetupDeps> = {}, o: { stdin?: () => Promise<string> } = {}): Promise<number> {
+  // Only the welcome card declines, and run never shows it.
+  return (await setup(ctx, deps, { ...o, offer: null })) ?? 1;
+}
+
 /**
- * `telinha` with no arguments on a TTY and no telinha.env: offer the wizard.
- * Resolves with setup's exit code, or null when the user declined.
+ * `telinha` with no arguments on a TTY and no telinha.env: setup with a
+ * welcome card first. Resolves with setup's exit code, or null when the user
+ * declined.
  */
 export async function offerSetup(ctx: CliContext, deps: Partial<SetupDeps> = {}): Promise<number | null> {
-  const term = (deps.term ?? ((locale: Locale) => createTerm({ tty: ctx.tty, yes: ctx.yes, locale })))(ctx.locale);
-  term.warn(ts(ctx.locale, 'noConfig', { path: ctx.envFile }));
-  if (!(await term.confirm(ts(ctx.locale, 'offerSetup'), true, { id: 'setup' }))) return null;
-  return run({ flags: {}, positionals: ['setup'], rest: [] }, { ...ctx, argv: ['setup'] }, deps);
+  return setup({ ...ctx, argv: ['setup'] }, deps, { offer: { envFile: ctx.envFile } });
 }

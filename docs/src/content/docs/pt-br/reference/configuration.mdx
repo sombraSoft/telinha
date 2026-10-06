@@ -9,7 +9,7 @@ import ConfigTable from '../../../../components/ConfigTable.astro';
 import generated from '../../../../data/generated.json';
 
 Tudo fica em um único arquivo `CHAVE=valor`, o `telinha.env`. O `telinha setup`
-escreve esse arquivo, e rodar o assistente de novo é a forma de mudar as
+escreve esse arquivo, e rodar o setup de novo é a forma de mudar as
 configurações; editar o arquivo à mão e reiniciar (`telinha service restart`)
 também funciona. Variáveis de ambiente de verdade sobrepõem o arquivo; uma
 definida como string vazia, não. Uma chave que a Telinha não conhece gera o log
@@ -30,7 +30,7 @@ aspas duplas e remove comentários ` #...` de um arquivo env; o parser da
 própria Telinha lê os valores literalmente. A única grafia que os dois leem
 igual é o valor entre aspas simples, então ponha aspas simples em todo valor
 que contenha `$`, `\` ou `#` (`COOKIE_SECRET='a$b#c'`). A Telinha avisa na
-inicialização sobre um valor sem aspas, e o assistente escreve todo segredo
+inicialização sobre um valor sem aspas, e o setup escreve todo segredo
 entre aspas simples.
 
 As tabelas abaixo são geradas a partir do código a cada build: a lista de

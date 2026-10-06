@@ -41,7 +41,7 @@ Yes, give each one a different `COMMAND_NAME` (and its own Discord application),
 
 ## How do I change settings?
 
-Run `telinha setup` again: every question defaults to the current value, secrets offer `(keep current)`, generated secrets stay, and keys the wizard does not manage (`ACME_EMAIL`, `SESSION_DAYS`, ...) are kept under an `Other settings` section of the file. The review can also write a new cookie secret, which logs everyone out. A running service restarts with the new file; a console run has to be restarted by hand. Or edit `telinha.env` and restart (`telinha service restart`, or restart the container). Every key is listed in [Configuration](/telinha/reference/configuration/).
+Run `telinha setup` again: every question starts at the current value, Enter keeps a secret as it is, generated secrets stay, and keys setup does not manage (`ACME_EMAIL`, `SESSION_DAYS`, ...) are kept under an `Other settings` section of the file. The Review can also write a new cookie secret, which logs everyone out. A running service restarts with the new file; a console run has to be restarted by hand. Or edit `telinha.env` and restart (`telinha service restart`, or restart the container). Every key is listed in [Configuration](/telinha/reference/configuration/).
 
 ## Where is my data?
 

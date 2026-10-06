@@ -1,16 +1,18 @@
-// The wizard's steps after the questions: secrets, review, writing
-// telinha.env, binaries, the service (one elevation on Windows, one sudo step
-// for low ports as a Linux user), the router probe, start and doctor. Every
-// side effect goes through SetupDeps so tests run them against fakes.
+// What setup does once the answers are in: secrets, writing telinha.env,
+// binaries, the service (one elevation on Windows, one sudo step for low
+// ports as a Linux user), the router probe, start and doctor. apply.ts runs
+// them as tasks. Every side effect goes through SetupDeps so tests run them
+// against fakes; every line goes through Wizard.out.
 import { randomBytes } from 'node:crypto';
 import { posix, win32 } from 'node:path';
 import { loadConfig, type Config } from '../../config.ts';
 import type { Ddns } from '../../ddns.ts';
+import { firewallCommands } from '../../doctor/checks.ts';
+import type { CheckResult } from '../../doctor/types.ts';
 import { parseEnvFile } from '../../envfile.ts';
 import type { NatProbe } from '../../nat/index.ts';
 import { isCgnatIpv4, isPrivateIpv4 } from '../../netinfo.ts';
 import type { Paths } from '../../paths.ts';
-import { firewallCommands } from '../../doctor/checks.ts';
 import { must, ServiceInstallError, type InstallResult, type ServiceManager, type SpawnFn } from '../../service/index.ts';
 import { SERVICE_USER, SYSCTL_SCRIPT } from '../../service/systemd.ts';
 import { parseWhoami, whoamiExe } from '../../service/windows.ts';
@@ -18,16 +20,18 @@ import { exeName } from '../../update/swap.ts';
 import type { CliContext } from '../args.ts';
 import type { ControlClient } from '../control.ts';
 import type { Locale, Params } from '../strings.ts';
-import type { Term } from '../term.ts';
+import type { Out, Spinner, Term } from '../term.ts';
+import { at } from './apply-strings.ts';
 import type { DiscordSetup } from './discord.ts';
-import { lockWindowsHome, renderEnvFile, SECRET_KEYS, writeEnvFile, type EnvFs, type PreviousEnv } from './envwrite.ts';
+import { lockWindowsHome, renderEnvFile, writeEnvFile, type EnvFs, type PreviousEnv } from './envwrite.ts';
 import { routerLabel, type HostInfo, type Hosting } from './host.ts';
 import type { SKey } from './strings.ts';
+import type { SetupUi } from './ui.ts';
 
-/** The wizard's answers by telinha.env key; '' = not set (the key is dropped or stays commented). */
+/** Setup's answers by telinha.env key; '' = not set (the key is dropped or stays commented). */
 export type Values = Record<string, string>;
 
-/** Ends the wizard with a message and an exit code (declined review, Discord unreachable...). */
+/** Ends setup with a message and an exit code. */
 export class SetupAbort extends Error {
   constructor(message: string, readonly code: number) {
     super(message);
@@ -50,8 +54,13 @@ export interface SetupDeps {
   discord: (token: string) => DiscordSetup;
   /** Linux: user = a user unit. null on hosts without a service manager. */
   serviceManager: (o: { user: boolean }) => ServiceManager | null;
-  control: Pick<ControlClient, 'available' | 'shutdown' | 'status'>;
-  bins: (config: Pick<Config, 'media' | 'ingress'>, paths: Pick<Paths, 'bin'>, log: (msg: string) => void) => Promise<unknown>;
+  /** doctorSession/doctorWait: the phone test on the doctor screen after the install. */
+  control: Pick<ControlClient, 'available' | 'shutdown' | 'status' | 'doctorSession' | 'doctorWait'>;
+  /** progress: bytes per tool while downloading (the setup screens draw a bar). */
+  bins: (
+    config: Pick<Config, 'media' | 'ingress'>, paths: Pick<Paths, 'bin'>, log: (msg: string) => void,
+    progress?: (tool: string, received: number, total: number | null) => void,
+  ) => Promise<unknown>;
   /** Captured output, no terminal. */
   spawn: SpawnFn;
   /** Inherits the terminal (sudo asks for a password); resolves with the exit code. */
@@ -74,52 +83,37 @@ export interface SetupDeps {
   sleep: (ms: number) => Promise<void>;
   /** `telinha doctor` with the given context (its argv carries the doctor flags). */
   doctor: (ctx: CliContext) => Promise<number>;
+  /** The doctor checks as data, for the setup screens; onResult after each one. */
+  doctorChecks: (ctx: CliContext, onResult?: (r: CheckResult, done: number, total: number) => void) => Promise<CheckResult[]>;
   /** The running executable (the native binary, or bun in dev). */
   execPath: string;
   /** Bun.which: a command on this process's PATH, or null. */
   which: (cmd: string) => string | null;
   /** The local listener (127.0.0.1:port) serves a valid certificate for host. */
   certReady: (host: string, port: number) => Promise<boolean>;
+  /** The setup screens; without them a terminal gets the plain run. */
+  ui?: SetupUi;
 }
 
 export interface Wizard {
   ctx: CliContext;
   deps: SetupDeps;
-  term: Term;
+  /** A terminal on the plain run; the task rows' capture under the setup screens. */
+  out: Out;
   locale: Locale;
   s: (key: SKey, params?: Params) => string;
-  /** "(keep current)" in the wizard's language. */
-  keepCurrent: string;
   host: HostInfo;
-  interactive: boolean;
   docker: boolean;
 }
 
+/** Runs fn with the real terminal (the setup screens step aside); intro: what to read there first. */
+export type WithTerminal = <T>(fn: () => Promise<T>, intro?: string[]) => Promise<T>;
+
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const pathFor = (platform: NodeJS.Platform) => (platform === 'win32' ? win32 : posix);
-const lines = (term: Term, text: string, kind: 'info' | 'warn' = 'info') => {
-  for (const l of text.split('\n')) term[kind](l);
+const lines = (out: Out, text: string, kind: 'info' | 'warn' = 'info') => {
+  for (const l of text.split('\n')) out[kind](l);
 };
-
-/** A masked prompt; with a current value, first "keep it or type a new one" (Enter keeps). */
-export async function askSecret(w: Wizard, o: { id: string; question: string; current?: string; validate?: (v: string) => string | null }): Promise<string> {
-  if (o.current) {
-    const keep = await w.term.select(o.question, [
-      { value: true, label: w.keepCurrent },
-      { value: false, label: w.s('secretNew') },
-    ], 0, { id: o.id });
-    if (keep) return o.current;
-  }
-  return w.term.secret(o.question, { id: o.id, validate: o.validate });
-}
-
-/**
- * "Press Enter when done": a line read for real even with --yes (no default:
- * there is nothing to accept, and answering it at once would loop the step).
- */
-export async function pause(w: Wizard, q: string, id: string): Promise<void> {
-  await w.term.text(q, { id });
-}
 
 /**
  * How to type the program in the user's terminal: `telinha` when that resolves
@@ -139,31 +133,6 @@ export function cliName(w: Wizard): string {
 export function logCommand(w: Wizard): string {
   if (w.deps.platform === 'win32') return `Get-Content "${w.ctx.paths.logFile}" -Tail 50`;
   return w.deps.isRoot ? 'journalctl -u telinha -e' : 'journalctl --user -u telinha -e';
-}
-
-// --- media ports
-
-const portOk = (v: string) => /^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 65535;
-
-export async function askMediaPorts(w: Wizard, values: Values): Promise<void> {
-  const { term, s } = w;
-  term.step(s('mediaTitle'));
-  let tcp = values.MEDIA_TCP_PORT || '7881';
-  let udp = values.MEDIA_UDP_PORT || '7882';
-  lines(term, s('mediaHelp', { tcp, udp }));
-  if (await term.confirm(s('mediaChangeQ'), false, { id: 'media' })) {
-    // The HTTPS port was just chosen (at home a high one, within reach of a typo here).
-    const https = (values.INGRESS || 'direct') === 'direct' ? values.HTTPS_PORT || '443' : null;
-    const check = (v: string) => (!portOk(v) ? s('portBad') : v === https ? s('mediaPortIsHttps') : null);
-    tcp = await term.text(s('mediaTcpQ'), { default: tcp, id: 'media-tcp', validate: check });
-    udp = await term.text(s('mediaUdpQ'), { default: udp, id: 'media-udp', validate: check });
-  }
-  // Defaults stay commented in the file.
-  values.MEDIA_TCP_PORT = tcp === '7881' ? '' : tcp;
-  values.MEDIA_UDP_PORT = udp === '7882' ? '' : udp;
-  if (w.docker) return;
-  if (await w.deps.portInUse(Number(tcp))) term.warn(s('mediaBusy', { proto: 'TCP', port: tcp }));
-  if (!(await w.deps.udpFree(Number(udp)))) term.warn(s('mediaBusy', { proto: 'UDP', port: udp }));
 }
 
 // --- secrets
@@ -191,7 +160,7 @@ export function generateSecrets(values: Values, random: (n: number) => Uint8Arra
   return made;
 }
 
-// --- review and write
+// --- write
 
 /** The file text, and the config loadConfig makes of it (the same check `run` does at start). */
 export function validateValues(values: Values, previous: PreviousEnv | null, home: string, o: { compiled?: boolean } = {}): { text: string; config: Config } {
@@ -200,33 +169,13 @@ export function validateValues(values: Values, previous: PreviousEnv | null, hom
   return { text, config };
 }
 
-/** Review table; returns whether to rotate the cookie secret. Declining aborts. */
-export async function review(w: Wizard, values: Values, o: { made: string[]; previous: PreviousEnv | null }): Promise<boolean> {
-  const { term, s } = w;
-  term.step(s('reviewTitle'));
-  const rows: string[][] = [];
-  for (const [k, v] of Object.entries(values)) {
-    if (!v) continue;
-    const shown = SECRET_KEYS.has(k) ? (o.made.includes(k) ? s('secretGenerated') : o.previous?.vars[k] === v ? s('secretKept') : s('secretSet')) : v;
-    rows.push([term.style.dim(k), shown]);
-  }
-  term.table(rows);
-  const canRotate = !!o.previous?.vars.COOKIE_SECRET && !o.made.includes('COOKIE_SECRET');
-  const items: { value: 'write' | 'rotate' | 'abort'; label: string; hint?: string }[] = [{ value: 'write', label: s('reviewWrite') }];
-  if (canRotate) items.push({ value: 'rotate', label: s('reviewRotate'), hint: s('reviewRotateHint') });
-  items.push({ value: 'abort', label: s('reviewAbort') });
-  const answer = await term.select(s('reviewQ'), items, 0, { id: 'review' });
-  if (answer === 'abort') throw new SetupAbort(s('aborted'), 1);
-  return answer === 'rotate';
-}
-
 /** The Windows account that keeps access to the file and runs the task. */
 export async function windowsAccount(w: Wizard): Promise<{ user: string; sid: string } | null> {
   const r = await w.deps.spawn([whoamiExe(w.ctx.env), '/user', '/fo', 'csv']).catch(() => null);
   return r && r.code === 0 ? parseWhoami(r.stdout) : null;
 }
 
-/** `shown`: the path as the user finds it (the host's, when the wizard runs in the image). */
+/** `shown`: the path as the user finds it (the host's, when setup runs in the image). */
 export async function writeConfig(w: Wizard, file: string, text: string, shown = file): Promise<void> {
   const env = w.ctx.env;
   const account = w.deps.platform === 'win32' ? await windowsAccount(w) : null;
@@ -234,7 +183,7 @@ export async function writeConfig(w: Wizard, file: string, text: string, shown =
   if (w.deps.platform === 'win32') {
     // The whole home (control token, task XML, bin\), before the secrets land in it.
     await w.deps.fs.mkdir(w.ctx.paths.home);
-    await lockWindowsHome({ home: w.ctx.paths.home, user, spawn: w.deps.spawn, warn: (m) => w.term.warn(w.s('aclFailed', { error: m })) });
+    await lockWindowsHome({ home: w.ctx.paths.home, user, spawn: w.deps.spawn, warn: (m) => w.out.warn(w.s('aclFailed', { error: m })) });
   }
   await writeEnvFile({
     file,
@@ -247,27 +196,26 @@ export async function writeConfig(w: Wizard, file: string, text: string, shown =
     spawn: w.deps.spawn,
     user,
   });
-  w.term.ok(w.s('written', { file: shown }));
+  w.out.ok(w.s('written', { file: shown }));
 }
 
 // --- binaries
 
 export async function downloadBinaries(w: Wizard, config: Pick<Config, 'media' | 'ingress'>): Promise<boolean> {
-  const { term, s } = w;
-  term.step(s('binsTitle'));
+  const { out, s } = w;
   // A root install's bin/ belongs to the service user: root writing there could
   // be steered onto any file through a planted symlink. The service fetches
   // them itself at start, as that user.
   if (w.deps.platform === 'linux' && w.deps.isRoot && !w.docker) {
     const bin = await w.deps.fs.stat(w.ctx.paths.bin);
     if (bin && bin.uid !== 0) {
-      term.info(s('binsByService'));
+      out.info(s('binsByService'));
       return true;
     }
   }
-  const spin = term.spinner(s('binsChecking'));
+  const spin = out.spinner(s('binsChecking'));
   try {
-    await w.deps.bins(config, w.ctx.paths, (m) => spin.update(m.replace(/^\[bins\]\s*/, '')));
+    await w.deps.bins(config, w.ctx.paths, (m) => spin.update(m.replace(/^\[bins\]\s*/, '')), (tool, received, total) => out.progress?.(received, total, tool));
     spin.stop(s('binsOk', { dir: w.ctx.paths.bin }));
     return true;
   } catch (e) {
@@ -323,14 +271,14 @@ function printInstall(w: Wizard, r: InstallResult): void {
   const names = { task: 'stepTask', firewall: 'stepFirewall', start: 'stepStart' } as const;
   for (const [key, outcome] of Object.entries(r.steps) as [keyof InstallResult['steps'], string][]) {
     const step = w.s(names[key]);
-    if (outcome === 'ok') w.term.ok(step);
-    else if (outcome === 'skipped') w.term.info(w.s('stepSkipped', { step }));
-    else w.term.fail(`${step}: ${outcome.replace(/^failed: /, '')}`);
+    if (outcome === 'ok') w.out.ok(step);
+    else if (outcome === 'skipped') w.out.info(w.s('stepSkipped', { step }));
+    else w.out.fail(`${step}: ${outcome.replace(/^failed: /, '')}`);
   }
-  if (r.error) w.term.fail(r.error);
+  if (r.error) w.out.fail(r.error);
   for (const h of r.hints ?? []) {
-    w.term.warn(w.s('stepHint', { cmd: h }));
-    if (h.includes('enable-linger')) w.term.info(w.s('lingerWhy'));
+    w.out.warn(w.s('stepHint', { cmd: h }));
+    if (h.includes('enable-linger')) w.out.info(w.s('lingerWhy'));
   }
 }
 
@@ -352,43 +300,46 @@ async function installedExe(w: Wizard): Promise<string> {
       await fs.copyFile(execPath, target);
       if (platform !== 'win32') await fs.chmod(target, 0o755);
     }
-    w.term.ok(w.s('exeCopied', { path: target }));
+    w.out.ok(w.s('exeCopied', { path: target }));
   }
   // The hints from here on say `telinha ...`; a double-clicked exe has no PATH entry yet.
-  if (platform === 'win32' && (await addToUserPath(w.deps.spawn, w.ctx.paths.bin))) w.term.ok(w.s('pathAdded', { dir: w.ctx.paths.bin }));
+  if (platform === 'win32' && (await addToUserPath(w.deps.spawn, w.ctx.paths.bin))) w.out.ok(w.s('pathAdded', { dir: w.ctx.paths.bin }));
   return target;
 }
 
 async function windowsInstall(w: Wizard, exe: string, firewall: boolean): Promise<boolean> {
-  const { term, s, deps } = w;
+  const { out, s, deps } = w;
   const home = w.ctx.paths.home;
   const account = await windowsAccount(w);
   const manual = (who: { user: string; sid: string } | null) =>
     elevationHint(exe, ['service', 'install', ...(firewall ? ['--firewall'] : []), '--home', home, '--lang', w.locale, ...(who ? ['--user', who.user, '--sid', who.sid] : [])]);
   if (!account) {
-    term.warn(s('whoamiFailed'));
-    term.info(s('serviceManual', { cmd: manual(null) }));
+    out.warn(s('whoamiFailed'));
+    out.info(s('serviceManual', { cmd: manual(null) }));
     return false;
   }
   const result = installResultPath(home);
   await deps.fs.mkdir(win32.dirname(result));
   await deps.fs.rm(result).catch(() => {});
   const args = ['service', 'install', ...(firewall ? ['--firewall'] : []), '--home', home, '--lang', w.locale, '--user', account.user, '--sid', account.sid, '--result', result];
-  lines(term, s('uacExplain'));
+  lines(out, s('uacExplain'));
+  // The elevated child runs behind UAC's secure desktop and never reads this
+  // terminal: the setup screens stay up and say what they wait for.
+  out.detail?.(at(w.locale, 'uacWaiting'));
   const r = await deps.spawn(['powershell', '-NoProfile', '-NonInteractive', '-Command', elevationCommand(exe, args)]);
   const text = await deps.fs.readText(result).catch(() => null);
   if (!text) {
     // Declined UAC: Start-Process throws (exit 1) or reports ERROR_CANCELLED (1223).
-    term.warn(r.code === 1223 || r.code === 1 ? s('uacDeclined') : s('uacNoResult', { code: r.code }));
-    term.info(s('serviceManual', { cmd: manual(account) }));
+    out.warn(r.code === 1223 || r.code === 1 ? s('uacDeclined') : s('uacNoResult', { code: r.code }));
+    out.info(s('serviceManual', { cmd: manual(account) }));
     return false;
   }
   let parsed: InstallResult;
   try {
     parsed = JSON.parse(text) as InstallResult;
   } catch {
-    term.warn(s('uacNoResult', { code: r.code }));
-    term.info(s('serviceManual', { cmd: manual(account) }));
+    out.warn(s('uacNoResult', { code: r.code }));
+    out.info(s('serviceManual', { cmd: manual(account) }));
     return false;
   }
   printInstall(w, parsed);
@@ -396,13 +347,13 @@ async function windowsInstall(w: Wizard, exe: string, firewall: boolean): Promis
 }
 
 async function linuxInstall(w: Wizard, exe: string): Promise<boolean> {
-  const { term, s, deps } = w;
+  const { out, s, deps } = w;
   const manager = deps.serviceManager({ user: !deps.isRoot });
   if (!manager) {
-    term.warn(s('serviceUnsupported'));
+    out.warn(s('serviceUnsupported'));
     return false;
   }
-  const spin = term.spinner(s('serviceInstalling', { kind: manager.kind }));
+  const spin = out.spinner(s('serviceInstalling', { kind: manager.kind }));
   try {
     const r = await manager.install({ firewall: false, exe, home: w.ctx.paths.home, locale: w.locale });
     spin.stop(s('serviceInstalled', { kind: manager.kind }));
@@ -421,49 +372,52 @@ async function linuxInstall(w: Wizard, exe: string): Promise<boolean> {
 /**
  * Linux user install, direct mode, a port below 1024 (a VPS, or a home that
  * opened 80/443 itself): the unprivileged-port sysctl, one sudo step that
- * survives every binary update. Declined, the command is printed for later.
+ * survives every binary update. sudo asks for the password on the real
+ * terminal (the setup screens step aside); auto is sudo -n (nobody to ask);
+ * manual, or a refusal, prints the command for later.
  */
-export async function unprivilegedPorts(w: Wizard, values: Values): Promise<void> {
-  const { term, s, deps } = w;
+export async function unprivilegedPorts(w: Wizard, values: Values, o: { mode: 'sudo' | 'manual' | 'auto'; withTerminal?: WithTerminal }): Promise<void> {
+  const { out, s, deps } = w;
   if ((values.INGRESS || 'direct') !== 'direct') return;
   const low = [Number(values.HTTP_PORT || 80), Number(values.HTTPS_PORT || 443)].filter((p) => p > 0 && p < 1024);
   if (!low.length) return;
   const start = Number((await deps.fs.readText(UNPRIVILEGED_PORT_START).catch(() => null))?.trim() ?? NaN);
   if (Number.isInteger(start) && start <= Math.min(...low)) return;
-  lines(term, s('sysctlExplain', { ports: low.join(', ') }));
+  const explain = s('sysctlExplain', { ports: low.join(', ') });
+  lines(out, explain);
   let ok = false;
-  if (w.interactive) {
-    if (await term.confirm(s('sysctlQ'), true, { id: 'sysctl' })) ok = (await deps.spawnInteractive(['sudo', 'sh', '-c', SYSCTL_SCRIPT]).catch(() => 1)) === 0;
-  } else {
+  if (o.mode === 'sudo') {
+    const sudo = () => deps.spawnInteractive(['sudo', 'sh', '-c', SYSCTL_SCRIPT]).catch(() => 1);
+    ok = (await (o.withTerminal ? o.withTerminal(sudo, explain.split('\n')) : sudo())) === 0;
+  } else if (o.mode === 'auto') {
     ok = (await deps.spawn(['sudo', '-n', 'sh', '-c', SYSCTL_SCRIPT]).catch(() => ({ code: 1 }))).code === 0;
   }
   if (ok) {
-    term.ok(s('sysctlOk'));
+    out.ok(s('sysctlOk'));
     return;
   }
-  term.warn(s('sysctlFailed'));
-  term.info(s('sysctlManual', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }));
+  out.warn(s('sysctlFailed'));
+  out.info(s('sysctlManual', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }));
 }
 
 /** Installs and starts the service (and the Windows firewall rules); true when it is registered. */
-export async function serviceStep(w: Wizard, values: Values, o: { firewall: boolean }): Promise<boolean> {
-  const { term, s, deps } = w;
-  term.step(s('serviceTitle'));
+export async function serviceStep(w: Wizard, values: Values, o: { firewall: boolean; sysctl: 'sudo' | 'manual' | 'auto'; withTerminal?: WithTerminal }): Promise<boolean> {
+  const { out, s, deps } = w;
   if (!w.ctx.compiled) {
-    term.info(s('serviceNeedsBinary'));
+    out.info(s('serviceNeedsBinary'));
     return false;
   }
-  if (deps.platform === 'linux' && !deps.isRoot) await unprivilegedPorts(w, values);
+  if (deps.platform === 'linux' && !deps.isRoot) await unprivilegedPorts(w, values, { mode: o.sysctl, withTerminal: o.withTerminal });
   let exe: string;
   try {
     exe = await installedExe(w);
   } catch (e) {
-    term.fail(s('serviceFailed', { error: errMsg(e) }));
+    out.fail(s('serviceFailed', { error: errMsg(e) }));
     return false;
   }
   if (deps.platform === 'win32') return windowsInstall(w, exe, o.firewall);
   if (deps.platform === 'linux') return linuxInstall(w, exe);
-  term.warn(s('serviceUnsupported'));
+  out.warn(s('serviceUnsupported'));
   return false;
 }
 
@@ -510,47 +464,46 @@ export function hostPorts(values: Values): string[] {
 }
 
 export async function routerStep(w: Wizard, values: Values, hosting: Hosting = 'home'): Promise<void> {
-  const { term, s } = w;
-  term.step(s('routerTitle'));
+  const { out, s } = w;
   const ports = publicPorts(values).join(', ');
   // A VPS has no router: its provider's firewall and its own are what block.
   if (hosting === 'vps') {
-    term.info(s('routerVps', { ports }));
+    out.info(s('routerVps', { ports }));
     if (w.deps.platform === 'linux') {
       const cmds = firewallCommands(hostPorts(values), (c) => w.deps.which(c));
-      if (cmds.ufw) term.info(s('routerVpsUfw', { cmd: cmds.ufw }));
-      if (cmds.firewalld) term.info(s('routerVpsFirewalld', { cmd: cmds.firewalld }));
+      if (cmds.ufw) out.info(s('routerVpsUfw', { cmd: cmds.ufw }));
+      if (cmds.firewalld) out.info(s('routerVpsFirewalld', { cmd: cmds.firewalld }));
     }
     return;
   }
   const nat = w.host.nat ?? (await w.deps.nat.probe().catch(() => null));
   if (!nat?.gateway) {
-    term.warn(s('routerNone'));
-    term.info(s('forwardByHand', { ports }));
+    out.warn(s('routerNone'));
+    out.info(s('forwardByHand', { ports }));
     return;
   }
-  term.ok(s('routerFound', { router: routerLabel(nat) ?? '?', ip: nat.externalIp ?? '?' }));
+  out.ok(s('routerFound', { router: routerLabel(nat) ?? '?', ip: nat.externalIp ?? '?' }));
   const ext = nat.externalIp;
-  if (ext && isCgnatIpv4(ext)) lines(term, s('cgnat'), 'warn');
-  else if (ext && isPrivateIpv4(ext)) lines(term, s('doubleNat'), 'warn');
+  if (ext && isCgnatIpv4(ext)) lines(out, s('cgnat'), 'warn');
+  else if (ext && isPrivateIpv4(ext)) lines(out, s('doubleNat'), 'warn');
   if (values.UPNP === 'off') {
-    term.info(s('forwardByHand', { ports }));
+    out.info(s('forwardByHand', { ports }));
     return;
   }
   // The mapper never asks for 80/443 (the advanced path forwards them by hand): name only what it owns.
   const entries = routerEntries(values);
-  term.info(s('upnpWillMap', { ports: entries.filter((e) => e.mapper).map((e) => e.port).join(', ') }));
+  out.info(s('upnpWillMap', { ports: entries.filter((e) => e.mapper).map((e) => e.port).join(', ') }));
   const byHand = entries.filter((e) => !e.mapper).map((e) => e.port);
-  if (byHand.length) term.info(s('forwardByHand', { ports: byHand.join(', ') }));
+  if (byHand.length) out.info(s('forwardByHand', { ports: byHand.join(', ') }));
 }
 
-// --- start, doctor, next steps
+// --- start, certificate, doctor, next steps
 
 /** The service did not come up: its log says why (caddy cannot bind 80, a bad tunnel token...). */
 function notAnswering(w: Wizard, spin: { fail(label?: string): void }): void {
   const [first, ...rest] = w.s('notAnswering', { log: logCommand(w), telinha: cliName(w) }).split('\n');
   spin.fail(first);
-  for (const l of rest) w.term.info(l);
+  for (const l of rest) w.out.info(l);
 }
 
 async function waitForService(w: Wizard, timeoutMs: number): Promise<boolean> {
@@ -562,92 +515,104 @@ async function waitForService(w: Wizard, timeoutMs: number): Promise<boolean> {
   return false;
 }
 
+/** How long setup waits for the service to answer after an install or a restart. */
+export const START_WAIT_MS = 60_000;
 /** How long setup waits for Caddy's first certificate before doctor runs. */
 export const CERT_WAIT_MS = 90_000;
 /** Through the DuckDNS API: the TXT record must propagate first (up to two minutes), then issuance. */
 export const CERT_WAIT_DNS_MS = 240_000;
 
+/** Running; a console run to restart by hand; nothing installed to start; or no answer in time. */
+export type StartOutcome = 'running' | 'console' | 'byHand' | 'notAnswering';
+
+/** A service that was already running restarts to read the new file; a fresh one was started by its install. */
+export async function startService(w: Wizard, o: { installed: boolean; wasRunning: boolean }): Promise<StartOutcome> {
+  const { out, s, deps } = w;
+  let spin: Spinner;
+  if (o.wasRunning) {
+    const supervised = await deps.control.status().then((st) => st.supervised, () => true);
+    if (!supervised) {
+      out.warn(s('consoleRestart'));
+      return 'console';
+    }
+    try {
+      await deps.control.shutdown('restart');
+    } catch (e) {
+      out.warn(errMsg(e));
+    }
+    // The old process answers a little longer; give it time to go.
+    await deps.sleep(3000);
+    spin = out.spinner(s('restarting'));
+  } else if (o.installed) {
+    spin = out.spinner(s('waitingStart'));
+  } else {
+    out.info(s('startByHand', { cmd: `${cliName(w)} run` }));
+    return 'byHand';
+  }
+  if (await waitForService(w, START_WAIT_MS)) {
+    spin.stop(s('running'));
+    return 'running';
+  }
+  notAnswering(w, spin);
+  return 'notAnswering';
+}
+
 /**
  * Direct mode: Caddy gets its certificate after the start, which takes from
  * seconds to minutes. Doctor before that flags a correct install as broken;
  * wait for the local listener to serve a valid one (asked by name on
- * 127.0.0.1, so a router without hairpin NAT does not matter).
+ * 127.0.0.1, so a router without hairpin NAT does not matter). True once it
+ * is there; progress hears the time waited against the limit.
  */
-async function waitForCertificate(w: Wizard, values: Values): Promise<void> {
-  const { term, s, deps } = w;
+export async function waitForCertificate(w: Wizard, values: Values, progress?: (waitedMs: number, limitMs: number) => void): Promise<boolean> {
+  const { out, s, deps } = w;
   let host: string;
   try {
     host = new URL(values.PUBLIC_URL ?? '').hostname;
   } catch {
-    return;
+    return false;
   }
   const port = Number(values.HTTPS_PORT || 443);
   const dns = values.ACME_DNS === 'duckdns';
-  const spin = term.spinner(s(dns ? 'certWaitingDns' : 'certWaiting'));
-  const end = deps.now() + (dns ? CERT_WAIT_DNS_MS : CERT_WAIT_MS);
+  const spin = out.spinner(s(dns ? 'certWaitingDns' : 'certWaiting'));
+  const limit = dns ? CERT_WAIT_DNS_MS : CERT_WAIT_MS;
+  const begin = deps.now();
   for (;;) {
     if (await deps.certReady(host, port).catch(() => false)) {
       spin.stop(s('certOk'));
-      return;
+      return true;
     }
-    if (deps.now() >= end) break;
+    const waited = deps.now() - begin;
+    if (waited >= limit) break;
+    progress?.(waited, limit);
     await deps.sleep(3000);
   }
   spin.fail(s('certPending', { telinha: cliName(w) }));
+  return false;
 }
 
 /**
- * A service that was already running restarts to read the new file; a fresh
- * one was started by its install. Then doctor (phone test only interactively).
+ * The doctor command after the install, plain and without the phone test:
+ * tty false keeps its full-screen checklist out of the middle of setup's
+ * lines. True when nothing failed.
  */
-export async function startAndDoctor(w: Wizard, o: { installed: boolean; wasRunning: boolean; doctor: boolean; values?: Values }): Promise<number> {
-  const { term, s, deps } = w;
-  term.step(s('startTitle'));
-  let running = false;
-  if (o.wasRunning) {
-    const supervised = await deps.control.status().then((st) => st.supervised, () => true);
-    if (supervised) {
-      try {
-        await deps.control.shutdown('restart');
-      } catch (e) {
-        term.warn(errMsg(e));
-      }
-      // The old process answers a little longer; give it time to go.
-      await deps.sleep(3000);
-      const spin = term.spinner(s('restarting'));
-      running = await waitForService(w, 60_000);
-      if (running) spin.stop(s('running'));
-      else notAnswering(w, spin);
-    } else {
-      term.warn(s('consoleRestart'));
-    }
-  } else if (o.installed) {
-    const spin = term.spinner(s('waitingStart'));
-    running = await waitForService(w, 60_000);
-    if (running) spin.stop(s('running'));
-    else notAnswering(w, spin);
-  } else {
-    term.info(s('startByHand', { cmd: `${cliName(w)} run` }));
-  }
-  if (!o.doctor) return 0;
-  if (running && o.values && (o.values.INGRESS || 'direct') === 'direct') await waitForCertificate(w, o.values);
-  term.step(s('doctorTitle'));
-  const argv = ['doctor', ...(w.interactive && running ? [] : ['--no-phone'])];
+export async function doctorCli(w: Wizard): Promise<boolean> {
   try {
-    const code = await deps.doctor({ ...w.ctx, argv, locale: w.locale });
-    if (code !== 0) term.warn(s('doctorProblems', { telinha: cliName(w) }));
+    const code = await w.deps.doctor({ ...w.ctx, tty: false, argv: ['doctor', '--no-phone'], locale: w.locale });
+    if (code === 0) return true;
+    w.out.warn(w.s('doctorProblems', { telinha: cliName(w) }));
   } catch (e) {
-    term.warn(s('doctorFailed', { error: errMsg(e) }));
+    w.out.warn(w.s('doctorFailed', { error: errMsg(e) }));
   }
-  return 0;
+  return false;
 }
 
 export function nextSteps(w: Wizard, values: Values, o: { file: string }): void {
-  const { term, s } = w;
-  term.step(s('nextTitle'));
+  const { out, s } = w;
+  out.step(s('nextTitle'));
   if (w.docker) {
-    lines(term, s('nextDocker'));
+    lines(out, s('nextDocker'));
     return;
   }
-  lines(term, s('nextNative', { url: values.PUBLIC_URL ?? '', command: values.COMMAND_NAME || 'telinha', file: o.file, telinha: cliName(w) }));
+  lines(out, s('nextNative', { url: values.PUBLIC_URL ?? '', command: values.COMMAND_NAME || 'telinha', file: o.file, telinha: cliName(w) }));
 }

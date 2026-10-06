@@ -1,6 +1,6 @@
 ---
 title: Doctor e solução de problemas
-description: Rode o telinha doctor, entenda a tabela e o teste pelo celular, e resolva os problemas mais comuns pelo sintoma.
+description: Rode o telinha doctor, entenda a lista de verificações e o teste pelo celular, e resolva os problemas mais comuns pelo sintoma.
 sidebar:
   order: 3
 ---
@@ -9,7 +9,7 @@ O `telinha doctor` confere tudo o que fica entre um membro do Discord e um
 vídeo funcionando: a configuração, os programas auxiliares, o aplicativo do
 Discord, o endereço público, o serviço local, o roteador e as atualizações.
 Depois ele oferece um teste pelo celular, com dados móveis, que mede o caminho
-de verdade de fora da sua rede. Rode depois do assistente, depois de mudar
+de verdade de fora da sua rede. Rode depois do setup, depois de mudar
 qualquer coisa e sempre que algo parar de funcionar.
 
 ## Como rodar
@@ -21,6 +21,10 @@ telinha doctor --no-phone   # todas as verificações, sem o teste pelo celular
 telinha doctor --json       # resultado legível por máquina no stdout
 ```
 
+Num terminal o doctor é uma lista interativa. Sem terminal (um pipe, um script,
+uma tarefa agendada) ou com `--json` ele imprime linhas simples; as duas formas
+rodam as mesmas verificações.
+
 - Ele lê a mesma configuração que o `telinha run`: o `telinha.env` mais o
   ambiente.
 - Cada verificação tem no máximo 10 segundos; uma que demora mais falha com
@@ -30,7 +34,7 @@ telinha doctor --json       # resultado legível por máquina no stdout
 - O `--json` imprime `{ checks, phone }` (o `phone` só quando o teste rodou);
   o link e o QR code do teste vão então para o stderr.
 - O código de saída é 1 quando uma verificação ou o teste pelo celular falhou;
-  avisos e verificações puladas não contam.
+  avisos e verificações puladas não contam. Ctrl+C na lista sai com 130.
 - Ele fala a língua da linha de comando: `--lang pt-BR` ou `LOCALE`.
 
 Onde rodar:
@@ -42,19 +46,54 @@ Onde rodar:
 | Docker | `docker exec -it telinha bun server/src/index.ts doctor` |
 | De um clone | `bun server/src/index.ts doctor` |
 
-## Como ler a tabela
+O setup mostra a mesma lista no fim (*Ver o diagnóstico*), com os resultados
+das verificações que ele já rodou.
 
-Uma linha por verificação, na ordem em que você consertaria as coisas:
+## A lista de verificações
+
+Uma linha por verificação, na ordem em que você consertaria as coisas. Enquanto
+uma verificação roda aparece um spinner; depois a linha ganha um ícone e um
+resultado de uma linha:
 
 | Ícone | Significado |
 | --- | --- |
-| `✓` | ok |
+| `✔` | ok |
 | `!` | aviso: funciona, mas tem algo estranho ou que não deu para confirmar |
-| `✗` | falha: isso quebra a Telinha para alguém |
+| `✖` | falha: isso quebra a Telinha para alguém |
 | `–` | pulada: não se aplica a esta instalação, ou uma verificação anterior precisa passar antes |
 
-Embaixo de uma linha que não está ok vêm os detalhes e uma linha que começa
-com `→`: o que fazer. Por exemplo:
+Embaixo da lista uma linha conta cada tipo (`11 ok · 1 aviso · 1 com falha · 2
+pulados`), na cor do pior. Vá até uma linha e aperte Enter para abrir: os
+detalhes e, numa linha que não está ok, um trecho **Como corrigir** dizendo o
+que fazer. Uma linha ok abre nos detalhes, ou em *Nada a fazer*.
+
+| Tecla | O que faz |
+| --- | --- |
+| `↑` `↓` (ou `k` `j`) | Move entre as linhas |
+| `Enter`, `Espaço` ou `→` | Abre ou fecha a linha em que o cursor está |
+| `r` | Roda todas as verificações de novo, com dados novos: use depois de consertar algo |
+| `p` | Começa um novo teste pelo celular (quando a Telinha está rodando) |
+| `s` | Para de esperar o celular |
+| `q` ou `Esc` | Sai; o código de saída é 1 quando uma verificação ou o teste pelo celular falhou |
+
+Uma linha de DNS que falhou, aberta, por exemplo:
+
+```
+✖ DNS                         telinha.example.com aponta pra 198.51.100.7, mas o IP público é 203.0.113.9.
+                              └ Como corrigir
+                                Muda o registro A de telinha.example.com pra 203.0.113.9.
+```
+
+Conserte de cima para baixo: uma configuração quebrada faz a maioria das
+verificações seguintes ser pulada, e um token do bot recusado pelo Discord
+pula as outras verificações do Discord. Cada verificação, o que ela olha e o
+que o resultado quer dizer:
+[Verificações do doctor](/telinha/pt-br/reference/doctor-checks/).
+
+## Saída simples
+
+Sem terminal o doctor imprime uma linha por verificação e um resumo, com os
+detalhes esmaecidos e a correção depois de uma seta:
 
 ```
 ✓ IP público                  A internet vê esta rede como 203.0.113.9.
@@ -64,16 +103,16 @@ com `→`: o que fazer. Por exemplo:
                               → Redireciona na mão no roteador pra 192.168.0.10: UDP 7882
 ```
 
-Conserte de cima para baixo: uma configuração quebrada faz a maioria das
-verificações seguintes ser pulada, e um token do bot recusado pelo Discord
-pula as outras verificações do Discord. Cada verificação, o que ela olha e o
-que o resultado quer dizer:
-[Verificações do doctor](/telinha/pt-br/reference/doctor-checks/).
+Os ícones são `✓`, `!`, `✗` e `–`, com os mesmos significados de cima. O teste
+pelo celular é pulado sem terminal (o link precisa de alguém para abrir),
+a menos que o `--json` rode num.
 
 ## O teste pelo celular
 
 Com o serviço rodando e as verificações feitas, o doctor pede à Telinha um
-link de uso único e mostra ele com um QR code:
+link de uso único. Na lista ele aparece num painel ao lado das linhas (embaixo,
+num terminal estreito, onde o código ocupa a tela até o celular responder),
+com um QR code, e o mesmo painel depois mostra o resultado:
 
 ```
 Abra isto no celular com o Wi-Fi DESLIGADO (dados móveis):
@@ -84,12 +123,19 @@ Os dados móveis são o ponto: no seu próprio Wi-Fi o celular está dentro da s
 rede e não prova nada sobre o roteador. Não precisa de login no Discord. O
 link funciona uma vez só e apenas por 10 minutos, e o cookie que ele deixa (15
 minutos) não abre nada além da página do teste e do relay do LiveKit, numa
-sala privada só dele. A página faz o teste, e o celular e o terminal mostram o
-resultado.
+sala privada só dele. A página faz o teste; o celular e o terminal mostram o
+resultado, e as linhas entram na lista como um grupo *Teste no celular*; uma que
+falhou traz a correção.
 
-O doctor espera o celular por até 10 minutos; Ctrl+C pula a espera. O teste é
-pulado com `--no-phone` ou `--local`, sem um terminal interativo e quando a
-Telinha não está rodando (inicie com `telinha service start`).
+O doctor espera o celular por até 10 minutos. Aperte `s` (Ctrl+C na saída
+simples) para parar de esperar, e `p` para um link novo quando um expira ou você
+pulou. O teste é pulado com `--no-phone` ou `--local`, sem um terminal
+interativo e quando a Telinha não está rodando (inicie com
+`telinha service start`).
+
+O QR code aparece inteiro ou não aparece: quando a janela é pequena demais para
+ele, mesmo sem o cabeçalho, o painel mostra só o link; aumente a janela para ver
+o código.
 
 ### O que cada linha mede
 

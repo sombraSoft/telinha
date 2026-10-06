@@ -9,7 +9,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 Um mini PC, um Raspberry Pi 4 ou 5, um notebook velho ou um servidor em casa:
 qualquer máquina Linux 64 bits que fique ligada. Uma linha de `curl` instala a
-Telinha, o assistente de configuração faz algumas perguntas e o systemd mantém
+Telinha, as telas de configuração fazem algumas perguntas e o systemd mantém
 tudo rodando.
 
 ## Antes de começar
@@ -21,10 +21,10 @@ tudo rodando.
   Raspberry Pi OS 32 bits é recusado, instale o de 64 bits.
 - `curl` ou `wget`, `tar`, e `sha256sum` ou `shasum`.
 - Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
-  Dá para criar o aplicativo antes do assistente ou durante ele: veja
+  Dá para criar o aplicativo antes do setup ou durante ele: veja
   [Aplicativo do Discord](/telinha/pt-br/start/discord/).
 - Para o endereço que o pessoal abre: um domínio na Cloudflare, ou nada, e
-  nesse caso o assistente te dá um endereço grátis do DuckDNS.
+  nesse caso o setup te dá um endereço grátis do DuckDNS.
   [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
   compara os dois.
 - Acesso à página de administração do roteador, a não ser que ele faça UPnP
@@ -47,7 +47,7 @@ As duas usam a mesma linha; o `sudo` faz a diferença.
 | --- | --- | --- |
 | Pasta da instalação | `/opt/telinha` | `~/.local/share/telinha` (respeita o `$XDG_DATA_HOME`) |
 | Serviço | Unidade do sistema `/etc/systemd/system/telinha.service`, rodando com um usuário de sistema `telinha` | Unidade do usuário `~/.config/systemd/user/telinha.service` |
-| Continua rodando depois do logout | Sim | Só com o lingering (o assistente liga) |
+| Continua rodando depois do logout | Sim | Só com o lingering (o setup liga) |
 | Comandos | `sudo telinha ...` | `telinha ...` |
 
 Numa máquina que existe para a Telinha, a instalação como root é a mais
@@ -77,7 +77,7 @@ simples.
 </Steps>
 
 Como root ele instala um `/usr/local/lib/telinha/telinha` que pertence ao root,
-chamado pelo comando `/usr/local/bin/telinha`, e o assistente copia o programa
+chamado pelo comando `/usr/local/bin/telinha`, e o setup copia o programa
 para `/opt/telinha/bin/` para o serviço, que atualiza essa cópia sozinho. Com o
 seu usuário ele instala `~/.local/share/telinha/bin/telinha` e mostra a linha
 para pôr no `~/.profile`, para o comando `telinha` ser encontrado:
@@ -91,21 +91,37 @@ O script não baixa mais nada: o `livekit-server` e o `caddy` ou o
 originais conferidos contra um sha256 fixo, o `caddy` da mesma versão da
 Telinha conferido com o `SHA256SUMS` dela. Para pular a
 pergunta, ponha `-s -- --native` depois do `sh` (`--no-setup` instala sem abrir
-o assistente), ou defina `TELINHA_INSTALL=native`. `TELINHA_VERSION` instala
+o setup), ou defina `TELINHA_INSTALL=native`. `TELINHA_VERSION` instala
 uma tag específica e `TELINHA_HOME` usa outra pasta.
 
-## Rode o assistente
+## Rode o setup
 
-O assistente fala português do Brasil ou inglês (ele pega o idioma do sistema e
-pergunta uma vez) e explica cada pergunta em uma ou duas linhas. Você nunca
-copia id na mão: servidores, cargos e canais aparecem em listas. Numa máquina
-Linux em casa, o caminho é este:
+O setup ocupa o terminal com telas próprias: os passos na lateral esquerda
+(Onde, Endereço, Discord, Portas, Atualizações, Revisão, Instalação), a
+pergunta atual num cartão à direita e, ao lado ou embaixo, uma dica que explica
+a escolha. Servidores, cargos e canais aparecem em listas, então você nunca
+copia id na mão. Na primeira vez ele começa pelo idioma, português do Brasil ou
+inglês, e todas as telas trocam na hora. Por SSH funciona igual, a partir de 80
+colunas por 24 linhas.
+
+- **Responda** com ↑ ↓ e Enter, ou aperte o número de uma opção. Numa resposta
+  de texto, digite e aperte Enter.
+- **Volte** com Esc ou ←. As respostas que você deu ficam.
+- **Pule para um passo** com Tab: ↑ ↓ e Enter vão para qualquer passo já
+  respondido, e Esc volta para o cartão.
+- **Segredos** (tokens) aparecem como bolinhas. Cole com o atalho de colar do
+  seu terminal (Ctrl+V, muitas vezes Ctrl+Shift+V), e aperte Ctrl+R para
+  mostrar ou esconder o que você colou.
+- **Saia** com Ctrl+C. Nada é gravado até você aplicar na Revisão.
+
+[Linha de comando](/telinha/pt-br/reference/cli/#teclas) lista todas as
+teclas. Numa máquina Linux em casa, o caminho é este:
 
 <Steps>
 
-1. **Onde a Telinha roda.** Ele mostra o IP público e o roteador, se algum
-   responder UPnP, NAT-PMP ou PCP, e pergunta *Onde a Telinha vai rodar?*
-   Escolha *Um computador em casa (um PC ou um servidor caseiro)*.
+1. **Onde.** A dica mostra o IP público e o roteador, se algum responder UPnP,
+   NAT-PMP ou PCP. Para *Onde a Telinha vai rodar?* escolha *Um computador em
+   casa (um PC ou um servidor caseiro)*.
 
 2. **Endereço.** A internet de casa em geral não deixa as portas web 80 e 443
    entrarem, então a Telinha não conta com elas. Ele pergunta *Você tem um
@@ -123,47 +139,84 @@ Linux em casa, o caminho é este:
      abre; um domínio na Cloudflare não tem essa limitação. Veja
      [DuckDNS na porta 8443](/telinha/pt-br/guides/domains/#duckdns-na-porta-8443).
 
-   Por fim, pergunta se a Telinha pode abrir as portas no roteador por UPnP.
+3. **Discord.** Cole o token do bot: a Telinha confere ele com o Discord na
+   hora e lê o seu app a partir dele. Depois o segredo do cliente (também
+   conferido), o servidor (uma lista dos que o bot já está; *Outro servidor*
+   mostra um link de convite e confere de novo quando você adicionar o bot), o
+   cargo que pode entrar, os canais (Espaço marca um, `a` marca todos) e o
+   nome do comando. O nome do grupo é opcional. Quando o app ainda não tem o
+   redirecionamento de login, um cartão mostra o endereço para adicionar em
+   OAuth2 → Redirects, a única coisa que você faz na mão no Portal do
+   Desenvolvedor: adicione, aperte Save Changes lá e escolha *Adicionei:
+   verificar de novo*. [Aplicativo do Discord](/telinha/pt-br/start/discord/)
+   mostra cada tela.
 
-3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
-   não ser que outro programa da máquina já use alguma.
-
-4. **Discord.** O token do bot, o segredo do cliente, o redirecionamento de
-   login (a única coisa que você adiciona na mão no Portal do Desenvolvedor), o
-   servidor, o cargo que pode entrar, os canais e o nome do comando.
-   [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
+4. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
+   que outro programa da máquina já use alguma. Depois vem *Pedir pro
+   roteador?*: diga que sim para a Telinha pedir as portas ao roteador por
+   UPnP, ou que não se você mesmo vai encaminhar.
 
 5. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
    sozinhas quando nenhuma sala está aberta.
 
-6. **Revisão.** Todos os valores numa tela só, com os segredos aparecendo
-   apenas como gerado, mantido ou definido. Confirme e o assistente grava
-   `config/telinha.env` na pasta da instalação: do root e legível pelo serviço
-   numa instalação como root, com modo 0600 numa instalação de usuário.
+6. **Revisão.** Todas as respostas numa tela só, agrupadas por passo, com o
+   endereço web em destaque e os segredos aparecendo apenas como definido,
+   mantido ou gerado. Role com PgUp e PgDn quando a lista for longa. Escolha
+   *Aplicar* (ou *Aplicar com um novo segredo de cookie*, oferecido numa nova
+   rodada, que desconecta todo mundo das páginas), *Voltar pras perguntas* ou
+   *Sair sem gravar*. Nada mudou nesta máquina até você aplicar.
 
-7. **Serviço e verificações.** Ele baixa os programas auxiliares e depois
-   instala e inicia a unidade do systemd. Com o seu usuário ele também liga o
-   lingering, para a Telinha continuar rodando depois do logout (quando isso
-   pede senha, ele mostra `sudo loginctl enable-linger <você>` para você rodar).
-   Depois olha o roteador (avisando de CGNAT ou NAT duplo e listando as portas
-   para encaminhar na mão quando não há UPnP), espera a Telinha subir e o
-   certificado HTTPS chegar, roda o `telinha doctor` com o teste pelo celular e
-   mostra os próximos passos.
+7. **Instalação.** Uma lista ao vivo: o app do Discord (conferido, com os
+   intents ligados), o endereço do DuckDNS se você escolheu um, o
+   `telinha.env`, os programas auxiliares (com uma barra para cada download), o
+   serviço, o roteador e firewall, o início, o certificado HTTPS (com um
+   endereço do DuckDNS) e as verificações finais. O arquivo vai para
+   `config/telinha.env` na pasta da instalação: do root e legível pelo serviço
+   numa instalação como root, com modo 0600 numa instalação de usuário. A linha
+   do serviço instala e inicia a unidade do systemd; com o seu usuário ela
+   também liga o lingering, para a Telinha continuar rodando depois do logout
+   (quando isso pede senha, ele mostra `sudo loginctl enable-linger <você>` para
+   você rodar). A linha do roteador olha o roteador (avisando de CGNAT ou NAT
+   duplo e listando as portas para encaminhar na mão quando não há UPnP), aí a
+   Telinha sobe e o certificado chega. No fim a tela mostra o seu endereço web,
+   e *Ver o diagnóstico* abre a lista de verificações com o teste pelo celular.
 
 </Steps>
 
+Se uma tarefa falha, as linhas dela se abrem embaixo com uma dica e três
+escolhas: *Tentar de novo* roda ela outra vez, *Pular* deixa pra lá e segue com
+o resto (as verificações finais dizem o que ficou faltando), e *Voltar pras
+perguntas* leva à pergunta de que aquela tarefa depende (o token do bot para o
+app do Discord, o token do DuckDNS para o DuckDNS) ou à Revisão; aplique de novo
+de lá e os segredos gerados antes continuam os mesmos. Gravar o telinha.env não
+tem *Pular*: tudo depois dele precisa do arquivo; depois de gravado, a Revisão
+diz isso e a última escolha vira *Sair da configuração*. ↑ nas escolhas percorre
+as linhas já terminadas, e Enter mostra o que cada uma fez. O último cartão abre
+o que falta fazer à mão (as portas do roteador, o comando de um aviso), e o
+resumo que fica no terminal também lista isso. Voltar fica desligado enquanto
+uma tarefa roda, e Ctrl+C pede um segundo aperto, porque parar no meio pode
+deixar uma instalação pela metade.
+
 :::note[Vai encaminhar as portas na mão?]
-Quando nenhum roteador responde UPnP (ou você não deixou usar), o assistente
-só lista as portas para encaminhar e segue em frente, então o teste pelo
-celular falha no final. Isso é esperado: encaminhe as portas como em
-[Abra as portas](#abra-as-portas) logo abaixo e rode o `telinha doctor` de
-novo. O certificado não depende delas: com um endereço do DuckDNS ele vem pelo
-DuckDNS (em geral de 1 a 3 minutos), e com um túnel quem cuida dele é a
-Cloudflare.
+Quando nenhum roteador responde UPnP (ou você não deixou usar), a linha do
+roteador só lista as portas para encaminhar e a instalação segue em frente,
+então o teste pelo celular falha no diagnóstico. Isso é esperado: encaminhe as
+portas como em [Abra as portas](#abra-as-portas) logo abaixo e rode o
+`telinha doctor` de novo. O certificado não depende delas: com um endereço do
+DuckDNS ele vem pelo DuckDNS (em geral de 1 a 3 minutos), e com um túnel quem
+cuida dele é a Cloudflare.
 :::
 
 Em casa, uma instalação de usuário não usa nenhuma porta abaixo de 1024 (a
-8443 e as portas de mídia ficam todas acima), então nada precisa de root.
+8443 e as portas de mídia ficam todas acima), então nada precisa de root. Se um
+setup chegar a precisar de uma (uma resposta avançada em casa que mantém a 80 e
+a 443), o passo Portas pergunta *Liberar elas com um comando sudo durante a
+instalação?*: diga que sim e as telas saem da frente enquanto o `sudo` pede a
+sua senha uma vez, e voltam na mesma tarefa.
+
+Sem terminal, ou com `--non-interactive`, o setup imprime linhas simples e tira
+cada resposta das opções, do ambiente e do arquivo existente: veja
+[Linha de comando](/telinha/pt-br/reference/cli/#telinha-setup).
 
 ## Abra as portas
 
@@ -177,7 +230,7 @@ A internet precisa chegar na máquina por estas portas:
 
 Nada além disso: nem a 80, nem a 443. Com um Cloudflare Tunnel só as duas
 portas de mídia são necessárias (túneis não levam WebRTC). Se você mudou
-alguma porta no assistente, use o seu valor.
+alguma porta no setup, use o seu valor.
 
 **Primeiro o UPnP.** Se o roteador respondeu e você deixou, a Telinha pede essas
 portas ao roteador enquanto roda e você não precisa fazer nada. Se não, faça o
@@ -206,13 +259,15 @@ das duas ferramentas.
 sudo telinha doctor
 ```
 
-(`telinha doctor`, sem `sudo`, numa instalação de usuário.) O doctor roda todas
-as verificações e mostra uma linha para cada, com o que fazer em tudo que não
-estiver ok. Depois ele mostra um link e um QR code para o teste pelo celular:
-abra no celular com o Wi-Fi desligado, para o teste vir de fora da sua rede,
-como a conexão dos seus amigos. Ele diz se a página, a conexão com o LiveKit, o
-UDP e o TCP funcionam de lá. O `telinha doctor --local` pula as verificações que
-precisam da internet.
+(`telinha doctor`, sem `sudo`, numa instalação de usuário.) O doctor é uma lista
+de verificações: uma linha para cada, com um spinner até sair o resultado.
+Aperte Enter numa linha para ver os detalhes e, quando ela não está ok, como
+corrigir; `r` roda todas de novo depois que você consertar algo. Quando as
+verificações terminam, um painel mostra um link e um QR code para o teste pelo
+celular: abra no celular com o Wi-Fi desligado, para o teste vir de fora da sua
+rede, como a conexão dos seus amigos. Ele diz se a página, a conexão com o
+LiveKit, o UDP e o TCP funcionam de lá, e `p` começa um novo teste. O
+`telinha doctor --local` pula as verificações que precisam da internet.
 [Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
 linha e o que uma falha quer dizer.
 
@@ -270,7 +325,7 @@ hora (com `sudo` numa instalação como root). Veja
 
 **Mudar as configurações** é rodar o `telinha setup` de novo
 (`sudo telinha setup` como root): cada pergunta já vem com o valor atual, os
-segredos podem ser mantidos e o serviço reinicia com o arquivo novo. Editar o
+segredos podem ser mantidos (Enter mantém) e o serviço reinicia com o arquivo novo. Editar o
 `telinha.env` na mão também funciona, seguido de `telinha service restart`.
 
 **Para remover**: `telinha service uninstall` tira a unidade e mantém os

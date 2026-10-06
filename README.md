@@ -46,12 +46,78 @@ check its sha256 against the release's `SHA256SUMS` and start `telinha setup`.
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
 bun install --frozen-lockfile && bun run build
-bun server/src/index.ts setup    # same wizard; downloads the helper binaries into <home>/bin
+bun server/src/index.ts setup    # same setup screens; downloads the helper binaries into <home>/bin
 bun server/src/index.ts          # run in this console
 ```
 
-Everything else, from the setup wizard to port forwarding, is in the
+Everything else, from the setup screens to port forwarding, is in the
 [docs](https://sombrasoft.github.io/telinha/).
+
+## Setup and doctor
+
+On a terminal, `telinha setup` and `telinha doctor` are full-screen screens
+(OpenTUI with Solid) in English or Brazilian Portuguese, drawn in the
+terminal's own colours with the Telinha accent for the focus (light or dark is
+detected; `TELINHA_THEME=light|dark` forces it, `NO_COLOR` turns the colours
+off). They work from 80x24; a wider terminal puts the hint beside the card.
+`telinha` alone with no `telinha.env` offers the setup first.
+
+**Setup.** A sidebar lists the steps, `Where`, `Address`, `Discord`, `Ports`,
+`Updates` (native installs only), `Review` and `Install`, with a check on the
+ones answered. The right side is one question at a time, as a card with a hint
+under or beside it that explains the choice (what a Cloudflare Tunnel is, why
+DuckDNS uses a high port, where to find a token). Servers, roles and channels
+are picked from lists read from Discord with the bot token, so no id is typed;
+the bot token, the client secret and the DuckDNS token are checked as you go.
+
+| Keys | |
+| --- | --- |
+| `↑` `↓`, `1`-`9`, `Enter` | Move, pick an option by its number, choose or confirm |
+| `Space`, `a` | Mark one, or all, in a multiple choice (the channels) |
+| `Esc` or `←` | Back to the previous question; the answers stay |
+| `Tab` | Focus the steps: `↑` `↓` and `Enter` jump to any step already answered, `Esc` returns to the card |
+| `Ctrl+U` | Clear a text field |
+| Paste, `Ctrl+R` | Secrets are masked; paste with the terminal's paste (`Ctrl+V`), `Ctrl+R` shows or hides them |
+| `PgUp` `PgDn` | Scroll a long Review |
+| `Ctrl+C` | Quit; during the install, press it twice, since stopping half way can leave a half install |
+
+Secrets are never rendered as text (the Review says only `set`, `kept` or
+`generated`). `--yes` opens the screens on the first question that has no
+default, or on the Review when every question has one. Flag mistakes
+(`--host home --public-url https://x.example` without `--advanced`, say) show as a
+notice on the first card, and the offending flags are not used as defaults.
+
+The `Review` lists every answer grouped by step, the web address, and the notes
+the lookups left, and writes nothing until you choose `Apply` (or `Apply with
+a new cookie secret`, which logs everyone out; offered on a re-run). `Install`
+is a live list of tasks: the Discord app, DuckDNS (only with a DuckDNS
+address), `telinha.env`, the helper programs (with a download bar), the
+service, the router and firewall, the start, the HTTPS certificate (direct
+mode) and the doctor checks. The sudo moment on Linux (one `sudo` for the
+unprivileged-port setting, only for a user install with ports below 1024)
+suspends the screens so `sudo` can ask for the password, then they come back;
+on Windows the service task waits for the single UAC prompt. A task that fails
+shows its lines, a hint and `Retry`, `Skip` (leave it and go on) or `Back to
+questions` (the question that task depends on, or the Review; applying again
+reuses the secrets already generated). Going back is off while a task runs.
+At the end the screens show the web address and offer the doctor report. Under
+`--docker` the same screens ask the questions and write the file (`docker run`
+needs `-it`), with no Updates step and no install tasks beyond the file.
+
+**Doctor.** One row per check, a spinner while it runs, then `✔`, `!`, `✖` or
+`–` and the one-line result. `Enter` (or `Space`, `→`) opens a row: its detail
+and a `Fix` line for anything not ok; `r` runs every check again, `p` starts a
+new phone test, `s` skips waiting for the phone, `q` or `Esc` quits (exit 1
+when a check or the phone test failed). With the service running and the
+checks done, a side panel shows the one-time link of the phone test, its QR
+code and the live result (HTTPS, LiveKit connection, sending video, first
+path, UDP and TCP); the same checklist opens from the end of the setup.
+
+Without a terminal, with `--non-interactive` (setup) or with `--json` (doctor),
+nothing opens: setup takes every answer from flags, the environment and the
+existing file (secrets only from the environment or a `--<name>-file`) and
+prints plain lines, and a flag mistake or a missing answer exits 2 naming it;
+doctor prints its table (`--json` the data, with the phone link on stderr).
 
 ## Architecture
 
@@ -142,7 +208,7 @@ those are served without a login (hashed build output, no data).
 
 | Path | What |
 | --- | --- |
-| `server/` | Bun TypeScript server, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` prompts, `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` and `setup/` the wizard, `doctor.ts`, `update.ts`, `service.ts`), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` home dirs and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile, `lock.ts` one run per home, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall and the `service run` loop, `update/` release lookup, download, swap, rollback, `proxy.ts` `/livekit/*` relay, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `codes.ts` room codes, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
+| `server/` | Bun TypeScript server, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` plain output (colours, spinner, tables, links; no prompts), `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` the entry (flags, the file, the machine, the screens or the plain run) and `setup/` what it runs: `model.ts` the questions as data, `resolve.ts` answers to `telinha.env` values and flags to answers, `lookups.ts` the read-only Discord, DNS and port lookups, `session.ts` the navigation state, `apply.ts` the install tasks with their retry/skip/back decisions, `steps.ts` their side effects, `ui.ts` the contract the screens implement, `qstrings.ts` and `apply-strings.ts` the texts, plus `discord.ts`, `domain.ts`, `host.ts` and `envwrite.ts`; `doctor.ts` and `doctor-strings.ts`, `update.ts`, `service.ts`), `tui/` the OpenTUI + Solid screens of setup and doctor (`runtime.tsx` the renderer and terminal safety, `theme.ts`, `keys.ts`, `ui/` the widgets, `setup/` and `doctor/` the screens, `load.ts`, `smoke.tsx`; loaded only on a terminal, through a dynamic import, so `run` never pulls it in), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` home dirs and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile, `lock.ts` one run per home, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall and the `service run` loop, `update/` release lookup, download, swap, rollback, `proxy.ts` `/livekit/*` relay, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `codes.ts` room codes, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
 | `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`), served under `/r/`, plus the doctor page (`doctor.html`, `src/doctor/`, plain TypeScript); `bun run build` writes `web/dist` |
 | `versions.json` | Pinned `livekit-server` and `cloudflared` versions with the sha256 of every asset (linux amd64/arm64, windows amd64/arm64; cloudflared has no windows arm64 build, the amd64 one is used), and the `caddy` build recipe: Caddy `version`, `xcaddy` and `modules` (no hashes: each release's `SHA256SUMS` pins its Caddy) |
 | `scripts/bins.ts` | `bun run bins`: downloads and verifies the helper binaries (dev, the Docker build): `livekit-server` and `cloudflared` against `versions.json`, `caddy` from a Telinha release (`--release vX.Y.Z`, default the latest) against its `SHA256SUMS` |
@@ -152,7 +218,7 @@ those are served without a login (hashed build output, no data).
 | `scripts/dev.ts`, `stack.ts` | Local dev: fetches `livekit-server`, starts the Bun server (which supervises it) and Vite, cleans up on exit; `stack.ts --e2e` is Playwright's web server |
 | `scripts/image.ts`, `smoke.sh` | `bun run image`: local container build plus the smoke test (`smoke.sh` ships in the image; it also checks the Caddy version and modules and has Caddy validate the DNS-01 Caddyfile) |
 | `e2e/` | Playwright specs (`*.e2e.ts`): login, routes and redirects, screen share between two browser contexts, language and theme, the member list, room closing, the phone test page |
-| `Dockerfile` | Multi-stage, multi-arch build (page build, prod deps, downloaded binaries, a `golang` stage that builds Caddy with `scripts/caddy-build.ts` and a `caddy-export` target the release uses for the per-platform assets, Bun alpine runtime with the three binaries); entrypoint `bun server/src/index.ts`, command `run` |
+| `Dockerfile` | Multi-stage, multi-arch build (page build, prod deps, downloaded binaries, a `golang` stage that builds Caddy with `scripts/caddy-build.ts` and a `caddy-export` target the release uses for the per-platform assets, Bun alpine runtime with the three binaries and `OPENTUI_LIBC=musl` for the screens' native library, only the musl one installed); entrypoint `bun server/src/index.ts`, command `run` |
 | `deploy/` | `install.sh`, `install.ps1` (the native installers), the Docker host side: `compose.yml`, `compose.journald.yml`, `telinha.env.example`, `install-docker.sh`, `telinha-update` and its systemd service/timer |
 | `docs/` | The docs site (Astro Starlight, English and pt-BR): pages in `src/content/docs/` (pt-BR under `pt-br/`), the reference generator and the drift and lint tests in `scripts/`, the reference descriptions in `src/data/reference.ts`, components in `src/components/` |
 | `.github/workflows/` | `ci.yml`, `release.yml` |
@@ -166,14 +232,14 @@ Needs only [Bun](https://bun.sh) 1.4.2 (no Node). Works on Windows and Linux.
 bun install --frozen-lockfile
 bun run dev                # http://localhost:5173/r/ (Vite HMR + Bun server, which runs LiveKit)
 bun run typecheck          # tsc and svelte-check in every workspace
-bun run test               # bun test: server, web and docs unit tests
+bun run test               # bun test: server, web, docs and scripts unit tests (the screens render in a test terminal)
 bun run build              # web/dist
 bun run e2e                # Playwright; needs bun run build first, and a Chromium (bunx playwright install chromium)
 bun run image              # build telinha:dev with docker or podman, then run the smoke test
 bun run bins               # download all three helper binaries for this host into .cache/telinha/bin (caddy from the latest release; a warning if it has none)
 bun run caddy              # build Telinha's Caddy with xcaddy into .cache/telinha/bin (needs Go on PATH)
 bun run versions check     # validate versions.json (refresh: recompute the livekit and cloudflared hashes)
-bun run compile --smoke    # native binaries for this OS into dist-bin/ (needs bun run build first)
+bun run compile --smoke    # native binaries for this OS into dist-bin/ (needs bun run build first); --smoke also runs the terminal UI smoke
 bun run docs:dev           # the docs site at http://localhost:4321/telinha/
 bun run docs:build         # docs/dist; the link validator fails the build on a broken link
 ```
@@ -204,19 +270,45 @@ registry lives in `.cache/telinha/data/`; the E2E stack uses
 is kept, so a `livekit-server` left behind by a killed run is cleaned up)
 and `CLOSE_EMPTY_SECONDS=4`, `POLL_SECONDS=1`; the browser reaches LiveKit through `ws://localhost:8081/livekit` like production.
 
-**Native binaries.** `bun run compile` (`scripts/build-binary.ts`) runs `bun build --compile`
-with `web/dist` embedded (run `bun run build` first) and writes
+**Terminal screens.** The screens under `server/src/tui` are `.tsx` files (OpenTUI
+with Solid). `server/tsconfig.json` and `docs/scripts/tsconfig.json` set
+`"jsx": "preserve"` and `"jsxImportSource": "@opentui/solid"`; the second is needed
+because the docs generator imports `cli/setup.ts` and `cli/doctor.ts`, and `tsc`
+follows their dynamic imports of the screens. Bun runs that JSX only through OpenTUI's
+Solid transform: `bun test` loads it from the `[test]` preload in `bunfig.toml` and
+`server/bunfig.toml` (without it Solid's server build renders the first frame but
+never reacts to a key), and a run from source (dev, the Docker image) registers it at
+runtime with `prepareTui()` in `server/src/tui/load.ts`, a no-op in the native binary,
+which the build plugin already transformed. The model, session, lookups and apply
+modules under `cli/setup/` are plain TypeScript with no Solid, tested without a
+terminal; `server/test/tui-*.test.tsx` render the screens in a test terminal with frame
+snapshots (`bun test server/test/tui-setup-frames.test.tsx -u` rewrites them after an
+intended change to a screen). `TELINHA_THEME=light|dark` forces the colour mode when
+you look at the screens in a terminal whose background the screens cannot read, and
+`TELINHA_SMOKE_TUI=1 bun server/src/index.ts --version` runs the terminal UI smoke from
+source. The OpenTUI packages and `solid-js` (which follows OpenTUI's exact peer pin)
+are one Renovate group, `opentui`, updated by hand: OpenTUI is 0.x, so a minor can
+break, and the terminal smokes are not part of the required checks.
+
+**Native binaries.** `bun run compile` (`scripts/build-binary.ts`) calls `Bun.build` with
+`compile` (the API, because only it takes the Solid plugin that transforms the screens'
+JSX) and `web/dist` embedded (run `bun run build` first) and writes
 `dist-bin/<target>/telinha[.exe]` plus the release archives
 `dist-bin/telinha-linux-{x64,arm64}.tar.gz` and
 `dist-bin/telinha-windows-{x64,arm64}.zip` (each with `LICENSE`) and
 `dist-bin/SHA256SUMS`. `--target` takes `linux-x64`, `linux-arm64`,
 `windows-x64`, `windows-arm64`, `linux`, `windows` or `host` (repeatable;
 default: this OS's two targets), `--version X.Y.Z` (default `package.json`),
-`--out DIR`, `--smoke` (runs the host binary's `--version`).
+`--out DIR`, `--smoke` (runs the host binary's `--version` and a terminal UI smoke,
+`TELINHA_SMOKE_TUI=1`, which renders a tiny OpenTUI screen, presses a key and checks it
+re-rendered, so a binary without OpenTUI's native library or without a reactive Solid
+fails; it also checks the binary sizes and that Babel was not bundled).
 `bun run compile sums` rewrites `SHA256SUMS` for whatever archives
 are in `dist-bin/`, the `caddy-<target>` ones included, and
 `bun run compile pack-caddy --target <t> --from DIR` packs a built Caddy as the
-release archive of one target. Linux targets cross-compile from any host; Windows targets
+release archive of one target. OpenTUI's native library is a package per OS and CPU, and
+a cross build embeds the target's: install them all with
+`bun install --frozen-lockfile --os='*' --cpu='*'` first (CI does). Linux targets cross-compile from any host; Windows targets
 build only on Windows, where Bun can write their version resource (product
 name, publisher, version). The x64 targets are Bun's baseline builds. The
 binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
@@ -227,7 +319,8 @@ machine if it is stopped). Caddy is compiled inside the build by the
 `scripts/caddy-build.ts`, `GOTOOLCHAIN=auto` so a Caddy that needs a newer Go
 still builds), on the build platform for the target one. The smoke test
 (`scripts/smoke.sh`, also run by the CI `image` job) runs inside the image:
-the server tests, the built page, `--version` of the three binaries, the
+the server tests, the terminal UI smoke from source (`TELINHA_SMOKE_TUI=1`, which proves the
+musl OpenTUI library loads and a key re-renders), the built page, `--version` of the three binaries, the
 Caddy version against `versions.json` and its `dns.providers.duckdns` and
 `layer4` modules, `caddy validate` of the DNS-01 Caddyfile rendered by the real
 code (without the token in the file), then the real entry point in `DEV_USER` mode
@@ -381,8 +474,18 @@ same Dockerfile stage the release uses) and `binaries (ubuntu-latest)` /
 `binaries (windows-latest)`, which compile the native targets and smoke-test
 them: `--version`, then a real `run` in `DEV_USER` mode until `/healthz`
 reports LiveKit up (the binary downloads `livekit-server` itself), the gate and
-`/doctor` answers, a graceful stop; `linux-arm64 --version` under QEMU; and the
-version resource (`ProductName` Telinha) of both Windows binaries.
+`/doctor` answers, a graceful stop; the terminal UI smoke of each binary
+(`TELINHA_SMOKE_TUI=1`, also for `linux-arm64` under QEMU, which runs
+`--version`) and a check of the binary sizes; the real setup screens of the Linux
+binary in a pseudo-terminal (`script`: the output has its escape sequences and
+whitespace stripped, then the first question's title must be there; after
+Ctrl+C the exit code must be 130 and the alternate screen left), and setup
+without a terminal exiting 2 at once; and the version resource (`ProductName`
+Telinha) of both Windows binaries. The `image` job runs the same two checks on
+`docker run [-it] ... setup --docker`, which needs the target's musl OpenTUI
+library selected by `OPENTUI_LIBC=musl`. The binaries jobs
+install every OS and CPU package (`bun install --os='*' --cpu='*'`) so each target
+embeds its own OpenTUI library.
 
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
 Dockerfile (its `golang` and bun images included), `deploy/compose.yml`,
@@ -404,7 +507,9 @@ git commit -am "fix(deps): refresh versions.json hashes" && git push
 
 Caddy (with xcaddy and the modules) and cloudflared bumps come as one `child-binaries` PR, LiveKit's in the
 `livekit` group, Astro and Starlight in the `docs-site` group (merged by hand:
-Starlight is 0.x and the `docs` job is not required); all `versions.json` bumps are `fix` commits so they cut a
+Starlight is 0.x and the `docs` job is not required), OpenTUI, its Solid binding
+and `solid-js` in the `opentui` group (merged by hand too: the terminal smokes are
+not required checks, so look at them before merging); all `versions.json` bumps are `fix` commits so they cut a
 release, and native installs download the new helper binaries on their next
 start.
 

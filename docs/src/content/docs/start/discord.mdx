@@ -1,6 +1,6 @@
 ---
 title: Discord app
-description: Create the Discord application Telinha logs people in with, and see what the setup wizard does for you.
+description: Create the Discord application Telinha logs people in with, and see what the setup does for you.
 sidebar:
   order: 7
 ---
@@ -9,7 +9,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 Telinha needs a Discord application of its own: its bot posts the room cards
 and answers the slash command, and its OAuth2 login lets people in. The
-setup wizard (`telinha setup`) does most of the work through Discord's API
+setup (`telinha setup`) does most of the work through Discord's API
 and waits while you do the few clicks it cannot. You can also do them all
 before you run it.
 
@@ -38,7 +38,7 @@ You need a Discord account and, in the server where Telinha will live, the
 2. Click **Reset Token**, confirm, and copy the token. Discord shows it only
    once; if you lose it, reset it again (the old one stops working).
 
-3. Paste it when the wizard asks for it. The wizard checks it right away and
+3. Paste it when the setup asks for it. The setup checks it right away and
    shows the bot's name. It also reads the client id from it, so you never
    copy that.
 
@@ -57,8 +57,9 @@ The room page lists everyone with the role, online and offline, so the bot
 needs two privileged intents: **Server Members Intent** and
 **Presence Intent**. Without them the bot cannot log in at all.
 
-The wizard switches both on through the API. If Discord does not let it, the
-wizard asks you to do it and checks again after each try:
+The setup switches both on through the API during the install. If Discord
+does not let it, the install's **Discord app** row warns that they are still
+off; switch them on by hand:
 
 <Steps>
 
@@ -82,12 +83,12 @@ To check by hand later, look at the same two switches, or run
 
 2. Under **Client Secret**, click **Reset Secret** and copy it.
 
-3. Paste it when the wizard asks. The wizard asks Discord at once whether
+3. Paste it when the setup asks. The setup asks Discord at once whether
    the secret matches the application, and asks again if it does not.
 
 </Steps>
 
-The client id is the application's id. The wizard reads it from the bot
+The client id is the application's id. The setup reads it from the bot
 token, so it never asks; you type it only with `--no-discord-check`
 (`--client-id`).
 
@@ -95,11 +96,11 @@ token, so it never asks; you type it only with `--no-discord-check`
 
 After login, Discord sends people back to `<PUBLIC_URL>/auth/callback`, and
 only to addresses the application lists. **This is the one thing Discord's
-API cannot set**, so the wizard shows the address and waits for you:
+API cannot set**, so the setup shows the address and waits for you:
 
 <Steps>
 
-1. Copy the address the wizard prints. With
+1. Copy the address the setup prints. With
    `PUBLIC_URL=https://telinha.example.com` it is
    `https://telinha.example.com/auth/callback`; with a DuckDNS address at
    home it carries the port, as in
@@ -110,19 +111,20 @@ API cannot set**, so the wizard shows the address and waits for you:
 
 3. Click **Save Changes**.
 
-4. Back in the wizard, choose to check again. It reads the application
-   until the redirect is there.
+4. Back in the setup, choose *I added it: check again*. It reads the
+   application until the redirect is there.
 
 </Steps>
 
-You may skip this step in the wizard; the `discord-redirect` check of
+You may skip this step (*Skip for now*); the `discord-redirect` check of
 `telinha doctor` reports it later. The redirect must match `PUBLIC_URL`
 exactly, port included. If you change `PUBLIC_URL`, add the new redirect.
 
 ## Invite the bot
 
-When the bot is in no server yet, or not in the one you want, the wizard
-prints an invite link and offers to open it in your browser:
+When the bot is in no server yet, or not in the one you want (*Another
+server (add the bot)*), the setup shows an invite link and offers to open it
+in your browser:
 
 <Steps>
 
@@ -130,7 +132,8 @@ prints an invite link and offers to open it in your browser:
 
 2. Review the permissions and click **Authorize**.
 
-3. Back in the wizard, press Enter. It lists the servers again.
+3. Back in the setup, choose *I added the bot: check again*. It lists the
+   servers again.
 
 </Steps>
 
@@ -147,7 +150,7 @@ two there. Without them the card stays as first posted (the log says
 
 ## Server, role, channels and names
 
-The wizard picks everything from lists; nobody copies ids:
+The setup picks everything from lists; nobody copies ids:
 
 - **Server** (`GUILD_ID`): one of the servers the bot is in. One Telinha
   serves one server.
@@ -165,9 +168,9 @@ The wizard picks everything from lists; nobody copies ids:
 To change any of these later, run `telinha setup` again: every question
 starts at the current value and secrets offer to keep the current one.
 
-## What the wizard does and what you click
+## What the setup does and what you click
 
-| The wizard | You |
+| The setup | You |
 | --- | --- |
 | Checks the bot token and reads the client id from it | Create the application, reset the token, paste it |
 | Switches on the two privileged intents | Only if Discord refuses: switch them on the **Bot** page |

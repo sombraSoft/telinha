@@ -122,15 +122,31 @@ without starting the setup). `TELINHA_VERSION` installs a given release tag.
 
 ## Run the setup
 
-The wizard speaks English or Brazilian Portuguese (it picks the system's
-language and asks once) and explains every question in a line or two. You
-never copy ids by hand: servers, roles and channels come from lists. On a VPS
-it goes like this:
+Setup fills the terminal with its own screens: the steps down the left (Where,
+Address, Discord, Ports, Updates, Review, Install), the current question as a
+card on the right and, beside or under it, a hint that explains the choice.
+Servers, roles and channels come from lists, so you never copy an id by hand.
+A first run starts with the language, English or Brazilian Portuguese, and
+every screen switches at once. Over SSH it works the same, from 80 columns by
+24 rows.
+
+- **Answer** with ↑ ↓ and Enter, or press the number of an option. For a text
+  answer, type and press Enter.
+- **Go back** with Esc or ←. The answers you gave stay.
+- **Jump** with Tab: ↑ ↓ and Enter go to any step you have already answered,
+  and Esc returns to the card.
+- **Secrets** (tokens) show as dots. Paste with your SSH client's paste
+  shortcut (Ctrl+V, often Ctrl+Shift+V, or right-click), and press Ctrl+R to
+  show or hide what you pasted.
+- **Quit** with Ctrl+C. Nothing is written until you apply at the Review.
+
+[Command line](/telinha/reference/cli/#keys) lists every key. On a VPS it goes
+like this:
 
 <Steps>
 
-1. **Where Telinha runs.** It asks *Where will Telinha run?* Choose *A
-   rented server (VPS)*. There is no router question after this one.
+1. **Where.** Choose *A rented server (VPS)* for *Where will Telinha run?*
+   There is no router question after this one.
 
 2. **Address.** It asks *How will people reach Telinha?*: your own domain
    (its A record is compared with the public IP), DuckDNS, sslip.io, a
@@ -144,28 +160,55 @@ it goes like this:
    LIVEKIT_NODE_IP=203.0.113.9
    ```
 
-3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
-   something else on the server uses them.
+3. **Discord.** Paste the bot token: Telinha checks it with Discord right
+   away and reads your app from it. Then the client secret (also checked), the
+   server (a list of the ones the bot is in; *Another server* shows an invite
+   link and checks again once you added the bot), the role that may enter, the
+   channels (Space marks one, `a` marks all) and the command name. A group
+   name is optional. When the app does not have the login redirect yet, a card
+   shows the address to add under OAuth2 → Redirects, the one thing you do by
+   hand on the Developer Portal: add it, press Save Changes there, then choose
+   *I added it: check again*. [Discord app](/telinha/start/discord/) walks
+   through every screen.
 
-4. **Discord.** The bot token, the client secret, the login redirect (the one
-   thing you add by hand on the Developer Portal), the server, the role that
-   may enter, the channels and the command name.
-   [Discord app](/telinha/start/discord/) walks through every screen.
+4. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+   something else on the server uses them. The hint lists the ports the
+   provider's firewall must let in, with the ufw and firewalld commands.
 
 5. **Updates.** Say yes: new stable releases then install themselves when no
    room is open.
 
-6. **Review.** Every value on one screen, secrets shown only as generated,
-   kept or set. Confirm and the wizard writes `/opt/telinha/config/telinha.env`,
-   owned by root and readable by the service.
+6. **Review.** Every answer on one screen, grouped by step, with the web
+   address highlighted and secrets shown only as set, kept or generated. Page
+   with PgUp and PgDn when the list is long. Choose *Apply* (or *Apply with a
+   new cookie secret*, offered on a re-run, which logs everyone out of the
+   pages), *Back to the questions* or *Quit without writing*. Nothing has
+   changed on this server until you apply.
 
-7. **Service and checks.** It installs and starts the systemd unit, lists the
-   ports the provider's firewall must allow (with the ufw or firewalld command
-   when one is installed), waits for Telinha to start and for its HTTPS
-   certificate, runs `telinha doctor` with the phone test and prints the next
-   steps.
+7. **Install.** A live list: the Discord app (checked, and its intents
+   switched on), the DuckDNS address if you picked one, `telinha.env`
+   (`/opt/telinha/config/telinha.env`, owned by root and readable by the
+   service), the helper programs (with a bar for each download), the service
+   (the systemd unit), the router and firewall row, the start, the HTTPS
+   certificate and the final checks. The router and firewall row lists the
+   ports the provider's firewall must allow, with the ufw or firewalld command
+   when one is installed. At the end the screen shows your web address, and *Show the doctor report* opens
+   the checklist with the phone test.
 
 </Steps>
+
+If a task fails, its lines open under it with a hint, and three choices:
+*Retry* runs it again, *Skip* leaves it and goes on with the rest (the
+final checks then tell you what is missing), and *Back to questions* returns
+to the question that task depends on (the bot token for the Discord app, the
+DuckDNS token for DuckDNS) or to the Review; apply again from there and the
+secrets generated before stay the same. Writing telinha.env has no *Skip*:
+everything after it needs the file; once it is written, the Review says so and
+its last choice is *Leave setup*. ↑ from the choices walks the finished rows,
+and Enter shows what each did. The last card opens what is left to do by hand
+(the router's ports, a warning's command), and the summary left in the terminal
+lists it too. Going back is off while a task runs, and Ctrl+C asks for a second
+press, because stopping half way can leave a half install.
 
 :::caution
 sslip.io is a shared domain: Let's Encrypt may refuse a certificate in a week
@@ -173,18 +216,30 @@ when too many were issued for it. A domain of your own, or DuckDNS, is more
 reliable.
 :::
 
+If you ran the installer as your user instead of root, the Ports step also
+asks *Allow them with one sudo command during the install?*, because a user
+cannot bind 80 and 443 otherwise. Answer yes and, at the service row, the
+screens step aside while `sudo` asks for your password once, then come back on
+the same task.
+
+Without a terminal, or with `--non-interactive`, setup prints plain lines and
+takes every answer from flags, the environment and the existing file: see
+[Command line](/telinha/reference/cli/#telinha-setup).
+
 ## Check it
 
 ```sh
 sudo telinha doctor
 ```
 
-Doctor runs every check and prints one row each, with what to do about
-anything that is not ok. Then it shows a link and a QR code for the phone
-test: open it on your phone with Wi-Fi off, so the test runs over mobile data
-like many of your friends' connections. It tells you whether the page, the
-LiveKit connection, UDP and TCP all work from there; a first path to an IP
-that is not the VPS's public IP means a wrong `LIVEKIT_NODE_IP`.
+Doctor is a checklist: one row per check, each with a spinner until it has its
+result. Press Enter on a row to see its detail and, when it is not ok, the fix;
+`r` runs every check again after you fix something. When the checks are done a
+panel shows a link and a QR code for the phone test: open it on your phone with
+Wi-Fi off, so the test runs over mobile data like many of your friends'
+connections. It tells you whether the page, the LiveKit connection, UDP and TCP
+all work from there, and `p` starts a new test; a first path to an IP that is
+not the VPS's public IP means a wrong `LIVEKIT_NODE_IP`.
 [Doctor and troubleshooting](/telinha/guides/doctor/) explains every row and
 what a failure means.
 
@@ -219,7 +274,7 @@ where you stand and `sudo telinha update --now` installs at once. See
 [Updates](/telinha/guides/updates/).
 
 **Changing settings** means running `sudo telinha setup` again: every question
-starts at the current value, secrets can be kept, and the service restarts with
+starts at the current value, secrets can be kept (Enter keeps them), and the service restarts with
 the new file. Editing `/opt/telinha/config/telinha.env` by hand works too,
 followed by `sudo telinha service restart`.
 
