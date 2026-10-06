@@ -51,6 +51,12 @@
       "automerge": false
     },
     {
+      "description": "The docs site's framework moves as one (Starlight pins its Astro peer) and Starlight is 0.x, so a minor can break the build; the docs CI job is not a required check, so the group is merged by hand",
+      "matchPackageNames": ["astro", "@astrojs/**", "starlight-links-validator"],
+      "groupName": "docs-site",
+      "automerge": false
+    },
+    {
       "description": "Bumps in versions.json stay red until someone runs `bun scripts/versions.ts refresh`, so they never automerge or block the allNonMajor group",
       "matchDepNames": ["caddyserver/caddy", "cloudflare/cloudflared"],
       "groupName": "child-binaries",

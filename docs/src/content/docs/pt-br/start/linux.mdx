@@ -1,0 +1,278 @@
+---
+title: Servidor Linux em casa
+description: Instale a Telinha numa máquina Linux em casa, como root ou com o seu usuário, e rode ela como serviço do systemd.
+sidebar:
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Um mini PC, um Raspberry Pi 4 ou 5, um notebook velho ou um servidor em casa:
+qualquer máquina Linux 64 bits que fique ligada. Uma linha de `curl` instala a
+Telinha, o assistente de configuração faz algumas perguntas e o systemd mantém
+tudo rodando.
+
+## Antes de começar
+
+- Linux 64 bits com glibc (Debian, Ubuntu, Raspberry Pi OS 64 bits, Fedora e
+  parecidos) em x64 ou arm64, com systemd. A versão x64 roda em qualquer CPU
+  x86-64, inclusive Celeron e Atom antigos. No Alpine ou em outro sistema com
+  musl o instalador passa para o [Docker](/telinha/pt-br/start/docker/); o
+  Raspberry Pi OS 32 bits é recusado, instale o de 64 bits.
+- `curl` ou `wget`, `tar`, e `sha256sum` ou `shasum`.
+- Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
+  Dá para criar o aplicativo antes do assistente ou durante ele: veja
+  [Aplicativo do Discord](/telinha/pt-br/start/discord/).
+- Uma ideia do endereço que o pessoal vai usar: um domínio seu, um nome
+  gratuito do DuckDNS ou um Cloudflare Tunnel.
+  [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
+  compara as opções.
+- Acesso à página de administração do roteador, a não ser que ele faça UPnP
+  (muitos roteadores vêm com isso desligado, e os da operadora muitas vezes
+  escondem a opção).
+  Sem acesso e sem UPnP, por exemplo com um roteador da operadora travado ou a
+  rede compartilhada de um prédio? Aí a Telinha nesta máquina não consegue abrir as portas
+  sozinha: peça à operadora ou a quem cuida da rede para encaminhar, ou use uma
+  [VPS](/telinha/pt-br/start/vps/).
+  Se a sua linha está atrás de CGNAT, nada da internet chega na máquina: leia
+  antes [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
+
+## Instalação
+
+Primeiro decida se a Telinha vai ser instalada como root ou com o seu usuário.
+As duas usam a mesma linha; o `sudo` faz a diferença.
+
+| | Como root | Com o seu usuário |
+| --- | --- | --- |
+| Pasta da instalação | `/opt/telinha` | `~/.local/share/telinha` (respeita o `$XDG_DATA_HOME`) |
+| Serviço | Unidade do sistema `/etc/systemd/system/telinha.service`, rodando com um usuário de sistema `telinha` | Unidade do usuário `~/.config/systemd/user/telinha.service` |
+| Portas 80 e 443 | Liberadas por uma capability da unidade | Precisam de um comando com `sudo`, ou da porta 8443 |
+| Continua rodando depois do logout | Sim | Só com o lingering (o assistente liga) |
+| Comandos | `sudo telinha ...` | `telinha ...` |
+
+Numa máquina que existe para a Telinha, a instalação como root é a mais
+simples.
+
+<Steps>
+
+1. Rode o instalador, como root:
+
+   ```sh
+   curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh
+   ```
+
+   ou com o seu usuário:
+
+   ```sh
+   curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sh
+   ```
+
+2. Ele pergunta se a Telinha vai rodar como programa nativo ou no Docker.
+   Fique com o padrão, nativo.
+
+3. O script baixa o `telinha-linux-x64.tar.gz` (ou o `telinha-linux-arm64.tar.gz`)
+   e o `SHA256SUMS` da versão estável mais nova, para se o sha256 não bater,
+   instala o programa e abre o `telinha setup`.
+
+</Steps>
+
+Como root ele instala um `/usr/local/lib/telinha/telinha` que pertence ao root,
+chamado pelo comando `/usr/local/bin/telinha`, e o assistente copia o programa
+para `/opt/telinha/bin/` para o serviço, que atualiza essa cópia sozinho. Com o
+seu usuário ele instala `~/.local/share/telinha/bin/telinha` e mostra a linha
+para pôr no `~/.profile`, para o comando `telinha` ser encontrado:
+
+```sh
+export PATH="$HOME/.local/share/telinha/bin:$PATH"
+```
+
+O script não baixa mais nada: o `livekit-server` e o `caddy` ou o
+`cloudflared` vêm depois, cada um conferido contra um sha256 fixo. Para pular a
+pergunta, ponha `-s -- --native` depois do `sh` (`--no-setup` instala sem abrir
+o assistente), ou defina `TELINHA_INSTALL=native`. `TELINHA_VERSION` instala
+uma tag específica e `TELINHA_HOME` usa outra pasta.
+
+## Rode o assistente
+
+O assistente fala português do Brasil ou inglês (ele pega o idioma do sistema e
+pergunta uma vez) e explica cada pergunta em uma ou duas linhas. Você nunca
+copia id na mão: servidores, cargos e canais aparecem em listas. Numa máquina
+Linux em casa, o caminho é este:
+
+<Steps>
+
+1. **Onde a Telinha roda.** Ele mostra o IP público e o roteador, se algum
+   responder UPnP, NAT-PMP ou PCP. Escolha *em casa*, ou *só atrás da
+   Cloudflare* se for usar um Cloudflare Tunnel.
+
+2. **Endereço.** Um domínio seu (o
+   [registro A](/telinha/pt-br/guides/domains/#seu-próprio-domínio) é
+   comparado com o IP público),
+   DuckDNS (o token é testado na hora), um Cloudflare Tunnel ou o seu próprio
+   proxy reverso. Com domínio próprio ou DuckDNS, a Telinha pega o certificado
+   HTTPS sozinha, então ele pergunta se as portas 80 e 443 da internet chegam
+   na máquina: sim; só a 443, para outra porta da máquina; ou nenhuma, e aí ele
+   recomenda o túnel. Por fim, pergunta se a Telinha pode abrir as portas no
+   roteador por UPnP.
+
+3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
+   não ser que outro programa da máquina já use alguma.
+
+4. **Discord.** O token do bot, o segredo do cliente, o redirecionamento de
+   login (a única coisa que você adiciona na mão no Portal do Desenvolvedor), o
+   servidor, o cargo que pode entrar, os canais e o nome do comando.
+   [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
+
+5. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
+   sozinhas quando nenhuma sala está aberta.
+
+6. **Revisão.** Todos os valores numa tela só, com os segredos aparecendo
+   apenas como gerado, mantido ou definido. Confirme e o assistente grava
+   `config/telinha.env` na pasta da instalação: do root e legível pelo serviço
+   numa instalação como root, com modo 0600 numa instalação de usuário.
+
+7. **Serviço e verificações.** Ele baixa os programas auxiliares e depois
+   instala e inicia a unidade do systemd. Com o seu usuário ele também liga o
+   lingering, para a Telinha continuar rodando depois do logout (quando isso
+   pede senha, ele mostra `sudo loginctl enable-linger <você>` para você rodar).
+   Depois olha o roteador (avisando de CGNAT ou NAT duplo e listando as portas
+   para encaminhar na mão quando não há UPnP), espera a Telinha subir e o
+   certificado HTTPS chegar, roda o `telinha doctor` com o teste pelo celular e
+   mostra os próximos passos.
+
+</Steps>
+
+:::note[Vai encaminhar as portas na mão?]
+Quando nenhum roteador responde UPnP (ou você não deixou usar), o assistente só lista as portas para encaminhar e segue em frente, então a
+espera pelo certificado e o teste pelo celular falham no final. Isso é
+esperado: encaminhe as portas como em [Abra as portas](#abra-as-portas) logo
+abaixo e rode o `telinha doctor` de novo (o certificado pode levar alguns
+minutos depois que as portas chegarem na máquina).
+:::
+
+**Instalação de usuário com as portas 80 e 443.** O Linux só deixa o root usar
+portas abaixo de 1024, então o assistente oferece um comando com `sudo` que
+libera as portas a partir da 80 para todos os usuários. Ele vale para todas as
+atualizações:
+
+```sh
+sudo sh -c 'printf "net.ipv4.ip_unprivileged_port_start=80\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system'
+```
+
+Se você recusar, ele oferece a alternativa: a Telinha escuta na 8443
+(`HTTPS_PORT=8443`, `HTTP_PORT=0`) e o roteador encaminha a 443 pública para a
+8443.
+
+## Abra as portas
+
+A internet precisa chegar na máquina por estas portas:
+
+| Porta | Quando | Para quê |
+| --- | --- | --- |
+| TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
+| UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
+| TCP 443 | domínio próprio ou DuckDNS | As páginas, por HTTPS |
+| TCP 80 | domínio próprio ou DuckDNS, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
+
+Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
+levam WebRTC. Se você mudou alguma porta no assistente, use o seu valor (com
+`HTTPS_PORT=8443` o roteador encaminha a 443 pública para a 8443).
+
+**Primeiro o UPnP.** Se o roteador respondeu e você deixou, a Telinha pede essas
+portas ao roteador enquanto roda e você não precisa fazer nada. Se não, faça o
+encaminhamento de portas na mão para o IP local da máquina, depois de dar a ela
+um IP fixo na rede local para a regra continuar apontando para ela.
+[Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/) explica as
+duas coisas, e há páginas para os roteadores da
+[Vivo](/telinha/pt-br/routers/vivo/), da [Claro](/telinha/pt-br/routers/claro/),
+da [TIM](/telinha/pt-br/routers/tim/) e da [Oi](/telinha/pt-br/routers/oi/).
+
+**O firewall da própria máquina.** A Telinha não cria regras de firewall no
+Linux. Se o ufw ou o firewalld estiver ativo, libere as mesmas portas nele. Com
+as portas padrão e domínio próprio:
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+```
+
+O `telinha doctor` mostra esses comandos com as suas portas quando encontra uma
+das duas ferramentas.
+
+## Verifique
+
+```sh
+sudo telinha doctor
+```
+
+(`telinha doctor`, sem `sudo`, numa instalação de usuário.) O doctor roda todas
+as verificações e mostra uma linha para cada, com o que fazer em tudo que não
+estiver ok. Depois ele mostra um link e um QR code para o teste pelo celular:
+abra no celular com o Wi-Fi desligado, para o teste vir de fora da sua rede,
+como a conexão dos seus amigos. Ele diz se a página, a conexão com o LiveKit, o
+UDP e o TCP funcionam de lá. O `telinha doctor --local` pula as verificações que
+precisam da internet.
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
+linha e o que uma falha quer dizer.
+
+## Use
+
+Digite `/telinha` (ou o nome de comando que você escolheu) num dos canais
+escolhidos. O bot posta um card com um botão para uma sala nova em
+`https://<seu endereço>/r/<código>`. Quem abre faz login com o Discord uma vez, e
+quem tem o cargo entra. Compartilhe a tela pelo Chrome, pelo Edge ou outro
+navegador baseado em Chromium; assistir funciona no celular também. O card
+mostra quem está transmitindo e quem está assistindo, e a sala fecha sozinha
+alguns minutos depois que todo mundo sai.
+
+:::caution[Funciona para os amigos, mas não da sua própria rede?]
+Muitos roteadores não conseguem devolver para dentro uma conexão feita ao
+próprio IP público (o NAT loopback, também chamado de hairpin NAT ou NAT
+reflection). Aí a sala abre pelos dados móveis e para todo mundo de fora, mas
+não desta máquina nem de outro aparelho da sua rede. Ligue o NAT loopback se o
+roteador tiver a opção. Uma linha no arquivo hosts apontando o nome para o IP
+local não resolve: a página abre, mas o LiveKit continua anunciando o IP
+público para o vídeo. Veja
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/#funciona-de-fora-mas-não-da-sua-própria-rede).
+:::
+
+## No dia a dia
+
+O serviço inicia com a máquina, sobe a Telinha de novo depois de uma
+atualização ou de um travamento e grava o log no journal. Numa instalação como
+root:
+
+```sh
+sudo telinha service status
+sudo telinha service restart
+journalctl -u telinha -f
+```
+
+Numa instalação de usuário:
+
+```sh
+telinha service status
+telinha service restart
+journalctl --user -u telinha -f
+```
+
+O `systemctl` (ou `systemctl --user`) gerencia a unidade `telinha` como
+qualquer outra; `telinha service start`, `stop`, `restart` e `status` fazem as
+mesmas chamadas.
+
+**As atualizações** acontecem sozinhas: a Telinha confere alguns minutos depois
+de iniciar e depois a cada poucas horas, espera enquanto há salas abertas,
+confere o sha256 e volta para a versão anterior se a nova não subir.
+`telinha update --check` mostra a situação e `telinha update --now` instala na
+hora (com `sudo` numa instalação como root). Veja
+[Atualizações](/telinha/pt-br/guides/updates/).
+
+**Mudar as configurações** é rodar o `telinha setup` de novo
+(`sudo telinha setup` como root): cada pergunta já vem com o valor atual, os
+segredos podem ser mantidos e o serviço reinicia com o arquivo novo. Editar o
+`telinha.env` na mão também funciona, seguido de `telinha service restart`.
+
+**Para remover**: `telinha service uninstall` tira a unidade e mantém os
+arquivos; depois apague a pasta da instalação.
+
+[Rodando como serviço](/telinha/pt-br/guides/service/) tem os detalhes.

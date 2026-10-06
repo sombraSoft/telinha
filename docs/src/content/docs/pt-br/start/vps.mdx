@@ -1,0 +1,237 @@
+---
+title: VPS
+description: Rode a Telinha num servidor Linux alugado com IP público próprio, com ou sem domínio.
+sidebar:
+  order: 5
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Uma VPS tem IPv4 público próprio, então não há roteador para configurar e o
+CGNAT não atrapalha. No lugar disso, você libera as portas no firewall do
+provedor. Sem domínio, o sslip.io dá ao servidor um nome HTTPS feito a partir
+do IP.
+
+## Antes de começar
+
+- Uma VPS com uma imagem atual de 64 bits do Ubuntu LTS ou do Debian (Fedora
+  e outras distribuições com systemd também servem), x64 ou arm64, com IPv4
+  público e um login como root ou como um usuário com `sudo`. Se você prefere
+  contêineres, a página do [Docker](/telinha/pt-br/start/docker/) também serve
+  para uma VPS.
+- Um plano pequeno dá conta para começar: o servidor repassa o vídeo sem
+  recodificar, então a rede pesa mais que CPU ou memória. Confira a franquia
+  mensal de tráfego do plano, porque cada espectador recebe a transmissão
+  inteira: veja
+  [Quantas pessoas podem assistir?](/telinha/pt-br/faq/#quantas-pessoas-podem-assistir).
+- Acesso às configurações de firewall do provedor (o nome muda: security
+  group, security list ou firewall).
+- Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
+  Dá para criar o aplicativo antes do assistente ou durante ele: veja
+  [Aplicativo do Discord](/telinha/pt-br/start/discord/).
+- Um endereço: um domínio seu com um
+  [registro A](/telinha/pt-br/guides/domains/#seu-próprio-domínio) apontando
+  para a VPS, um nome
+  gratuito do DuckDNS ou nenhum domínio, com o
+  [sslip.io](/telinha/pt-br/guides/domains/#sslipio).
+  [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
+  compara as opções.
+
+## Abra as portas primeiro
+
+Faça isto antes da instalação: o assistente testa as portas no final, e
+muitos provedores só liberam o SSH por padrão. Uma VPS tem dois firewalls, e
+os dois precisam deixar estas portas entrarem:
+
+| Porta | Quando | Para quê |
+| --- | --- | --- |
+| TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
+| UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
+| TCP 443 | domínio próprio, DuckDNS ou sslip.io | As páginas, por HTTPS |
+| TCP 80 | idem, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
+
+Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
+levam WebRTC. Se você vai escolher outra porta no assistente, libere essa no
+lugar.
+
+**O firewall do provedor.** Crie uma regra de entrada para cada linha da tabela
+no painel do provedor (security group, security list ou regras de firewall),
+vinda de qualquer endereço.
+
+**O firewall do próprio servidor.** A Telinha não cria regras de firewall no
+Linux. Se o ufw ou o firewalld estiver ativo, libere as mesmas portas nele; com
+as portas padrão:
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+```
+
+:::caution
+Se for ligar o ufw agora, libere o SSH antes (`sudo ufw allow OpenSSH`), senão a
+próxima conexão fica trancada para fora.
+:::
+
+:::note
+Algumas imagens de provedor (as do Ubuntu na Oracle Cloud, por exemplo)
+bloqueiam portas com regras do iptables puro, com o ufw desligado. Se
+`sudo iptables -L INPUT -n` mostrar uma regra `REJECT`, siga o guia do provedor
+para liberar as portas no servidor também.
+:::
+
+Numa VPS não há roteador, então o assistente desliga o UPnP (`UPNP=off`).
+[Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/) fala mais
+sobre firewalls.
+
+## Instalação
+
+Numa VPS, instale como root: assim o serviço roda com um usuário de sistema
+próprio, `telinha`, pode usar as portas 80 e 443 e continua rodando quando você
+sai do SSH.
+
+<Steps>
+
+1. Conecte no servidor. O painel do provedor mostra o IP dele e o usuário
+   para entrar (muitas vezes `root` ou `ubuntu`), com uma senha ou uma chave
+   SSH. No Windows 10 ou 11 abra o PowerShell, no macOS ou no Linux abra o
+   Terminal, e digite:
+
+   ```sh
+   ssh <usuário>@<IP do servidor>
+   ```
+
+   Na primeira vez ele pergunta se você confia na impressão digital
+   (fingerprint) do servidor: responda `yes`. Depois rode, no servidor:
+
+   ```sh
+   curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh
+   ```
+
+   (Se você entrou como root, tire o `sudo`.)
+
+2. Ele pergunta se a Telinha vai rodar como programa nativo ou no Docker.
+   Fique com o padrão, nativo.
+
+3. O script baixa o `telinha-linux-x64.tar.gz` (ou o `telinha-linux-arm64.tar.gz`)
+   e o `SHA256SUMS` da versão estável mais nova, para se o sha256 não bater,
+   instala o programa e abre o `telinha setup`.
+
+</Steps>
+
+O programa vai para `/usr/local/lib/telinha/telinha`, chamado pelo comando
+`/usr/local/bin/telinha`; a pasta da instalação é `/opt/telinha`, e o assistente
+copia o programa para `/opt/telinha/bin/` para o serviço, que atualiza essa
+cópia sozinho. O script não baixa mais nada: o `livekit-server` e o `caddy` ou o
+`cloudflared` vêm depois, cada um conferido contra um sha256 fixo. Para pular a
+pergunta, ponha `-s -- --native` depois do `sh` (`--no-setup` instala sem abrir
+o assistente). `TELINHA_VERSION` instala uma tag específica.
+
+## Rode o assistente
+
+O assistente fala português do Brasil ou inglês (ele pega o idioma do sistema e
+pergunta uma vez) e explica cada pergunta em uma ou duas linhas. Você nunca
+copia id na mão: servidores, cargos e canais aparecem em listas. Numa VPS, o
+caminho é este:
+
+<Steps>
+
+1. **Onde a Telinha roda.** Escolha *numa VPS ou servidor na nuvem*. Depois
+   disso não tem pergunta sobre roteador.
+
+2. **Endereço.** Um domínio seu (o registro A é comparado com o IP público),
+   DuckDNS, sslip.io, um Cloudflare Tunnel ou o seu próprio proxy reverso. Nas
+   três primeiras opções a Telinha pega o certificado HTTPS sozinha, então ele
+   pergunta se as portas 80 e 443 da internet chegam no servidor: responda que
+   sim, você já liberou as portas acima. Com o sslip.io ele
+   usa o IPv4 público do servidor (e pergunta quando não consegue ver) e grava
+   o endereço e o IP que o LiveKit anuncia:
+
+   ```ini
+   PUBLIC_URL=https://203-0-113-9.sslip.io
+   LIVEKIT_NODE_IP=203.0.113.9
+   ```
+
+3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
+   não ser que outro programa do servidor já use alguma.
+
+4. **Discord.** O token do bot, o segredo do cliente, o redirecionamento de
+   login (a única coisa que você adiciona na mão no Portal do Desenvolvedor), o
+   servidor, o cargo que pode entrar, os canais e o nome do comando.
+   [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
+
+5. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
+   sozinhas quando nenhuma sala está aberta.
+
+6. **Revisão.** Todos os valores numa tela só, com os segredos aparecendo
+   apenas como gerado, mantido ou definido. Confirme e o assistente grava
+   `/opt/telinha/config/telinha.env`, do root e legível pelo serviço.
+
+7. **Serviço e verificações.** Ele instala e inicia a unidade do systemd,
+   lista as portas que o firewall do provedor precisa deixar entrar (com o comando do ufw
+   ou do firewalld quando um deles está instalado), espera a Telinha subir e o
+   certificado HTTPS chegar, roda o `telinha doctor` com o teste pelo celular e
+   mostra os próximos passos.
+
+</Steps>
+
+:::caution
+O sslip.io é um domínio compartilhado: o Let's Encrypt pode recusar um
+certificado na semana em que muitos já foram emitidos para ele. Um domínio seu,
+ou o DuckDNS, é mais confiável.
+:::
+
+## Verifique
+
+```sh
+sudo telinha doctor
+```
+
+O doctor roda todas as verificações e mostra uma linha para cada, com o que
+fazer em tudo que não estiver ok. Depois ele mostra um link e um QR code para o
+teste pelo celular: abra no celular com o Wi-Fi desligado, para o teste passar
+pelos dados móveis, como a conexão de boa parte dos seus amigos. Ele diz se a
+página, a conexão com o LiveKit, o UDP e o TCP funcionam de lá; um primeiro
+caminho para um IP que não é o IP público da VPS quer dizer um
+`LIVEKIT_NODE_IP` errado.
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
+linha e o que uma falha quer dizer.
+
+## Use
+
+Digite `/telinha` (ou o nome de comando que você escolheu) num dos canais
+escolhidos. O bot posta um card com um botão para uma sala nova em
+`https://<seu endereço>/r/<código>`. Quem abre faz login com o Discord uma vez, e
+quem tem o cargo entra. Compartilhe a tela pelo Chrome, pelo Edge ou outro
+navegador baseado em Chromium; assistir funciona no celular também. O card
+mostra quem está transmitindo e quem está assistindo, e a sala fecha sozinha
+alguns minutos depois que todo mundo sai.
+
+## No dia a dia
+
+O serviço inicia com a máquina, sobe a Telinha de novo depois de uma
+atualização ou de um travamento e grava o log no journal:
+
+```sh
+sudo telinha service status
+sudo telinha service restart
+journalctl -u telinha -f
+```
+
+O `systemctl` gerencia a unidade `telinha` como qualquer outra;
+`telinha service start`, `stop`, `restart` e `status` fazem as mesmas chamadas.
+
+**As atualizações** acontecem sozinhas: a Telinha confere alguns minutos depois
+de iniciar e depois a cada poucas horas, espera enquanto há salas abertas,
+confere o sha256 e volta para a versão anterior se a nova não subir.
+`sudo telinha update --check` mostra a situação e `sudo telinha update --now`
+instala na hora. Veja [Atualizações](/telinha/pt-br/guides/updates/).
+
+**Mudar as configurações** é rodar o `sudo telinha setup` de novo: cada pergunta
+já vem com o valor atual, os segredos podem ser mantidos e o serviço reinicia
+com o arquivo novo. Editar o `/opt/telinha/config/telinha.env` na mão também
+funciona, seguido de `sudo telinha service restart`.
+
+**Para remover**: `sudo telinha service uninstall` tira a unidade e mantém os
+arquivos; depois apague `/opt/telinha`.
+
+[Rodando como serviço](/telinha/pt-br/guides/service/) tem os detalhes.

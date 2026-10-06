@@ -4,7 +4,8 @@
 # the release, which creates the tag. So releases/latest never points at a
 # release without its assets, and a failed run leaves only a draft to finish
 # or delete. Hosts running telinha-update wait for the tag, the image and its
-# published digest (telinha-image.digest) before deploying.
+# published digest (telinha-image.digest) before deploying. A stable release
+# also redeploys the docs site (docs.yml) once it is published.
 name: release
 
 on:
@@ -236,3 +237,17 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+
+  # The docs site follows each stable release. Called (not triggered by the
+  # release event) so the deploy runs on main, which the Pages environment
+  # allows; the checkout is still the release commit.
+  docs:
+    needs: [release-please, release-assets]
+    if: needs.release-please.outputs.release_created == 'true' && !contains(needs.release-please.outputs.tag_name, '-')
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    with:
+      ref: ${{ needs.release-please.outputs.sha }}

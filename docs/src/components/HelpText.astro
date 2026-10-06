@@ -1,0 +1,17 @@
+---
+// The real `telinha help [command]` output in the page's language.
+import generated from '../data/generated.json';
+import type { Locale } from '../data/reference.ts';
+
+type HelpKey = 'help' | 'helpRun' | 'helpSetup' | 'helpDoctor' | 'helpUpdate' | 'helpService';
+// `topic`, not `key`: JSX runtimes treat `key` as their own.
+interface Props { locale: Locale; topic: HelpKey }
+const { locale, topic } = Astro.props;
+const text = (generated.cli.help as Record<Locale, Record<HelpKey, string>>)[locale][topic];
+---
+
+<pre class="help"><code>{text}</code></pre>
+
+<style>
+  pre.help { white-space: pre-wrap; }
+</style>

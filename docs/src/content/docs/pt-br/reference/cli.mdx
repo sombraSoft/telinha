@@ -1,0 +1,122 @@
+---
+title: Linha de comando
+description: Cada comando, opção e código de saída da telinha, com os textos de ajuda reais que o programa imprime.
+sidebar:
+  order: 2
+---
+
+import HelpText from '../../../../components/HelpText.astro';
+import FlagTable from '../../../../components/FlagTable.astro';
+
+Os textos de ajuda desta página são os que o `telinha help` imprime, e as
+tabelas de opções são geradas a partir do parser da linha de comando a cada
+build.
+
+<HelpText locale="pt-BR" topic="help" />
+
+## Opções globais
+
+Todo comando aceita estas, em qualquer posição da linha. As opções próprias de
+um comando vão depois dele.
+
+<FlagTable locale="pt-BR" command="global" />
+
+## telinha run
+
+<HelpText locale="pt-BR" topic="helpRun" />
+
+`run` é o padrão: `telinha` sozinho faz o mesmo. Ele aceita só as opções
+globais. Num terminal ainda sem `telinha.env`, ele oferece iniciar o
+assistente, e depois de um clique duplo espera o Enter para a janela não sumir.
+Só um `run` por pasta de instalação: um segundo (uma execução no console com o
+serviço de pé) deixa o primeiro em paz e sai com 1 dizendo
+`Telinha is already running (pid N)`.
+
+## telinha setup
+
+<HelpText locale="pt-BR" topic="helpSetup" />
+
+<FlagTable locale="pt-BR" command="setup" />
+
+Com `--non-interactive` (implícito sem terminal), cada resposta vem das
+opções, depois do ambiente (qualquer chave do `telinha.env`), depois do arquivo
+existente. Uma resposta faltando sai com 2 dizendo qual opção ou variável.
+Obrigatórias: `--public-url` (ou `--duckdns-domain`), o token do bot, o client
+secret, `--guild`, `--role`, `--channels`, mais o token do túnel ou do DuckDNS
+nesses modos.
+
+```
+telinha setup --non-interactive --public-url https://telinha.example.com \
+  --guild <id> --role <id> --channels <id>,<id> \
+  --discord-token-file ./discord-token --client-secret-file - < ./client-secret
+```
+
+## telinha doctor
+
+<HelpText locale="pt-BR" topic="helpDoctor" />
+
+<FlagTable locale="pt-BR" command="doctor" />
+
+Sai com 1 quando uma verificação ou o teste pelo celular falhou. As
+verificações estão em [Verificações do doctor](/telinha/pt-br/reference/doctor-checks/).
+
+## telinha update
+
+<HelpText locale="pt-BR" topic="helpUpdate" />
+
+<FlagTable locale="pt-BR" command="update" />
+
+Com o serviço rodando, o pedido vai para ele; com o serviço parado, o novo
+executável fica preparado e a próxima inicialização usa ele.
+
+```
+telinha update --check     # versão atual, estável mais nova (ou a fixada), preparada / falha / pendente
+telinha update             # com o serviço rodando: confere e instala agora, a menos que haja salas abertas
+telinha update --now       # instala mesmo com salas abertas; também tenta de novo uma tag que falhou
+```
+
+## telinha service
+
+<HelpText locale="pt-BR" topic="helpService" />
+
+<FlagTable locale="pt-BR" command="service" actions />
+
+<FlagTable locale="pt-BR" command="service" />
+
+`--user` muda conforme a plataforma: no Linux é uma chave que instala uma
+unidade de usuário (`~/.config/systemd/user/telinha.service`,
+`systemctl --user`) em vez da do sistema; no Windows recebe a conta com que a
+tarefa do Agendador de Tarefas roda, que a instalação elevada passa junto com
+`--sid`.
+
+## Códigos de saída
+
+| Código | Significado |
+| --- | --- |
+| `0` | ok |
+| `1` | erro; também o `doctor` com uma verificação falha, e o `service status` quando o serviço não está instalado ou não está rodando |
+| `2` | uso: uma opção inválida, um comando desconhecido, uma resposta não interativa faltando |
+| `3` | reinício pedido: o `run` pedindo ao laço do serviço para iniciá-lo de novo, depois de uma atualização |
+
+## Segredos
+
+Segredos nunca vão na linha de comando: a lista de processos e o histórico do
+shell mostram tudo. Eles vêm do ambiente com o nome que têm no `telinha.env`,
+ou de um arquivo passado à opção `-file` correspondente; `-` lê do stdin, um
+segredo por execução. As opções `--discord-token`, `--client-secret`,
+`--tunnel-token` e `--duckdns-token` são recusadas com um erro de uso dizendo
+isso.
+
+| Segredo | Ambiente | Arquivo |
+| --- | --- | --- |
+| Token do bot | `DISCORD_TOKEN` | `--discord-token-file CAMINHO` |
+| Client secret | `DISCORD_CLIENT_SECRET` | `--client-secret-file CAMINHO` |
+| Token do túnel | `TUNNEL_TOKEN` | `--tunnel-token-file CAMINHO` |
+| Token do DuckDNS | `DUCKDNS_TOKEN` | `--duckdns-token-file CAMINHO` |
+
+## Versão e ajuda
+
+`telinha --version` imprime uma linha, por exemplo
+`telinha 0.7.0 (abc1234, bun 1.4.2, windows-x64)`. `telinha help [comando]`
+imprime os textos acima no idioma escolhido por `--lang`, senão `LOCALE`,
+senão o do sistema.

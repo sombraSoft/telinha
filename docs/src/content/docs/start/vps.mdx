@@ -1,0 +1,228 @@
+---
+title: VPS
+description: Run Telinha on a rented Linux server with its own public IP, with or without a domain.
+sidebar:
+  order: 5
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+A VPS has its own public IPv4, so there is no router to configure and CGNAT
+does not matter. You open the ports in the provider's firewall instead. Without
+a domain, sslip.io gives the server an HTTPS name made from its IP.
+
+## Before you start
+
+- A VPS with a current 64-bit Ubuntu LTS or Debian image (Fedora and other
+  distributions with systemd work too), x64 or arm64, with a public IPv4 and a login as
+  root or as a user with `sudo`. If you prefer containers, the
+  [Docker](/telinha/start/docker/) page works on a VPS too.
+- A small plan is enough to start: the server forwards the video without
+  re-encoding it, so the network matters more than CPU or RAM. Check the
+  plan's monthly transfer allowance, because every viewer receives the full
+  stream: see [How many people can watch?](/telinha/faq/#how-many-people-can-watch).
+- Access to the provider's firewall settings (called security group, security
+  list or firewall, depending on the provider).
+- A Discord server where you can create an application and add a bot. You can
+  create the app before the setup or while it runs: see
+  [Discord app](/telinha/start/discord/).
+- An address: your own domain with an
+  [A record](/telinha/guides/domains/#your-own-domain) pointing at the VPS, a free
+  DuckDNS name, or no domain at all with
+  [sslip.io](/telinha/guides/domains/#sslipio).
+  [Address, HTTPS and ingress modes](/telinha/guides/domains/) compares them.
+
+## Open the ports first
+
+Do this before the install: the setup checks the ports at the end, and many
+providers allow only SSH by default. A VPS has two firewalls, and both must
+let these ports in:
+
+| Port | When | What for |
+| --- | --- | --- |
+| TCP 7881 | always | Video over TCP, for networks that block UDP |
+| UDP 7882 | always | Video over UDP, the normal path |
+| TCP 443 | your own domain, DuckDNS or sslip.io | The pages, over HTTPS |
+| TCP 80 | same, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
+
+With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
+carry WebRTC. If you will pick another port in the setup, open that one
+instead.
+
+**The provider's firewall.** Add an inbound rule per line of the table in the
+provider's panel (security group, security list or firewall rules), from
+any source address.
+
+**The server's own firewall.** Telinha adds no firewall rules on Linux. If ufw
+or firewalld is active, open the same ports there; with the default ports:
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+```
+
+:::caution
+If you turn ufw on now, allow SSH first (`sudo ufw allow OpenSSH`), or the
+next connection is locked out.
+:::
+
+:::note
+Some provider images (Oracle Cloud's Ubuntu images, for example) block ports
+with plain iptables rules while ufw stays inactive. If
+`sudo iptables -L INPUT -n` lists a `REJECT` rule, follow the provider's guide
+to open the ports on the server too.
+:::
+
+There is no router on a VPS, so the setup turns UPnP off (`UPNP=off`).
+[Port forwarding](/telinha/guides/port-forwarding/) has more on firewalls.
+
+## Install
+
+On a VPS, install as root: the service then runs as its own `telinha` system
+user, can bind ports 80 and 443, and keeps running when you log out.
+
+<Steps>
+
+1. Connect to the server. The provider's panel shows its IP address and the
+   user to log in as (often `root` or `ubuntu`), with a password or an SSH
+   key. On Windows 10 or 11 open PowerShell, on macOS or Linux open Terminal,
+   and type:
+
+   ```sh
+   ssh <user>@<server IP>
+   ```
+
+   The first time it asks whether to trust the server's fingerprint: answer
+   `yes`. Then run, on the server:
+
+   ```sh
+   curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh
+   ```
+
+   (Logged in as root, drop the `sudo`.)
+
+2. It asks whether to run Telinha as a native program or in Docker. Keep the
+   default, native.
+
+3. The script downloads `telinha-linux-x64.tar.gz` (or `telinha-linux-arm64.tar.gz`)
+   and `SHA256SUMS` from the newest stable release, stops if the sha256 does
+   not match, installs the program and starts `telinha setup`.
+
+</Steps>
+
+The program lands in `/usr/local/lib/telinha/telinha`, run by the
+`/usr/local/bin/telinha` command; the home folder is `/opt/telinha`, and the
+setup copies the program into `/opt/telinha/bin/` for the service, which
+updates that copy itself. The script downloads nothing else: `livekit-server`
+and `caddy` or `cloudflared` come later, each checked against a pinned sha256.
+To skip the question, add `-s -- --native` after `sh` (`--no-setup` installs
+without starting the setup). `TELINHA_VERSION` installs a given release tag.
+
+## Run the setup
+
+The wizard speaks English or Brazilian Portuguese (it picks the system's
+language and asks once) and explains every question in a line or two. You
+never copy ids by hand: servers, roles and channels come from lists. On a VPS
+it goes like this:
+
+<Steps>
+
+1. **Where Telinha runs.** Choose *a VPS or cloud server*. There is no router
+   question after this one.
+
+2. **Address.** Your own domain (its A record is compared with the public
+   IP), DuckDNS, sslip.io, a Cloudflare Tunnel or your own reverse proxy. With
+   the first three Telinha gets the HTTPS certificate itself, so it asks
+   whether ports 80 and 443 from the internet reach the server: answer yes,
+   you opened them above. With sslip.io it takes the
+   server's public IPv4 (and asks for it when it cannot see it) and writes
+   both the address and the IP LiveKit announces:
+
+   ```ini
+   PUBLIC_URL=https://203-0-113-9.sslip.io
+   LIVEKIT_NODE_IP=203.0.113.9
+   ```
+
+3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+   something else on the server uses them.
+
+4. **Discord.** The bot token, the client secret, the login redirect (the one
+   thing you add by hand on the Developer Portal), the server, the role that
+   may enter, the channels and the command name.
+   [Discord app](/telinha/start/discord/) walks through every screen.
+
+5. **Updates.** Say yes: new stable releases then install themselves when no
+   room is open.
+
+6. **Review.** Every value on one screen, secrets shown only as generated,
+   kept or set. Confirm and the wizard writes `/opt/telinha/config/telinha.env`,
+   owned by root and readable by the service.
+
+7. **Service and checks.** It installs and starts the systemd unit, lists the
+   ports the provider's firewall must allow (with the ufw or firewalld command
+   when one is installed), waits for Telinha to start and for its HTTPS
+   certificate, runs `telinha doctor` with the phone test and prints the next
+   steps.
+
+</Steps>
+
+:::caution
+sslip.io is a shared domain: Let's Encrypt may refuse a certificate in a week
+when too many were issued for it. A domain of your own, or DuckDNS, is more
+reliable.
+:::
+
+## Check it
+
+```sh
+sudo telinha doctor
+```
+
+Doctor runs every check and prints one row each, with what to do about
+anything that is not ok. Then it shows a link and a QR code for the phone
+test: open it on your phone with Wi-Fi off, so the test runs over mobile data
+like many of your friends' connections. It tells you whether the page, the
+LiveKit connection, UDP and TCP all work from there; a first path to an IP
+that is not the VPS's public IP means a wrong `LIVEKIT_NODE_IP`.
+[Doctor and troubleshooting](/telinha/guides/doctor/) explains every row and
+what a failure means.
+
+## Use it
+
+Type `/telinha` (or the command name you chose) in one of the channels you
+picked. The bot posts a card with a button to a new room at
+`https://<your address>/r/<code>`. Whoever opens it logs in with Discord once,
+and members with the role get in. Share your screen from Chrome, Edge or
+another Chromium browser; watching works on phones too. The card shows who is
+streaming and who is watching, and the room closes by itself a few minutes
+after everyone leaves.
+
+## Day two
+
+The service starts at boot, starts Telinha again after an update or a crash,
+and logs to the journal:
+
+```sh
+sudo telinha service status
+sudo telinha service restart
+journalctl -u telinha -f
+```
+
+`systemctl` manages the `telinha` unit like any other; `telinha service start`,
+`stop`, `restart` and `status` make the same calls.
+
+**Updates** happen on their own: Telinha checks a few minutes after it starts
+and then every few hours, waits while rooms are open, checks the sha256 and
+rolls back a version that fails to start. `sudo telinha update --check` shows
+where you stand and `sudo telinha update --now` installs at once. See
+[Updates](/telinha/guides/updates/).
+
+**Changing settings** means running `sudo telinha setup` again: every question
+starts at the current value, secrets can be kept, and the service restarts with
+the new file. Editing `/opt/telinha/config/telinha.env` by hand works too,
+followed by `sudo telinha service restart`.
+
+**Removing it**: `sudo telinha service uninstall` removes the unit and keeps
+the files; then delete `/opt/telinha`.
+
+[Running as a service](/telinha/guides/service/) has the details.

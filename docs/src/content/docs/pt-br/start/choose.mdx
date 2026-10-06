@@ -1,0 +1,119 @@
+---
+title: Escolha a sua instalação
+description: Três perguntas que definem onde a Telinha roda, qual endereço as pessoas usam e se a sua rede consegue hospedá-la.
+sidebar:
+  order: 2
+---
+
+import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Responda três perguntas, nesta ordem. Cada resposta leva a um guia de início
+rápido ou a um guia detalhado, e o assistente (`telinha setup`) pergunta as
+mesmas coisas; então nada do que você decidir aqui é definitivo.
+
+<Steps>
+
+1. [Onde ela vai rodar?](#onde-ela-vai-rodar) Um PC com Windows, uma
+   máquina Linux em casa, Docker ou um servidor alugado.
+
+2. [Como as pessoas acessam a Telinha?](#como-as-pessoas-acessam-a-telinha)
+   Um domínio seu, um nome gratuito, um Cloudflare Tunnel ou o proxy reverso
+   que você já usa.
+
+3. [A internet consegue chegar na sua rede?](#a-internet-consegue-chegar-na-sua-rede)
+   Se a sua linha está atrás de CGNAT, uma instalação em casa não funciona e
+   uma VPS funciona.
+
+</Steps>
+
+## Onde ela vai rodar?
+
+A máquina precisa ficar ligada enquanto as pessoas assistem. Qualquer coisa
+que rode um dos [builds suportados](/telinha/pt-br/start/how-it-works/#máquina-e-sistema-operacional)
+serve.
+
+<CardGrid>
+  <LinkCard title="PC com Windows" description="O PC que você já tem. Não precisa de administrador para instalar; um aviso do UAC configura o serviço." href="/telinha/pt-br/start/windows/" />
+  <LinkCard title="Linux em casa" description="Um mini PC, um Raspberry Pi 4 ou 5 com sistema 64 bits ou qualquer máquina Linux 64 bits com glibc." href="/telinha/pt-br/start/linux/" />
+  <LinkCard title="Docker" description="Um NAS ou servidor que já roda Docker, ou um sistema com musl, como o Alpine. Um contêiner traz tudo." href="/telinha/pt-br/start/docker/" />
+  <LinkCard title="VPS" description="Um servidor alugado com IP público próprio. Nenhum roteador para configurar; funciona quando a sua linha de casa não dá." href="/telinha/pt-br/start/vps/" />
+</CardGrid>
+
+No Linux, a instalação nativa e a com Docker fazem o mesmo trabalho. A
+nativa é um único programa que se atualiza sozinho e roda como serviço do
+systemd; o Docker combina com uma máquina que já roda contêineres.
+
+## Como as pessoas acessam a Telinha?
+
+As pessoas abrem um endereço HTTPS. Escolha a primeira linha que serve para
+você:
+
+| A sua situação | Escolha | O que isso quer dizer |
+| --- | --- | --- |
+| Você tem um domínio | [Domínio próprio](/telinha/pt-br/guides/domains/#seu-próprio-domínio), `INGRESS=direct` | O Caddy que vem junto obtém um certificado do Let's Encrypt; encaminhe as portas TCP 80 e 443 (ou só a 443) |
+| Sem domínio, em casa | [DuckDNS](/telinha/pt-br/guides/domains/#duckdns) | Um `<name>.duckdns.org` gratuito que a Telinha mantém apontando para o seu IP, mesmo quando ele muda |
+| Sem domínio, numa VPS | [sslip.io](/telinha/pt-br/guides/domains/#sslipio) | Um endereço feito a partir do IP fixo da VPS, sem conta nenhuma; é um domínio compartilhado, então o Let's Encrypt pode recusar um certificado numa semana movimentada |
+| Você não consegue abrir 80/443, mas consegue abrir as portas de mídia | [Cloudflare Tunnel](/telinha/pt-br/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | Nenhuma porta web de entrada; precisa de um domínio na Cloudflare |
+| Você já usa nginx, Traefik ou Caddy | [Seu próprio proxy reverso](/telinha/pt-br/guides/domains/#seu-próprio-proxy-reverso), `INGRESS=external` | O seu proxy cuida do HTTPS e repassa para a Telinha; ele precisa deixar passar WebSockets |
+
+Em qualquer modo, as duas portas de mídia, TCP 7881 e UDP 7882, precisam
+chegar à máquina: nenhum túnel leva a mídia do WebRTC. Veja
+[Como funciona](/telinha/pt-br/start/how-it-works/#a-mídia-vai-direto-para-o-livekit).
+
+## A internet consegue chegar na sua rede?
+
+Muitas linhas residenciais dividem um único IPv4 público entre vários
+clientes. Isso é o CGNAT (NAT da operadora): o endereço WAN do seu roteador
+fica na faixa `100.64.0.0/10`, e nada da internet chega na sua rede, nem
+encaminhamento de portas nem UPnP. Para conferir, abra a página de status do
+roteador e compare o IP WAN dele com o IP que um site como
+`https://1.1.1.1/cdn-cgi/trace` mostra; se forem diferentes, você está atrás
+de CGNAT ou de um segundo roteador. Não consegue abrir a página de status?
+Pergunte à operadora: "a minha linha tem IPv4 público próprio ou está atrás de
+CGNAT?" Com a Telinha instalada, o
+`telinha doctor` faz o mesmo teste para você (a verificação `cgnat`, que
+precisa de um roteador que responda a UPnP, NAT-PMP ou PCP), e o assistente
+avisa. Atrás de CGNAT, um Cloudflare Tunnel ainda faz as páginas chegarem,
+mas não a mídia; então peça um IPv4 público para a operadora (muitas vezes
+sem custo; às vezes chamam de "tirar do CGNAT") ou rode a Telinha numa VPS.
+Já um endereço WAN privado quer dizer NAT duplo: um segundo roteador na
+frente do seu, onde as portas também precisam ser encaminhadas. Um modo com
+LiveKit Cloud, para quem não consegue abrir porta nenhuma, está planejado,
+ainda sem data.
+
+<CardGrid>
+  <LinkCard title="CGNAT e NAT duplo" description="Como diferenciar os dois e o que pedir para a operadora." href="/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo" />
+  <LinkCard title="VPS" description="Rode a Telinha num servidor alugado." href="/telinha/pt-br/start/vps/" />
+</CardGrid>
+
+## Compare as instalações
+
+| | PC com Windows | Linux em casa | VPS | Docker |
+| --- | --- | --- | --- | --- |
+| Instalação | `install.ps1` no PowerShell, sem administrador | `install.sh` como root ou como usuário | `install.sh` como root | `install.sh --docker` como root |
+| Serviço | Tarefa `Telinha` do Agendador de Tarefas, um aviso do UAC durante o assistente | systemd: unidade do sistema como root, unidade de usuário nos outros casos | Unidade do sistema no systemd | compose com `restart: unless-stopped` |
+| Atualizações | O programa se atualiza sozinho | O programa se atualiza sozinho | O programa se atualiza sozinho | Timer do `telinha-update`, se você ativar |
+| O que você encaminha | TCP 7881 e UDP 7882 no roteador (o UPnP pode fazer isso); no modo direto, também TCP 80 e 443 | Igual ao Windows | Sem roteador: libere as mesmas portas no firewall do provedor e no ufw ou firewalld | Igual à máquina onde ele roda |
+
+Os comandos de instalação, como cada guia rápido mostra:
+
+Windows (PowerShell):
+
+```
+irm https://github.com/sombraSoft/telinha/releases/latest/download/install.ps1 | iex
+```
+
+Linux e VPS:
+
+```
+curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sh
+```
+
+Docker:
+
+```
+curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh -s -- --docker
+```
+
+Antes de instalar, deixe o [aplicativo do Discord](/telinha/pt-br/start/discord/)
+pronto, ou crie enquanto o assistente espera.

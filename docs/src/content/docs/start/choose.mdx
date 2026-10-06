@@ -1,0 +1,114 @@
+---
+title: Choose your setup
+description: Three questions that pick where Telinha runs, which address people use, and whether your network can host it.
+sidebar:
+  order: 2
+---
+
+import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Answer three questions in order. Each answer points to a quickstart or a
+guide, and the setup wizard (`telinha setup`) asks the same things, so
+nothing you decide here is final.
+
+<Steps>
+
+1. [Where will it run?](#where-will-it-run) A Windows PC, a Linux box at
+   home, Docker, or a rented server.
+
+2. [How will people reach it?](#how-will-people-reach-it) Your own domain,
+   a free name, a Cloudflare Tunnel or the reverse proxy you already run.
+
+3. [Can the internet reach your network?](#can-the-internet-reach-your-network)
+   If your line is behind CGNAT, a home install cannot work and a VPS can.
+
+</Steps>
+
+## Where will it run?
+
+The machine has to stay on while people watch. Anything that runs one of
+the [supported builds](/telinha/start/how-it-works/#machine-and-operating-system)
+works.
+
+<CardGrid>
+  <LinkCard title="Windows PC" description="The PC you already have. No administrator needed to install; one UAC prompt sets up the service." href="/telinha/start/windows/" />
+  <LinkCard title="Linux at home" description="A mini PC, a Raspberry Pi 4 or 5 with a 64-bit OS, or any 64-bit Linux box with glibc." href="/telinha/start/linux/" />
+  <LinkCard title="Docker" description="A NAS or server that already runs Docker, or a musl system such as Alpine. One container bundles everything." href="/telinha/start/docker/" />
+  <LinkCard title="VPS" description="A rented server with its own public IP. No router to configure; works when your home line cannot." href="/telinha/start/vps/" />
+</CardGrid>
+
+On Linux, native and Docker do the same job. Native is a single program
+that updates itself and runs as a systemd service; Docker suits a machine
+that already runs containers.
+
+## How will people reach it?
+
+People open an HTTPS address. Pick the first row that fits:
+
+| Your situation | Choose | What it means |
+| --- | --- | --- |
+| You own a domain | [Your own domain](/telinha/guides/domains/#your-own-domain), `INGRESS=direct` | The bundled Caddy gets a Let's Encrypt certificate; forward TCP 80 and 443 (or only 443) |
+| No domain, at home | [DuckDNS](/telinha/guides/domains/#duckdns) | A free `<name>.duckdns.org` that Telinha keeps pointing at your changing IP |
+| No domain, on a VPS | [sslip.io](/telinha/guides/domains/#sslipio) | An address made from the VPS's fixed IP, no account at all; it is a shared domain, so Let's Encrypt may refuse a certificate in a busy week |
+| You cannot open 80/443, but can open the media ports | [Cloudflare Tunnel](/telinha/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | No inbound web ports; needs a domain on Cloudflare |
+| You already run nginx, Traefik or Caddy | [Your own reverse proxy](/telinha/guides/domains/#your-own-reverse-proxy), `INGRESS=external` | Your proxy terminates HTTPS and forwards to Telinha; it must pass WebSockets |
+
+In every mode the two media ports, TCP 7881 and UDP 7882, must reach the
+machine: no tunnel carries WebRTC media. See
+[How it works](/telinha/start/how-it-works/#media-goes-straight-to-livekit).
+
+## Can the internet reach your network?
+
+Many home lines share one public IPv4 between several customers. This is
+carrier-grade NAT (CGNAT): your router's WAN address is in `100.64.0.0/10`,
+and nothing from the internet reaches your network, port forwarding and UPnP
+included. To check, open your router's status page and compare its WAN IP
+with the IP a site such as `https://1.1.1.1/cdn-cgi/trace` shows; if they
+differ, you are behind CGNAT or a second router. Cannot open the status page?
+Ask your ISP: "does my line have its own public IPv4, or is it behind
+CGNAT?" Once Telinha is installed,
+`telinha doctor` runs the same test for you (the `cgnat` check, which needs a
+router that answers UPnP, NAT-PMP or PCP), and the setup wizard warns about
+it. Behind CGNAT a Cloudflare Tunnel still gets the pages through, but not
+the media, so ask your ISP for a public IPv4 (often free, sometimes called
+"removing CGNAT") or run Telinha on a VPS. A private WAN address instead
+means double NAT: a second router in front of yours, where the ports must be
+forwarded too. A LiveKit Cloud mode for hosts that cannot open any port is
+planned, without a date.
+
+<CardGrid>
+  <LinkCard title="CGNAT and double NAT" description="How to tell them apart and what to ask your ISP." href="/telinha/guides/domains/#cgnat-and-double-nat" />
+  <LinkCard title="VPS" description="Run Telinha on a rented server instead." href="/telinha/start/vps/" />
+</CardGrid>
+
+## Compare the setups
+
+| | Windows PC | Linux at home | VPS | Docker |
+| --- | --- | --- | --- | --- |
+| Install | `install.ps1` in PowerShell, no administrator | `install.sh` as root or as a user | `install.sh` as root | `install.sh --docker` as root |
+| Service | Task Scheduler task `Telinha`, one UAC prompt during setup | systemd: a system unit as root, a user unit otherwise | systemd system unit | compose with `restart: unless-stopped` |
+| Updates | The program updates itself | The program updates itself | The program updates itself | `telinha-update` timer, when you enable it |
+| What you forward | TCP 7881 and UDP 7882 on the router (UPnP may do it); direct mode also TCP 80 and 443 | Same as Windows | No router: open the same ports in the provider's firewall and in ufw or firewalld | Same as the machine it runs on |
+
+The install commands, as each quickstart gives them:
+
+Windows (PowerShell):
+
+```
+irm https://github.com/sombraSoft/telinha/releases/latest/download/install.ps1 | iex
+```
+
+Linux and VPS:
+
+```
+curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sh
+```
+
+Docker:
+
+```
+curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh -s -- --docker
+```
+
+Before you install, have the [Discord app](/telinha/start/discord/) ready,
+or create it while the wizard waits.

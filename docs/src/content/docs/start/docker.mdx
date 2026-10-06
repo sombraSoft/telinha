@@ -1,0 +1,234 @@
+---
+title: Docker
+description: Run Telinha as one container on a Linux Docker host, with the setup wizard in the image and optional automatic updates.
+sidebar:
+  order: 6
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+One container runs everything: the image `ghcr.io/sombrasoft/telinha`
+(`linux/amd64` and `linux/arm64`) bundles `livekit-server`, `caddy` and
+`cloudflared`. The host keeps the compose file and the configuration in
+`/opt/telinha`, and an optional timer, `telinha-update`, keeps it on the newest
+stable release.
+
+## Before you start
+
+- A Linux machine with Docker Engine and the compose plugin, at home or on a
+  VPS, and root access (`sudo`). Alpine and other musl systems belong here:
+  the native build needs glibc.
+- A Discord server where you can create an application and add a bot. You can
+  create the app before the setup or while it runs: see
+  [Discord app](/telinha/start/discord/).
+- An idea of the address people will use: your own domain, a free DuckDNS
+  name, sslip.io on a VPS or a Cloudflare Tunnel.
+  [Address, HTTPS and ingress modes](/telinha/guides/domains/) compares them.
+- At home, access to your router's admin page unless it does UPnP, and a line
+  that is not behind CGNAT: see
+  [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat). No
+  access and no UPnP, for example a locked ISP router or a shared building
+  network? Then the machine cannot open the ports itself: ask the ISP or
+  whoever runs the network to forward them, or use a [VPS](/telinha/start/vps/).
+
+:::caution[Docker Desktop on Windows]
+On Windows the [native install](/telinha/start/windows/) is the simpler path.
+Docker Desktop also works: the compose file uses host networking, which needs
+Docker Desktop 4.34 or newer with **Settings → Resources → Network → Enable
+host networking** turned on. Video over UDP through that path is unverified, so
+use a Cloudflare Tunnel there (`INGRESS=tunnel`, nothing to bind on 80/443).
+`install-docker.sh` and `telinha-update` are Linux only.
+:::
+
+## Install
+
+The installer needs root. Either pass `--docker` to the same one-liner the
+native install uses:
+
+```sh
+curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh -s -- --docker
+```
+
+or download the Docker bundle of the release and run its installer yourself:
+
+```sh
+curl -fsSLO https://github.com/sombraSoft/telinha/releases/latest/download/telinha-deploy.tar.gz
+mkdir telinha-deploy && tar xzf telinha-deploy.tar.gz -C telinha-deploy && cd telinha-deploy
+sudo sh install-docker.sh
+```
+
+The one-liner downloads `telinha-deploy.tar.gz`, checks it against the
+release's `SHA256SUMS` and runs the `install-docker.sh` inside. That script can
+run again at any time; it changes only what is its own:
+
+| Path | What |
+| --- | --- |
+| `/opt/telinha/compose.yml` | One service, `telinha`, with host networking and the volume `telinha-data` for the data |
+| `/opt/telinha/compose.journald.yml` | Optional override that sends the logs to journald |
+| `/opt/telinha/compose.override.yml` | Yours, optional; compose picks it up by itself |
+| `/opt/telinha/config/telinha.env` | The configuration, created from the example only when missing (mode 600) |
+| `/opt/telinha/.env` | The version compose runs, written by `telinha-update` (without it, `latest`) |
+| `/usr/local/sbin/telinha-update` | The updater, with its systemd units in `/etc/systemd/system/` |
+
+`/opt/telinha` is root's (mode 700), so the commands on this page run in a root
+shell: `sudo -i` first. With `TELINHA_VERSION=<tag>` the installer pins compose
+to that release.
+
+By hand without the installer: create `/opt/telinha/config`, copy
+`compose.yml` (in the bundle, or `deploy/` of a clone) to `/opt/telinha/` and
+`telinha.env.example` to `/opt/telinha/config/telinha.env`, fill it in (the
+example lists every key with a comment), then `docker compose up -d`.
+
+## Run the setup
+
+While `telinha.env` still has empty values, the installer offers the setup
+wizard. It runs inside the image, so nothing else gets installed on the host.
+To run it yourself later:
+
+```sh
+docker run --rm -it --user 0 -e TELINHA_HOME=/telinha -v /opt/telinha/config:/telinha/config ghcr.io/sombrasoft/telinha:latest setup --docker
+```
+
+The wizard speaks English or Brazilian Portuguese and explains every question
+in a line or two; servers, roles and channels come from lists.
+
+<Steps>
+
+1. **Where Telinha runs.** At home behind a router, a VPS, or behind
+   Cloudflare only.
+
+2. **Address.** Your own domain, DuckDNS, sslip.io (VPS only), a Cloudflare
+   Tunnel or your own reverse proxy. With the bundled Caddy it asks whether
+   ports 80 and 443 from the internet reach the machine; at home, whether
+   Telinha may open the ports on the router through UPnP (it works from the
+   container, thanks to host networking).
+
+3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+   something else on the host uses them.
+
+4. **Discord.** The bot token, the client secret, the login redirect (the one
+   thing you add by hand on the Developer Portal), the server, the role that
+   may enter, the channels and the command name.
+   [Discord app](/telinha/start/discord/) walks through every screen.
+
+5. **Review.** Every value on one screen; confirm and it writes
+   `/opt/telinha/config/telinha.env` (mode 600). There is no updates question:
+   in Docker, `telinha-update` does that job.
+
+6. **Start it.** The wizard stops after the file (no programs to download, no
+   service, no firewall, no router probe) and prints how to start:
+
+   ```sh
+   cd /opt/telinha && docker compose up -d
+   ```
+
+   or, to let `telinha-update` deploy it now and keep it updated from then on:
+
+   ```sh
+   systemctl enable --now telinha-update.timer
+   ```
+
+</Steps>
+
+## Open the ports
+
+The container uses the host's network, so the ports are the host's:
+
+| Port | When | What for |
+| --- | --- | --- |
+| TCP 7881 | always | Video over TCP, for networks that block UDP |
+| UDP 7882 | always | Video over UDP, the normal path |
+| TCP 443 | your own domain, DuckDNS or sslip.io | The pages, over HTTPS |
+| TCP 80 | same, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
+
+With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
+carry WebRTC. If you changed a port in the setup, use your value.
+
+**At home**, UPnP comes first: when it is on (`UPNP=auto`) and the router
+accepts it, Telinha maps these ports while it runs. Otherwise forward them by
+hand to the host's local IP; see [Port forwarding](/telinha/guides/port-forwarding/)
+and the pages for [Vivo](/telinha/routers/vivo/), [Claro](/telinha/routers/claro/),
+[TIM](/telinha/routers/tim/) and [Oi](/telinha/routers/oi/) routers. **On a
+VPS**, open them in the provider's firewall (see [VPS](/telinha/start/vps/)).
+
+If ufw or firewalld is active on the host, open the same ports there; with the
+default ports:
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+```
+
+## Check it
+
+Doctor runs inside the container:
+
+```sh
+docker exec -it telinha bun server/src/index.ts doctor
+```
+
+It runs every check and prints one row each, with what to do about anything
+that is not ok: the `gateway`, `cgnat` and `mappings` rows tell you what the
+router agreed to. Then it shows a link and a QR code for the phone test: open
+it on your phone with Wi-Fi off, so the test comes from outside your network.
+It tells you whether the page, the LiveKit connection, UDP and TCP all work
+from there. [Doctor and troubleshooting](/telinha/guides/doctor/) explains
+every row and what a failure means.
+
+The container also has a healthcheck: `docker compose ps` shows it unhealthy
+while a bundled program is down, for example a Caddy that cannot bind 80/443 or
+a bad tunnel token.
+
+## Use it
+
+Type `/telinha` (or the command name you chose) in one of the channels you
+picked. The bot posts a card with a button to a new room at
+`https://<your address>/r/<code>`. Whoever opens it logs in with Discord once,
+and members with the role get in. Share your screen from Chrome, Edge or
+another Chromium browser; watching works on phones too. The card shows who is
+streaming and who is watching, and the room closes by itself a few minutes
+after everyone leaves.
+
+## Day two
+
+Compose's `restart: unless-stopped` is the service: the container comes back
+after a crash or a reboot.
+
+```sh
+docker logs -f telinha
+cd /opt/telinha && docker compose restart
+```
+
+To keep the logs in the journal across container re-creations, use the
+journald override, then read them with `journalctl`:
+
+```sh
+cp /opt/telinha/compose.journald.yml /opt/telinha/compose.override.yml
+cd /opt/telinha && docker compose up -d
+journalctl -t telinha
+```
+
+**Updates.** With the timer on, `telinha-update` checks 3 minutes after boot and
+then every 5 minutes, verifies the image against the digest published with the
+release, waits while rooms are open and rolls back a version that never turns
+healthy. Without it, update by hand with
+`docker compose pull && docker compose up -d` in `/opt/telinha`.
+
+```sh
+telinha-update status
+telinha-update --now
+```
+
+See [Updates](/telinha/guides/updates/) for pinning a version and the other
+subcommands.
+
+**Changing settings** means running the wizard again (the `docker run` line
+above, or `sh install-docker.sh --setup` from the bundle) and re-creating the
+container so it reads the new file:
+
+```sh
+cd /opt/telinha && docker compose up -d --force-recreate
+```
+
+[Running as a service](/telinha/guides/service/) covers the override file, a
+memory limit and the healthcheck.

@@ -1,0 +1,119 @@
+---
+title: Command line
+description: Every telinha command, flag and exit code, with the real help texts the program prints.
+sidebar:
+  order: 2
+---
+
+import HelpText from '../../../components/HelpText.astro';
+import FlagTable from '../../../components/FlagTable.astro';
+
+The help texts on this page are the ones `telinha help` prints, and the flag
+tables are generated from the command-line parser at every build.
+
+<HelpText locale="en" topic="help" />
+
+## Global flags
+
+Every command accepts these, anywhere on the line. A command's own flags go
+after the command.
+
+<FlagTable locale="en" command="global" />
+
+## telinha run
+
+<HelpText locale="en" topic="helpRun" />
+
+`run` is the default: `telinha` alone does the same. It takes only the global
+flags. On a terminal with no `telinha.env` yet it offers to start the setup
+instead, and after a double-click it waits for Enter so the window does not
+vanish. Only one `run` per home directory: a second one (a console run while
+the service is up) leaves the first alone and exits 1 with
+`Telinha is already running (pid N)`.
+
+## telinha setup
+
+<HelpText locale="en" topic="helpSetup" />
+
+<FlagTable locale="en" command="setup" />
+
+With `--non-interactive` (implied without a terminal) every answer comes from
+flags, then the environment (any `telinha.env` key), then the existing file. A
+missing answer exits 2 naming the flag or variable. Required:
+`--public-url` (or `--duckdns-domain`), the bot token, the client secret,
+`--guild`, `--role`, `--channels`, plus the tunnel or DuckDNS token in those
+modes.
+
+```
+telinha setup --non-interactive --public-url https://telinha.example.com \
+  --guild <id> --role <id> --channels <id>,<id> \
+  --discord-token-file ./discord-token --client-secret-file - < ./client-secret
+```
+
+## telinha doctor
+
+<HelpText locale="en" topic="helpDoctor" />
+
+<FlagTable locale="en" command="doctor" />
+
+Exit 1 when a check or the phone test failed. The checks are listed in
+[Doctor checks](/telinha/reference/doctor-checks/).
+
+## telinha update
+
+<HelpText locale="en" topic="helpUpdate" />
+
+<FlagTable locale="en" command="update" />
+
+With the service running the request goes to it; with the service stopped the
+new executable is staged and the next start uses it.
+
+```
+telinha update --check     # current version, newest stable (or the pin), staged / failed / pending
+telinha update             # with the service running: check and install now unless rooms are open
+telinha update --now       # install even with rooms open; also retries a failed tag
+```
+
+## telinha service
+
+<HelpText locale="en" topic="helpService" />
+
+<FlagTable locale="en" command="service" actions />
+
+<FlagTable locale="en" command="service" />
+
+`--user` differs by platform: on Linux it is a switch that installs a user
+unit (`~/.config/systemd/user/telinha.service`, `systemctl --user`) instead of
+the system one; on Windows it takes the account the Task Scheduler task runs
+as, which the elevated install passes along with `--sid`.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | ok |
+| `1` | error; also `doctor` with a failed check, and `service status` when the service is not installed or not running |
+| `2` | usage: a bad flag, an unknown command, a missing non-interactive answer |
+| `3` | restart requested: `run` asking the service loop to start it again, after an update |
+
+## Secrets
+
+Secrets never go on the command line: the process list and the shell history
+show it. They come from the environment under their `telinha.env` name, or
+from a file given to the matching `-file` flag; `-` reads stdin, one secret
+per run. The flags `--discord-token`, `--client-secret`, `--tunnel-token` and
+`--duckdns-token` are refused with a usage error saying so.
+
+| Secret | Environment | File |
+| --- | --- | --- |
+| Bot token | `DISCORD_TOKEN` | `--discord-token-file PATH` |
+| Client secret | `DISCORD_CLIENT_SECRET` | `--client-secret-file PATH` |
+| Tunnel token | `TUNNEL_TOKEN` | `--tunnel-token-file PATH` |
+| DuckDNS token | `DUCKDNS_TOKEN` | `--duckdns-token-file PATH` |
+
+## Version and help
+
+`telinha --version` prints one line, for example
+`telinha 0.7.0 (abc1234, bun 1.4.2, windows-x64)`. `telinha help [command]`
+prints the texts above in the language picked by `--lang`, else `LOCALE`,
+else the system's.

@@ -1,0 +1,114 @@
+---
+title: Desenvolvimento
+description: Compile, teste e altere a Telinha e este site de documentação a partir de um clone.
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+Você só precisa do [Bun](https://bun.sh) 1.4.2 (sem Node). Funciona no Windows e no Linux.
+
+## Rodar a partir de um clone
+
+Use um clone para desenvolver, ou numa plataforma sem versão pronta. Rodando do código-fonte não há instalação de serviço nem atualização automática: atualize com `git pull`, `bun install`, `bun run build` e reinicie.
+
+```
+git clone https://github.com/sombraSoft/telinha && cd telinha
+bun install --frozen-lockfile && bun run build
+bun server/src/index.ts setup    # same wizard; downloads the helper binaries into <home>/bin
+bun server/src/index.ts          # run in this console
+```
+
+## Scripts
+
+```
+bun install --frozen-lockfile
+bun run dev
+bun run typecheck
+bun run test
+bun run build
+bun run e2e
+bun run image
+bun run bins
+bun run versions check
+bun run compile --smoke
+bun run docs:dev
+bun run docs:build
+```
+
+| Script | O que faz |
+| --- | --- |
+| `bun run dev` | Vite com recarga automática mais o servidor Bun, que roda o LiveKit; abra `http://localhost:5173/r/` |
+| `bun run typecheck` | `tsc` e `svelte-check` em todos os pacotes, incluindo `docs/scripts` |
+| `bun run test` | `bun test` no servidor, na página web e na documentação |
+| `bun run build` | Compila a página da sala em `web/dist` |
+| `bun run e2e` | Playwright; rode `bun run build` antes e instale um Chromium com `bunx playwright install chromium` |
+| `bun run image` | Compila `telinha:dev` com docker ou podman e roda o teste de fumaça |
+| `bun run bins` | Baixa os três binários auxiliares para este computador em `.cache/telinha/bin` |
+| `bun run versions check` | Valida o `versions.json` (`refresh` recalcula todos os hashes) |
+| `bun run compile --smoke` | Compila os binários nativos deste sistema em `dist-bin/` (rode `bun run build` antes) |
+| `bun run docs:dev` | Serve este site em `http://localhost:4321/telinha/` |
+| `bun run docs:build` | Compila este site em `docs/dist/` |
+
+### O servidor de desenvolvimento
+
+O `bun run dev` baixa o `livekit-server` (fixado no `versions.json`, com sha256 verificado) na primeira execução e inicia o servidor com `TELINHA_HOME=.cache/telinha`, `INGRESS=external`, `MEDIA=self`, `LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` e `AUTO_UPDATE=off`. O servidor supervisiona o LiveKit exatamente como em produção. O Vite repassa `/auth` e `/livekit` (WebSocket incluído) para o servidor em `127.0.0.1:8081`, então o navegador passa pela porta de entrada e pelo repasse de sinalização de verdade.
+
+O servidor roda com `DEV_USER` definido (padrão `1:Dev`, ou seja `<id>:<nome>`), um login falso que dispensa o Discord e o bot. Ele é recusado a menos que `PUBLIC_URL` seja `http://localhost` ou `http://127.0.0.1`, `LISTEN` seja um endereço de loopback e `INGRESS` seja `external`, e nesse modo toda requisição cujo `Host` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 421. Use `DEV_LOCALE=en` ou `pt-BR` para forçar o idioma. Não há comando de barra em desenvolvimento, então qualquer código de sala válido (`/r/lamo-futi`, `/r/bada-kodi`: duas ou três sílabas de consoante e vogal de cada lado do hífen) abre uma sala no primeiro uso. `CLOSE_EMPTY_SECONDS=30 bun run dev` mostra uma sala fechando.
+
+## Binários nativos
+
+O `bun run compile` (`scripts/build-binary.ts`) roda `bun build --compile` com o `web/dist` embutido (rode `bun run build` antes). Ele escreve `dist-bin/<target>/telinha[.exe]`, os pacotes de release `dist-bin/telinha-linux-{x64,arm64}.tar.gz` e `dist-bin/telinha-windows-{x64,arm64}.zip` (cada um com `LICENSE`) e `dist-bin/SHA256SUMS`.
+
+| Opção | Significado |
+| --- | --- |
+| `--target` | `linux-x64`, `linux-arm64`, `windows-x64`, `windows-arm64`, `linux`, `windows` ou `host`; repetível, o padrão são os dois alvos do sistema atual |
+| `--version X.Y.Z` | Versão a embutir, por padrão a do `package.json` |
+| `--out DIR` | Pasta de saída |
+| `--smoke` | Roda o `--version` do binário deste computador |
+
+O `bun run compile sums` reescreve o `SHA256SUMS` para os pacotes que estiverem em `dist-bin/`. Os alvos Linux compilam de qualquer sistema. Os alvos Windows só compilam no Windows, onde o Bun consegue escrever o recurso de versão. Os alvos x64 são os builds baseline do Bun. O binário nunca lê um `.env` ou `bunfig.toml` da pasta onde roda.
+
+## Este site
+
+O site usa o [Starlight](https://starlight.astro.build) no workspace `docs/`, em inglês (o idioma raiz) e português do Brasil, com todas as páginas nos dois idiomas.
+
+- **Onde ficam as páginas.** As páginas em inglês ficam em `docs/src/content/docs/`, as em português no mesmo caminho dentro de `docs/src/content/docs/pt-br/`. A ordem dentro de um grupo da barra lateral vem de `sidebar: { order: N }` no frontmatter. Páginas que usam um componente são `.mdx`, as outras `.md`.
+- **Links.** O site é servido em `/telinha/`, então os links internos levam esse prefixo: `/telinha/start/choose/` em inglês, `/telinha/pt-br/start/choose/` em português, sempre com a barra no final. O validador de links derruba o build por link quebrado, âncora quebrada, página que existe em só um idioma ou link de um idioma para o outro.
+- **Referência gerada.** As páginas de [configuração](/telinha/pt-br/reference/configuration/), linha de comando e verificações do doctor são geradas a partir do código. O `docs/scripts/generate.ts` lê as chaves de configuração, flags e verificações reais e escreve `docs/src/data/generated.json` (não versionado) antes de cada execução do dev ou do build. As descrições são escritas à mão em `docs/src/data/reference.ts`, com os mesmos nomes como chave.
+- **Testes de divergência.** O `docs/scripts/reference.test.ts` roda no `bun run test` e falha quando uma chave, flag, comando ou verificação do código não tem descrição, quando uma descrição cita algo que não existe mais, quando falta uma página em algum idioma ou quando uma página cita uma variável de ambiente ou flag desconhecida.
+- **Adicionar um idioma.** Crie uma pasta em `docs/src/content/docs/` com a mesma árvore de páginas, uma linha em `locales` no `docs/astro.config.mjs` e uma entrada em `translations` para cada grupo e link da barra lateral.
+- **Adicionar uma página de roteador.** Crie um arquivo em `routers/` em cada idioma, com os mesmos títulos de seção, um `sidebar: { order: N }` e uma lista de fontes no fim. O grupo da barra lateral a lista sozinho.
+
+O `bun run docs:dev` e o `bun run docs:build` rodam o gerador antes.
+
+### Publicação
+
+O `release.yml` chama o `.github/workflows/docs.yml` depois de publicar uma versão estável (pré-lançamentos não publicam o site), então o site acompanha cada versão. Você também pode rodar o `docs.yml` à mão, na aba Actions, a partir da `main`, para publicar uma correção da documentação entre versões.
+
+## Estrutura
+
+<FileTree>
+
+- server/ Servidor em TypeScript para Bun: os comandos, a configuração, o supervisor, a porta de entrada, o bot e o registro de salas
+- web/ Página da sala em Svelte 5 e a página do doctor, compiladas com Vite em `web/dist`
+- docs/ Este site (Starlight, inglês e português), seu gerador e seus testes
+- deploy/ Os instaladores, os arquivos do host Docker e o `telinha-update`
+- scripts/ Ambiente de desenvolvimento, download dos binários auxiliares, build nativo, build da imagem e teste de fumaça
+- e2e/ Testes do Playwright
+- .github/ Workflows de CI e de release
+- Dockerfile Build da imagem em vários estágios e várias arquiteturas
+- versions.json Versões fixadas de `livekit-server`, `caddy` e `cloudflared` com seus hashes
+- package.json Workspaces e os scripts acima
+- bun.lock
+- bunfig.toml
+- tsconfig.json
+- playwright.config.ts
+- renovate.json Regras de atualização de dependências
+- release-please-config.json Configuração do PR de release e do changelog
+- CHANGELOG.md
+- LICENSE MIT
+- README.md Visão geral, arquitetura e a tabela arquivo por arquivo
+
+</FileTree>
+
+O [README](https://github.com/sombraSoft/telinha#readme) tem a tabela arquivo por arquivo e as notas de arquitetura.

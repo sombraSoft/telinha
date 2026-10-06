@@ -12,6 +12,9 @@ dist-bin
 deploy/
 # server/test checks it against KNOWN_KEYS; the in-image unit tests need it.
 !deploy/telinha.env.example
+# Only the workspace manifest: bun install --frozen-lockfile needs every workspace.
+docs/
+!docs/package.json
 .github/
 e2e/
 test-results/

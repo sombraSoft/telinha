@@ -1,0 +1,35 @@
+---
+// Key | Default | Required | Notes for one section of telinha.env, in the
+// code's key order. Defaults come from the generator's probes when one exists.
+import generated from '../data/generated.json';
+import { CONFIG_KEYS, UI, codeSegments, pick, type Locale, type Section } from '../data/reference.ts';
+
+interface Props { locale: Locale; section: Section }
+const { locale, section } = Astro.props;
+
+const keys = (generated.knownKeys as string[]).filter((k) => CONFIG_KEYS[k]?.section === section);
+const defaults = generated.defaults as Record<string, string>;
+const rows = keys.map((key) => {
+  const doc = CONFIG_KEYS[key]!;
+  const def = defaults[key] ?? (doc.default === undefined ? '' : pick(doc.default, locale));
+  const required = doc.required === 'yes' ? UI.yes![locale] : doc.required === 'no' ? UI.no![locale] : doc.required[locale];
+  return { key, def, probed: defaults[key] !== undefined, required, notes: doc.notes[locale] };
+});
+const t = (k: string) => UI[k]![locale];
+---
+
+<table>
+  <thead>
+    <tr><th>{t('key')}</th><th>{t('default')}</th><th>{t('required')}</th><th>{t('notes')}</th></tr>
+  </thead>
+  <tbody>
+    {rows.map((r) => (
+      <tr>
+        <td><code class="ref-name">{r.key}</code></td>
+        <td>{r.probed ? <code>{r.def}</code> : codeSegments(r.def).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>
+        <td>{codeSegments(r.required).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>
+        <td>{codeSegments(r.notes).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>

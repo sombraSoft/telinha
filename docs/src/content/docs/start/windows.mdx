@@ -1,0 +1,250 @@
+---
+title: Windows PC
+description: Install Telinha on a Windows PC, let the setup wizard configure it and keep it running as a background task.
+sidebar:
+  order: 3
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+The PC you already have is enough. One PowerShell line installs Telinha, the
+setup wizard asks a few questions, and a background task keeps it running
+from boot, whether or not anyone is logged on.
+
+## Before you start
+
+- A 64-bit Windows PC, x64 or ARM, with Windows PowerShell 5.1 (built into
+  Windows) or a newer PowerShell.
+- The PC stays on, because a sleeping PC closes every room. Set it never to
+  sleep while plugged in: Settings → System → Power & battery (Power on a
+  desktop) → Screen and sleep (Screen, sleep & hibernate timeouts on newer
+  builds) → *When plugged in, put my device to sleep after*: *Never*.
+- A Discord server where you can create an application and add a bot. You can
+  create the app before the setup or while it runs: see
+  [Discord app](/telinha/start/discord/).
+- An idea of the address people will use: your own domain, a free DuckDNS
+  name or a Cloudflare Tunnel. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
+  compares them.
+- Access to your router's admin page, unless it does UPnP (many routers ship
+  with it off, and ISP routers often hide the switch).
+  No access and no UPnP, for example a locked ISP router or a shared building
+  network? Then this PC cannot open the ports itself: ask the ISP or
+  whoever runs the network to forward them, or use a [VPS](/telinha/start/vps/).
+  If your line is behind CGNAT, nothing from the internet reaches the PC:
+  read [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat)
+  first.
+
+## Install
+
+<Steps>
+
+1. Press Start, type `PowerShell` and click **Windows PowerShell**, not *Run
+   as administrator*: Telinha installs into your own user folder, and the
+   setup asks for administrator rights by itself when it needs them.
+
+2. Paste this line and press Enter:
+
+   ```powershell
+   irm https://github.com/sombraSoft/telinha/releases/latest/download/install.ps1 | iex
+   ```
+
+3. The script downloads `telinha-windows-x64.zip` (or `telinha-windows-arm64.zip`)
+   and `SHA256SUMS` from the newest stable release and stops if the sha256 does
+   not match. It puts `telinha.exe` into `%LOCALAPPDATA%\Telinha\bin`, adds
+   that folder to your user `PATH`, prints `telinha --version` and starts
+   `telinha setup`.
+
+</Steps>
+
+The script downloads nothing else. The setup downloads `livekit-server` and
+`caddy` or `cloudflared` itself, each checked against a pinned sha256.
+
+Three environment variables change what the script does. Set them in the same
+window before the `irm` line:
+
+```powershell
+$env:TELINHA_VERSION = 'vX.Y.Z'
+$env:TELINHA_HOME = 'D:\Telinha'
+$env:TELINHA_NO_SETUP = '1'
+```
+
+`TELINHA_VERSION` installs that release tag instead of the newest one,
+`TELINHA_HOME` uses another folder (kept as a user variable so later
+terminals find it), and `TELINHA_NO_SETUP` installs without starting the
+setup. Downloading the zip from the releases page by hand works too: unpack it
+anywhere and double-click `telinha.exe`, which offers the setup when there is
+no configuration yet. Windows may stop it with SmartScreen's *Windows protected
+your PC*, because the build is not code-signed yet: click *More info*, then
+*Run anyway*.
+
+:::note
+On Windows on ARM, Telinha runs the arm64 build. Cloudflare publishes no ARM
+`cloudflared` for Windows, so the tunnel mode uses the x64 one under emulation.
+:::
+
+## Run the setup
+
+The wizard speaks English or Brazilian Portuguese (it picks the system's
+language and asks once) and explains every question in a line or two. You
+never copy ids by hand: servers, roles and channels come from lists. On a
+Windows PC at home it goes like this:
+
+<Steps>
+
+1. **Where Telinha runs.** It shows the public IP and the router if one
+   answers UPnP, NAT-PMP or PCP. Choose *at home*, or *behind Cloudflare
+   only* if you will use a Cloudflare Tunnel.
+
+2. **Address.** Your own domain (its
+   [A record](/telinha/guides/domains/#your-own-domain) is compared with the
+   public IP), DuckDNS (the token is tried at once), a Cloudflare Tunnel or your own
+   reverse proxy. With your own domain or DuckDNS, Telinha gets the HTTPS
+   certificate itself, so it asks whether ports 80 and 443 from the internet
+   can reach the PC: yes; only 443, to another port on the PC; or neither, and
+   then it recommends the tunnel. Last, it asks whether Telinha may open the
+   ports on the router through UPnP.
+
+3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+   something else on the PC uses them.
+
+4. **Discord.** The bot token, the client secret, the login redirect (the one
+   thing you add by hand on the Developer Portal), the server, the role that
+   may enter, the channels and the command name.
+   [Discord app](/telinha/start/discord/) walks through every screen.
+
+5. **Updates.** Say yes: new stable releases then install themselves when no
+   room is open.
+
+6. **Review.** Every value on one screen, secrets shown only as generated,
+   kept or set. Confirm and the wizard writes
+   `%LOCALAPPDATA%\Telinha\config\telinha.env`, readable only by you, SYSTEM and
+   Administrators.
+
+7. **Service and checks.** It downloads the helper programs, then Windows asks
+   for administrator rights once (UAC) to register the background task and add
+   the firewall rules. It looks at the router (warning about CGNAT or double
+   NAT, listing the ports to forward by hand without UPnP), waits for Telinha to
+   start and for its HTTPS certificate, then runs `telinha doctor` with the
+   phone test and prints the next steps. The notes below cover the
+   administrator prompt and a router without UPnP.
+
+</Steps>
+
+:::note[The administrator prompt]
+Windows shows a User Account Control prompt for `telinha.exe` with
+*Publisher: Unknown*. That is expected: the build is not code-signed yet.
+Check that the program is the one in `%LOCALAPPDATA%\Telinha\bin` (*Show more
+details* shows the path) and click **Yes**.
+:::
+
+:::note[Forwarding the ports by hand?]
+When no router answered UPnP (or you did not allow it), the wizard only lists the ports to forward and carries on, so the
+certificate wait and the phone test fail at the end. That is expected: forward
+the ports as in [Open the ports](#open-the-ports) below, then run
+`telinha doctor` again (the certificate can take a few minutes once the ports
+reach the PC).
+:::
+
+If you said no to the UAC prompt, the background task is not registered: the
+wizard prints a PowerShell command that asks again, and running `telinha setup`
+once more does the same.
+
+## Open the ports
+
+The internet has to reach the PC on these ports:
+
+| Port | When | What for |
+| --- | --- | --- |
+| TCP 7881 | always | Video over TCP, for networks that block UDP |
+| UDP 7882 | always | Video over UDP, the normal path |
+| TCP 443 | your own domain or DuckDNS | The pages, over HTTPS |
+| TCP 80 | your own domain or DuckDNS, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
+
+With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
+carry WebRTC. If you changed a port in the setup, use your value.
+
+**UPnP first.** When the router answered and you allowed it, Telinha asks the
+router for these ports while it runs and you have nothing to do. Otherwise
+forward them by hand to the PC's local IP, after giving the PC a fixed address
+so the rule keeps pointing at it.
+[Port forwarding](/telinha/guides/port-forwarding/) explains both, and there
+are pages for [Vivo](/telinha/routers/vivo/), [Claro](/telinha/routers/claro/),
+[TIM](/telinha/routers/tim/) and [Oi](/telinha/routers/oi/) routers.
+
+**Windows Firewall.** The UAC step adds four inbound rules, each bound to its
+program in `bin\`: `Telinha LiveKit TCP` and `Telinha LiveKit UDP` for
+`livekit-server.exe`, `Telinha HTTPS` and `Telinha HTTP` for `caddy.exe` (the
+last two only with your own domain or DuckDNS). Running `telinha` in a console
+before the service and dismissing the Windows Security alert leaves Block
+rules behind, and Block wins over Allow; the install removes those first. Run
+`telinha setup` again after changing a port so the rules follow.
+
+## Check it
+
+```powershell
+telinha doctor
+```
+
+Doctor runs every check and prints one row each, with what to do about
+anything that is not ok. Then it shows a link and a QR code for the phone
+test: open it on your phone with Wi-Fi off, so the test comes from outside
+your network like your friends' connections do. It tells you whether the
+page, the LiveKit connection, UDP and TCP all work from there.
+`telinha doctor --local` skips the checks that need the internet.
+[Doctor and troubleshooting](/telinha/guides/doctor/) explains every row and
+what a failure means.
+
+## Use it
+
+Type `/telinha` (or the command name you chose) in one of the channels you
+picked. The bot posts a card with a button to a new room at
+`https://<your address>/r/<code>`. Whoever opens it logs in with Discord once,
+and members with the role get in. Share your screen from Chrome, Edge or
+another Chromium browser; watching works on phones too. The card shows who is
+streaming and who is watching, and the room closes by itself a few minutes
+after everyone leaves.
+
+:::caution[It works for friends but not from your own network?]
+Many routers cannot send a connection to their own public address back inside
+(NAT loopback, also called hairpin NAT or NAT reflection). Then the room opens
+on mobile data and for everyone outside, but not from this PC or another
+device on your network. Turn NAT loopback on if the router has the option.
+A hosts-file line pointing the name at the PC's local IP does not fix it:
+the page loads, but LiveKit still announces the public IP for the video. See
+[Doctor and troubleshooting](/telinha/guides/doctor/#works-from-outside-but-not-from-your-own-network).
+:::
+
+## Day two
+
+The background task is called `Telinha` in Task Scheduler. It starts at boot,
+runs as your account without administrator rights, starts Telinha again after
+an update or a crash, and writes the log to
+`%LOCALAPPDATA%\Telinha\logs\telinha.log` (rotated at 10 MB, five kept).
+
+```powershell
+telinha service status
+telinha service restart
+telinha service stop
+telinha service start
+Get-Content "$env:LOCALAPPDATA\Telinha\logs\telinha.log" -Tail 50 -Wait
+```
+
+`telinha run` starts Telinha in the console instead (Ctrl+C stops it), but only
+one copy runs per home folder: with the service up, a console run says
+`Telinha is already running` and exits.
+
+**Updates** happen on their own: Telinha checks a few minutes after it starts
+and then every few hours, waits while rooms are open, checks the sha256 and
+rolls back a version that fails to start. `telinha update --check` shows where
+you stand and `telinha update --now` installs at once. See
+[Updates](/telinha/guides/updates/).
+
+**Changing settings** means running `telinha setup` again: every question
+starts at the current value, secrets can be kept, and the service restarts with
+the new file. Editing `telinha.env` by hand works too, followed by
+`telinha service restart`.
+
+**Removing it**: `telinha service uninstall --firewall` removes the task and
+the firewall rules, then delete `%LOCALAPPDATA%\Telinha`.
+
+[Running as a service](/telinha/guides/service/) has the details.

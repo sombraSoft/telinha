@@ -1,0 +1,239 @@
+---
+title: Docker
+description: Rode a Telinha num contêiner só, num host Linux com Docker, com o assistente dentro da imagem e atualizações automáticas opcionais.
+sidebar:
+  order: 6
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Um contêiner roda tudo: a imagem `ghcr.io/sombrasoft/telinha` (`linux/amd64` e
+`linux/arm64`) já traz o `livekit-server`, o `caddy` e o `cloudflared`. O host
+guarda o arquivo do compose e a configuração em `/opt/telinha`, e um timer
+opcional, o `telinha-update`, mantém tudo na versão estável mais nova.
+
+## Antes de começar
+
+- Uma máquina Linux com Docker Engine e o plugin do compose, em casa ou numa
+  VPS, e acesso de root (`sudo`). O Alpine e outros sistemas com musl ficam
+  aqui: a versão nativa precisa de glibc.
+- Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
+  Dá para criar o aplicativo antes do assistente ou durante ele: veja
+  [Aplicativo do Discord](/telinha/pt-br/start/discord/).
+- Uma ideia do endereço que o pessoal vai usar: um domínio seu, um nome
+  gratuito do DuckDNS, o sslip.io numa VPS ou um Cloudflare Tunnel.
+  [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
+  compara as opções.
+- Em casa, acesso à página de administração do roteador, a não ser que ele faça
+  UPnP, e uma linha que não esteja atrás de CGNAT: veja
+  [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo). Sem
+  acesso e sem UPnP, por exemplo com um roteador da operadora travado ou a rede
+  compartilhada de um prédio? Aí a máquina não consegue abrir as portas
+  sozinha: peça à operadora ou a quem cuida da rede para encaminhar, ou use uma
+  [VPS](/telinha/pt-br/start/vps/).
+
+:::caution[Docker Desktop no Windows]
+No Windows a [instalação nativa](/telinha/pt-br/start/windows/) é o caminho mais
+simples. O Docker Desktop também funciona: o arquivo do compose usa a rede do
+host, o que exige o Docker Desktop 4.34 ou mais novo com **Settings → Resources
+→ Network → Enable host networking** ligado. O vídeo por UDP nesse caminho não
+foi verificado, então use um Cloudflare Tunnel lá (`INGRESS=tunnel`, nada para
+ocupar as portas 80/443). O `install-docker.sh` e o `telinha-update` são só
+para Linux.
+:::
+
+## Instalação
+
+O instalador precisa de root. Ou você passa `--docker` para a mesma linha da
+instalação nativa:
+
+```sh
+curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh -s -- --docker
+```
+
+ou baixa o pacote Docker da versão e roda o instalador dele por conta própria:
+
+```sh
+curl -fsSLO https://github.com/sombraSoft/telinha/releases/latest/download/telinha-deploy.tar.gz
+mkdir telinha-deploy && tar xzf telinha-deploy.tar.gz -C telinha-deploy && cd telinha-deploy
+sudo sh install-docker.sh
+```
+
+A linha única baixa o `telinha-deploy.tar.gz`, confere com o `SHA256SUMS` da
+versão e roda o `install-docker.sh` que vem dentro. Esse script pode rodar de
+novo quando você quiser; ele só mexe no que é dele:
+
+| Caminho | O que é |
+| --- | --- |
+| `/opt/telinha/compose.yml` | Um serviço, `telinha`, com a rede do host e o volume `telinha-data` para os dados |
+| `/opt/telinha/compose.journald.yml` | Override opcional que manda os logs para o journald |
+| `/opt/telinha/compose.override.yml` | Seu, opcional; o compose lê sozinho |
+| `/opt/telinha/config/telinha.env` | A configuração, criada a partir do exemplo só quando não existe (modo 600) |
+| `/opt/telinha/.env` | A versão que o compose roda, gravada pelo `telinha-update` (sem ele, `latest`) |
+| `/usr/local/sbin/telinha-update` | O atualizador, com as unidades do systemd em `/etc/systemd/system/` |
+
+O `/opt/telinha` é do root (modo 700), então os comandos desta página rodam num
+shell de root: antes, `sudo -i`. Com `TELINHA_VERSION=<tag>` o instalador fixa o
+compose nessa versão.
+
+À mão, sem o instalador: crie `/opt/telinha/config`, copie o `compose.yml`
+(do pacote, ou do `deploy/` de um clone) para `/opt/telinha/` e o
+`telinha.env.example` para `/opt/telinha/config/telinha.env`, preencha (o
+exemplo lista cada chave com um comentário) e rode `docker compose up -d`.
+
+## Rode o assistente
+
+Enquanto o `telinha.env` ainda tem valores vazios, o instalador oferece o
+assistente de configuração. Ele roda dentro da imagem, então nada mais é
+instalado no host. Para rodar você mesmo depois:
+
+```sh
+docker run --rm -it --user 0 -e TELINHA_HOME=/telinha -v /opt/telinha/config:/telinha/config ghcr.io/sombrasoft/telinha:latest setup --docker
+```
+
+O assistente fala português do Brasil ou inglês e explica cada pergunta em uma
+ou duas linhas; servidores, cargos e canais aparecem em listas.
+
+<Steps>
+
+1. **Onde a Telinha roda.** Em casa atrás de um roteador, numa VPS ou só atrás
+   da Cloudflare.
+
+2. **Endereço.** Um domínio seu, DuckDNS, sslip.io (só para VPS), um Cloudflare
+   Tunnel ou o seu próprio proxy reverso. Com o Caddy que vem junto ele
+   pergunta se as portas 80 e 443 da internet chegam na máquina; em casa, se a
+   Telinha pode abrir as portas no roteador por UPnP (funciona de dentro do
+   contêiner, graças à rede do host).
+
+3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
+   não ser que outro programa do host já use alguma.
+
+4. **Discord.** O token do bot, o segredo do cliente, o redirecionamento de
+   login (a única coisa que você adiciona na mão no Portal do Desenvolvedor), o
+   servidor, o cargo que pode entrar, os canais e o nome do comando.
+   [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
+
+5. **Revisão.** Todos os valores numa tela só; confirme e ele grava
+   `/opt/telinha/config/telinha.env` (modo 600). Não tem pergunta sobre
+   atualizações: no Docker, quem cuida disso é o `telinha-update`.
+
+6. **Inicie.** O assistente para depois do arquivo (sem programas para baixar,
+   sem serviço, sem firewall, sem olhar o roteador) e mostra como iniciar:
+
+   ```sh
+   cd /opt/telinha && docker compose up -d
+   ```
+
+   ou, para o `telinha-update` publicar agora e manter atualizado daqui em
+   diante:
+
+   ```sh
+   systemctl enable --now telinha-update.timer
+   ```
+
+</Steps>
+
+## Abra as portas
+
+O contêiner usa a rede do host, então as portas são as do host:
+
+| Porta | Quando | Para quê |
+| --- | --- | --- |
+| TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
+| UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
+| TCP 443 | domínio próprio, DuckDNS ou sslip.io | As páginas, por HTTPS |
+| TCP 80 | idem, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
+
+Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
+levam WebRTC. Se você mudou alguma porta no assistente, use o seu valor.
+
+**Em casa**, primeiro o UPnP: quando ele está ligado (`UPNP=auto`) e o roteador
+aceita, a Telinha mapeia essas portas enquanto roda. Se não, faça o
+encaminhamento de portas na mão para o IP local do host; veja
+[Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/) e as páginas
+dos roteadores da [Vivo](/telinha/pt-br/routers/vivo/), da
+[Claro](/telinha/pt-br/routers/claro/), da [TIM](/telinha/pt-br/routers/tim/) e
+da [Oi](/telinha/pt-br/routers/oi/). **Numa VPS**, libere as portas no firewall
+do provedor (veja [VPS](/telinha/pt-br/start/vps/)).
+
+Se o ufw ou o firewalld estiver ativo no host, libere as mesmas portas nele; com
+as portas padrão:
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+```
+
+## Verifique
+
+O doctor roda dentro do contêiner:
+
+```sh
+docker exec -it telinha bun server/src/index.ts doctor
+```
+
+Ele roda todas as verificações e mostra uma linha para cada, com o que fazer em
+tudo que não estiver ok: as linhas `gateway`, `cgnat` e `mappings` mostram o que
+o roteador aceitou. Depois ele mostra um link e um QR code para o teste pelo
+celular: abra no celular com o Wi-Fi desligado, para o teste vir de fora da sua
+rede. Ele diz se a página, a conexão com o LiveKit, o UDP e o TCP funcionam de
+lá. [Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
+linha e o que uma falha quer dizer.
+
+O contêiner também tem um healthcheck: o `docker compose ps` mostra ele como
+unhealthy enquanto um dos programas que vêm junto está fora do ar, por exemplo
+um Caddy que não consegue usar as portas 80/443 ou um token de túnel errado.
+
+## Use
+
+Digite `/telinha` (ou o nome de comando que você escolheu) num dos canais
+escolhidos. O bot posta um card com um botão para uma sala nova em
+`https://<seu endereço>/r/<código>`. Quem abre faz login com o Discord uma vez, e
+quem tem o cargo entra. Compartilhe a tela pelo Chrome, pelo Edge ou outro
+navegador baseado em Chromium; assistir funciona no celular também. O card
+mostra quem está transmitindo e quem está assistindo, e a sala fecha sozinha
+alguns minutos depois que todo mundo sai.
+
+## No dia a dia
+
+O `restart: unless-stopped` do compose faz o papel de serviço: o contêiner volta
+depois de um travamento ou de uma reinicialização.
+
+```sh
+docker logs -f telinha
+cd /opt/telinha && docker compose restart
+```
+
+Para guardar os logs no journal mesmo quando o contêiner é recriado, use o
+override do journald e leia com o `journalctl`:
+
+```sh
+cp /opt/telinha/compose.journald.yml /opt/telinha/compose.override.yml
+cd /opt/telinha && docker compose up -d
+journalctl -t telinha
+```
+
+**Atualizações.** Com o timer ligado, o `telinha-update` confere 3 minutos
+depois da inicialização e depois a cada 5 minutos, valida a imagem contra o
+digest publicado com a versão, espera enquanto há salas abertas e volta para a
+versão anterior se a nova nunca ficar saudável. Sem o timer, atualize na mão com
+`docker compose pull && docker compose up -d` em `/opt/telinha`.
+
+```sh
+telinha-update status
+telinha-update --now
+```
+
+Veja [Atualizações](/telinha/pt-br/guides/updates/) para fixar uma versão e os
+outros subcomandos.
+
+**Mudar as configurações** é rodar o assistente de novo (a linha do
+`docker run` acima, ou `sh install-docker.sh --setup` no pacote) e recriar o
+contêiner para ele ler o arquivo novo:
+
+```sh
+cd /opt/telinha && docker compose up -d --force-recreate
+```
+
+[Rodando como serviço](/telinha/pt-br/guides/service/) fala do arquivo de
+override, de um limite de memória e do healthcheck.

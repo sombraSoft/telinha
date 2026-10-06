@@ -1,0 +1,39 @@
+---
+title: Telinha
+description: Self-hosted screen share for a Discord group, running on your own machine.
+template: splash
+hero:
+  title: Telinha
+  tagline: Screen share for your Discord group, on your own machine.
+  actions:
+    - text: Choose your setup
+      link: /telinha/start/choose/
+      icon: right-arrow
+    - text: How it works
+      link: /telinha/start/how-it-works/
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <LinkCard title="Windows PC" description="Install on the PC you already have; it runs as a background service." href="/telinha/start/windows/" />
+  <LinkCard title="Linux at home" description="A mini PC, a Raspberry Pi 4/5 or any 64-bit Linux box that stays on." href="/telinha/start/linux/" />
+  <LinkCard title="VPS" description="A rented server with a public IP: no router to configure." href="/telinha/start/vps/" />
+  <LinkCard title="Docker" description="One container that bundles everything, with optional automatic updates." href="/telinha/start/docker/" />
+</CardGrid>
+
+Telinha is a self-hosted screen share for a Discord group. Members log in with
+Discord, a role check decides who gets in, and the `/telinha` command opens a
+room at `/r/<code>` and posts a live card in the allowed channels. The video
+goes through a LiveKit SFU running next to it. It exists because Discord Go
+Live is blocked in Brazil.
+
+You need a Discord server you administer, a machine that stays on, an HTTPS
+address (your own domain, or one of the no-domain options: DuckDNS, sslip.io
+or a Cloudflare Tunnel) and either two forwarded ports on your router or a
+VPS.
+
+Everything is one program configured by one file, `telinha.env`. The setup
+wizard writes it for you, downloads the helper programs Telinha needs and sets
+it up as a service.

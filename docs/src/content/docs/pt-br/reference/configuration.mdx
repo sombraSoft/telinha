@@ -1,0 +1,104 @@
+---
+title: Configuração (telinha.env)
+description: Cada chave do telinha.env com o padrão, se é obrigatória e o que faz, gerado a partir do código.
+sidebar:
+  order: 1
+---
+
+import ConfigTable from '../../../../components/ConfigTable.astro';
+import generated from '../../../../data/generated.json';
+
+Tudo fica em um único arquivo `CHAVE=valor`, o `telinha.env`. O `telinha setup`
+escreve esse arquivo, e rodar o assistente de novo é a forma de mudar as
+configurações; editar o arquivo à mão e reiniciar (`telinha service restart`)
+também funciona. Variáveis de ambiente de verdade sobrepõem o arquivo; uma
+definida como string vazia, não. Uma chave que a Telinha não conhece gera o log
+`config: unknown key FOO in telinha.env` e é ignorada.
+
+Onde o arquivo fica (`TELINHA_HOME` move a árvore inteira, `TELINHA_ENV` só o
+arquivo):
+
+| Plataforma | `telinha.env` |
+| --- | --- |
+| Windows | <code>{generated.paths.windows.config + '\\telinha.env'}</code> |
+| Linux, como root | <code>{generated.paths.linuxRoot.config + '/telinha.env'}</code> |
+| Linux, como usuário | <code>{generated.paths.linuxUser.config + '/telinha.env'}</code> (`$XDG_DATA_HOME` é respeitado) |
+| Host Docker | `/opt/telinha/config/telinha.env`; o compose entrega ao contêiner como variáveis de ambiente |
+
+**Aspas.** O Docker compose interpola `$VAR`, processa escapes com `\` em
+aspas duplas e remove comentários ` #...` de um arquivo env; o parser da
+própria Telinha lê os valores literalmente. A única grafia que os dois leem
+igual é o valor entre aspas simples, então ponha aspas simples em todo valor
+que contenha `$`, `\` ou `#` (`COOKIE_SECRET='a$b#c'`). A Telinha avisa na
+inicialização sobre um valor sem aspas, e o assistente escreve todo segredo
+entre aspas simples.
+
+As tabelas abaixo são geradas a partir do código a cada build: a lista de
+chaves, os padrões e a coluna "obrigatória" vêm do próprio servidor.
+
+## Identidade e Discord
+
+<ConfigTable locale="pt-BR" section="discord" />
+
+## URL pública e entrada HTTP
+
+<ConfigTable locale="pt-BR" section="ingress" />
+
+## Mídia (LiveKit)
+
+<ConfigTable locale="pt-BR" section="media" />
+
+## Salas
+
+<ConfigTable locale="pt-BR" section="rooms" />
+
+## Instalação nativa
+
+<ConfigTable locale="pt-BR" section="native" />
+
+## Locais
+
+<ConfigTable locale="pt-BR" section="paths" />
+
+## Só desenvolvimento
+
+<ConfigTable locale="pt-BR" section="dev" />
+
+## Reservado para LiveKit Cloud / TURN
+
+<ConfigTable locale="pt-BR" section="reserved" />
+
+## Erros de validação
+
+Um valor inválido impede a inicialização (e falha a verificação `config` do
+`telinha doctor`) com uma linha só, por exemplo
+`telinha: bad INGRESS x (want direct | tunnel | external)` ou
+`ports collide: MEDIA_TCP_PORT=7881, LISTEN=7881`. As regras:
+
+- `direct` e `tunnel` precisam de uma `PUBLIC_URL` `https://`.
+- `LIVEKIT_PORT`, as duas portas de mídia, a porta do `LISTEN` e, no modo
+  direct, `HTTPS_PORT` e `HTTP_PORT` precisam ser todas diferentes.
+- `MEDIA=cloud` é recusado: ainda não há suporte.
+- `COMMAND_NAME` precisa ser minúsculo, 1-32 letras, dígitos, `-` ou `_`;
+  `UPDATE_PIN` uma tag como `v1.2.3`; `LOCALE` `en` ou `pt-BR`;
+  `LIVEKIT_NODE_IP` um endereço IPv4; `DUCKDNS_DOMAIN` só o subdomínio;
+  `LIVEKIT_API_URL` um `http(s)://host[:porta]`.
+- `DEV_USER` é recusado a menos que a `PUBLIC_URL` seja `http://localhost` ou
+  `http://127.0.0.1`, o `LISTEN` seja loopback e o `INGRESS` seja `external`.
+
+Avisos vão para o log e a inicialização segue: uma porta da `PUBLIC_URL`
+diferente de `HTTPS_PORT` (o roteador traduz), um `DUCKDNS_DOMAIN` escrito com
+`.duckdns.org` (o sufixo é removido), um nome do DuckDNS que não é o host da
+`PUBLIC_URL`, e `AUTO_UPDATE=on` fora do binário nativo (ignorado).
+
+## O que os filhos recebem do ambiente
+
+Os programas auxiliares são iniciados com o ambiente da própria Telinha menos
+todas as chaves do `telinha.env` e menos qualquer coisa que comece com
+`LIVEKIT_`, `TUNNEL_`, `DISCORD_` ou `TELINHA_` (os binários em Go leem essas
+variáveis como opções). `PATH`, `HOME`, `TEMP`, `SystemRoot`, `LANG`,
+configurações de proxy e afins passam. Além disso, cada filho recebe só o que
+precisa: o LiveKit recebe `LIVEKIT_KEYS` (montada a partir do par de chaves da
+API), o cloudflared recebe `TUNNEL_TOKEN`, e o Caddy recebe `XDG_DATA_HOME`,
+`XDG_CONFIG_HOME` e `HOME` apontando para `data/caddy`. Nenhum segredo vai
+para a linha de comando de um filho nem para um arquivo renderizado.

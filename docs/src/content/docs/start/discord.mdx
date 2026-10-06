@@ -1,0 +1,242 @@
+---
+title: Discord app
+description: Create the Discord application Telinha logs people in with, and see what the setup wizard does for you.
+sidebar:
+  order: 7
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Telinha needs a Discord application of its own: its bot posts the room cards
+and answers the slash command, and its OAuth2 login lets people in. The
+setup wizard (`telinha setup`) does most of the work through Discord's API
+and waits while you do the few clicks it cannot. You can also do them all
+before you run it.
+
+You need a Discord account and, in the server where Telinha will live, the
+**Manage Server** permission (to add the bot).
+
+## Create the application
+
+<Steps>
+
+1. Open the Developer Portal at
+   [discord.com/developers/applications](https://discord.com/developers/applications)
+   and sign in.
+
+2. Click **New Application**, give it a name (the bot shows up under that
+   name), accept the terms and click **Create**.
+
+</Steps>
+
+## Bot token
+
+<Steps>
+
+1. In your application, open the **Bot** page.
+
+2. Click **Reset Token**, confirm, and copy the token. Discord shows it only
+   once; if you lose it, reset it again (the old one stops working).
+
+3. Paste it when the wizard asks for it. The wizard checks it right away and
+   shows the bot's name. It also reads the client id from it, so you never
+   copy that.
+
+</Steps>
+
+:::caution
+The token is the bot's password. Never put it on a command line: the process
+list and your shell history would show it. Telinha refuses
+`--discord-token` with a usage error; see
+[Non-interactive setup](#non-interactive-setup) for the safe ways.
+:::
+
+## Privileged intents
+
+The room page lists everyone with the role, online and offline, so the bot
+needs two privileged intents: **Server Members Intent** and
+**Presence Intent**. Without them the bot cannot log in at all.
+
+The wizard switches both on through the API. If Discord does not let it, the
+wizard asks you to do it and checks again after each try:
+
+<Steps>
+
+1. Open the **Bot** page.
+
+2. Under **Privileged Gateway Intents**, switch on **Server Members Intent**
+   and **Presence Intent**.
+
+3. Click **Save Changes**.
+
+</Steps>
+
+To check by hand later, look at the same two switches, or run
+`telinha doctor`: its `discord-intents` check says which one is off.
+
+## Client secret and client id
+
+<Steps>
+
+1. Open the **OAuth2** page.
+
+2. Under **Client Secret**, click **Reset Secret** and copy it.
+
+3. Paste it when the wizard asks. The wizard asks Discord at once whether
+   the secret matches the application, and asks again if it does not.
+
+</Steps>
+
+The client id is the application's id. The wizard reads it from the bot
+token, so it never asks; you type it only with `--no-discord-check`
+(`--client-id`).
+
+## Login redirect
+
+After login, Discord sends people back to `<PUBLIC_URL>/auth/callback`, and
+only to addresses the application lists. **This is the one thing Discord's
+API cannot set**, so the wizard shows the address and waits for you:
+
+<Steps>
+
+1. Copy the address the wizard prints. With
+   `PUBLIC_URL=https://telinha.example.com` it is
+   `https://telinha.example.com/auth/callback`.
+
+2. On the **OAuth2** page, under **Redirects**, click **Add Redirect** and
+   paste it.
+
+3. Click **Save Changes**.
+
+4. Back in the wizard, choose to check again. It reads the application
+   until the redirect is there.
+
+</Steps>
+
+You may skip this step in the wizard; the `discord-redirect` check of
+`telinha doctor` reports it later. The redirect must match `PUBLIC_URL`
+exactly, port included. If you change `PUBLIC_URL`, add the new redirect.
+
+## Invite the bot
+
+When the bot is in no server yet, or not in the one you want, the wizard
+prints an invite link and offers to open it in your browser:
+
+<Steps>
+
+1. Open the link and pick your server (you need **Manage Server** there).
+
+2. Review the permissions and click **Authorize**.
+
+3. Back in the wizard, press Enter. It lists the servers again.
+
+</Steps>
+
+The link adds the bot with the `bot` and `applications.commands` scopes
+and three permissions: **View Channel**, **Send Messages** and
+**Read Message History**.
+
+The live card is the bot's reply to the slash command, and the bot keeps
+editing it through Discord's API while the room is open. That editing needs
+**View Channel** and **Read Message History** in every command channel. If
+a channel is private or overrides permissions, give the bot's role those
+two there. Without them the card stays as first posted (the log says
+`card not editable`), and everything else works.
+
+## Server, role, channels and names
+
+The wizard picks everything from lists; nobody copies ids:
+
+- **Server** (`GUILD_ID`): one of the servers the bot is in. One Telinha
+  serves one server.
+- **Role** (`ROLE_ID`): members with this role may enter the rooms. The last
+  entry, "Everyone in the server (@everyone)", lets every member in. Roles
+  managed by an integration, such as a bot's own role, are not listed.
+- **Channels** (`CHANNEL_IDS`): text or announcement channels, grouped by
+  category. The slash command works only in these. Pick at least one.
+- **Command name** (`COMMAND_NAME`, default `telinha`): lowercase letters,
+  digits, `-` or `_`, 1 to 32 characters. Two Telinhas in the same server
+  need different names.
+- **Group name** (`GROUP_NAME`): shown on the pages and in the bot's
+  replies. Empty means the server's name.
+
+To change any of these later, run `telinha setup` again: every question
+starts at the current value and secrets offer to keep the current one.
+
+## What the wizard does and what you click
+
+| The wizard | You |
+| --- | --- |
+| Checks the bot token and reads the client id from it | Create the application, reset the token, paste it |
+| Switches on the two privileged intents | Only if Discord refuses: switch them on the **Bot** page |
+| Checks the client secret with Discord | Reset the secret, paste it |
+| Shows the login redirect and waits until it is saved | Add the redirect and click **Save Changes** |
+| Prints the invite link and can open the browser | Pick the server and authorize the bot |
+| Lists servers, roles and channels | Pick them |
+| Validates the command name | Choose the command and group names |
+
+## Non-interactive setup
+
+`telinha setup --non-interactive` (also used when there is no terminal) runs
+the same checks without asking: it reads the client id from the token,
+switches the intents on, checks the client secret, and checks that the bot
+is in `--guild` (printing the invite link when it is not) and that the role
+and channels exist. A missing redirect is only a warning there; doctor
+checks it again. For everyone in the server, pass the server's own id as
+`--role`.
+
+Secrets never go on the command line. `--discord-token` and
+`--client-secret` are refused with a usage error. Give them through the
+environment, under their `telinha.env` names, or through a file; `-` reads
+standard input, one secret per run:
+
+| Secret | Environment | File |
+| --- | --- | --- |
+| Bot token | `DISCORD_TOKEN` | `--discord-token-file PATH` |
+| Client secret | `DISCORD_CLIENT_SECRET` | `--client-secret-file PATH` |
+
+```
+telinha setup --non-interactive --public-url https://telinha.example.com \
+  --guild <id> --role <id> --channels <id>,<id> \
+  --discord-token-file ./discord-token --client-secret-file - < ./client-secret
+```
+
+`--no-discord-check` makes no Discord calls at all: the ids are taken as
+given, nothing is verified, and `--client-id` becomes required. The rest of
+the flags are in [Command line](/telinha/reference/cli/).
+
+## Troubleshooting
+
+### "disallowed intents" at login
+
+The bot cannot log in because one of the two privileged intents is off. Run
+`telinha setup` again (it switches them on) or turn them on by hand under
+[Privileged intents](#privileged-intents). The `discord-intents` check of
+`telinha doctor` names the missing one.
+
+### Login fails with "Invalid OAuth2 redirect_uri"
+
+Discord does not know `<PUBLIC_URL>/auth/callback`. Add it as in
+[Login redirect](#login-redirect), with the exact scheme, host and port of
+`PUBLIC_URL`. The `discord-redirect` check prints the address it expects
+and the ones the application has.
+
+### Discord rejects the token
+
+The token was reset, or copied wrong. Reset it on the **Bot** page and run
+`telinha setup` again. The `discord-token` check catches this.
+
+### The bot is in no server
+
+The bot was never invited, or was removed. The `discord-guild` check of
+`telinha doctor` prints the invite link for your `GUILD_ID`; open it and
+authorize the bot again.
+
+### The card does not update
+
+The bot cannot see the channel or read its history. Give the bot's role
+**View Channel** and **Read Message History** in the command channels (see
+[Invite the bot](#invite-the-bot)).
+
+All checks are listed in [Doctor checks](/telinha/reference/doctor-checks/),
+and [Doctor and troubleshooting](/telinha/guides/doctor/) covers the rest.
