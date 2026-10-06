@@ -96,7 +96,8 @@ COPY package.json bunfig.toml versions.json ./
 COPY --from=prod-deps /app/node_modules node_modules
 COPY --from=build /app/server/package.json /app/server/tsconfig.json server/
 COPY --from=build /app/server/src server/src
-COPY --from=build /app/server/test server/test
+# bun test opens snapshot files for writing; the tests run as bun.
+COPY --from=build --chown=bun:bun /app/server/test server/test
 # server/test reads it (every key is a KNOWN_KEY); also a reference config for `docker run`.
 COPY deploy/telinha.env.example deploy/
 COPY --from=build /app/web/dist web/dist
