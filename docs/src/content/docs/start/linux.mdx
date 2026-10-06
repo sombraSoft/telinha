@@ -1,0 +1,265 @@
+---
+title: Linux server at home
+description: Install Telinha on a Linux box at home, as root or as your user, and run it as a systemd service.
+sidebar:
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+A mini PC, a Raspberry Pi 4 or 5, an old laptop or a home server: any 64-bit
+Linux machine that stays on. One `curl` line installs Telinha, the setup
+wizard asks a few questions, and systemd keeps it running.
+
+## Before you start
+
+- 64-bit Linux with glibc (Debian, Ubuntu, Raspberry Pi OS 64-bit, Fedora and
+  the like) on x64 or arm64, with systemd. The x64 build runs on any x86-64
+  CPU, old Celeron and Atom boxes included. On Alpine or another musl system
+  the installer switches to [Docker](/telinha/start/docker/); a 32-bit
+  Raspberry Pi OS is refused, install the 64-bit one.
+- `curl` or `wget`, `tar`, and `sha256sum` or `shasum`.
+- A Discord server where you can create an application and add a bot. You can
+  create the app before the setup or while it runs: see
+  [Discord app](/telinha/start/discord/).
+- An idea of the address people will use: your own domain, a free DuckDNS
+  name or a Cloudflare Tunnel. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
+  compares them.
+- Access to your router's admin page, unless it does UPnP (many routers ship
+  with it off, and ISP routers often hide the switch).
+  No access and no UPnP, for example a locked ISP router or a shared building
+  network? Then this machine cannot open the ports itself: ask the ISP or
+  whoever runs the network to forward them, or use a [VPS](/telinha/start/vps/).
+  If your line is behind CGNAT, nothing from the internet reaches the
+  machine: read
+  [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat) first.
+
+## Install
+
+Decide first whether Telinha is installed as root or as your user. Both use
+the same one-liner; `sudo` makes the difference.
+
+| | As root | As your user |
+| --- | --- | --- |
+| Home folder | `/opt/telinha` | `~/.local/share/telinha` (`$XDG_DATA_HOME` respected) |
+| Service | System unit `/etc/systemd/system/telinha.service`, running as a `telinha` system user | User unit `~/.config/systemd/user/telinha.service` |
+| Ports 80 and 443 | Allowed through a capability of the unit | Need one `sudo` command, or port 8443 |
+| Keeps running after you log out | Yes | Only with lingering (the setup turns it on) |
+| Commands | `sudo telinha ...` | `telinha ...` |
+
+On a machine that is there for Telinha, the root install is the simpler one.
+
+<Steps>
+
+1. Run the installer, as root:
+
+   ```sh
+   curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh
+   ```
+
+   or as your user:
+
+   ```sh
+   curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sh
+   ```
+
+2. It asks whether to run Telinha as a native program or in Docker. Keep the
+   default, native.
+
+3. The script downloads `telinha-linux-x64.tar.gz` (or `telinha-linux-arm64.tar.gz`)
+   and `SHA256SUMS` from the newest stable release, stops if the sha256 does
+   not match, installs the program and starts `telinha setup`.
+
+</Steps>
+
+As root it installs a root-owned `/usr/local/lib/telinha/telinha`, run by the
+`/usr/local/bin/telinha` command, and the setup copies it into
+`/opt/telinha/bin/` for the service, which updates that copy itself. As your
+user it installs `~/.local/share/telinha/bin/telinha` and prints the line to
+add to `~/.profile` so the `telinha` command is found:
+
+```sh
+export PATH="$HOME/.local/share/telinha/bin:$PATH"
+```
+
+The script downloads nothing else: `livekit-server` and `caddy` or
+`cloudflared` come later, each checked against a pinned sha256. To skip the
+question, add `-s -- --native` after `sh` (`--no-setup` installs without
+starting the setup), or set `TELINHA_INSTALL=native`. `TELINHA_VERSION`
+installs a given release tag and `TELINHA_HOME` another home folder.
+
+## Run the setup
+
+The wizard speaks English or Brazilian Portuguese (it picks the system's
+language and asks once) and explains every question in a line or two. You
+never copy ids by hand: servers, roles and channels come from lists. On a
+Linux box at home it goes like this:
+
+<Steps>
+
+1. **Where Telinha runs.** It shows the public IP and the router if one
+   answers UPnP, NAT-PMP or PCP. Choose *at home*, or *behind Cloudflare
+   only* if you will use a Cloudflare Tunnel.
+
+2. **Address.** Your own domain (its
+   [A record](/telinha/guides/domains/#your-own-domain) is compared with the
+   public IP), DuckDNS (the token is tried at once), a Cloudflare Tunnel or your own
+   reverse proxy. With your own domain or DuckDNS, Telinha gets the HTTPS
+   certificate itself, so it asks whether ports 80 and 443 from the internet
+   can reach the machine: yes; only 443, to another port on the machine; or
+   neither, and then it recommends the tunnel. Last, it asks whether Telinha
+   may open the ports on the router through UPnP.
+
+3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+   something else on the machine uses them.
+
+4. **Discord.** The bot token, the client secret, the login redirect (the one
+   thing you add by hand on the Developer Portal), the server, the role that
+   may enter, the channels and the command name.
+   [Discord app](/telinha/start/discord/) walks through every screen.
+
+5. **Updates.** Say yes: new stable releases then install themselves when no
+   room is open.
+
+6. **Review.** Every value on one screen, secrets shown only as generated,
+   kept or set. Confirm and the wizard writes `config/telinha.env` in the home
+   folder: owned by root and readable by the service in a root install, mode
+   0600 in a user install.
+
+7. **Service and checks.** It downloads the helper programs, then installs and
+   starts the systemd unit. As your user it also turns lingering on, so
+   Telinha keeps running after you log out (when that needs a password it
+   prints `sudo loginctl enable-linger <you>` for you to run). Then it looks at the router (warning about CGNAT or double
+   NAT, listing the ports to forward by hand without UPnP), waits for Telinha
+   to start and for its HTTPS certificate, runs `telinha doctor` with the
+   phone test and prints the next steps.
+
+</Steps>
+
+:::note[Forwarding the ports by hand?]
+When no router answered UPnP (or you did not allow it), the wizard only lists the ports to forward and carries on, so the
+certificate wait and the phone test fail at the end. That is expected: forward
+the ports as in [Open the ports](#open-the-ports) below, then run
+`telinha doctor` again (the certificate can take a few minutes once the ports
+reach the machine).
+:::
+
+**User install with ports 80 and 443.** Linux lets only root bind ports below
+1024, so the setup offers one `sudo` command that allows them from 80 up for
+every user. It survives every update:
+
+```sh
+sudo sh -c 'printf "net.ipv4.ip_unprivileged_port_start=80\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system'
+```
+
+If you decline, it offers the alternative: Telinha listens on 8443
+(`HTTPS_PORT=8443`, `HTTP_PORT=0`) and the router forwards public 443 to 8443.
+
+## Open the ports
+
+The internet has to reach the machine on these ports:
+
+| Port | When | What for |
+| --- | --- | --- |
+| TCP 7881 | always | Video over TCP, for networks that block UDP |
+| UDP 7882 | always | Video over UDP, the normal path |
+| TCP 443 | your own domain or DuckDNS | The pages, over HTTPS |
+| TCP 80 | your own domain or DuckDNS, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
+
+With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
+carry WebRTC. If you changed a port in the setup, use your value (with
+`HTTPS_PORT=8443` the router forwards public 443 to 8443).
+
+**UPnP first.** When the router answered and you allowed it, Telinha asks the
+router for these ports while it runs and you have nothing to do. Otherwise
+forward them by hand to the machine's local IP, after giving the machine a
+fixed address so the rule keeps pointing at it.
+[Port forwarding](/telinha/guides/port-forwarding/) explains both, and there
+are pages for [Vivo](/telinha/routers/vivo/), [Claro](/telinha/routers/claro/),
+[TIM](/telinha/routers/tim/) and [Oi](/telinha/routers/oi/) routers.
+
+**The machine's own firewall.** Telinha adds no firewall rules on Linux. If
+ufw or firewalld is active, open the same ports there. With the default ports
+and your own domain:
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+```
+
+`telinha doctor` prints these commands with your own ports when it finds
+either tool.
+
+## Check it
+
+```sh
+sudo telinha doctor
+```
+
+(`telinha doctor`, without `sudo`, for a user install.) Doctor runs every
+check and prints one row each, with what to do about anything that is not ok.
+Then it shows a link and a QR code for the phone test: open it on your phone
+with Wi-Fi off, so the test comes from outside your network like your
+friends' connections do. It tells you whether the page, the LiveKit
+connection, UDP and TCP all work from there. `telinha doctor --local` skips
+the checks that need the internet.
+[Doctor and troubleshooting](/telinha/guides/doctor/) explains every row and
+what a failure means.
+
+## Use it
+
+Type `/telinha` (or the command name you chose) in one of the channels you
+picked. The bot posts a card with a button to a new room at
+`https://<your address>/r/<code>`. Whoever opens it logs in with Discord once,
+and members with the role get in. Share your screen from Chrome, Edge or
+another Chromium browser; watching works on phones too. The card shows who is
+streaming and who is watching, and the room closes by itself a few minutes
+after everyone leaves.
+
+:::caution[It works for friends but not from your own network?]
+Many routers cannot send a connection to their own public address back inside
+(NAT loopback, also called hairpin NAT or NAT reflection). Then the room opens
+on mobile data and for everyone outside, but not from this machine or another
+device on your network. Turn NAT loopback on if the router has the option.
+A hosts-file line pointing the name at the machine's local IP does not fix it:
+the page loads, but LiveKit still announces the public IP for the video. See
+[Doctor and troubleshooting](/telinha/guides/doctor/#works-from-outside-but-not-from-your-own-network).
+:::
+
+## Day two
+
+The service starts at boot, starts Telinha again after an update or a crash,
+and logs to the journal. For a root install:
+
+```sh
+sudo telinha service status
+sudo telinha service restart
+journalctl -u telinha -f
+```
+
+For a user install:
+
+```sh
+telinha service status
+telinha service restart
+journalctl --user -u telinha -f
+```
+
+`systemctl` (or `systemctl --user`) manages the `telinha` unit like any other;
+`telinha service start`, `stop`, `restart` and `status` make the same calls.
+
+**Updates** happen on their own: Telinha checks a few minutes after it starts
+and then every few hours, waits while rooms are open, checks the sha256 and
+rolls back a version that fails to start. `telinha update --check` shows where
+you stand and `telinha update --now` installs at once (with `sudo` for a root
+install). See [Updates](/telinha/guides/updates/).
+
+**Changing settings** means running `telinha setup` again (`sudo telinha setup`
+as root): every question starts at the current value, secrets can be kept, and
+the service restarts with the new file. Editing `telinha.env` by hand works
+too, followed by `telinha service restart`.
+
+**Removing it**: `telinha service uninstall` removes the unit and keeps the
+files; then delete the home folder.
+
+[Running as a service](/telinha/guides/service/) has the details.

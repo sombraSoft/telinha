@@ -1,0 +1,51 @@
+---
+title: Verificações do doctor
+description: O que cada verificação do telinha doctor olha e o que resolve, mais o que o teste pelo celular mede.
+sidebar:
+  order: 3
+---
+
+import DoctorChecks from '../../../../components/DoctorChecks.astro';
+
+O `telinha doctor` roda as verificações abaixo em ordem, 10 s cada no máximo,
+e imprime uma linha por verificação (`✓` ok, `!` aviso, `✗` falha, `–` pulada)
+com o que fazer sobre qualquer coisa que não esteja ok. `--local` pula as que
+precisam de internet, e o teste pelo celular. Sai com 1 quando uma verificação
+ou o teste pelo celular falhou. Como ler os resultados e as soluções por
+sintoma estão em
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/).
+
+Os ids e os títulos das verificações vêm do código a cada build.
+
+<DoctorChecks locale="pt-BR" />
+
+## O teste pelo celular
+
+Com o serviço rodando, o doctor pede a ele um link de uso único e imprime
+junto com um QR code para abrir num celular com o Wi-Fi desligado. Aberto nos
+dados móveis, o teste vem de fora da sua rede, que é justamente o ponto. Não
+precisa de login no Discord: o link funciona uma vez e só dentro de 10
+minutos, e o cookie que ele deixa (15 minutos) não abre nada além da página do
+doctor e do relay do LiveKit, numa sala privada só dele. A página e o terminal
+mostram:
+
+| Linha | Mede |
+| --- | --- |
+| HTTPS | A página carregou por HTTPS, e a latência |
+| LiveKit connection | A sinalização por `/livekit` na `PUBLIC_URL` |
+| Sending video | A publicação de uma trilha de vídeo de teste minúscula |
+| First path | O protocolo e o IP que a conexão usou, e o tempo de ida e volta |
+| UDP / TCP | A mídia forçada por cada protocolo, um de cada vez |
+
+Lendo uma falha:
+
+| Resultado | Significa |
+| --- | --- |
+| LiveKit connection falhou | A Telinha não é alcançável na `PUBLIC_URL` pela internet: veja as verificações `dns`, `tls` e as do roteador |
+| HTTPS e LiveKit ok, UDP e TCP falharam | As portas de mídia estão fechadas: encaminhe as duas |
+| Só o UDP falhou | O UDP não está encaminhado; o vídeo ainda funciona por TCP, com mais atraso |
+| Só o TCP falhou | O TCP não está encaminhado; necessário onde o UDP é bloqueado |
+| First path para um IP que não é o IP público | Um `LIVEKIT_NODE_IP` errado |
+
+O doctor espera até 10 minutos (Ctrl+C pula); `--no-phone` pula o teste, e
+ele é pulado sem terminal ou com o serviço parado.

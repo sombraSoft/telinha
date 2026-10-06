@@ -1,0 +1,10 @@
+/* Wide reference tables scroll inside the content column instead of the page. */
+.sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+}
+
+/* Long commands and URLs wrap instead of hiding behind a horizontal scroll. */
+.sl-markdown-content :not(pre) > code {
+  overflow-wrap: anywhere;
+}

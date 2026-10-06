@@ -6,12 +6,15 @@
   "packageManager": "bun@1.4.2",
   "workspaces": [
     "server",
-    "web"
+    "web",
+    "docs"
   ],
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "build": "bun run --filter @telinha/web build",
-    "test": "bun test ./server ./web",
+    "docs:dev": "bun run --filter @telinha/docs dev",
+    "docs:build": "bun run --filter @telinha/docs build",
+    "test": "bun test ./server ./web ./docs",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p .",
     "e2e": "playwright test",
     "compile": "bun scripts/build-binary.ts",

@@ -1,0 +1,18 @@
+{
+  "name": "@telinha/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun scripts/generate.ts && bun --bun astro dev",
+    "build": "bun scripts/generate.ts && bun --bun astro build",
+    "preview": "bun --bun astro preview",
+    "typecheck": "tsc --noEmit -p scripts"
+  },
+  "devDependencies": {
+    "@astrojs/starlight": "^0.42.5",
+    "@types/bun": "^1.4.2",
+    "astro": "^7.3.5",
+    "starlight-links-validator": "^0.26.0",
+    "typescript": "^6.0.3"
+  }
+}

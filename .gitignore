@@ -4,6 +4,8 @@ web/dist/
 dist-bin/
 .cache/
 data/
+# ...but not the docs site's hand-written reference data (generated.json stays ignored below).
+!docs/src/data/
 test-results/
 playwright-report/
 .env
@@ -14,3 +16,7 @@ deploy/.env
 *.log
 # Release CI drops the image digest here for the deploy bundle.
 deploy/telinha-image.digest
+# Docs site build output; generated.json is rebuilt from the code on every build.
+docs/dist/
+docs/.astro/
+docs/src/data/generated.json

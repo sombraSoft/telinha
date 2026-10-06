@@ -1,0 +1,216 @@
+---
+title: Como funciona
+description: O que a Telinha roda, como alguém sai do Discord e chega numa sala, e do que a máquina e a rede precisam.
+sidebar:
+  order: 1
+---
+
+import PinnedVersions from '../../../../components/PinnedVersions.astro';
+
+A Telinha é um compartilhamento de tela que você hospeda para o seu grupo do
+Discord. Alguém digita `/telinha` num canal permitido, o bot responde com um
+card e o link de uma sala em `/r/<code>`, e todo mundo que tem o cargo certo
+entra com a conta do Discord e assiste. O vídeo passa pelo
+[LiveKit](https://livekit.io), um servidor de mídia (um SFU) que roda ao lado
+da Telinha, na mesma máquina.
+
+## Um único programa
+
+A Telinha é um único executável, configurado por um único arquivo, o
+`telinha.env`. Ao iniciar, ela lê esse arquivo, escreve a configuração dos
+programas auxiliares em `data/run/` e inicia esses programas como processos
+filhos:
+
+| Processo filho | Quando | O que faz |
+| --- | --- | --- |
+| `livekit-server` | sempre | Recebe a tela compartilhada e envia para cada pessoa assistindo |
+| `caddy` | `INGRESS=direct` | Obtém um certificado do Let's Encrypt para o seu endereço e cuida do HTTPS |
+| `cloudflared` | `INGRESS=tunnel` | Leva o tráfego web da Cloudflare até a Telinha, sem abrir portas web de entrada |
+
+Com `INGRESS=external` nem o `caddy` nem o `cloudflared` rodam: o seu próprio
+proxy reverso cuida do HTTPS. Um processo filho que cai é reiniciado, com uma
+espera um pouco maior a cada vez, e o que ele imprime vai para o log da
+Telinha como `[livekit] ...`, `[caddy] ...` ou `[cloudflared] ...`.
+
+O programa nativo baixa os binários auxiliares de que precisa durante a
+instalação (ou no primeiro início), confere o sha256 de cada download com o
+valor fixado na versão e baixa de novo quando uma versão fixa uma mais nova.
+A imagem Docker já traz os três.
+
+<PinnedVersions locale="pt-BR" />
+
+## Login na entrada
+
+Todas as páginas ficam atrás do login do Discord. Depois do login, a Telinha
+confere se a pessoa tem o cargo que você escolheu (ou deixa entrar todo mundo
+do servidor, se foi essa a escolha) e guarda a sessão por `SESSION_DAYS`
+dias. Só alguns caminhos respondem sem login: `/healthz`, os arquivos
+estáticos da página, o próprio login em `/auth/` e o link de uso único do
+teste pelo celular do `telinha doctor`.
+
+Só o comando de barra cria salas. Cada sala ganha um código curto e fácil de
+falar, como `lamo-futi`, e fica em `<PUBLIC_URL>/r/lamo-futi`. O card que o
+bot publica é ao vivo: mostra quem está transmitindo, quem está assistindo e
+desde quando. Uma sala fecha de vez depois de `CLOSE_EMPTY_SECONDS` vazia
+(cinco minutos, por padrão), e o card vira um resumo.
+
+Além das pessoas na sala, a página lista todo mundo que tem o cargo, online e
+offline, no estilo do Discord. É por causa dessa lista que o bot precisa de
+duas intents privilegiadas (veja [Aplicativo do Discord](/telinha/pt-br/start/discord/)).
+
+## A mídia vai direto para o LiveKit
+
+Dois tipos de tráfego saem do navegador:
+
+- **Sinalização**, um WebSocket pequeno, passa pela Telinha em
+  `/livekit/rtc` no seu `PUBLIC_URL`, atrás do mesmo login. São poucos
+  kilobytes por segundo por pessoa.
+- **Mídia**, o vídeo em si, vai direto entre o navegador e o LiveKit por
+  WebRTC, na porta TCP `MEDIA_TCP_PORT` (7881) e na UDP `MEDIA_UDP_PORT`
+  (7882). O UDP é o caminho normal; o TCP é a alternativa para redes que
+  bloqueiam UDP.
+
+Por isso as duas portas de mídia precisam chegar à máquina vindas da internet
+em qualquer modo. Um Cloudflare Tunnel leva páginas web e WebSockets, mas não
+a mídia do WebRTC; então, mesmo com túnel, as portas de mídia são
+encaminhadas no roteador (ou liberadas na VPS).
+
+## Diagramas
+
+### Direto
+
+`INGRESS=direct`: o Caddy que vem junto obtém o certificado e repassa tudo
+para a Telinha.
+
+```
+browser --> caddy :443 (TLS; :80 redirects)           child of telinha
+              --> telinha 127.0.0.1:8081 (LISTEN)
+                    /healthz      --> answered, no login
+                    /internal/*   --> local control endpoint (bearer token, never through a proxy)
+                    /r/assets/*   --> the pages' hashed assets, no login
+                    /doctor*      --> phone test (one-time link)
+                    /auth/*       --> OAuth login, /auth/members (no gate)
+                    everything    --> gate: Discord login + role
+                      /livekit/rtc* --> LiveKit 127.0.0.1:7880   (signaling relay, WebSocket)
+                      /r/<code>     --> room page
+                      /             --> redirect to /r/
+
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP)
+```
+
+### Túnel
+
+`INGRESS=tunnel`: Cloudflare Tunnel, sem portas web de entrada. As portas de
+mídia continuam precisando de encaminhamento.
+
+```
+browser --> Cloudflare --> cloudflared                child of telinha
+              --> telinha 127.0.0.1:8081 --> (same routes as above)
+
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP)
+```
+
+### Seu próprio proxy
+
+`INGRESS=external`: o seu nginx, Traefik ou Caddy cuida do HTTPS e repassa
+para o endereço `LISTEN` da Telinha. Ele precisa deixar passar o upgrade de
+WebSocket e definir o `X-Forwarded-For`. A mídia funciona igual aos outros
+dois modos. Detalhes em
+[Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/#seu-próprio-proxy-reverso).
+
+## Quando o IP público muda
+
+A maioria das conexões residenciais recebe um IP público novo de vez em
+quando. O LiveKit descobre o IP público uma vez, ao iniciar, então a Telinha
+fica de olho: a cada `IP_WATCH_SECONDS` (cinco minutos, por padrão) ela
+pergunta qual IP a internet enxerga. Quando o IP muda, ela renova os
+mapeamentos no roteador, atualiza o DuckDNS, se você usa, e reinicia o
+LiveKit. As salas abertas dão uma piscada: a página se reconecta sozinha, e
+quem estava compartilhando precisa compartilhar de novo.
+
+Num servidor com IP público fixo, defina `LIVEKIT_NODE_IP`; isso desliga essa
+verificação. Com DuckDNS, a Telinha também mantém o seu `<name>.duckdns.org`
+apontando para o IP atual. Veja
+[Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/).
+
+## UPnP
+
+Com `UPNP=auto` (o padrão), a Telinha pede ao roteador que encaminhe as
+portas para esta máquina enquanto ela roda, por UPnP, NAT-PMP ou PCP, o que o
+roteador responder. Os mapeamentos são renovados enquanto ela roda e
+removidos quando ela para. Muitos roteadores vêm com o UPnP desligado; aí
+você liga no roteador ou faz o encaminhamento de portas à mão e define
+`UPNP=off`. Veja [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/).
+
+## Atualizações
+
+- **Programa nativo** (Windows e Linux): ele se atualiza sozinho para novas
+  versões estáveis, confere o sha256 de cada download, espera enquanto há
+  salas abertas (até `UPDATE_MAX_DEFER_HOURS`) e volta para a versão anterior
+  quando uma nova falha ao iniciar duas vezes.
+- **Docker**: o `telinha-update`, um script no host executado por um timer
+  do systemd que você ativa na instalação, baixa a imagem nova e confere com
+  o digest publicado na versão.
+- **A partir do código-fonte**: você atualiza com `git pull`.
+
+Veja [Atualizações](/telinha/pt-br/guides/updates/).
+
+## Requisitos
+
+### Máquina e sistema operacional
+
+Uma máquina que fique ligada enquanto as pessoas assistem: um PC com Windows,
+uma máquina Linux em casa ou uma VPS. Builds nativos:
+
+| Build | Roda em |
+| --- | --- |
+| `windows-x64` | Windows em qualquer CPU x86-64 |
+| `windows-arm64` | Windows em ARM (a Cloudflare não publica `cloudflared` ARM para Windows, então o x64 roda em emulação) |
+| `linux-x64` | Linux com glibc em qualquer CPU x86-64 |
+| `linux-arm64` | Linux com glibc em ARM 64 bits, como um Raspberry Pi 4 ou 5 com sistema 64 bits |
+
+Os builds x64 não precisam de AVX2, então servidores caseiros antigos com
+Celeron ou Atom funcionam. Os builds Linux precisam de glibc: no Alpine e em
+outros sistemas com musl, o instalador muda para a instalação com Docker. Um
+userland 32 bits (um Raspberry Pi OS 32 bits, por exemplo) também não roda o
+build nativo; o instalador recusa e indica a instalação com Docker ou um
+sistema 64 bits. A imagem Docker é `linux/amd64` e `linux/arm64`. O macOS não
+é suportado.
+
+### Rede
+
+- **Um IPv4 público que chegue até a máquina.** Em casa, isso quer dizer um
+  roteador onde você consiga fazer encaminhamento de portas e uma linha sem
+  CGNAT; uma VPS já tem um. Veja
+  [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
+- **Um endereço HTTPS**: um domínio seu ou uma opção sem domínio (DuckDNS,
+  sslip.io numa VPS ou um Cloudflare Tunnel com um domínio na Cloudflare).
+- **Estas portas**, da internet até a máquina:
+
+| Porta (padrão) | Protocolo | Quando |
+| --- | --- | --- |
+| `MEDIA_TCP_PORT` (7881) | TCP | sempre |
+| `MEDIA_UDP_PORT` (7882) | UDP | sempre |
+| `HTTPS_PORT` (443) | TCP | `INGRESS=direct` |
+| `HTTP_PORT` (80) | TCP | `INGRESS=direct`, a não ser com `HTTP_PORT=0` |
+
+`LISTEN` (8081) e `LIVEKIT_PORT` (7880) só escutam em loopback e nunca são
+encaminhadas. Mais em [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/#quais-portas).
+
+### Discord
+
+Um servidor do Discord onde você possa adicionar um bot (você precisa da
+permissão **Gerenciar servidor** lá) e uma conta do Discord para criar um
+aplicativo no Developer Portal. O assistente de configuração faz quase tudo;
+a página [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra os
+cliques.
+
+### Navegadores
+
+Para assistir, qualquer navegador atual serve. Para compartilhar, um
+navegador de desktop baseado em Chromium (Chrome, Edge e parecidos) se sai
+melhor: a página usa AV1 quando o navegador tem um codificador de hardware
+para ele, senão H.265, senão H.264, e sempre envia uma cópia em H.264 para
+quem não consegue decodificar a primeira opção.
+
+Próximo passo: [Escolha a sua instalação](/telinha/pt-br/start/choose/).

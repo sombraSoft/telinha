@@ -1,0 +1,49 @@
+---
+title: Doctor checks
+description: What each telinha doctor check looks at and what fixes it, plus what the phone test measures.
+sidebar:
+  order: 3
+---
+
+import DoctorChecks from '../../../components/DoctorChecks.astro';
+
+`telinha doctor` runs the checks below in order, 10 s each at most, and prints
+one row per check (`✓` ok, `!` warning, `✗` failure, `–` skipped) with what to
+do about anything that is not ok. `--local` skips the ones that need the
+internet, and the phone test. Exit 1 when a check or the phone test failed.
+How to read the results and the fixes by symptom are in
+[Doctor and troubleshooting](/telinha/guides/doctor/).
+
+The check ids and titles come from the code at every build.
+
+<DoctorChecks locale="en" />
+
+## The phone test
+
+With the service running, doctor asks it for a one-time link and prints it
+with a QR code to open on a phone with Wi-Fi off. Opened on mobile data the
+test comes from outside your network, which is the point. No Discord login is
+needed: the link works once and only within 10 minutes, and the cookie it
+leaves (15 minutes) opens nothing but the doctor page and the LiveKit relay,
+for a private room of its own. Both the page and the terminal show:
+
+| Row | Measures |
+| --- | --- |
+| HTTPS | The page loaded over HTTPS, and its latency |
+| LiveKit connection | Signaling through `/livekit` on `PUBLIC_URL` |
+| Sending video | Publishing a tiny test video track |
+| First path | The protocol and IP the connection took, and its round trip |
+| UDP / TCP | Media forced over each protocol in turn |
+
+Reading a failure:
+
+| Result | Means |
+| --- | --- |
+| LiveKit connection failed | Telinha is not reachable at `PUBLIC_URL` from the internet: see the `dns`, `tls` and router checks |
+| HTTPS and LiveKit fine, UDP and TCP failed | The media ports are closed: forward both |
+| Only UDP failed | UDP is not forwarded; video still works over TCP, with more delay |
+| Only TCP failed | TCP is not forwarded; needed where UDP is blocked |
+| First path to an IP that is not the public IP | A wrong `LIVEKIT_NODE_IP` |
+
+Doctor waits up to 10 minutes (Ctrl+C skips); `--no-phone` skips the test, and
+it is skipped without a terminal or with the service stopped.

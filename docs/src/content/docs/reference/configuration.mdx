@@ -1,0 +1,101 @@
+---
+title: Configuration (telinha.env)
+description: Every telinha.env key with its default, whether it is required and what it does, generated from the code.
+sidebar:
+  order: 1
+---
+
+import ConfigTable from '../../../components/ConfigTable.astro';
+import generated from '../../../data/generated.json';
+
+Everything lives in one `KEY=value` file, `telinha.env`. `telinha setup` writes
+it, and running the wizard again is how settings change; editing the file by
+hand and restarting (`telinha service restart`) works too. Real environment
+variables override the file; one set to the empty string does not. A key
+Telinha does not know logs `config: unknown key FOO in telinha.env` and is
+otherwise ignored.
+
+Where the file lives (`TELINHA_HOME` moves the whole tree, `TELINHA_ENV` just
+the file):
+
+| Platform | `telinha.env` |
+| --- | --- |
+| Windows | <code>{generated.paths.windows.config + '\\telinha.env'}</code> |
+| Linux, as root | <code>{generated.paths.linuxRoot.config + '/telinha.env'}</code> |
+| Linux, as a user | <code>{generated.paths.linuxUser.config + '/telinha.env'}</code> (`$XDG_DATA_HOME` respected) |
+| Docker host | `/opt/telinha/config/telinha.env`; compose hands it to the container as environment variables |
+
+**Quoting.** Docker compose interpolates `$VAR`, processes `\` escapes in
+double quotes and strips ` #...` comments from an env file; Telinha's own
+parser reads values literally. The one spelling both read the same is a
+single-quoted value, so single-quote every value containing `$`, `\` or `#`
+(`COOKIE_SECRET='a$b#c'`). Telinha warns at start about an unquoted one, and
+the wizard single-quotes every secret it writes.
+
+The tables below are generated from the code at every build: the key list,
+the defaults and the "required" column come from the server itself.
+
+## Identity and Discord
+
+<ConfigTable locale="en" section="discord" />
+
+## Public URL and HTTP ingress
+
+<ConfigTable locale="en" section="ingress" />
+
+## Media (LiveKit)
+
+<ConfigTable locale="en" section="media" />
+
+## Rooms
+
+<ConfigTable locale="en" section="rooms" />
+
+## Native install
+
+<ConfigTable locale="en" section="native" />
+
+## Locations
+
+<ConfigTable locale="en" section="paths" />
+
+## Dev only
+
+<ConfigTable locale="en" section="dev" />
+
+## Reserved for LiveKit Cloud / TURN
+
+<ConfigTable locale="en" section="reserved" />
+
+## Validation errors
+
+A bad value fails start-up (and `telinha doctor`'s `config` check) with one
+line, for example `telinha: bad INGRESS x (want direct | tunnel | external)`
+or `ports collide: MEDIA_TCP_PORT=7881, LISTEN=7881`. The rules:
+
+- `direct` and `tunnel` need an `https://` `PUBLIC_URL`.
+- `LIVEKIT_PORT`, both media ports, the `LISTEN` port and, in direct mode,
+  `HTTPS_PORT` and `HTTP_PORT` must all differ.
+- `MEDIA=cloud` is refused: not supported yet.
+- `COMMAND_NAME` must be lowercase, 1-32 letters, digits, `-` or `_`;
+  `UPDATE_PIN` a tag like `v1.2.3`; `LOCALE` `en` or `pt-BR`;
+  `LIVEKIT_NODE_IP` an IPv4 address; `DUCKDNS_DOMAIN` the subdomain alone;
+  `LIVEKIT_API_URL` an `http(s)://host[:port]`.
+- `DEV_USER` is refused unless `PUBLIC_URL` is `http://localhost` or
+  `http://127.0.0.1`, `LISTEN` is loopback and `INGRESS` is `external`.
+
+Warnings are logged and the start goes on: a `PUBLIC_URL` port that differs
+from `HTTPS_PORT` (the router translates), a `DUCKDNS_DOMAIN` written with
+`.duckdns.org` (trimmed), a DuckDNS name that is not the `PUBLIC_URL` host,
+and `AUTO_UPDATE=on` outside the native binary (ignored).
+
+## What children get from the environment
+
+The helper programs are started with Telinha's own environment minus every
+`telinha.env` key and minus anything starting with `LIVEKIT_`, `TUNNEL_`,
+`DISCORD_` or `TELINHA_` (the Go binaries read such variables as flags).
+`PATH`, `HOME`, `TEMP`, `SystemRoot`, `LANG`, proxy settings and the like pass
+through. On top of that each child gets only what it needs: LiveKit
+`LIVEKIT_KEYS` (built from the API key pair), cloudflared `TUNNEL_TOKEN`, Caddy
+`XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `HOME` pointed at `data/caddy`. No
+secret is ever in a child's command line or in a rendered file.

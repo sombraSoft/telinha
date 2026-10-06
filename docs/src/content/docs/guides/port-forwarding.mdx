@@ -1,0 +1,289 @@
+---
+title: Port forwarding
+description: Which ports Telinha needs, how the router forwards them (by itself through UPnP or by hand), how to spot CGNAT, and the firewalls in between.
+sidebar:
+  order: 2
+---
+
+import { CardGrid, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Your router decides which machine on your network gets a connection that
+comes in from the internet. Without a rule for a port, it drops the
+connection. Port forwarding is that rule: "what arrives on port X goes to
+this machine". A machine at home needs it; a VPS has no router and only a
+cloud firewall to open.
+
+Telinha can ask the router for the rules itself (UPnP), and when the router
+does not let it, you add them by hand. Either way, check the result with
+`telinha doctor`.
+
+## Which ports
+
+| Port (default) | When | What for |
+| --- | --- | --- |
+| TCP `MEDIA_TCP_PORT` (7881) | always | WebRTC media over TCP, for networks that block UDP |
+| UDP `MEDIA_UDP_PORT` (7882) | always | WebRTC media over UDP, the normal path |
+| TCP `HTTPS_PORT` (443) | `INGRESS=direct` | Caddy, HTTPS; the public side is the `PUBLIC_URL` port |
+| TCP `HTTP_PORT` (80) | `INGRESS=direct`, unless `HTTP_PORT=0` | Let's Encrypt's HTTP challenge, the redirect to HTTPS |
+
+So, by [ingress mode](/telinha/guides/domains/):
+
+| Mode | Forward to the machine |
+| --- | --- |
+| `direct` | TCP 7881, UDP 7882, TCP 443, TCP 80 |
+| `tunnel` | TCP 7881, UDP 7882 |
+| `external` | TCP 7881, UDP 7882, plus whatever your own proxy needs |
+
+The media ports are needed in every mode because browsers send video straight
+to LiveKit; a Cloudflare Tunnel carries the pages, not WebRTC. If you changed
+a port in `telinha.env`, forward your value. Use the same number on both sides
+of a rule; the one exception is the HTTPS
+[port translation](/telinha/guides/domains/#port-translation).
+
+Two ports are never forwarded. `LISTEN` (`127.0.0.1:8081`) is Telinha's own
+listener, reached by Caddy, `cloudflared` or your proxy on the same machine.
+`LIVEKIT_PORT` (7880) is LiveKit's signaling and API port: browsers reach
+LiveKit's signaling through Telinha's gated relay at `/livekit` on
+`PUBLIC_URL`, so that port stays on loopback.
+
+## TCP and UDP
+
+The two media ports are two ways to the same place. WebRTC prefers UDP: it has
+the least delay and copes best with a lost packet. TCP is the fallback for
+viewers whose network blocks UDP (some offices, schools and public Wi-Fi).
+What happens when one is missing:
+
+| Open | Result |
+| --- | --- |
+| Both | Everyone connects, over UDP where it can |
+| Only TCP | Video works, with more delay |
+| Only UDP | Works for most people; fails for viewers behind networks that block UDP |
+| Neither | The page loads and login works, but video never connects |
+
+Forward both. Routers that offer "TCP/UDP" or "Both" as a protocol can do it
+in one rule per port, but the two ports are different numbers, so it is still
+two rules. The [phone test](/telinha/guides/doctor/#the-phone-test) checks
+each protocol separately.
+
+## Give the machine a fixed address
+
+A forwarding rule points at the machine's address on your network (its LAN
+IP, such as `192.168.0.10`). Most routers hand those out through DHCP, and the
+address can change after a reboot or when the lease runs out. Then the rule
+forwards to nothing, or to another device, and Telinha stops being reachable
+from one day to the next.
+
+Find the current address first:
+
+<Tabs syncKey="os">
+  <TabItem label="Windows">
+
+```
+ipconfig
+```
+
+The `IPv4 Address` of the adapter that has a `Default Gateway`. The gateway is
+the router's address, where its admin page lives.
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```
+ip -4 addr
+ip route
+```
+
+The `inet` address of the interface that the `default via` line of `ip route`
+uses. The `default via` address is the router's, where its admin page lives.
+
+  </TabItem>
+</Tabs>
+
+Then make it stay, one of two ways:
+
+- **DHCP reservation** (preferred). In the router's admin page, tell DHCP to
+  always give this machine the same address. The menu is called DHCP
+  reservation, address reservation, static lease or similar ("reserva de
+  DHCP" on Brazilian firmwares); you pick the machine from the list of
+  connected devices or type its MAC address. The machine itself stays on
+  automatic settings.
+- **Static LAN IP**. Set the address by hand in the machine's network
+  settings: pick one outside the range the router's DHCP hands out, in the
+  same network, with the router as gateway and DNS. Easy to get wrong, and the
+  reservation does the same job.
+
+## Let Telinha ask the router (UPnP, NAT-PMP, PCP)
+
+With `UPNP=auto` (the default) Telinha asks the router to forward the ports
+above to this machine while it runs, through UPnP IGD (v1 or v2), PCP or
+NAT-PMP, whichever the router answers. In `direct` mode that includes public
+443 to `HTTPS_PORT` and 80 to `HTTP_PORT`.
+
+- Leases last an hour and are renewed well before they run out.
+- They are added again after an IP change, because routers often drop them on
+  a reconnect.
+- A clean stop removes them; what a crash leaves behind (recorded in
+  `data/run/upnp.json`) is removed at the next start.
+- With no router answering, Telinha says so once and looks again every 10
+  minutes, so turning UPnP on in the router is picked up without a restart.
+
+The log:
+
+```
+upnp: mapped TCP 7881 -> 192.168.0.10:7881 (lease 3600s)
+upnp: mapped UDP 7882 -> 192.168.0.10:7882 via NAT-PMP (lease 3600s)
+upnp: could not map TCP 443: port 443 is mapped to another device 192.168.0.20
+upnp: no UPnP/NAT-PMP gateway found; forward the ports on the router by hand
+```
+
+Many routers ship with UPnP off, and ISP-supplied routers often hide the
+switch or disable it. To turn it on, open the router's admin page (the address
+and login are usually printed on a label under the device) and look in the
+advanced, NAT or network settings for an option called UPnP; enable it and
+save. If you cannot find it, or you would rather not let programs on your
+network open ports, forward by hand and set `UPNP=off`. Both end the same way.
+
+A VPS has no router to ask; Telinha logs the "no gateway" line once and
+carries on.
+
+## Forwarding by hand
+
+Every router does this the same way; only the menu names change.
+
+<Steps>
+
+1. Open the router's admin page in a browser: the gateway address from
+   [above](#give-the-machine-a-fixed-address), with the login printed on the
+   label under the device.
+
+2. Find the forwarding menu. It is usually under the advanced or NAT settings
+   and is called port forwarding, virtual server, NAT, port mapping or
+   "redirecionamento de portas"; the name changes with the firmware.
+
+3. Add one rule per port: a name, the protocol, the external port, the
+   internal IP (the fixed address of the machine) and the internal port, the
+   same number as the external one.
+
+4. Save or apply.
+
+5. Set `UPNP=off` in `telinha.env` and restart Telinha, so it does not try to
+   map ports the router already forwards.
+
+</Steps>
+
+With the defaults in `direct` mode and the machine at `192.168.0.10`:
+
+| Name | Protocol | External port | Internal IP | Internal port |
+| --- | --- | --- | --- | --- |
+| telinha-media-tcp | TCP | 7881 | 192.168.0.10 | 7881 |
+| telinha-media-udp | UDP | 7882 | 192.168.0.10 | 7882 |
+| telinha-https | TCP | 443 | 192.168.0.10 | 443 |
+| telinha-http | TCP | 80 | 192.168.0.10 | 80 |
+
+`telinha doctor` tells you what is missing. The `gateway` check warns when no
+router answers UPnP and lists the ports to forward by hand; the `mappings`
+check lists the ports the router did not agree to, with the address to send
+them to (a translated port shows as `TCP 443 → 8443`); with `UPNP=off` it is
+skipped and prints the list.
+
+## Is it CGNAT?
+
+If your ISP shares one public IPv4 between many customers (CGNAT), nothing
+from the internet reaches your network, and no forwarding rule changes that.
+Check before you spend an evening on the router:
+
+1. Find the router's WAN (or Internet) IP on its status page.
+2. Find the IP the internet sees: the Public IP row of `telinha doctor`, or
+   the `ip=` line of `https://1.1.1.1/cdn-cgi/trace` opened on that network.
+3. Compare:
+   - the same address: no CGNAT, forwarding works;
+   - a WAN IP between `100.64.0.0` and `100.127.255.255` (`100.64.0.0/10`):
+     CGNAT;
+   - a WAN IP in a private range (`10.x`, `172.16.x` to `172.31.x`,
+     `192.168.x`): double NAT, another router in front of yours;
+   - any other different address: another NAT in front as well.
+
+No access to the status page? Ask your ISP instead: "does my line have its
+own public IPv4, or is it behind CGNAT?"
+
+`telinha doctor` does this for you when the router speaks UPnP, NAT-PMP or
+PCP: the `cgnat` check fails on CGNAT and warns on double NAT. What to do in
+each case: [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
+
+## Firewalls
+
+Forwarding gets the traffic to the machine; the machine's own firewall still
+decides whether to let it in.
+
+<Tabs syncKey="os">
+  <TabItem label="Windows">
+
+`telinha service install --firewall` (which the setup's administrator step
+runs) first removes every inbound rule bound to `livekit-server.exe` or
+`caddy.exe` in `bin\`, then adds inbound allow rules for all network profiles,
+each bound to its program. The removal matters: if you ran Telinha in a
+console before and dismissed the Windows Security Alert, Windows left Block
+rules for those programs, and Block wins over Allow.
+
+| Rule | Program | Port |
+| --- | --- | --- |
+| `Telinha LiveKit TCP` | `livekit-server.exe` | TCP `MEDIA_TCP_PORT` |
+| `Telinha LiveKit UDP` | `livekit-server.exe` | UDP `MEDIA_UDP_PORT` |
+| `Telinha HTTPS` (direct) | `caddy.exe` | TCP `HTTPS_PORT` |
+| `Telinha HTTP` (direct, `HTTP_PORT` not 0) | `caddy.exe` | TCP `HTTP_PORT` |
+
+After changing a port, run the setup again (or the install command from an
+administrator terminal). `telinha service uninstall --firewall` removes the
+rules.
+
+  </TabItem>
+  <TabItem label="Linux">
+
+Telinha adds no firewall rules on Linux. With ufw or firewalld active, open
+the ports yourself. With the defaults in `direct` mode:
+
+```
+sudo ufw allow 443/tcp && sudo ufw allow 80/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp
+sudo firewall-cmd --permanent --add-port=443/tcp --add-port=80/tcp --add-port=7881/tcp --add-port=7882/udp && sudo firewall-cmd --reload
+```
+
+The `listeners` check of `telinha doctor` prints these commands with your own
+ports when it finds `ufw` or `firewall-cmd`.
+
+Some VPS images (Oracle Cloud's Ubuntu images, for example) block ports with
+plain iptables rules while ufw stays inactive, and doctor does not look at
+those. If `sudo iptables -L INPUT -n` lists a `REJECT` rule, follow the
+provider's guide to open the ports.
+
+  </TabItem>
+</Tabs>
+
+On a VPS, the provider's cloud firewall (security group, network firewall)
+sits in front of the machine: open the same ports there too.
+
+## Router pages
+
+Step-by-step notes for the routers of the main Brazilian ISPs, with sources:
+
+<CardGrid>
+  <LinkCard title="Vivo Fibra" href="/telinha/routers/vivo/" />
+  <LinkCard title="Claro (NET)" href="/telinha/routers/claro/" />
+  <LinkCard title="TIM Ultrafibra" href="/telinha/routers/tim/" />
+  <LinkCard title="Oi Fibra" href="/telinha/routers/oi/" />
+</CardGrid>
+
+Any other router: search the manufacturer's support site for the model name
+plus "port forwarding". The [recipe above](#forwarding-by-hand) is all it takes; only
+the menu names differ.
+
+## Check it
+
+```
+telinha doctor
+```
+
+Read the Router, Carrier NAT, Port forwarding and Local listeners rows (the
+`gateway`, `cgnat`, `mappings` and `listeners` checks), then do the phone test
+it offers: on mobile data, it measures UDP and TCP separately from
+outside your network. How to read the result:
+[Doctor and troubleshooting](/telinha/guides/doctor/).

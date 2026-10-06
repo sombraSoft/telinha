@@ -1,0 +1,296 @@
+---
+title: Encaminhamento de portas
+description: Quais portas a Telinha precisa, como o roteador encaminha (sozinho por UPnP ou na mão), como reconhecer o CGNAT e os firewalls no caminho.
+sidebar:
+  order: 2
+---
+
+import { CardGrid, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+É o roteador que decide qual máquina da sua rede recebe uma conexão que chega
+da internet. Sem uma regra para a porta, ele descarta a conexão. O
+encaminhamento de portas (o famoso "abrir portas") é essa regra: "o que chegar
+na porta X vai para esta máquina". Um servidor em casa precisa disso; uma VPS
+não tem roteador, só um firewall na nuvem para liberar.
+
+A Telinha consegue pedir as regras ao roteador sozinha (UPnP) e, quando o
+roteador não deixa, você cria na mão. Nos dois casos, confira o resultado com
+o `telinha doctor`.
+
+## Quais portas
+
+| Porta (padrão) | Quando | Para quê |
+| --- | --- | --- |
+| TCP `MEDIA_TCP_PORT` (7881) | sempre | Mídia WebRTC por TCP, para redes que bloqueiam UDP |
+| UDP `MEDIA_UDP_PORT` (7882) | sempre | Mídia WebRTC por UDP, o caminho normal |
+| TCP `HTTPS_PORT` (443) | `INGRESS=direct` | Caddy, HTTPS; o lado público é a porta do `PUBLIC_URL` |
+| TCP `HTTP_PORT` (80) | `INGRESS=direct`, a não ser com `HTTP_PORT=0` | Desafio HTTP do Let's Encrypt, redirecionamento para HTTPS |
+
+Ou seja, por [modo de entrada](/telinha/pt-br/guides/domains/):
+
+| Modo | Encaminhe para a máquina |
+| --- | --- |
+| `direct` | TCP 7881, UDP 7882, TCP 443, TCP 80 |
+| `tunnel` | TCP 7881, UDP 7882 |
+| `external` | TCP 7881, UDP 7882, mais o que o seu próprio proxy precisar |
+
+As portas de mídia valem para todos os modos porque o navegador manda o vídeo
+direto para o LiveKit; um Cloudflare Tunnel leva as páginas, não o WebRTC. Se
+você mudou alguma porta no `telinha.env`, encaminhe o seu valor. Use o mesmo
+número dos dois lados da regra; a única exceção é a
+[tradução de portas](/telinha/pt-br/guides/domains/#tradução-de-portas) do HTTPS.
+
+Duas portas nunca são encaminhadas. O `LISTEN` (`127.0.0.1:8081`) é a porta da
+própria Telinha, que o Caddy, o `cloudflared` ou o seu proxy acessam na mesma
+máquina. O `LIVEKIT_PORT` (7880) é a porta de sinalização e API do LiveKit: o
+navegador chega na sinalização do LiveKit pelo relay protegido da Telinha em
+`/livekit` no `PUBLIC_URL`, então essa porta fica só no loopback.
+
+## TCP e UDP
+
+As duas portas de mídia são dois caminhos para o mesmo lugar. O WebRTC
+prefere UDP: tem menos atraso e lida melhor com pacote perdido. O TCP é o
+plano B para quem assiste de uma rede que bloqueia UDP (alguns escritórios,
+escolas e Wi-Fi público). O que acontece quando falta uma:
+
+| Abertas | Resultado |
+| --- | --- |
+| As duas | Todo mundo conecta, por UDP quando dá |
+| Só TCP | O vídeo funciona, com mais atraso |
+| Só UDP | Funciona para a maioria; falha para quem está numa rede que bloqueia UDP |
+| Nenhuma | A página carrega e o login funciona, mas o vídeo nunca conecta |
+
+Encaminhe as duas. Roteadores que oferecem "TCP/UDP" ou "Ambos" como
+protocolo fazem isso numa regra por porta, mas as duas portas têm números
+diferentes, então continuam sendo duas regras. O
+[teste pelo celular](/telinha/pt-br/guides/doctor/#o-teste-pelo-celular) mede
+cada protocolo separadamente.
+
+## Fixe o IP do computador
+
+A regra de encaminhamento aponta para o endereço da máquina na sua rede (o IP
+local, tipo `192.168.0.10`). A maioria dos roteadores distribui esses
+endereços por DHCP, e o endereço pode mudar depois de um reinício ou quando a
+concessão vence. Aí a regra encaminha para o nada, ou para outro aparelho, e a
+Telinha para de ser acessível de um dia para o outro.
+
+Primeiro descubra o endereço atual:
+
+<Tabs syncKey="os">
+  <TabItem label="Windows">
+
+```
+ipconfig
+```
+
+O `Endereço IPv4` (`IPv4 Address`) do adaptador que tem um
+`Gateway Padrão` (`Default Gateway`). O gateway é o endereço do roteador, onde fica a
+página de administração dele.
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```
+ip -4 addr
+ip route
+```
+
+O endereço `inet` da interface que a linha `default via` do `ip route` usa. O
+endereço depois de `default via` é o do roteador, onde fica a página de
+administração dele.
+
+  </TabItem>
+</Tabs>
+
+Depois faça esse endereço ficar fixo, de um destes dois jeitos:
+
+- **Reserva de DHCP** (o recomendado). Na página do roteador, diga ao DHCP
+  para dar sempre o mesmo endereço a esta máquina. O menu se chama reserva de
+  DHCP, reserva de endereço, DHCP estático ou algo parecido; você escolhe a
+  máquina na lista de aparelhos conectados ou digita o endereço MAC dela. A
+  máquina continua com a rede no automático.
+- **IP fixo na rede local**. Configure o endereço na mão nas configurações de
+  rede da máquina: escolha um fora da faixa que o DHCP do roteador distribui,
+  na mesma rede, com o roteador como gateway e DNS. É fácil errar, e a reserva
+  de DHCP resolve a mesma coisa.
+
+## Deixe a Telinha pedir ao roteador (UPnP, NAT-PMP, PCP)
+
+Com `UPNP=auto` (o padrão), a Telinha pede ao roteador para encaminhar as
+portas acima para esta máquina enquanto ela roda, por UPnP IGD (v1 ou v2), PCP
+ou NAT-PMP, o que o roteador responder. No modo `direct` isso inclui a 443
+pública para o `HTTPS_PORT` e a 80 para o `HTTP_PORT`.
+
+- Cada mapeamento dura uma hora e é renovado bem antes de vencer.
+- Eles são refeitos depois de uma troca de IP, porque o roteador costuma
+  esquecer tudo quando reconecta.
+- Uma parada normal remove os mapeamentos; o que sobra de um travamento
+  (anotado em `data/run/upnp.json`) é removido no próximo início.
+- Se nenhum roteador responde, a Telinha avisa uma vez e procura de novo a
+  cada 10 minutos; então ligar o UPnP no roteador funciona sem reiniciar nada.
+
+O log:
+
+```
+upnp: mapped TCP 7881 -> 192.168.0.10:7881 (lease 3600s)
+upnp: mapped UDP 7882 -> 192.168.0.10:7882 via NAT-PMP (lease 3600s)
+upnp: could not map TCP 443: port 443 is mapped to another device 192.168.0.20
+upnp: no UPnP/NAT-PMP gateway found; forward the ports on the router by hand
+```
+
+Muitos roteadores vêm com o UPnP desligado, e os roteadores das operadoras
+muitas vezes escondem ou desativam a opção. Para ligar, abra a página do
+roteador (o endereço e o login costumam estar na etiqueta embaixo do aparelho)
+e procure nas configurações avançadas, de NAT ou de rede uma opção chamada
+UPnP; ative e salve. Se não achar, ou se preferir não deixar os programas da
+sua rede abrirem portas, encaminhe na mão e use `UPNP=off`. O resultado é o
+mesmo.
+
+Uma VPS não tem roteador para perguntar; a Telinha registra a linha de "no
+gateway" uma vez e segue em frente.
+
+## Encaminhamento manual
+
+Todo roteador faz isso do mesmo jeito; só os nomes dos menus mudam.
+
+<Steps>
+
+1. Abra a página de administração do roteador no navegador: o endereço do
+   gateway [lá de cima](#fixe-o-ip-do-computador), com o login que está na
+   etiqueta embaixo do aparelho.
+
+2. Ache o menu de encaminhamento. O menu costuma ficar nas configurações
+   avançadas ou de NAT e se chama redirecionamento de portas, servidor virtual
+   ou mapeamento de portas (em inglês, port forwarding ou virtual server); o
+   nome muda conforme o firmware.
+
+3. Crie uma regra por porta: um nome, o protocolo, a porta externa, o IP
+   interno (o endereço fixo da máquina) e a porta interna, com o mesmo número
+   da externa.
+
+4. Salve ou aplique.
+
+5. Coloque `UPNP=off` no `telinha.env` e reinicie a Telinha, para ela não
+   tentar mapear portas que o roteador já encaminha.
+
+</Steps>
+
+Com os valores padrão no modo `direct` e a máquina em `192.168.0.10`:
+
+| Nome | Protocolo | Porta externa | IP interno | Porta interna |
+| --- | --- | --- | --- | --- |
+| telinha-media-tcp | TCP | 7881 | 192.168.0.10 | 7881 |
+| telinha-media-udp | UDP | 7882 | 192.168.0.10 | 7882 |
+| telinha-https | TCP | 443 | 192.168.0.10 | 443 |
+| telinha-http | TCP | 80 | 192.168.0.10 | 80 |
+
+O `telinha doctor` diz o que está faltando. A verificação `gateway` avisa
+quando nenhum roteador responde UPnP e lista as portas para encaminhar na mão;
+a verificação `mappings` lista as portas que o roteador não aceitou, com o
+endereço para onde mandar (uma porta traduzida aparece como `TCP 443 → 8443`);
+com `UPNP=off` ela é pulada e mostra a lista.
+
+## É CGNAT?
+
+Se a sua operadora divide um IPv4 público entre muitos clientes (CGNAT), nada
+da internet chega na sua rede, e nenhuma regra de encaminhamento muda isso.
+Confira antes de passar a noite mexendo no roteador:
+
+1. Veja o IP WAN (ou IP de Internet) do roteador na página de status dele.
+2. Veja o IP que a internet enxerga: a linha IP público do `telinha doctor`,
+   ou a linha `ip=` de `https://1.1.1.1/cdn-cgi/trace` aberto nessa rede.
+3. Compare:
+   - o mesmo endereço: não é CGNAT, o encaminhamento funciona;
+   - um IP WAN entre `100.64.0.0` e `100.127.255.255` (`100.64.0.0/10`):
+     CGNAT;
+   - um IP WAN numa faixa privada (`10.x`, `172.16.x` a `172.31.x`,
+     `192.168.x`): NAT duplo, outro roteador na frente do seu;
+   - qualquer outro endereço diferente: também tem outro NAT na frente.
+
+Sem acesso à página de status? Pergunte à operadora: "a minha linha tem IPv4
+público próprio ou está atrás de CGNAT?"
+
+O `telinha doctor` faz isso por você quando o roteador fala UPnP, NAT-PMP ou
+PCP: a verificação `cgnat` falha com CGNAT e avisa com NAT duplo. O que fazer
+em cada caso: [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
+
+## Firewalls
+
+O encaminhamento leva o tráfego até a máquina; o firewall da própria máquina
+ainda decide se deixa entrar.
+
+<Tabs syncKey="os">
+  <TabItem label="Windows">
+
+O `telinha service install --firewall` (que o passo de administrador do
+assistente roda) primeiro remove toda regra de entrada ligada ao
+`livekit-server.exe` ou ao `caddy.exe` da pasta `bin\`, e depois cria regras
+de entrada que permitem o tráfego em todos os perfis de rede, cada uma ligada
+ao seu programa. A remoção importa: se você rodou a Telinha num console antes
+e fechou o Alerta de Segurança do Windows, o Windows deixou regras de bloqueio
+para esses programas, e bloquear ganha de permitir.
+
+| Regra | Programa | Porta |
+| --- | --- | --- |
+| `Telinha LiveKit TCP` | `livekit-server.exe` | TCP `MEDIA_TCP_PORT` |
+| `Telinha LiveKit UDP` | `livekit-server.exe` | UDP `MEDIA_UDP_PORT` |
+| `Telinha HTTPS` (direct) | `caddy.exe` | TCP `HTTPS_PORT` |
+| `Telinha HTTP` (direct, `HTTP_PORT` diferente de 0) | `caddy.exe` | TCP `HTTP_PORT` |
+
+Depois de mudar uma porta, rode o assistente de novo (ou o comando de
+instalação num terminal de administrador). O
+`telinha service uninstall --firewall` remove as regras.
+
+  </TabItem>
+  <TabItem label="Linux">
+
+No Linux a Telinha não cria regras de firewall. Com ufw ou firewalld ativo,
+libere as portas você mesmo. Com os valores padrão no modo `direct`:
+
+```
+sudo ufw allow 443/tcp && sudo ufw allow 80/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp
+sudo firewall-cmd --permanent --add-port=443/tcp --add-port=80/tcp --add-port=7881/tcp --add-port=7882/udp && sudo firewall-cmd --reload
+```
+
+A verificação `listeners` do `telinha doctor` mostra esses comandos com as
+suas portas quando encontra o `ufw` ou o `firewall-cmd`.
+
+Algumas imagens de VPS (as do Ubuntu na Oracle Cloud, por exemplo) bloqueiam
+portas com regras do iptables puro, com o ufw desligado, e o doctor não olha
+essas regras. Se `sudo iptables -L INPUT -n` mostrar uma regra `REJECT`, siga
+o guia do provedor para liberar as portas.
+
+  </TabItem>
+</Tabs>
+
+Numa VPS, o firewall na nuvem do provedor (security group, firewall de rede)
+fica na frente da máquina: libere as mesmas portas lá também.
+
+## Páginas por operadora
+
+Passo a passo para os roteadores das principais operadoras do Brasil, com
+fontes:
+
+<CardGrid>
+  <LinkCard title="Vivo Fibra" href="/telinha/pt-br/routers/vivo/" />
+  <LinkCard title="Claro (NET)" href="/telinha/pt-br/routers/claro/" />
+  <LinkCard title="TIM Ultrafibra" href="/telinha/pt-br/routers/tim/" />
+  <LinkCard title="Oi Fibra" href="/telinha/pt-br/routers/oi/" />
+</CardGrid>
+
+Qualquer outro roteador: procure no site de suporte do fabricante o nome do
+modelo mais "redirecionamento de portas" (ou "port forwarding"). A
+[receita acima](#encaminhamento-manual) é tudo o que precisa; só os nomes dos
+menus mudam.
+
+## Confira
+
+```
+telinha doctor
+```
+
+Leia as linhas Roteador, NAT da operadora, Redirecionamento de portas e
+Portas locais (as verificações `gateway`, `cgnat`, `mappings` e `listeners`), e
+depois faça o teste pelo celular que ele oferece: com dados móveis, ele mede UDP e TCP
+separadamente, de fora da sua rede. Como ler o resultado:
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/).

@@ -278,6 +278,19 @@ jobs:
       - name: versions.json
         run: bun scripts/versions.ts check
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      # The link validator runs inside the build and fails it on a broken link.
+      - run: bun run docs:build
+
   gitleaks:
     runs-on: ubuntu-latest
     permissions:

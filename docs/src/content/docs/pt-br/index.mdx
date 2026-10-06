@@ -1,0 +1,40 @@
+---
+title: Telinha
+description: Compartilhamento de tela para o seu grupo do Discord, rodando na sua própria máquina.
+template: splash
+hero:
+  title: Telinha
+  tagline: Compartilhamento de tela para o seu grupo do Discord, na sua máquina.
+  actions:
+    - text: Escolha a sua instalação
+      link: /telinha/pt-br/start/choose/
+      icon: right-arrow
+    - text: Como funciona
+      link: /telinha/pt-br/start/how-it-works/
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <LinkCard title="PC com Windows" description="Instale no PC que você já tem; ele roda como serviço em segundo plano." href="/telinha/pt-br/start/windows/" />
+  <LinkCard title="Linux em casa" description="Um mini PC, um Raspberry Pi 4/5 ou qualquer máquina Linux 64 bits que fique ligada." href="/telinha/pt-br/start/linux/" />
+  <LinkCard title="VPS" description="Um servidor alugado com IP público: nenhum roteador para configurar." href="/telinha/pt-br/start/vps/" />
+  <LinkCard title="Docker" description="Um contêiner com tudo dentro, com atualização automática opcional." href="/telinha/pt-br/start/docker/" />
+</CardGrid>
+
+A Telinha é um compartilhamento de tela que você hospeda para o seu grupo do
+Discord. Os membros entram com a conta do Discord, uma verificação de cargo
+decide quem pode entrar, e o comando `/telinha` abre uma sala em `/r/<code>` e
+publica um card ao vivo nos canais permitidos. O vídeo passa por um SFU
+LiveKit que roda junto. Ela existe porque o Go Live do Discord é bloqueado no
+Brasil.
+
+Você precisa de um servidor do Discord que você administra, uma máquina que
+fique ligada, um endereço HTTPS (o seu próprio domínio ou uma das opções sem
+domínio: DuckDNS, sslip.io ou um Cloudflare Tunnel) e duas portas encaminhadas no
+roteador ou uma VPS.
+
+Tudo é um único programa configurado por um único arquivo, o `telinha.env`. O
+assistente de configuração escreve esse arquivo para você, baixa os programas
+auxiliares de que a Telinha precisa e a instala como serviço.

@@ -1,0 +1,114 @@
+---
+title: Development
+description: Build, test and change Telinha and this documentation site from a clone.
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+You only need [Bun](https://bun.sh) 1.4.2 (no Node). It works on Windows and Linux.
+
+## Run from a clone
+
+Use a clone for development, or on a platform without a release build. Run from source there is no service install and no self-update: update with `git pull`, `bun install`, `bun run build`, then restart.
+
+```
+git clone https://github.com/sombraSoft/telinha && cd telinha
+bun install --frozen-lockfile && bun run build
+bun server/src/index.ts setup    # same wizard; downloads the helper binaries into <home>/bin
+bun server/src/index.ts          # run in this console
+```
+
+## Scripts
+
+```
+bun install --frozen-lockfile
+bun run dev
+bun run typecheck
+bun run test
+bun run build
+bun run e2e
+bun run image
+bun run bins
+bun run versions check
+bun run compile --smoke
+bun run docs:dev
+bun run docs:build
+```
+
+| Script | What it does |
+| --- | --- |
+| `bun run dev` | Vite with hot reload plus the Bun server, which runs LiveKit; open `http://localhost:5173/r/` |
+| `bun run typecheck` | `tsc` and `svelte-check` over every package, including `docs/scripts` |
+| `bun run test` | `bun test` over the server, the web page and the docs |
+| `bun run build` | Builds the room page into `web/dist` |
+| `bun run e2e` | Playwright; run `bun run build` first, and install a Chromium with `bunx playwright install chromium` |
+| `bun run image` | Builds `telinha:dev` with docker or podman, then runs the smoke test |
+| `bun run bins` | Downloads the three helper binaries for this host into `.cache/telinha/bin` |
+| `bun run versions check` | Validates `versions.json` (`refresh` recomputes every hash) |
+| `bun run compile --smoke` | Builds the native binaries for this OS into `dist-bin/` (run `bun run build` first) |
+| `bun run docs:dev` | Serves this site at `http://localhost:4321/telinha/` |
+| `bun run docs:build` | Builds this site into `docs/dist/` |
+
+### The dev server
+
+`bun run dev` downloads `livekit-server` (pinned in `versions.json`, sha256-verified) on first run and starts the server with `TELINHA_HOME=.cache/telinha`, `INGRESS=external`, `MEDIA=self`, `LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` and `AUTO_UPDATE=off`. The server supervises LiveKit exactly as in production. Vite proxies `/auth` and `/livekit` (WebSocket included) to the server on `127.0.0.1:8081`, so the browser goes through the real gate and signaling relay.
+
+The server runs with `DEV_USER` set (default `1:Dev`, that is `<id>:<name>`), a fake login that skips Discord and the bot. It is refused unless `PUBLIC_URL` is `http://localhost` or `http://127.0.0.1`, `LISTEN` is a loopback address and `INGRESS` is `external`, and in that mode every request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` gets a 421. Set `DEV_LOCALE=en` or `pt-BR` to force the language. There is no slash command in dev, so any valid room code (`/r/lamo-futi`, `/r/bada-kodi`: two or three consonant-vowel syllables on each side of the dash) opens a room on first use. `CLOSE_EMPTY_SECONDS=30 bun run dev` shows a room closing.
+
+## Native binaries
+
+`bun run compile` (`scripts/build-binary.ts`) runs `bun build --compile` with `web/dist` embedded (run `bun run build` first). It writes `dist-bin/<target>/telinha[.exe]`, the release archives `dist-bin/telinha-linux-{x64,arm64}.tar.gz` and `dist-bin/telinha-windows-{x64,arm64}.zip` (each with `LICENSE`) and `dist-bin/SHA256SUMS`.
+
+| Option | Meaning |
+| --- | --- |
+| `--target` | `linux-x64`, `linux-arm64`, `windows-x64`, `windows-arm64`, `linux`, `windows` or `host`; repeatable, default is this OS's two targets |
+| `--version X.Y.Z` | Version to embed, default from `package.json` |
+| `--out DIR` | Output directory |
+| `--smoke` | Runs the host binary's `--version` |
+
+`bun run compile sums` rewrites `SHA256SUMS` for whatever archives are in `dist-bin/`. Linux targets cross-compile from any host. Windows targets build only on Windows, where Bun can write their version resource. The x64 targets are Bun's baseline builds. The binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
+
+## This site
+
+The site is [Starlight](https://starlight.astro.build) in the `docs/` workspace, in English (the root language) and Brazilian Portuguese, with every page in both languages.
+
+- **Where the pages live.** English pages are under `docs/src/content/docs/`, Portuguese ones at the same path under `docs/src/content/docs/pt-br/`. Page order inside a sidebar group comes from `sidebar: { order: N }` in the frontmatter. Pages that use a component are `.mdx`, the others `.md`.
+- **Links.** The site is served under `/telinha/`, so internal links carry it: `/telinha/start/choose/` in English, `/telinha/pt-br/start/choose/` in Portuguese, always with the trailing slash. The link validator fails the build on a broken link, a broken anchor, a page that exists in only one language or a link from one language to the other.
+- **Generated reference.** The [configuration](/telinha/reference/configuration/), command line and doctor checks pages are built from the code. `docs/scripts/generate.ts` reads the real config keys, flags and checks and writes `docs/src/data/generated.json` (not committed) before every dev or build run. The descriptions are written by hand in `docs/src/data/reference.ts`, keyed by the same names.
+- **Drift tests.** `docs/scripts/reference.test.ts` runs under `bun run test` and fails when a key, flag, command or check in the code has no description, when a description names something that no longer exists, when a language is missing a page, or when a page mentions an unknown environment key or flag.
+- **Add a language.** Add a folder under `docs/src/content/docs/` with the same page tree, one line in `locales` in `docs/astro.config.mjs`, and a `translations` entry for every sidebar group and link there.
+- **Add a router page.** Add one file under `routers/` in each language, with the same headings, a `sidebar: { order: N }` and a sources list at the end. The sidebar group lists it by itself.
+
+`bun run docs:dev` and `bun run docs:build` both run the generator first.
+
+### Publishing
+
+`release.yml` calls `.github/workflows/docs.yml` after it publishes a stable release (pre-releases do not publish the site), so the site follows each release. You can also run `docs.yml` by hand from the Actions tab on `main`, to publish a documentation fix between releases.
+
+## Layout
+
+<FileTree>
+
+- server/ Bun TypeScript server: the commands, config, supervisor, gate, bot and room registry
+- web/ Svelte 5 room page and the doctor page, built with Vite into `web/dist`
+- docs/ This site (Starlight, English and Portuguese) and its generator and tests
+- deploy/ The installers, the Docker host files and `telinha-update`
+- scripts/ Dev stack, helper-binary download, native build, image build and smoke test
+- e2e/ Playwright specs
+- .github/ CI and release workflows
+- Dockerfile Multi-stage, multi-arch image build
+- versions.json Pinned `livekit-server`, `caddy` and `cloudflared` with their hashes
+- package.json Workspaces and the scripts above
+- bun.lock
+- bunfig.toml
+- tsconfig.json
+- playwright.config.ts
+- renovate.json Dependency update rules
+- release-please-config.json Release PR and changelog settings
+- CHANGELOG.md
+- LICENSE MIT
+- README.md Overview, architecture and the file-by-file layout
+
+</FileTree>
+
+The [README](https://github.com/sombraSoft/telinha#readme) has the file-by-file table and the architecture notes.

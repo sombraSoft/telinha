@@ -1,0 +1,208 @@
+---
+title: How it works
+description: What Telinha runs, how a viewer gets from Discord to a room, and what the machine and the network need.
+sidebar:
+  order: 1
+---
+
+import PinnedVersions from '../../../components/PinnedVersions.astro';
+
+Telinha is a screen share you host for your Discord group. Someone types
+`/telinha` in an allowed channel, the bot answers with a card and a link to a
+room at `/r/<code>`, and everyone with the right role logs in with Discord and
+watches. The video goes through [LiveKit](https://livekit.io), a media server
+(an SFU) that runs next to Telinha on the same machine.
+
+## One program
+
+Telinha is one executable configured by one file, `telinha.env`. When it
+starts it reads that file, writes the configuration of its helper programs
+into `data/run/` and starts them as its own children:
+
+| Child | When | What it does |
+| --- | --- | --- |
+| `livekit-server` | always | Receives the shared screen and sends it to every viewer |
+| `caddy` | `INGRESS=direct` | Gets a Let's Encrypt certificate for your address and terminates HTTPS |
+| `cloudflared` | `INGRESS=tunnel` | Carries the web traffic from Cloudflare to Telinha, with no inbound web ports |
+
+With `INGRESS=external` neither `caddy` nor `cloudflared` runs: your own
+reverse proxy terminates HTTPS. A child that crashes is restarted, waiting a
+little longer each time, and its output lands in Telinha's log as
+`[livekit] ...`, `[caddy] ...` or `[cloudflared] ...`.
+
+The native program downloads the helper binaries it needs during setup (or
+at the first start), checks each download's sha256 against the value pinned
+in the release, and downloads them again when a release pins a newer
+version. The Docker image carries all three.
+
+<PinnedVersions locale="en" />
+
+## The login gate
+
+Every page sits behind a Discord login. After login Telinha checks that the
+member has the role you picked (or lets everyone in the server through, if
+you chose that), and remembers the session for `SESSION_DAYS` days. Only a
+few paths answer without a login: `/healthz`, the page's static assets, the
+login itself under `/auth/`, and the one-time phone test link of
+`telinha doctor`.
+
+Only the slash command creates rooms. Each room gets a short pronounceable
+code, such as `lamo-futi`, and lives at `<PUBLIC_URL>/r/lamo-futi`. The card
+the bot posts is live: it shows who is streaming, who is watching and since
+when. A room closes for good after `CLOSE_EMPTY_SECONDS` with nobody in it
+(five minutes by default), and the card turns into a summary.
+
+Beside the people in the room, the page lists everyone else with the role,
+online and offline, Discord style. That list is why the bot needs two
+privileged intents (see [Discord app](/telinha/start/discord/)).
+
+## Media goes straight to LiveKit
+
+Two kinds of traffic leave the browser:
+
+- **Signaling**, a small WebSocket, goes through Telinha at
+  `/livekit/rtc` on your `PUBLIC_URL`, behind the same login gate. It is a
+  few kilobytes per second per viewer.
+- **Media**, the video itself, goes straight between the browser and
+  LiveKit over WebRTC, on TCP `MEDIA_TCP_PORT` (7881) and UDP
+  `MEDIA_UDP_PORT` (7882). UDP is the normal path; TCP is the fallback for
+  networks that block UDP.
+
+That is why the two media ports must reach the machine from the internet in
+every mode. A Cloudflare Tunnel carries web pages and WebSockets, but not
+WebRTC media, so even behind a tunnel the media ports are forwarded on the
+router (or opened on a VPS).
+
+## Diagrams
+
+### Direct
+
+`INGRESS=direct`: the bundled Caddy gets the certificate and forwards
+everything to Telinha.
+
+```
+browser --> caddy :443 (TLS; :80 redirects)           child of telinha
+              --> telinha 127.0.0.1:8081 (LISTEN)
+                    /healthz      --> answered, no login
+                    /internal/*   --> local control endpoint (bearer token, never through a proxy)
+                    /r/assets/*   --> the pages' hashed assets, no login
+                    /doctor*      --> phone test (one-time link)
+                    /auth/*       --> OAuth login, /auth/members (no gate)
+                    everything    --> gate: Discord login + role
+                      /livekit/rtc* --> LiveKit 127.0.0.1:7880   (signaling relay, WebSocket)
+                      /r/<code>     --> room page
+                      /             --> redirect to /r/
+
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP)
+```
+
+### Tunnel
+
+`INGRESS=tunnel`: Cloudflare Tunnel, no inbound web ports. The media ports
+still need forwarding.
+
+```
+browser --> Cloudflare --> cloudflared                child of telinha
+              --> telinha 127.0.0.1:8081 --> (same routes as above)
+
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP)
+```
+
+### Your own proxy
+
+`INGRESS=external`: your nginx, Traefik or Caddy terminates HTTPS and
+forwards to Telinha's `LISTEN` address. It must pass WebSocket upgrades and
+set `X-Forwarded-For`. Media is the same as in the other two modes. Details
+in [Address, HTTPS and ingress modes](/telinha/guides/domains/#your-own-reverse-proxy).
+
+## When the public IP changes
+
+Most home connections get a new public IP now and then. LiveKit learns the
+public IP once at start, so Telinha watches it: every `IP_WATCH_SECONDS`
+(five minutes by default) it asks what the internet sees. When the IP
+changes it renews the router mappings, updates DuckDNS if you use it, and
+restarts LiveKit. Open rooms blip: the page reconnects by itself, and
+whoever was sharing has to share again.
+
+On a server with a fixed public IP, set `LIVEKIT_NODE_IP` instead; that
+turns the watch off. With DuckDNS, Telinha also keeps your
+`<name>.duckdns.org` pointing at the current IP. See
+[Address, HTTPS and ingress modes](/telinha/guides/domains/).
+
+## UPnP
+
+With `UPNP=auto` (the default) Telinha asks the router to forward its ports
+to this machine while it runs, through UPnP, NAT-PMP or PCP, whichever the
+router answers. The mappings are renewed while Telinha runs and removed when
+it stops. Many routers ship with UPnP off; then you either turn it on in the
+router or forward the ports by hand and set `UPNP=off`. See
+[Port forwarding](/telinha/guides/port-forwarding/).
+
+## Updates
+
+- **Native program** (Windows and Linux): it updates itself to new stable
+  releases, checks the sha256 of every download, waits while rooms are open
+  (up to `UPDATE_MAX_DEFER_HOURS`), and rolls back a release that fails to
+  start twice.
+- **Docker**: `telinha-update`, a script on the host run by a systemd timer
+  you enable at install, pulls the new image and checks it against the
+  release's published digest.
+- **From source**: you update with `git pull`.
+
+See [Updates](/telinha/guides/updates/).
+
+## Requirements
+
+### Machine and operating system
+
+A machine that stays on while people watch: a Windows PC, a Linux box at
+home, or a VPS. Native builds:
+
+| Build | Runs on |
+| --- | --- |
+| `windows-x64` | Windows on any x86-64 CPU |
+| `windows-arm64` | Windows on ARM (Cloudflare ships no ARM `cloudflared` for Windows, so the x64 one runs under emulation) |
+| `linux-x64` | Linux with glibc on any x86-64 CPU |
+| `linux-arm64` | Linux with glibc on 64-bit ARM, such as a Raspberry Pi 4 or 5 with a 64-bit OS |
+
+The x64 builds need no AVX2, so older Celeron and Atom home servers work.
+The Linux builds need glibc: on Alpine and other musl systems the installer
+switches to the Docker install. A 32-bit userland (a 32-bit Raspberry Pi OS,
+for example) cannot run the native build either; the installer refuses it
+and points to the Docker install or a 64-bit OS. The Docker image is
+`linux/amd64` and `linux/arm64`. macOS is not supported.
+
+### Network
+
+- **A public IPv4 that reaches the machine.** At home that means a router
+  you can forward ports on and a line without CGNAT; a VPS has one already.
+  See [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
+- **An HTTPS address**: your own domain, or a no-domain option (DuckDNS,
+  sslip.io on a VPS, or a Cloudflare Tunnel with a domain on Cloudflare).
+- **These ports** from the internet to the machine:
+
+| Port (default) | Protocol | When |
+| --- | --- | --- |
+| `MEDIA_TCP_PORT` (7881) | TCP | always |
+| `MEDIA_UDP_PORT` (7882) | UDP | always |
+| `HTTPS_PORT` (443) | TCP | `INGRESS=direct` |
+| `HTTP_PORT` (80) | TCP | `INGRESS=direct`, unless `HTTP_PORT=0` |
+
+`LISTEN` (8081) and `LIVEKIT_PORT` (7880) are loopback only and never
+forwarded. More in [Port forwarding](/telinha/guides/port-forwarding/#which-ports).
+
+### Discord
+
+A Discord server where you can add a bot (you need the **Manage Server**
+permission there) and a Discord account to create an application in the
+Developer Portal. The setup wizard does most of the work; the
+[Discord app](/telinha/start/discord/) page walks through the clicks.
+
+### Browsers
+
+Watching works in any current browser. For sharing, a Chromium-based desktop
+browser (Chrome, Edge and similar) does best: the page uses AV1 when the
+browser has a hardware encoder for it, else H.265, else H.264, and always
+sends an H.264 copy for viewers that cannot decode the first choice.
+
+Next: [Choose your setup](/telinha/start/choose/).

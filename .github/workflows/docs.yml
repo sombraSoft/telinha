@@ -1,0 +1,54 @@
+# Builds the docs site and deploys it to GitHub Pages. release.yml calls it
+# after publishing a stable release (so the run is on main, which the Pages
+# environment allows, and the checkout is the release commit); it can also
+# be run by hand from main. Pages must use the "GitHub Actions" source.
+name: docs
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build, empty for the run's own ref
+        type: string
+        required: false
+        default: ''
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Empty on workflow_dispatch: checkout then uses the run's own ref.
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      # The link validator runs inside the build and fails it on a broken link.
+      - run: bun run docs:build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # One deploy at a time; a queued run waits rather than cancelling.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

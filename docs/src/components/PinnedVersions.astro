@@ -1,0 +1,15 @@
+---
+// One sentence with the helper versions this release pins (versions.json), so
+// no page ever types a version number into prose.
+import generated from '../data/generated.json';
+import { UI, type Locale } from '../data/reference.ts';
+
+interface Props { locale: Locale }
+const { locale } = Astro.props;
+const v = generated.versions as { livekit: string; caddy: string; cloudflared: string };
+const t = (k: string) => UI[k]![locale];
+---
+
+<p>
+  {t('pins')} <code>livekit-server</code> {v.livekit}, <code>caddy</code> {v.caddy} {t('and')} <code>cloudflared</code> {v.cloudflared}.
+</p>

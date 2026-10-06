@@ -1,0 +1,260 @@
+---
+title: PC com Windows
+description: Instale a Telinha num PC com Windows, deixe o assistente configurar tudo e mantenha ela rodando como tarefa em segundo plano.
+sidebar:
+  order: 3
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+O PC que você já tem dá conta. Uma linha no PowerShell instala a Telinha, o
+assistente de configuração faz algumas perguntas e uma tarefa em segundo plano
+mantém tudo rodando desde a inicialização, com ou sem alguém logado.
+
+## Antes de começar
+
+- Um PC com Windows 64 bits, x64 ou ARM, com o Windows PowerShell 5.1 (que já
+  vem no Windows) ou um PowerShell mais novo.
+- O PC fica ligado, porque um PC suspenso fecha todas as salas. Configure para
+  ele nunca entrar em suspensão na tomada: Configurações → Sistema → Energia e
+  bateria (Energia num desktop) → Tela e suspensão (Tempos limite de tela,
+  suspensão e hibernação nas versões mais novas) → *Quando conectado, colocar
+  meu dispositivo em suspensão após*: *Nunca*.
+- Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
+  Dá para criar o aplicativo antes do assistente ou durante ele: veja
+  [Aplicativo do Discord](/telinha/pt-br/start/discord/).
+- Uma ideia do endereço que o pessoal vai usar: um domínio seu, um nome
+  gratuito do DuckDNS ou um Cloudflare Tunnel.
+  [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
+  compara as opções.
+- Acesso à página de administração do roteador, a não ser que ele faça UPnP
+  (muitos roteadores vêm com isso desligado, e os da operadora muitas vezes
+  escondem a opção).
+  Sem acesso e sem UPnP, por exemplo com um roteador da operadora travado ou a
+  rede compartilhada de um prédio? Aí a Telinha neste PC não consegue abrir as portas
+  sozinha: peça à operadora ou a quem cuida da rede para encaminhar, ou use uma
+  [VPS](/telinha/pt-br/start/vps/).
+  Se a sua linha está atrás de CGNAT, nada da internet chega no PC: leia antes
+  [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
+
+## Instalação
+
+<Steps>
+
+1. Aperte Iniciar, digite `PowerShell` e clique em **Windows PowerShell**, não
+   em *Executar como administrador*: a Telinha se instala na sua própria pasta
+   de usuário, e o assistente pede permissão de administrador sozinho quando
+   precisa.
+
+2. Cole esta linha e aperte Enter:
+
+   ```powershell
+   irm https://github.com/sombraSoft/telinha/releases/latest/download/install.ps1 | iex
+   ```
+
+3. O script baixa o `telinha-windows-x64.zip` (ou o `telinha-windows-arm64.zip`)
+   e o `SHA256SUMS` da versão estável mais nova, e para se o sha256 não bater.
+   Ele coloca o `telinha.exe` em `%LOCALAPPDATA%\Telinha\bin`, adiciona essa
+   pasta ao `PATH` do seu usuário, mostra o `telinha --version` e abre o
+   `telinha setup`.
+
+</Steps>
+
+O script não baixa mais nada. Quem baixa o `livekit-server` e o `caddy` ou o
+`cloudflared` é o próprio assistente, cada um conferido contra um sha256 fixo.
+
+Três variáveis de ambiente mudam o que o script faz. Defina na mesma janela,
+antes da linha do `irm`:
+
+```powershell
+$env:TELINHA_VERSION = 'vX.Y.Z'
+$env:TELINHA_HOME = 'D:\Telinha'
+$env:TELINHA_NO_SETUP = '1'
+```
+
+`TELINHA_VERSION` instala essa tag em vez da mais nova, `TELINHA_HOME` usa
+outra pasta (guardada como variável do usuário, para os próximos terminais
+acharem) e `TELINHA_NO_SETUP` instala sem abrir o assistente. Também dá para
+baixar o zip na página de releases: descompacte onde quiser e dê dois cliques no
+`telinha.exe`, que oferece o assistente quando ainda não existe configuração.
+O Windows pode barrar com a tela do SmartScreen *O Windows protegeu o
+computador*, porque a versão ainda não tem assinatura de código: clique em
+*Mais informações* e depois em *Executar assim mesmo*.
+
+:::note
+No Windows on ARM a Telinha roda a versão arm64. A Cloudflare não publica um
+`cloudflared` ARM para Windows, então o modo de túnel usa o x64 em emulação.
+:::
+
+## Rode o assistente
+
+O assistente fala português do Brasil ou inglês (ele pega o idioma do sistema e
+pergunta uma vez) e explica cada pergunta em uma ou duas linhas. Você nunca
+copia id na mão: servidores, cargos e canais aparecem em listas. Num PC com
+Windows em casa, o caminho é este:
+
+<Steps>
+
+1. **Onde a Telinha roda.** Ele mostra o IP público e o roteador, se algum
+   responder UPnP, NAT-PMP ou PCP. Escolha *em casa*, ou *só atrás da
+   Cloudflare* se for usar um Cloudflare Tunnel.
+
+2. **Endereço.** Um domínio seu (o
+   [registro A](/telinha/pt-br/guides/domains/#seu-próprio-domínio) é
+   comparado com o IP público),
+   DuckDNS (o token é testado na hora), um Cloudflare Tunnel ou o seu próprio
+   proxy reverso. Com domínio próprio ou DuckDNS, a Telinha pega o certificado
+   HTTPS sozinha, então ele pergunta se as portas 80 e 443 da internet chegam
+   no PC: sim; só a 443, para outra porta do PC; ou nenhuma, e aí ele recomenda
+   o túnel. Por fim, pergunta se a Telinha pode abrir as portas no roteador por
+   UPnP.
+
+3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
+   não ser que outro programa do PC já use alguma.
+
+4. **Discord.** O token do bot, o segredo do cliente, o redirecionamento de
+   login (a única coisa que você adiciona na mão no Portal do Desenvolvedor), o
+   servidor, o cargo que pode entrar, os canais e o nome do comando.
+   [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
+
+5. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
+   sozinhas quando nenhuma sala está aberta.
+
+6. **Revisão.** Todos os valores numa tela só, com os segredos aparecendo
+   apenas como gerado, mantido ou definido. Confirme e o assistente grava
+   `%LOCALAPPDATA%\Telinha\config\telinha.env`, que só você, o SYSTEM e os
+   Administradores conseguem ler.
+
+7. **Serviço e verificações.** Ele baixa os programas auxiliares e aí o
+   Windows pede permissão de administrador uma vez (o Controle de Conta de
+   Usuário, UAC) para registrar a tarefa em segundo plano e criar as regras de
+   firewall. Depois olha o roteador (avisando de CGNAT ou NAT duplo e listando
+   as portas para encaminhar na mão quando não há UPnP), espera a Telinha subir
+   e o certificado HTTPS chegar, roda o `telinha doctor` com o teste pelo
+   celular e mostra os próximos passos. As notas logo abaixo falam do pedido
+   de administrador e de um roteador sem UPnP.
+
+</Steps>
+
+:::note[O pedido de administrador]
+O Windows mostra um aviso do Controle de Conta de Usuário para o
+`telinha.exe` com *Editor: Desconhecido*. Isso é esperado: a versão ainda não
+tem assinatura de código. Confira se o programa é o que está em
+`%LOCALAPPDATA%\Telinha\bin` (*Mostrar mais detalhes* mostra o caminho) e
+clique em **Sim**.
+:::
+
+:::note[Vai encaminhar as portas na mão?]
+Quando nenhum roteador responde UPnP (ou você não deixou usar), o assistente só lista as portas para encaminhar e segue em frente, então a
+espera pelo certificado e o teste pelo celular falham no final. Isso é
+esperado: encaminhe as portas como em [Abra as portas](#abra-as-portas) logo
+abaixo e rode o `telinha doctor` de novo (o certificado pode levar alguns
+minutos depois que as portas chegarem no PC).
+:::
+
+Se você recusou o UAC, a tarefa em segundo plano não foi registrada: o
+assistente mostra um comando do PowerShell que pede a permissão de novo, e rodar
+o `telinha setup` outra vez faz o mesmo.
+
+## Abra as portas
+
+A internet precisa chegar no PC por estas portas:
+
+| Porta | Quando | Para quê |
+| --- | --- | --- |
+| TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
+| UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
+| TCP 443 | domínio próprio ou DuckDNS | As páginas, por HTTPS |
+| TCP 80 | domínio próprio ou DuckDNS, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
+
+Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
+levam WebRTC. Se você mudou alguma porta no assistente, use o seu valor.
+
+**Primeiro o UPnP.** Se o roteador respondeu e você deixou, a Telinha pede essas
+portas ao roteador enquanto roda e você não precisa fazer nada. Se não, faça o
+encaminhamento de portas na mão para o IP local do PC, depois de dar a ele um IP
+fixo na rede local para a regra continuar apontando para ele.
+[Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/) explica as
+duas coisas, e há páginas para os roteadores da
+[Vivo](/telinha/pt-br/routers/vivo/), da [Claro](/telinha/pt-br/routers/claro/),
+da [TIM](/telinha/pt-br/routers/tim/) e da [Oi](/telinha/pt-br/routers/oi/).
+
+**Firewall do Windows.** O passo do UAC cria quatro regras de entrada, cada uma
+presa ao seu programa em `bin\`: `Telinha LiveKit TCP` e `Telinha LiveKit UDP`
+para o `livekit-server.exe`, `Telinha HTTPS` e `Telinha HTTP` para o
+`caddy.exe` (essas duas só com domínio próprio ou DuckDNS). Rodar o `telinha`
+num console antes do serviço e fechar o alerta de Segurança do Windows deixa
+regras de bloqueio para trás, e o bloqueio vence a permissão; a instalação
+remove essas regras antes. Rode o `telinha setup` de novo depois de mudar uma
+porta para as regras acompanharem.
+
+## Verifique
+
+```powershell
+telinha doctor
+```
+
+O doctor roda todas as verificações e mostra uma linha para cada, com o que
+fazer em tudo que não estiver ok. Depois ele mostra um link e um QR code para o
+teste pelo celular: abra no celular com o Wi-Fi desligado, para o teste vir de
+fora da sua rede, como a conexão dos seus amigos. Ele diz se a página, a conexão
+com o LiveKit, o UDP e o TCP funcionam de lá. O `telinha doctor --local` pula as
+verificações que precisam da internet.
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
+linha e o que uma falha quer dizer.
+
+## Use
+
+Digite `/telinha` (ou o nome de comando que você escolheu) num dos canais
+escolhidos. O bot posta um card com um botão para uma sala nova em
+`https://<seu endereço>/r/<código>`. Quem abre faz login com o Discord uma vez, e
+quem tem o cargo entra. Compartilhe a tela pelo Chrome, pelo Edge ou outro
+navegador baseado em Chromium; assistir funciona no celular também. O card
+mostra quem está transmitindo e quem está assistindo, e a sala fecha sozinha
+alguns minutos depois que todo mundo sai.
+
+:::caution[Funciona para os amigos, mas não da sua própria rede?]
+Muitos roteadores não conseguem devolver para dentro uma conexão feita ao
+próprio IP público (o NAT loopback, também chamado de hairpin NAT ou NAT
+reflection). Aí a sala abre pelos dados móveis e para todo mundo de fora, mas
+não deste PC nem de outro aparelho da sua rede. Ligue o NAT loopback se o
+roteador tiver a opção. Uma linha no arquivo hosts apontando o nome para o IP
+local não resolve: a página abre, mas o LiveKit continua anunciando o IP
+público para o vídeo. Veja
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/#funciona-de-fora-mas-não-da-sua-própria-rede).
+:::
+
+## No dia a dia
+
+A tarefa em segundo plano se chama `Telinha` no Agendador de Tarefas. Ela inicia
+com o Windows, roda com a sua conta sem permissão de administrador, sobe a
+Telinha de novo depois de uma atualização ou de um travamento e grava o log em
+`%LOCALAPPDATA%\Telinha\logs\telinha.log` (girado a cada 10 MB, cinco guardados).
+
+```powershell
+telinha service status
+telinha service restart
+telinha service stop
+telinha service start
+Get-Content "$env:LOCALAPPDATA\Telinha\logs\telinha.log" -Tail 50 -Wait
+```
+
+O `telinha run` roda a Telinha no console (Ctrl+C para), mas só uma cópia roda
+por pasta: com o serviço no ar, uma execução no console avisa
+`A Telinha já está rodando` e sai.
+
+**As atualizações** acontecem sozinhas: a Telinha confere alguns minutos depois
+de iniciar e depois a cada poucas horas, espera enquanto há salas abertas,
+confere o sha256 e volta para a versão anterior se a nova não subir.
+`telinha update --check` mostra a situação e `telinha update --now` instala na
+hora. Veja [Atualizações](/telinha/pt-br/guides/updates/).
+
+**Mudar as configurações** é rodar o `telinha setup` de novo: cada pergunta já
+vem com o valor atual, os segredos podem ser mantidos e o serviço reinicia com o
+arquivo novo. Editar o `telinha.env` na mão também funciona, seguido de
+`telinha service restart`.
+
+**Para remover**: `telinha service uninstall --firewall` tira a tarefa e as
+regras de firewall; depois apague `%LOCALAPPDATA%\Telinha`.
+
+[Rodando como serviço](/telinha/pt-br/guides/service/) tem os detalhes.
