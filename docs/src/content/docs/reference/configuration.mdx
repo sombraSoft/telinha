@@ -63,10 +63,6 @@ the defaults and the "required" column come from the server itself.
 
 <ConfigTable locale="en" section="dev" />
 
-## Reserved for LiveKit Cloud / TURN
-
-<ConfigTable locale="en" section="reserved" />
-
 ## Validation errors
 
 A bad value fails start-up (and `telinha doctor`'s `config` check) with one
@@ -82,9 +78,17 @@ or `ports collide: MEDIA_TCP_PORT=7881, LISTEN=7881`. The rules:
   with `HTTP_PORT=0` is refused: Let's Encrypt validates only over public
   port 80 or 443, so that setup could never get a certificate. Use
   `ACME_DNS=duckdns` with a DuckDNS name, or a `PUBLIC_URL` on 443.
-- `LIVEKIT_PORT`, both media ports, the `LISTEN` port and, in direct mode,
+- `LIVEKIT_PORT`, both media ports (these three only with `MEDIA=self`), the
+  `LISTEN` port, `TURN_PORT` while TURN is on and, in direct mode,
   `HTTPS_PORT` and `HTTP_PORT` (unless it is `0`) must all differ.
-- `MEDIA=cloud` is refused: not supported yet.
+- `MEDIA=cloud` needs `LIVEKIT_CLOUD_URL`, a `wss://` or `https://` URL with a
+  host (`ws://` and `http://` only with `DEV_USER`); a path, query or trailing
+  slash is dropped without an error.
+- `TURN=on` where TURN over TLS cannot run is refused with the reason, for
+  example `TURN=on is not possible here: home installs get no TURN: home connections do not let port 443 in. TURN over TLS on 443 is for a VPS in direct mode on port 443.`
+  It needs `MEDIA=self`, `INGRESS=direct`, a `HOSTING` other than `home`,
+  `HTTPS_PORT=443` with a `PUBLIC_URL` on 443, and a DNS name (not an IP) in
+  `PUBLIC_URL`. `TURN=auto` never fails: where those do not hold it stays off.
 - `COMMAND_NAME` must be lowercase, 1-32 letters, digits, `-` or `_`;
   `UPDATE_PIN` a tag like `v1.2.3`; `LOCALE` `en` or `pt-BR`;
   `LIVEKIT_NODE_IP` an IPv4 address; `DUCKDNS_DOMAIN` the subdomain alone;
@@ -97,8 +101,11 @@ from `HTTPS_PORT` (the router translates), a `PUBLIC_URL` on a port other
 than 443 without `ACME_DNS` while `HTTP_PORT` is on (the certificate then
 needs public port 80 reaching `HTTP_PORT`), `ACME_DNS` set outside direct
 mode (ignored), a `DUCKDNS_DOMAIN` written with `.duckdns.org` (trimmed), a
-DuckDNS name that is not the `PUBLIC_URL` host, and `AUTO_UPDATE=on` outside
-the native binary (ignored).
+DuckDNS name that is not the `PUBLIC_URL` host, `AUTO_UPDATE=on` outside
+the native binary (ignored), and with `MEDIA=cloud` any of `LIVEKIT_PORT`,
+`MEDIA_TCP_PORT`, `MEDIA_UDP_PORT`, `LIVEKIT_API_URL` or `LIVEKIT_PUBLIC_URL`
+set to something other than its default
+(`config: MEDIA_TCP_PORT only applies to MEDIA=self; ignored`).
 
 ## What children get from the environment
 
@@ -106,8 +113,8 @@ The helper programs are started with Telinha's own environment minus every
 `telinha.env` key and minus anything starting with `LIVEKIT_`, `TUNNEL_`,
 `DISCORD_` or `TELINHA_` (the Go binaries read such variables as flags).
 `PATH`, `HOME`, `TEMP`, `SystemRoot`, `LANG`, proxy settings and the like pass
-through. On top of that each child gets only what it needs: LiveKit
-`LIVEKIT_KEYS` (built from the API key pair), cloudflared `TUNNEL_TOKEN`, Caddy
+through. On top of that each child gets only what it needs: LiveKit (which
+runs only with `MEDIA=self`) `LIVEKIT_KEYS` (built from the API key pair), cloudflared `TUNNEL_TOKEN`, Caddy
 `XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `HOME` pointed at `data/caddy`, plus
 `DUCKDNS_TOKEN` with `ACME_DNS=duckdns` (the rendered `Caddyfile` reads it as
 `{env.DUCKDNS_TOKEN}`, and Telinha blanks it out of Caddy's log lines). No

@@ -515,7 +515,8 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: "false"
 
   # The image build also compiles our Caddy (xcaddy + DuckDNS + layer4), and the
-  # smoke test checks its version and modules and validates the DNS-01 Caddyfile.
+  # smoke test checks its version and modules and validates the DNS-01 and TURN
+  # (layer4, PROXY v2) Caddyfiles.
   image:
     runs-on: ubuntu-latest
     steps:

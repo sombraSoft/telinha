@@ -402,6 +402,60 @@ describe('createPortMapper', () => {
     expect(JSON.parse(readFileSync(statePath, 'utf8')).mappings.map((x: { state: string }) => x.state)).toEqual(['pending', 'pending']);
   });
 
+  test('nothing to map: no discovery, no rediscovery loop, no "forward by hand" line', async () => {
+    const env = lan();
+    let sockets = 0;
+    const udp = env.deps.udp;
+    const m = createPortMapper({
+      mappings: [], statePath: join(tmp, 'none', 'upnp.json'), log: (...a) => env.logs.push(a.join(' ')),
+      ...env.deps, udp: async (h) => { sockets++; return udp(h); },
+    });
+    await m.start();
+    await m.refresh();
+    await env.advance(60 * MIN);
+    expect(sockets).toBe(0);
+    expect(env.logs).toEqual([]);
+    expect(m.status().mappings).toEqual([]);
+    await m.stop();
+  });
+
+  test('nothing to map, mappings left by a previous run: one cycle removes them, then nothing more', async () => {
+    const statePath = join(tmp, 'cloud', 'upnp.json');
+    const env = lan({ igd: true });
+    env.igdTable['TCP/7881'] = { client: LOCAL, internalPort: 7881, description: 'Telinha TCP 7881', lease: 0 };
+    mkdirSync(join(tmp, 'cloud'), { recursive: true });
+    writeFileSync(statePath, JSON.stringify({ enabled: true, gateway: null, externalIp: null, updatedAt: 0, mappings: [{ ...MAPPINGS[0], state: 'mapped' }] }));
+    const m = createPortMapper({ mappings: [], statePath, log: (...a) => env.logs.push(a.join(' ')), ...env.deps });
+    const p = m.start();
+    await env.advance(3000);
+    await p;
+    expect(env.logs).toEqual(['upnp: removed stale mapping TCP 7881']);
+    expect(env.igdTable).toEqual({});
+    expect(JSON.parse(readFileSync(statePath, 'utf8')).mappings).toEqual([]);
+    const soaps = env.soap.length;
+    await env.advance(60 * MIN);
+    expect(env.soap.length).toBe(soaps);
+    expect(env.logs).toHaveLength(1);
+    await m.stop();
+  });
+
+  test('nothing to map, stale entries and no gateway: silent, and the state file keeps them', async () => {
+    const statePath = join(tmp, 'cloud-nogw', 'upnp.json');
+    const env = lan();
+    mkdirSync(join(tmp, 'cloud-nogw'), { recursive: true });
+    const state = JSON.stringify({ enabled: true, gateway: null, externalIp: null, updatedAt: 0, mappings: [{ ...MAPPINGS[0], state: 'mapped' }] });
+    writeFileSync(statePath, state);
+    const m = createPortMapper({ mappings: [], statePath, log: (...a) => env.logs.push(a.join(' ')), ...env.deps });
+    const p = m.start();
+    await env.advance(3000);
+    await p;
+    expect(env.logs).toEqual([]);
+    await env.advance(60 * MIN);
+    await m.stop();
+    expect(env.logs).toEqual([]);
+    expect(readFileSync(statePath, 'utf8')).toBe(state);
+  });
+
   test('stop() before start() leaves the state file for the next run', async () => {
     const statePath = join(tmp, 'early', 'upnp.json');
     mkdirSync(join(tmp, 'early'), { recursive: true });

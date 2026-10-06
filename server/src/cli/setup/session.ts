@@ -66,7 +66,7 @@ export interface Notice { kind: 'locked' | 'presetErrors' | 'info'; text: string
 interface Slot { state: LookupState; actions: ActionId[]; running?: Text }
 
 const STEP_LABEL: Record<StepId, QKey> = {
-  where: 'stepWhere', address: 'stepAddress', discord: 'stepDiscord', ports: 'stepPorts', updates: 'stepUpdates', tray: 'stepTray', review: 'stepReview', install: 'stepInstall',
+  where: 'stepWhere', address: 'stepAddress', discord: 'stepDiscord', media: 'stepMedia', ports: 'stepPorts', updates: 'stepUpdates', tray: 'stepTray', review: 'stepReview', install: 'stepInstall',
 };
 const ACTION_LABEL: Record<ActionId, QKey> = { retry: 'actionRetry', keep: 'actionKeep', quit: 'actionQuit', open: 'actionOpen', check: 'actionCheck' };
 const str = (v: string | string[] | undefined): string => (typeof v === 'string' ? v : '');
@@ -796,6 +796,10 @@ export class SetupSession {
         const name = guildName(a, env);
         return `/${str(a.command) || 'telinha'}${name ? ` · ${name}` : ''}`;
       }
+      case 'media':
+        if (a.media === 'cloud') return this.#t(txt('sumMediaCloud'));
+        if (a.media !== 'self') return '';
+        return this.#t(txt(a.turn === 'on' ? 'sumTurn' : 'sumMediaSelf'));
       case 'ports': {
         if (!a.mediaPorts) return '';
         // Grouped by protocol, one group per line ("TCP 7881, 8443" / "UDP 7882"): the sidebar joins them when they fit.

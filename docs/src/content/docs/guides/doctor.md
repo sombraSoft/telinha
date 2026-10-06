@@ -7,7 +7,8 @@ sidebar:
 
 `telinha doctor` checks everything between a Discord member and a working
 video: the configuration, the helper programs, the Discord app, the public
-address, the local service, the router and updates. It then offers a test
+address, LiveKit Cloud or TURN where they are in use, the local service, the
+router and updates. It then offers a test
 from your phone, on mobile data, that measures the real path from outside your
 network. Run it after the setup, after changing anything, and whenever
 something stops working.
@@ -105,6 +106,17 @@ The icons are `✓`, `!`, `✗` and `–`, with the same meanings as above. The 
 test is skipped without a terminal (its link needs someone to open it), unless
 `--json` runs on one.
 
+Two rows depend on the media setup. **LiveKit Cloud** (`livekit-cloud`) runs
+only with `MEDIA=cloud`: it lists the project's rooms with the API key and
+secret, so it proves the URL and the key pair at once, and its detail lines
+repeat the two things to know about the project (turn automatic room creation
+off; the free plan's limits). See [LiveKit Cloud](/telinha/guides/livekit-cloud/).
+**TURN over TLS** (`turn`) runs only where TURN is on: it checks that
+`turn.<host>` resolves to the public IP, that it presents a valid certificate
+on 443, and that LiveKit's TURN is listening locally on `TURN_PORT`. On a VPS
+with your own domain it is skipped with the DNS record to create and the
+`TURN=on` to set. See [TURN over TLS on port 443](/telinha/guides/turn/).
+
 ## The phone test
 
 With the service running and the checks done, doctor asks Telinha for a
@@ -121,7 +133,7 @@ Mobile data matters: on your own Wi-Fi the phone is inside your network and
 proves nothing about the router. No Discord login is needed. The link works
 once and only within 10 minutes, and the cookie it leaves (15 minutes) opens
 nothing but the test page and the LiveKit relay, for a private room of its
-own. The page runs the test; the phone and the terminal both show the result,
+own (with `MEDIA=cloud` the page connects to the Cloud project directly). The page runs the test; the phone and the terminal both show the result,
 and the rows join the checklist as a *Phone test* group; a failed one carries its fix.
 
 Doctor waits up to 10 minutes for the phone. Press `s` (Ctrl+C in the plain
@@ -139,10 +151,11 @@ window larger to get the code.
 | Row | Measures |
 | --- | --- |
 | HTTPS | The page loaded over HTTPS, and how long it took |
-| LiveKit connection | Signaling through `/livekit` on `PUBLIC_URL` |
+| LiveKit connection | Signaling through `/livekit` on `PUBLIC_URL`; with `MEDIA=cloud`, to the Cloud project |
 | Sending video | Publishing a tiny test video track |
 | First path | The protocol and IP the connection took, and its round trip |
-| UDP / TCP | Media forced over each protocol in turn, on `MEDIA_UDP_PORT` and `MEDIA_TCP_PORT` |
+| UDP / TCP | Media forced over each protocol in turn, on `MEDIA_UDP_PORT` and `MEDIA_TCP_PORT`; with `MEDIA=cloud` the rows show no port (the ports are Cloud's) |
+| TURN/TLS 443 | Only with TURN on (*TURN over TLS on 443* on the phone): media forced through `turn.<host>:443`; the proof that a viewer on a 443-only network can relay |
 
 ### Reading a failure
 
@@ -152,7 +165,9 @@ window larger to get the code.
 | UDP and TCP, with HTTPS and LiveKit fine | The media ports are closed: forward both |
 | Only UDP | UDP is not forwarded; video still works over TCP, with more delay |
 | Only TCP | TCP is not forwarded; viewers whose network blocks UDP cannot watch |
-| First path to an IP that is not your public IP | LiveKit advertises the wrong address: check `LIVEKIT_NODE_IP` |
+| First path to an IP that is not your public IP | LiveKit advertises the wrong address: check `LIVEKIT_NODE_IP` (`MEDIA=self`; with Cloud the IP is Cloud's) |
+| UDP and TCP with `MEDIA=cloud` | That phone's network blocks WebRTC; nothing to open on your side, try another network |
+| TURN/TLS 443 | A warning, not a failure: see the `turn` check (the DNS record and the certificate of `turn.<host>`) |
 
 ## Troubleshooting
 
@@ -209,8 +224,29 @@ shows UDP and TCP failed. Forward TCP `MEDIA_TCP_PORT` (7881) and UDP
 `MEDIA_UDP_PORT` (7882) to this machine, open them in the machine's firewall,
 and on a VPS in the provider's firewall too. `mappings` shows what the router
 agreed to; on Linux `listeners` prints the ufw or firewalld commands. Behind
-CGNAT (`cgnat` fails) no forwarding helps: see
+CGNAT (`cgnat` fails) no forwarding helps: ask for a public IPv4, or set
+`MEDIA=cloud` so [LiveKit Cloud](/telinha/guides/livekit-cloud/) carries the
+video with no open port; see
 [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
+
+### LiveKit Cloud fails
+
+`livekit-cloud` fails in two ways. *Rejected the API key or secret*: copy the
+key and secret again from the project's Settings → Keys into
+`LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (or run the
+[non-interactive setup](/telinha/guides/livekit-cloud/#set-it-up) again).
+*Could not reach*: check `LIVEKIT_CLOUD_URL` (the project's Settings; it looks
+like `wss://<project>.livekit.cloud`) and the machine's internet access. When
+the check passes but people get refused late in the month, the project hit
+the free plan's monthly cap.
+
+### Viewers on a strict network cannot watch
+
+They are on a network that only lets port 443 through (an office, a school,
+some mobile carriers), so the media ports never reach the machine. On a VPS on
+443 turn on [TURN over TLS on port 443](/telinha/guides/turn/), then run
+`telinha doctor` again: the `turn` row should pass and the phone test gains a
+TURN/TLS 443 row. With `MEDIA=cloud`, LiveKit Cloud's own TURN covers them.
 
 ### Only UDP or only TCP fails
 

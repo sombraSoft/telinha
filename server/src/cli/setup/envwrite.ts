@@ -74,14 +74,19 @@ PUBLIC_URL=
 
 # --- Media (LiveKit) -----------------------------------------------------------------------------
 
-# self = bundled livekit-server; cloud is reserved and rejected for now
+# self = the bundled livekit-server on this machine (media ports to forward); cloud = LiveKit Cloud: no media
+# port to open, the free Build plan allows 5,000 participant-minutes and 50 GB downstream a month, with up to
+# 100 participants connected at once. Turn automatic room creation off in the Cloud project's settings.
 #MEDIA=self
-# Any key/secret pair you make up (e.g. openssl rand -hex 16 / -base64 32); telinha hands it to LiveKit
+# self: any key/secret pair you make up (telinha setup generates them); cloud: the project's API key and secret
+# (cloud.livekit.io -> project -> Settings -> Keys)
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=''
-# LiveKit's signaling/API port, loopback only
+# cloud: the project's URL (Settings -> Project), wss://<project>.livekit.cloud
+#LIVEKIT_CLOUD_URL=
+# self: LiveKit's signaling/API port, loopback only
 #LIVEKIT_PORT=7880
-# ICE over TCP and UDP: forward both on the router
+# self: ICE over TCP and UDP: forward both on the router
 #MEDIA_TCP_PORT=7881
 #MEDIA_UDP_PORT=7882
 # auto = ask the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and HTTPS_PORT in direct
@@ -89,12 +94,20 @@ LIVEKIT_API_SECRET=''
 #UPNP=auto
 # Static public IPv4: skips STUN and turns the IP watch off
 #LIVEKIT_NODE_IP=
-# LiveKit HTTP API as telinha reaches it; default http://127.0.0.1:<LIVEKIT_PORT>
+# self: LiveKit HTTP API as telinha reaches it; default http://127.0.0.1:<LIVEKIT_PORT>
 #LIVEKIT_API_URL=http://127.0.0.1:7880
-# WebSocket URL browsers use for signaling; default = PUBLIC_URL as wss:// + /livekit (proxied by telinha)
+# self: WebSocket URL browsers use for signaling; default = PUBLIC_URL as wss:// + /livekit (proxied by telinha)
 #LIVEKIT_PUBLIC_URL=
-# How often the public IP is checked (LiveKit restarts when it changes), in seconds; 0 = off
+# How often the public IP is checked, in seconds; 0 = off. On a change the router mappings are renewed, DuckDNS
+# is told and (self) LiveKit restarts
 #IP_WATCH_SECONDS=300
+# TURN over TLS on port 443 for people on networks that only let 443 through. VPS in direct mode on 443 only
+# (never at home). auto = on for a VPS install with a DuckDNS or sslip.io address (turn.<host> resolves by
+# itself), off with your own domain until you add the DNS record turn.<host> -> your IP and set on; off = never
+#TURN=auto
+# TURN: the local port LiveKit's TURN listens on; Caddy terminates TLS on 443 and forwards here. Keep it closed
+# in the firewall
+#TURN_PORT=5349
 
 # --- Rooms ---------------------------------------------------------------------------------------
 
@@ -138,11 +151,6 @@ LIVEKIT_API_SECRET=''
 # PUBLIC_URL is http://localhost or http://127.0.0.1 and INGRESS is external.
 #DEV_USER=
 #DEV_LOCALE=
-
-# --- Reserved for LiveKit Cloud / TURN, ignored for now ------------------------------------------
-
-#LIVEKIT_CLOUD_URL=
-#TURN_TLS_PORT=
 `;
 
 /** Keys the wizard decides: a re-run rewrites or drops them; every other key is kept as it was. */
@@ -150,7 +158,7 @@ export const MANAGED_KEYS: readonly string[] = [
   'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'GUILD_ID', 'ROLE_ID', 'CHANNEL_IDS',
   'COMMAND_NAME', 'GROUP_NAME', 'COOKIE_SECRET',
   'PUBLIC_URL', 'HOSTING', 'INGRESS', 'ACME_DNS', 'HTTP_PORT', 'HTTPS_PORT', 'TUNNEL_TOKEN', 'DDNS_PROVIDER', 'DUCKDNS_DOMAIN', 'DUCKDNS_TOKEN',
-  'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'UPNP', 'LIVEKIT_NODE_IP',
+  'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'MEDIA', 'LIVEKIT_CLOUD_URL', 'TURN', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'UPNP', 'LIVEKIT_NODE_IP',
   'AUTO_UPDATE', 'LOCALE',
 ];
 

@@ -26,8 +26,10 @@ stable release.
   or sslip.io. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
   compares them.
 - At home, access to your router's admin page unless it does UPnP, and a line
-  that is not behind CGNAT: see
-  [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat). No
+  that is not behind CGNAT, unless LiveKit Cloud carries the video
+  (`MEDIA=cloud`, with a Cloudflare Tunnel for the pages): see
+  [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat) and
+  [LiveKit Cloud](/telinha/guides/livekit-cloud/). No
   access and no UPnP, for example a locked ISP router or a shared building
   network? Then the machine cannot open the ports itself: ask the ISP or
   whoever runs the network to forward them, or use a [VPS](/telinha/start/vps/).

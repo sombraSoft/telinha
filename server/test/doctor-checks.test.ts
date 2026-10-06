@@ -139,7 +139,7 @@ const DUCK = {
 test('checks run in the documented order', () => {
   expect(CHECKS.map((c) => c.id)).toEqual([
     'config', 'binaries', 'discord-token', 'discord-intents', 'discord-guild', 'discord-role', 'discord-channels', 'discord-redirect',
-    'public-ip', 'dns', 'certificate', 'tls', 'listeners', 'service', 'tray', 'gateway', 'cgnat', 'mappings', 'update',
+    'public-ip', 'dns', 'certificate', 'tls', 'livekit-cloud', 'turn', 'listeners', 'service', 'tray', 'gateway', 'cgnat', 'mappings', 'update',
   ]);
 });
 
@@ -147,6 +147,9 @@ test('a healthy setup is all ok', async () => {
   const { ctx } = ctxFor({ files: BIN_FILES });
   const rs = await runChecks(CHECKS, ctx);
   expect(rs.filter((r) => r.status !== 'ok').map((r) => `${r.id}: ${r.summary}`)).toEqual([
+    'livekit-cloud: Skipped: MEDIA=self runs LiveKit on this machine.',
+    // An own domain with HOSTING unset: TURN=auto leaves it off and says how to turn it on.
+    'turn: TURN over TLS is available: create the DNS record turn.telinha.example.com → 203.0.113.7 (A record, same IP as telinha.example.com) and set TURN=on in telinha.env. It lets people on networks that only allow port 443 watch and stream.',
     'tray: The tray icon exists on native Windows installs only.',
     // No upnp.json and no running service to ask.
     'mappings: Skipped: the running service opens the ports; start it to see them.',
@@ -425,6 +428,197 @@ describe('public address', () => {
   });
 });
 
+const CLOUD = { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc.livekit.cloud' };
+const AUTO_CREATE = 'In the project\'s settings, turn automatic room creation off: Telinha creates and deletes rooms itself, and a closed room must not come back when someone opens an old link.';
+const LIMITS = 'Free Build plan: 5,000 WebRTC participant-minutes and 50 GB downstream a month, as a hard cap (past that, LiveKit Cloud refuses new connections until the next month), and up to 100 participants connected at once.';
+
+describe('livekit-cloud', () => {
+  const rooms = (n: number, seen: string[][] = []): Partial<NetLike> => ({
+    livekitListRooms: async (url, key, secret) => (seen.push([url, key, secret]), { rooms: n }),
+  });
+  const failing = (e: unknown): Partial<NetLike> => ({ livekitListRooms: async () => { throw e; } });
+
+  test('skips without a config and with MEDIA=self', async () => {
+    expect((await one('livekit-cloud', { env: { PUBLIC_URL: '' } })).summary).toBe('Skipped: fix the configuration first.');
+    const self = await one('livekit-cloud', { net: rooms(0) });
+    expect(self.status).toBe('skip');
+    expect(self.summary).toBe('Skipped: MEDIA=self runs LiveKit on this machine.');
+  });
+
+  test('one ListRooms call with the project URL and keys: ok with the host and the room count, plus the two Cloud notes', async () => {
+    const seen: string[][] = [];
+    const r = await run('livekit-cloud', { env: CLOUD, net: rooms(3, seen) });
+    expect(seen).toEqual([['https://proj-abc.livekit.cloud', 'devkey', 'lksecret']]); // gitleaks:allow
+    expect(r).toEqual({
+      id: 'livekit-cloud', title: 'LiveKit Cloud', status: 'ok',
+      summary: 'Connected to proj-abc.livekit.cloud: 3 room(s) open there.',
+      detail: [AUTO_CREATE, LIMITS],
+    });
+  });
+
+  test('a rejected key or secret fails with where to copy them from', async () => {
+    const twirp = Object.assign(new Error('permission denied'), { status: 401 });
+    for (const e of [twirp, new Error('unauthorized'), new Error('invalid API key'), { status: 403 }]) {
+      const r = await one('livekit-cloud', { env: CLOUD, net: failing(e) });
+      expect(r.status).toBe('fail');
+      expect(r.summary).toBe('LiveKit Cloud rejected the API key or secret for proj-abc.livekit.cloud.');
+      expect(r.fix).toStartWith('Cloud dashboard → your project → Settings → Keys: copy the key and secret into LIVEKIT_API_KEY / LIVEKIT_API_SECRET');
+      expect(r.detail).toEqual([AUTO_CREATE, LIMITS]);
+    }
+  });
+
+  test('anything else is unreachable, with the error and never the key or secret', async () => {
+    const r = await one('livekit-cloud', { env: CLOUD, net: failing(new Error('getaddrinfo ENOTFOUND proj-abc.livekit.cloud')) });
+    expect(r.status).toBe('fail');
+    expect(r.summary).toBe('Could not reach LiveKit Cloud at proj-abc.livekit.cloud: getaddrinfo ENOTFOUND proj-abc.livekit.cloud');
+    expect(r.fix).toBe('Check LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<project>.livekit.cloud) and this machine\'s internet access.');
+    expect(r.detail).toEqual([AUTO_CREATE, LIMITS]);
+    const leaky = await one('livekit-cloud', { env: CLOUD, net: failing(new Error('bad request for lksecret')) });
+    expect(JSON.stringify(leaky)).not.toContain('lksecret');
+  });
+
+  test('the default asks the server through the SDK (Twirp 401 reads as a rejected key)', async () => {
+    const paths: string[] = [];
+    const server = Bun.serve({
+      port: 0, hostname: '127.0.0.1',
+      fetch: (req) => (paths.push(new URL(req.url).pathname), Response.json({ code: 'unauthenticated', msg: 'invalid token' }, { status: 401 })),
+    });
+    try {
+      const env = {
+        ...CLOUD, DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:8081', INGRESS: 'external',
+        LIVEKIT_CLOUD_URL: `http://127.0.0.1:${server.port}`, HTTPS_PORT: '', HTTP_PORT: '',
+      };
+      const r = await one('livekit-cloud', { env });
+      expect(paths).toEqual(['/twirp/livekit.RoomService/ListRooms']);
+      expect(r.summary).toBe(`LiveKit Cloud rejected the API key or secret for 127.0.0.1:${server.port}.`);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test('--local skips it; pt-BR', async () => {
+    const { ctx } = ctxFor({ env: CLOUD, local: true, net: rooms(1) });
+    expect(byId(await runChecks(CHECKS, ctx))['livekit-cloud']!.status).toBe('skip');
+    const pt = await one('livekit-cloud', { env: CLOUD, net: rooms(1), locale: 'pt-BR' });
+    expect(pt.title).toBe('LiveKit Cloud');
+    expect(pt.summary).toBe('Conectado a proj-abc.livekit.cloud: 1 sala(s) aberta(s) lá.');
+    expect(pt.detail?.[1]).toContain('5.000');
+  });
+
+  test('a cloud setup: the Cloud check is ok and TURN is not offered', async () => {
+    const { ctx } = ctxFor({ env: CLOUD, net: rooms(0) });
+    const rs = byId(await runChecks(CHECKS, ctx));
+    expect(rs['livekit-cloud']!.status).toBe('ok');
+    expect(rs.turn!.summary).toBe('Skipped: TURN over TLS on 443 is for a VPS in direct mode on port 443 (MEDIA=cloud brings LiveKit Cloud\'s own TURN).');
+  });
+});
+
+describe('turn', () => {
+  const ON = { HOSTING: 'vps', TURN: 'on' };
+  const TURN_HOST = 'turn.telinha.example.com';
+  const OK = 'turn.telinha.example.com:443 has a valid certificate and LiveKit\'s TURN is listening on 127.0.0.1:5349 behind Caddy. Whether a phone can relay through it is what the phone test\'s TURN/TLS row shows.';
+  const goodTls = async () => ({ validTo: Date.now() + 60 * 86_400_000, issuer: "Let's Encrypt", subjectAltNames: [TURN_HOST], authorized: true });
+
+  test('skips: no config, TURN=off, and every config TURN cannot run with, naming why', async () => {
+    expect((await one('turn', { env: { PUBLIC_URL: '' } })).summary).toBe('Skipped: fix the configuration first.');
+    expect((await one('turn', { env: { TURN: 'off', HOSTING: 'vps' } })).summary).toBe('Skipped: TURN=off.');
+    const rows: [Record<string, string>, string][] = [
+      [{ INGRESS: 'tunnel', TUNNEL_TOKEN: 't' }, 'it needs INGRESS=direct (Caddy must own port 443)'],
+      [{ HOSTING: 'home' }, 'home installs get no TURN: home connections do not let port 443 in'],
+      [{ HTTPS_PORT: '8443', HTTP_PORT: '0' }, 'it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)'],
+    ];
+    for (const [env, why] of rows) {
+      const r = await one('turn', { env });
+      expect(r.status).toBe('skip');
+      expect(r.summary).toBe(`Skipped: TURN over TLS on 443 is for a VPS in direct mode on port 443 (${why}).`);
+    }
+  });
+
+  test('eligible but left off by auto (own domain): a skip naming the record and TURN=on', async () => {
+    const resolved: string[] = [];
+    const r = await one('turn', { env: { HOSTING: 'vps' }, net: { resolveA: async (h) => (resolved.push(h), [PUBLIC]) } });
+    expect(r.status).toBe('skip');
+    expect(r.summary).toBe('TURN over TLS is available: create the DNS record turn.telinha.example.com → 203.0.113.7 (A record, same IP as telinha.example.com) and set TURN=on in telinha.env. It lets people on networks that only allow port 443 watch and stream.');
+    expect(resolved).toEqual([]);
+    // LIVEKIT_NODE_IP is the address to point at.
+    expect((await one('turn', { env: { HOSTING: 'vps', LIVEKIT_NODE_IP: '198.51.100.4' } })).summary).toContain('turn.telinha.example.com → 198.51.100.4');
+  });
+
+  test('on: DNS, certificate and the local listener all good is ok, the SANs as detail', async () => {
+    const calls: string[] = [];
+    const r = await one('turn', {
+      env: ON,
+      net: {
+        resolveA: async (h) => (calls.push(`dns ${h}`), [PUBLIC]),
+        tlsInfo: async (h, p) => (calls.push(`tls ${h}:${p}`), goodTls()),
+        tcpOpen: async (h, p) => (calls.push(`tcp ${h}:${p}`), true),
+      },
+    });
+    expect(calls).toEqual([`dns ${TURN_HOST}`, `tls ${TURN_HOST}:443`, 'tcp 127.0.0.1:5349']);
+    expect(r).toEqual({ id: 'turn', title: 'TURN over TLS', status: 'ok', summary: OK, detail: [TURN_HOST] });
+  });
+
+  test('auto on a DuckDNS VPS checks turn.<name> by itself', async () => {
+    const resolved: string[] = [];
+    const r = await one('turn', {
+      env: { HOSTING: 'vps', PUBLIC_URL: 'https://grupo.duckdns.org' },
+      net: { resolveA: async (h) => (resolved.push(h), [PUBLIC]) },
+    });
+    expect(resolved).toEqual(['turn.grupo.duckdns.org']);
+    expect(r.status).toBe('ok');
+  });
+
+  test('DNS: no record or the wrong address fails with the record to create', async () => {
+    const fix = 'Create an A record turn.telinha.example.com → 203.0.113.7. DuckDNS and sslip.io names need nothing.';
+    const missing = await one('turn', { env: ON, net: { resolveA: async () => { throw new Error('ENOTFOUND'); } } });
+    expect(missing.status).toBe('fail');
+    expect(missing.summary).toBe('turn.telinha.example.com does not resolve: ENOTFOUND');
+    expect(missing.fix).toBe(fix);
+    const empty = await one('turn', { env: ON, net: { resolveA: async () => [] } });
+    expect(empty.summary).toBe('turn.telinha.example.com does not resolve: no A record');
+    const wrong = await one('turn', { env: ON, net: { resolveA: async () => ['198.51.100.9'] } });
+    expect(wrong.status).toBe('fail');
+    expect(wrong.summary).toBe('turn.telinha.example.com points at 198.51.100.9, but the public IP is 203.0.113.7.');
+    expect(wrong.fix).toBe(fix);
+  });
+
+  test('DNS: an unknown public IP warns and the other probes still run', async () => {
+    const r = await one('turn', { env: ON, net: { lookupPublicIp: async () => { throw new Error('offline'); } } });
+    expect(r.status).toBe('warn');
+    expect(r.summary).toBe('turn.telinha.example.com resolves to 203.0.113.7; the public IP is unknown, so it could not be compared.');
+  });
+
+  test('certificate: not valid for turn.<host> fails with where Caddy gets it', async () => {
+    const r = await one('turn', {
+      env: ON,
+      net: { tlsInfo: async () => ({ validTo: 0, issuer: '', subjectAltNames: ['telinha.example.com'], authorized: false, error: 'Hostname/IP does not match certificate\'s altnames' }) },
+    });
+    expect(r.status).toBe('fail');
+    expect(r.summary).toBe('turn.telinha.example.com:443 has no valid certificate: Hostname/IP does not match certificate\'s altnames');
+    expect(r.fix).toBe('Caddy obtains it after the start (a few minutes; it needs port 80 open for the HTTP challenge, or 443 for TLS-ALPN). Look at the [caddy] lines in the log.');
+    expect(r.detail).toEqual(['telinha.example.com']);
+  });
+
+  test('nothing listening on TURN_PORT locally warns with how to start telinha', async () => {
+    const probed: number[] = [];
+    const r = await one('turn', { env: { ...ON, TURN_PORT: '5400' }, net: { tlsInfo: goodTls, tcpOpen: async (_h, p) => (probed.push(p), false) } });
+    expect(probed).toEqual([5400]);
+    expect(r.status).toBe('warn');
+    expect(r.summary).toBe('LiveKit\'s TURN is not listening on 127.0.0.1:5400 (TURN_PORT).');
+    expect(r.fix).toBe('Start it: telinha service start (or telinha run).');
+    expect(JSON.stringify(r)).not.toMatch(/handshake|answers TURN/i);
+  });
+
+  test('--local skips it; pt-BR', async () => {
+    const { ctx } = ctxFor({ env: ON, local: true });
+    expect(byId(await runChecks(CHECKS, ctx)).turn!.status).toBe('skip');
+    const pt = await one('turn', { env: ON, net: { tlsInfo: goodTls }, locale: 'pt-BR' });
+    expect(pt.title).toBe('TURN sobre TLS');
+    expect(pt.summary).toContain('o TURN do LiveKit está escutando em 127.0.0.1:5349 atrás do Caddy');
+    expect((await one('turn', { env: { TURN: 'off' }, locale: 'pt-BR' })).summary).toBe('Pulado: TURN=off.');
+  });
+});
+
 describe('certificate', () => {
   test('every way the certificate comes; informational, never a warning', async () => {
     const rows: [Record<string, string>, string, string[]?][] = [
@@ -502,6 +696,25 @@ describe('listeners and service', () => {
     expect(pt.detail?.join('\n')).toContain('Se o ufw estiver ativo');
     expect((await one('listeners', { env })).detail?.join('\n')).not.toMatch(/ufw|firewall/);
     expect((await one('listeners', { env, sys: { platform: 'win32', ...tools(['ufw']) } })).detail?.join('\n')).not.toContain('ufw');
+  });
+
+  test('TURN on: a TURN (TURN_PORT) row says whether 127.0.0.1:<port> is listening, and a closed one warns', async () => {
+    const env = { HOSTING: 'vps', TURN: 'on' };
+    const up = await one('listeners', { env, local: true });
+    expect(up.status).toBe('ok');
+    expect(up.detail).toContain('TURN (TURN_PORT): listening on 127.0.0.1:5349');
+    const down = await one('listeners', { env, local: true, net: { tcpOpen: async (_h, p) => p !== 5349 } });
+    expect(down.status).toBe('warn');
+    expect(down.summary).toBe('LiveKit\'s TURN is not listening on 127.0.0.1:5349 (TURN_PORT).');
+    expect(down.fix).toBe('Start it: telinha service start (or telinha run).');
+    expect(down.detail).toContain('TURN (TURN_PORT): nothing listening on 127.0.0.1:5349');
+    // TURN off: no row, no probe of its port.
+    const probed: number[] = [];
+    const off = await one('listeners', { net: { tcpOpen: async (_h, p) => (probed.push(p), true) } });
+    expect(off.detail?.join('\n')).not.toContain('TURN');
+    expect(probed).not.toContain(5349);
+    const pt = await one('listeners', { env, locale: 'pt-BR' });
+    expect(pt.detail).toContain('TURN (TURN_PORT): escutando em 127.0.0.1:5349');
   });
 
   test('service states', async () => {
@@ -647,6 +860,18 @@ describe('router', () => {
     expect(dbl.fix).toContain('TCP 443, TCP 80, TCP 7881, UDP 7882');
     expect((await run('cgnat', { nat: nat(PUBLIC) })).status).toBe('ok');
     expect((await run('cgnat', { nat: nat('198.51.100.9') })).status).toBe('warn');
+  });
+
+  test('CGNAT: the fix offers a public IPv4 or MEDIA=cloud; with MEDIA=cloud it is only a warning about the pages', async () => {
+    const self = await run('cgnat', { nat: nat('100.72.3.4') });
+    expect(self.fix).toBe('For the web side use INGRESS=tunnel or a VPS. For the video, either ask your provider for a public IPv4 (a public IP or a CGNAT opt-out) or set MEDIA=cloud: LiveKit Cloud carries the media and needs no open port (free Build plan: 5,000 participant-minutes and 50 GB a month, up to 100 participants connected at once).');
+    const cloud = await run('cgnat', { env: CLOUD, nat: nat('100.72.3.4'), net: { livekitListRooms: async () => ({ rooms: 0 }) } });
+    expect(cloud.status).toBe('warn');
+    expect(cloud.summary).toBe('Your provider uses carrier NAT (100.72.3.4); the video goes through LiveKit Cloud, so only the pages need a way in: INGRESS=tunnel or a VPS.');
+    expect(cloud.fix).toBeUndefined();
+    const pt = await run('cgnat', { env: CLOUD, nat: nat('100.72.3.4'), locale: 'pt-BR' });
+    expect(pt.summary).toContain('o vídeo passa pelo LiveKit Cloud');
+    expect((await run('cgnat', { nat: nat('100.72.3.4'), locale: 'pt-BR' })).fix).toContain('põe MEDIA=cloud');
   });
 
   test('no gateway: router warns with the ports, cgnat and mappings skip', async () => {

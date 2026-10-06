@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { KNOWN_KEYS, loadConfig, parseListen, upnpMappings } from '../src/config.ts';
+import { KNOWN_KEYS, loadConfig, parseListen, turnIneligibility, upnpMappings } from '../src/config.ts';
 import { ENV_TEMPLATE, renderEnvFile } from '../src/cli/setup/envwrite.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import { resolvePaths } from '../src/paths.ts';
@@ -19,6 +19,9 @@ const HOME_ENV = {
   ...PROD_ENV, PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns',
   DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'g', DUCKDNS_TOKEN: 'duck-secret-token', // gitleaks:allow
 };
+const CLOUD_ENV = { ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc123.livekit.cloud' };
+// What the wizard writes for a VPS on a DuckDNS name: HTTPS on 443, HTTP challenge on 80.
+const VPS_DUCK_ENV = { ...PROD_ENV, PUBLIC_URL: 'https://g.duckdns.org', HOSTING: 'vps' };
 
 describe('loadConfig', () => {
   test('production defaults', () => {
@@ -65,6 +68,10 @@ describe('loadConfig', () => {
     expect(c.updatePin).toBeUndefined();
     expect([c.updateCheckHours, c.updateMaxDeferHours]).toEqual([6, 12]);
     expect(c.locale).toBeUndefined();
+    expect(c.livekitCloudHost).toBeUndefined();
+    expect(c.turnSetting).toBe('auto');
+    expect(c.turnPort).toBe(5349);
+    expect(c.turn).toBeNull();
   });
 
   test('optional overrides', () => {
@@ -132,19 +139,23 @@ describe('loadConfig', () => {
   test('INGRESS and MEDIA values', () => {
     expect(() => loadConfig({ ...PROD_ENV, INGRESS: 'caddy' })).toThrow('bad INGRESS caddy');
     expect(() => loadConfig({ ...PROD_ENV, MEDIA: 'sfu' })).toThrow('bad MEDIA sfu');
-    expect(() => loadConfig({ ...PROD_ENV, MEDIA: 'cloud' })).toThrow('MEDIA=cloud is not supported yet');
+    expect(loadConfig(CLOUD_ENV).media).toBe('cloud');
   });
 
-  test('reserved keys are accepted silently', () => {
-    const c = loadConfig({ ...PROD_ENV, LIVEKIT_CLOUD_URL: 'wss://x.livekit.cloud', TURN_TLS_PORT: '5349' });
+  test('LIVEKIT_CLOUD_URL is ignored silently with MEDIA=self', () => {
+    const c = loadConfig({ ...PROD_ENV, LIVEKIT_CLOUD_URL: 'wss://x.livekit.cloud' });
     expect(c.warnings).toEqual([]);
+    expect(c.livekitCloudHost).toBeUndefined();
+    expect(c.livekitUrl).toBe('wss://tela.example.com/livekit');
   });
 
-  test('KNOWN_KEYS covers the schema incl. reserved keys, not the removed LIVEKIT_KEYS', () => {
-    for (const k of [...Object.keys(PROD_ENV), 'INGRESS', 'MEDIA', 'TUNNEL_TOKEN', 'TELINHA_ENV', 'BIN_DIR', 'DEV_USER', 'DUCKDNS_TOKEN', 'TURN_TLS_PORT', 'HOSTING', 'ACME_DNS']) {
+  test('KNOWN_KEYS covers the schema, not the removed LIVEKIT_KEYS or TURN_TLS_PORT', () => {
+    for (const k of [...Object.keys(PROD_ENV), 'INGRESS', 'MEDIA', 'TUNNEL_TOKEN', 'TELINHA_ENV', 'BIN_DIR', 'DEV_USER', 'DUCKDNS_TOKEN', 'HOSTING', 'ACME_DNS', 'LIVEKIT_CLOUD_URL', 'TURN', 'TURN_PORT']) {
       expect(KNOWN_KEYS.has(k)).toBe(true);
     }
     expect(KNOWN_KEYS.has('LIVEKIT_KEYS')).toBe(false);
+    // TURN_PORT took its place; the public TURN port is always 443.
+    expect(KNOWN_KEYS.has('TURN_TLS_PORT')).toBe(false);
     expect(KNOWN_KEYS.has('PATH')).toBe(false);
   });
 
@@ -372,6 +383,173 @@ describe('port collisions', () => {
   test('HTTPS_PORT and HTTP_PORT are free outside direct mode', () => {
     expect(loadConfig({ ...TUNNEL_ENV, HTTPS_PORT: '8081', HTTP_PORT: '7880' }).httpsPort).toBe(8081);
     expect(loadConfig({ ...PROD_ENV, INGRESS: 'external', HTTPS_PORT: '7881', HTTP_PORT: '7882' }).ingress).toBe('external');
+  });
+});
+
+describe('MEDIA=cloud', () => {
+  test('defaults: browsers and RoomService go straight to the Cloud host', () => {
+    const c = loadConfig(CLOUD_ENV);
+    expect(c.media).toBe('cloud');
+    expect(c.livekitCloudHost).toBe('proj-abc123.livekit.cloud');
+    expect(c.livekitUrl).toBe('wss://proj-abc123.livekit.cloud');
+    expect(c.livekitApiUrl).toBe('https://proj-abc123.livekit.cloud');
+    expect(c.livekitKey).toBe('devkey');
+    expect(c.turn).toBeNull();
+    expect(c.warnings).toEqual([]);
+  });
+
+  test('LIVEKIT_CLOUD_URL is required', () => {
+    expect(() => loadConfig({ ...CLOUD_ENV, LIVEKIT_CLOUD_URL: '' })).toThrow('missing env LIVEKIT_CLOUD_URL');
+  });
+
+  test('https:// accepted; path, query and trailing slash dropped', () => {
+    for (const u of ['https://proj-abc123.livekit.cloud', 'wss://proj-abc123.livekit.cloud/', 'wss://proj-abc123.livekit.cloud/rtc?x=1', 'https://proj-abc123.livekit.cloud/a/b/']) {
+      const c = loadConfig({ ...CLOUD_ENV, LIVEKIT_CLOUD_URL: u });
+      expect([c.livekitUrl, c.livekitApiUrl]).toEqual(['wss://proj-abc123.livekit.cloud', 'https://proj-abc123.livekit.cloud']);
+    }
+  });
+
+  test('bad schemes and hostless values are refused', () => {
+    for (const bad of ['proj.livekit.cloud', 'ws://proj.livekit.cloud', 'http://proj.livekit.cloud', 'ftp://proj.livekit.cloud', 'wss://', 'not a url']) {
+      expect(() => loadConfig({ ...CLOUD_ENV, LIVEKIT_CLOUD_URL: bad })).toThrow('bad LIVEKIT_CLOUD_URL');
+    }
+  });
+
+  test('dev may point at a plain ws/http stand-in', () => {
+    const c = loadConfig({ ...DEV_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'ws://localhost:7880' });
+    expect([c.livekitUrl, c.livekitApiUrl, c.livekitCloudHost]).toEqual(['ws://localhost:7880', 'http://localhost:7880', 'localhost:7880']);
+    expect(loadConfig({ ...DEV_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'http://127.0.0.1:7880/' }).livekitUrl).toBe('ws://127.0.0.1:7880');
+  });
+
+  test('self-only keys are warned and ignored when set to something else than their default', () => {
+    const c = loadConfig({
+      ...CLOUD_ENV, LIVEKIT_PORT: '7990', MEDIA_TCP_PORT: '7891', MEDIA_UDP_PORT: '7892',
+      LIVEKIT_API_URL: 'http://10.0.0.5:7880', LIVEKIT_PUBLIC_URL: 'wss://lk.example.com',
+    });
+    expect(c.warnings).toEqual(['LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'LIVEKIT_API_URL', 'LIVEKIT_PUBLIC_URL']
+      .map((k) => `config: ${k} only applies to MEDIA=self; ignored`));
+    expect(c.livekitUrl).toBe('wss://proj-abc123.livekit.cloud');
+    expect(c.livekitApiUrl).toBe('https://proj-abc123.livekit.cloud');
+    const same = loadConfig({ ...CLOUD_ENV, LIVEKIT_PORT: '7880', MEDIA_TCP_PORT: '7881', MEDIA_UDP_PORT: '7882', LIVEKIT_API_URL: 'http://127.0.0.1:7880/' });
+    expect(same.warnings).toEqual([]);
+    // Not validated either: nothing uses it.
+    expect(loadConfig({ ...CLOUD_ENV, LIVEKIT_API_URL: 'ftp://x' }).warnings).toEqual(['config: LIVEKIT_API_URL only applies to MEDIA=self; ignored']);
+  });
+
+  test('LIVEKIT_NODE_IP and IP_WATCH_SECONDS keep their meaning, no warning', () => {
+    expect(loadConfig({ ...CLOUD_ENV, IP_WATCH_SECONDS: '60' })).toMatchObject({ ipWatchSeconds: 60, warnings: [] });
+    expect(loadConfig({ ...CLOUD_ENV, LIVEKIT_NODE_IP: '203.0.113.7' })).toMatchObject({ livekitNodeIp: '203.0.113.7', ipWatchSeconds: 0, warnings: [] });
+  });
+
+  test('media and LiveKit ports are not bound, so they do not collide', () => {
+    expect(() => loadConfig({ ...CLOUD_ENV, MEDIA_UDP_PORT: '7881' })).not.toThrow();
+    expect(() => loadConfig({ ...CLOUD_ENV, LISTEN: '127.0.0.1:7880' })).not.toThrow();
+    expect(() => loadConfig({ ...CLOUD_ENV, HTTP_PORT: '7881' })).not.toThrow();
+    expect(() => loadConfig({ ...CLOUD_ENV, HTTPS_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTPS_PORT=8081');
+    expect(() => loadConfig({ ...CLOUD_ENV, HTTP_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTP_PORT=8081');
+  });
+
+  test('works with a tunnel and asks the router for no media port', () => {
+    const c = loadConfig({ ...CLOUD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' });
+    expect(c.livekitUrl).toBe('wss://proj-abc123.livekit.cloud');
+    expect(upnpMappings(c)).toEqual([]);
+    expect(upnpMappings(loadConfig({ ...HOME_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' })).map((m) => m.externalPort)).toEqual([8443]);
+  });
+});
+
+describe('TURN', () => {
+  const NOT_HERE = (why: string) =>
+    `TURN=on is not possible here: ${why}. TURN over TLS on 443 is for a VPS in direct mode on port 443.`;
+
+  test('auto on a DuckDNS VPS in direct mode on 443: on, turn.<host> on 5349', () => {
+    const c = loadConfig(VPS_DUCK_ENV);
+    expect(c.turnSetting).toBe('auto');
+    expect(c.turn).toEqual({ host: 'turn.g.duckdns.org', port: 5349 });
+    expect(c.warnings).toEqual([]);
+    expect(loadConfig({ ...VPS_DUCK_ENV, HTTP_PORT: '0' }).turn?.host).toBe('turn.g.duckdns.org');
+  });
+
+  test('auto on sslip.io: on', () => {
+    expect(loadConfig({ ...PROD_ENV, PUBLIC_URL: 'https://1-2-3-4.sslip.io', HOSTING: 'vps' }).turn)
+      .toEqual({ host: 'turn.1-2-3-4.sslip.io', port: 5349 });
+  });
+
+  test('auto on an own domain: off until TURN=on (turn.<host> needs a record)', () => {
+    expect(loadConfig({ ...PROD_ENV, HOSTING: 'vps' }).turn).toBeNull();
+    expect(loadConfig({ ...PROD_ENV, HOSTING: 'vps', TURN: 'on' }).turn).toEqual({ host: 'turn.tela.example.com', port: 5349 });
+  });
+
+  test('auto with HOSTING unset: off; TURN=on there: on', () => {
+    const env = { ...PROD_ENV, PUBLIC_URL: 'https://g.duckdns.org' };
+    expect(loadConfig(env).turn).toBeNull();
+    expect(loadConfig({ ...env, TURN: 'on' }).turn).toEqual({ host: 'turn.g.duckdns.org', port: 5349 });
+  });
+
+  test('auto where not eligible: off, no error', () => {
+    for (const env of [HOME_ENV, { ...VPS_DUCK_ENV, HOSTING: 'home' }, { ...VPS_DUCK_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' },
+      { ...VPS_DUCK_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' }, { ...VPS_DUCK_ENV, HTTPS_PORT: '8443' }, DEV_ENV]) {
+      expect(loadConfig(env).turn).toBeNull();
+    }
+  });
+
+  test('TURN=off: never', () => {
+    expect(loadConfig({ ...VPS_DUCK_ENV, TURN: 'off' })).toMatchObject({ turnSetting: 'off', turn: null });
+    // Off is off even where TURN=on would be refused.
+    expect(loadConfig({ ...HOME_ENV, TURN: 'off' }).turn).toBeNull();
+  });
+
+  test('TURN=on where it cannot run: each reason', () => {
+    const on = { ...VPS_DUCK_ENV, TURN: 'on' };
+    expect(() => loadConfig({ ...on, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' }))
+      .toThrow(NOT_HERE("MEDIA=cloud brings LiveKit Cloud's own TURN"));
+    expect(() => loadConfig({ ...on, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' }))
+      .toThrow(NOT_HERE('it needs INGRESS=direct (Caddy must own port 443)'));
+    expect(() => loadConfig({ ...on, INGRESS: 'external' }))
+      .toThrow(NOT_HERE('it needs INGRESS=direct (Caddy must own port 443)'));
+    expect(() => loadConfig({ ...HOME_ENV, HOSTING: 'home', TURN: 'on' }))
+      .toThrow(NOT_HERE('home installs get no TURN: home connections do not let port 443 in'));
+    // Advanced home layout on 80/443: still refused.
+    expect(() => loadConfig({ ...on, HOSTING: 'home' }))
+      .toThrow(NOT_HERE('home installs get no TURN: home connections do not let port 443 in'));
+    const port443 = NOT_HERE('it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)');
+    expect(() => loadConfig({ ...on, HTTPS_PORT: '8443' })).toThrow(port443);
+    expect(() => loadConfig({ ...on, PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '8443' })).toThrow(port443);
+    expect(() => loadConfig({ ...on, PUBLIC_URL: 'https://g.duckdns.org:8443' })).toThrow(port443);
+    const dns = NOT_HERE('it needs a DNS name in PUBLIC_URL (turn.<host> must resolve)');
+    for (const u of ['https://203.0.113.7', 'https://[2001:db8::1]', 'https://localhost', 'https://tela']) {
+      expect(() => loadConfig({ ...on, PUBLIC_URL: u })).toThrow(dns);
+    }
+  });
+
+  test('turnIneligibility: reasons in order, hosting null allowed', () => {
+    const base = { media: 'self', ingress: 'direct', hosting: null, httpsPort: 443, publicUrl: 'https://g.duckdns.org', publicHost: 'g.duckdns.org' } as const;
+    expect(turnIneligibility(base)).toBeNull();
+    expect(turnIneligibility({ ...base, hosting: 'vps' })).toBeNull();
+    // The first failing rule wins.
+    expect(turnIneligibility({ ...base, media: 'cloud', ingress: 'tunnel', hosting: 'home' })).toBe("MEDIA=cloud brings LiveKit Cloud's own TURN");
+    expect(turnIneligibility({ ...base, ingress: 'tunnel', hosting: 'home' })).toBe('it needs INGRESS=direct (Caddy must own port 443)');
+    expect(turnIneligibility({ ...base, hosting: 'home', httpsPort: 8443 })).toBe('home installs get no TURN: home connections do not let port 443 in');
+    expect(turnIneligibility({ ...base, httpsPort: 8443, publicHost: '1.2.3.4' }))
+      .toBe('it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)');
+    expect(turnIneligibility({ ...base, publicUrl: 'https://1.2.3.4', publicHost: '1.2.3.4' }))
+      .toBe('it needs a DNS name in PUBLIC_URL (turn.<host> must resolve)');
+  });
+
+  test('TURN values and TURN_PORT', () => {
+    expect(() => loadConfig({ ...PROD_ENV, TURN: 'yes' })).toThrow('bad TURN yes (want auto | on | off)');
+    for (const v of ['0', '65536', '1.5', 'x']) expect(() => loadConfig({ ...PROD_ENV, TURN_PORT: v })).toThrow('bad TURN_PORT');
+    expect(loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '15349' }).turn).toEqual({ host: 'turn.g.duckdns.org', port: 15349 });
+    // Parsed with TURN off too.
+    expect(loadConfig({ ...PROD_ENV, TURN_PORT: '6000' }).turnPort).toBe(6000);
+  });
+
+  test('TURN_PORT joins the collision set only when TURN is on', () => {
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, TURN_PORT=8081');
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, LISTEN: '127.0.0.1:5349' })).toThrow('ports collide: LISTEN=5349, TURN_PORT=5349');
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, MEDIA_TCP_PORT: '5349' })).toThrow('ports collide: MEDIA_TCP_PORT=5349, TURN_PORT=5349');
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '443' })).toThrow('ports collide: HTTPS_PORT=443, TURN_PORT=443');
+    expect(loadConfig({ ...VPS_DUCK_ENV, TURN: 'off', TURN_PORT: '8081' }).turn).toBeNull();
+    expect(loadConfig({ ...PROD_ENV, TURN_PORT: '8081' }).turn).toBeNull();
   });
 });
 

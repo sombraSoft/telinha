@@ -1,9 +1,11 @@
-// `telinha run`: the service. Reads telinha.env, supervises livekit-server (and
-// caddy or cloudflared, per INGRESS), gates every page behind the Discord
-// login, relays LiveKit signaling at /livekit, serves rooms at /r/<code>, runs
+// `telinha run`: the service. Reads telinha.env, supervises livekit-server (with
+// MEDIA=self; MEDIA=cloud uses LiveKit Cloud) and caddy or cloudflared (per
+// INGRESS), gates every page behind the Discord login, relays LiveKit signaling
+// at /livekit (self only), serves rooms at /r/<code>, runs
 // the slash command and the room lifecycle, keeps the router's port mappings
 // and the DuckDNS record fresh, answers the local control endpoint and, in the
 // native binary, updates itself. See README.md.
+import type { WebSocketHandler } from 'bun';
 import { REST } from 'discord.js';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -192,7 +194,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     lock.release();
     return fail(`telinha: ${message(e)}`);
   }
-  log(`telinha ${ctx.version} starting (ingress=${config.ingress}, media=${config.media}${supervised ? ', supervised' : ''})`);
+  log(`telinha ${ctx.version} starting (ingress=${config.ingress}, media=${config.media}, turn=${config.turn?.host ?? 'off'}${supervised ? ', supervised' : ''})`);
 
   try {
     await supervisor.start();
@@ -244,17 +246,23 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   }).start(config.pollSeconds * 1000));
 
   const ddns: Ddns | null = config.ddns ? createDuckDns({ domain: config.ddns.domain, token: config.ddns.token, fetch, log }) : null;
+  // With nothing to map (LiveKit Cloud behind a tunnel) the mapper only drops what a previous run left.
   if (config.upnp) mapper = createPortMapper({ mappings: upnpMappings(config), statePath: join(paths.run, 'upnp.json'), log });
 
-  // LiveKit picks the public IP once at start; a residential IP change needs a restart.
+  // LiveKit picks the public IP once at start; a residential IP change needs a
+  // restart. Cloud has no local LiveKit but still wants the mappings and DuckDNS renewed.
   let ipWatch: IpWatch | null = null;
-  if (config.media === 'self' && config.ipWatchSeconds > 0 && !config.livekitNodeIp) {
+  if (config.ipWatchSeconds > 0 && !config.livekitNodeIp) {
+    const self = config.media === 'self';
     ipWatch = createIpWatch({
       fetch, intervalMs: config.ipWatchSeconds * 1000, log,
+      labels: self
+        ? { changed: 'restarting livekit', startedWith: 'livekit started with the new one' }
+        : { changed: 'nothing to restart', startedWith: 'nothing to restart' },
       onChange: async (ip) => {
         // Routers often drop mappings on a WAN reconnect.
         await mapper?.refresh().catch((e: unknown) => log('upnp: refresh failed', message(e)));
-        await sup.restart('livekit');
+        if (self) await sup.restart('livekit');
         // The DDNS loop is authoritative; this only saves it up to one interval.
         void ddns?.update(ip);
       },
@@ -319,6 +327,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     ddns: ddns?.last() ?? null,
     update: updater?.status() ?? null,
     supervised,
+    turn: config.turn ? { host: config.turn.host, port: config.turn.port } : null,
   });
   control = createControl({
     tokenFile: join(paths.run, 'control.token'),
@@ -335,7 +344,10 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     log,
   });
 
-  const proxy = createLivekitProxy({ apiUrl: config.livekitApiUrl, log });
+  // Cloud: browsers reach LiveKit Cloud directly, so /livekit/* stays a 404.
+  const proxy = config.media === 'self' ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
+  // Bun.serve wants a handler even when nothing ever upgrades.
+  const noSockets: WebSocketHandler<ProxyData> = { message() {} };
   const handler = createHandler({
     config, isMember, files, group, registry: reg, rooms, discordReady: () => discordReady(), members: () => directory.list(), log,
     proxy,
@@ -353,7 +365,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
       hostname: config.host,
       port: config.port,
       fetch: handler,
-      websocket: proxy.websocket,
+      websocket: proxy?.websocket ?? noSockets,
     });
   } catch (e) {
     log(`start-up failed: cannot listen on ${config.host}:${config.port}: ${message(e)}`);

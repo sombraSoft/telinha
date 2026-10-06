@@ -192,7 +192,7 @@ describe('setup screens and --non-interactive write the same telinha.env', () =>
   test('VPS, own domain, custom media ports', async () => {
     const r = await both({
       answers: { ...DISCORD, hosting: 'vps', domain: 't.example.com', mediaPorts: 'change', mediaTcp: '50000', mediaUdp: '50001' },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--media-tcp', '50000', '--media-udp', '50001', ...DISCORD_FLAGS], env: SECRETS,
+      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--media-tcp', '50000', '--media-udp', '50001', '--turn', 'on', ...DISCORD_FLAGS], env: SECRETS,
     });
     expect(r.screens).toBe(r.plain);
     expect(parseEnvFile(r.screens).vars).toMatchObject({ HTTP_PORT: '80', HTTPS_PORT: '443', MEDIA_TCP_PORT: '50000', MEDIA_UDP_PORT: '50001' });
@@ -202,7 +202,7 @@ describe('setup screens and --non-interactive write the same telinha.env', () =>
     const r = await both({
       offline: true,
       answers: { discordToken: TOKEN, clientId: APP, clientSecret: SECRET, guild: GUILD, role: ROLE, channels: `${CHANNEL},${CHANNEL2}`, hosting: 'vps', domain: 't.example.com' },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, ...DISCORD_FLAGS.map((f) => (f === CHANNEL ? `${CHANNEL},${CHANNEL2}` : f))], env: SECRETS,
+      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, '--turn', 'on', ...DISCORD_FLAGS.map((f) => (f === CHANNEL ? `${CHANNEL},${CHANNEL2}` : f))], env: SECRETS,
     });
     expect(r.screens).toBe(r.plain);
     expect(parseEnvFile(r.screens).vars).toMatchObject({ DISCORD_CLIENT_ID: APP, CHANNEL_IDS: `${CHANNEL},${CHANNEL2}` });
@@ -211,9 +211,39 @@ describe('setup screens and --non-interactive write the same telinha.env', () =>
   test('online: the client id read from the token equals --client-id', async () => {
     const r = await both({
       answers: { ...DISCORD, hosting: 'vps', domain: 't.example.com' },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, ...DISCORD_FLAGS], env: SECRETS,
+      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, '--turn', 'on', ...DISCORD_FLAGS], env: SECRETS,
     });
     expect(r.screens).toBe(r.plain);
     expect(parseEnvFile(r.screens).vars.DISCORD_CLIENT_ID).toBe(APP);
+  });
+
+  test('VPS, own domain, no TURN: the screens\' no is the flags\' auto (off for an own domain)', async () => {
+    const r = await both({
+      answers: { ...DISCORD, hosting: 'vps', domain: 't.example.com', turn: 'off' },
+      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', ...DISCORD_FLAGS], env: SECRETS,
+    });
+    expect(r.screens).toBe(r.plain);
+    expect(parseEnvFile(r.screens).vars.TURN).toBeUndefined();
+  });
+
+  test('VPS, DuckDNS: TURN yes is the default auto, left commented', async () => {
+    const r = await both({
+      answers: { ...DISCORD, hosting: 'vps', vpsAddress: 'duckdns', duckName: 'my-group', duckToken: DUCK, redirect: 'skip', turn: 'on' },
+      flags: ['--host', 'vps', '--duckdns-domain', 'my-group', ...DISCORD_FLAGS], env: { ...SECRETS, DUCKDNS_TOKEN: DUCK },
+    });
+    expect(r.screens).toBe(r.plain);
+    expect(parseEnvFile(r.screens).vars.TURN).toBeUndefined();
+    expect(r.screens).toContain('#TURN=auto');
+  });
+
+  test('home, LiveKit Cloud: the project\'s URL, key and secret, no media ports', async () => {
+    const r = await both({
+      answers: { ...DISCORD, hosting: 'home', homeCf: 'no', duckName: 'my-group', duckToken: DUCK, media: 'cloud', cloudUrl: 'https://my-proj.livekit.cloud/', cloudKey: 'APIcloudkey', cloudSecret: 'cloud-secret' },
+      flags: ['--host', 'home', '--duckdns-domain', 'my-group', '--media', 'cloud', '--cloud-url', 'wss://my-proj.livekit.cloud', '--livekit-key', 'APIcloudkey', ...DISCORD_FLAGS],
+      env: { ...SECRETS, DUCKDNS_TOKEN: DUCK, LIVEKIT_API_SECRET: 'cloud-secret' },
+    });
+    expect(r.screens).toBe(r.plain);
+    expect(parseEnvFile(r.screens).vars).toMatchObject({ MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://my-proj.livekit.cloud', LIVEKIT_API_KEY: 'APIcloudkey', LIVEKIT_API_SECRET: 'cloud-secret' });
+    for (const k of ['MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'TURN']) expect(parseEnvFile(r.screens).vars[k]).toBeUndefined();
   });
 });

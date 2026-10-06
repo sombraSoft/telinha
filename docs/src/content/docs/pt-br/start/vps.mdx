@@ -48,11 +48,19 @@ os dois precisam deixar estas portas entrarem:
 | TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
 | UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
 | TCP 443 | domínio próprio, DuckDNS ou sslip.io | As páginas, por HTTPS |
+| TCP 443 (TURN sobre TLS) | TURN ligado | A mesma porta: o vídeo retransmitido para quem está numa rede que só libera a 443; nada a mais para abrir |
 | TCP 80 | idem, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
 
 Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
 levam WebRTC. Se você vai escolher outra porta no setup, libere essa no
 lugar.
+
+:::note
+Com o TURN ligado, o TURN do LiveKit escuta na `TURN_PORT` (5349) e
+retransmite pela UDP 30000-40000, as duas só para uso dentro da máquina: o
+Caddy chega na primeira da mesma máquina, e a retransmissão só fala com o
+próprio LiveKit. Deixe as duas fechadas nos dois firewalls.
+:::
 
 **O firewall do provedor.** Crie uma regra de entrada para cada linha da tabela
 no painel do provedor (security group, security list ou regras de firewall),
@@ -238,6 +246,21 @@ Sem terminal, ou com `--non-interactive`, o setup imprime linhas simples e tira
 cada resposta das opções, do ambiente e do arquivo existente: veja
 [Linha de comando](/telinha/pt-br/reference/cli/#telinha-setup).
 
+## Redes rígidas
+
+Algumas pessoas estão em redes que só deixam o navegador chegar na porta 443
+(empresas, escolas, algumas operadoras de celular), onde as portas de mídia
+nunca passam. Com o endereço na 443, a Telinha retransmite o vídeo delas por
+`turn.<host>:443`, que para essas redes parece um site HTTPS qualquer:
+[TURN sobre TLS na porta 443](/telinha/pt-br/guides/turn/). O passo Vídeo do
+setup pergunta *Também passar o vídeo pela porta 443 para redes rígidas?* (sim
+por padrão). Com um nome do DuckDNS ou do sslip.io é só isso; com domínio
+próprio ele antes pede para você criar o registro DNS `turn.<host>`, onde
+`<host>` é o host do `PUBLIC_URL` (para `https://telinha.example.com` fica
+`turn.telinha.example.com`, veja [DNS](/telinha/pt-br/guides/turn/#dns)),
+apontando para a VPS, e confere se ele resolve. A linha `turn` do doctor diz
+se funciona.
+
 ## Verifique
 
 ```sh
@@ -250,8 +273,9 @@ está ok, como corrigir; `r` roda todas de novo depois que você consertar algo.
 Quando as verificações terminam, um painel mostra um link e um QR code para o
 teste pelo celular: abra no celular com o Wi-Fi desligado, para o teste passar
 pelos dados móveis, como a conexão de boa parte dos seus amigos. Ele diz se a
-página, a conexão com o LiveKit, o UDP e o TCP funcionam de lá, e `p` começa um
-novo teste; um primeiro caminho para um IP que não é o IP público da VPS quer
+página, a conexão com o LiveKit, o UDP e o TCP funcionam de lá, e com o TURN
+ligado se o vídeo consegue passar por `turn.<host>:443` (a linha TURN/TLS
+443); `p` começa um novo teste; um primeiro caminho para um IP que não é o IP público da VPS quer
 dizer um `LIVEKIT_NODE_IP` errado.
 [Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
 linha e o que uma falha quer dizer.

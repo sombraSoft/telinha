@@ -1,10 +1,12 @@
 // The doctor's checks, in the order a person fixes things: config, binaries,
-// Discord, the public address, the local service, the router, updates. Every
-// outside call goes through the CheckContext so tests run offline.
+// Discord, the public address and media path, the local service, the router,
+// updates. Every outside call goes through the CheckContext so tests run
+// offline.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, win32 } from 'node:path';
+import { RoomServiceClient } from 'livekit-server-sdk';
 import versionsJson from '../../../versions.json' with { type: 'json' };
-import { KNOWN_KEYS, upnpMappings, type Config } from '../config.ts';
+import { KNOWN_KEYS, turnIneligibility, upnpMappings, type Config } from '../config.ts';
 import { createDuckDns, DUCKDNS_REJECTED } from '../ddns.ts';
 import { parseEnvFile } from '../envfile.ts';
 import type { Locale } from '../i18n.ts';
@@ -20,6 +22,8 @@ import type {
 const DISCORD_API = 'https://discord.com/api/v10';
 const DAY_MS = 86_400_000;
 const SIGNATURE_TIMEOUT_MS = 5_000;
+// Under runChecks' 10 s cap, so a slow Cloud reads as unreachable rather than a timed-out check.
+const CLOUD_TIMEOUT_MS = 8_000;
 const RUN_KEY = String.raw`Software\Microsoft\Windows\CurrentVersion\Run`;
 // VIEW_CHANNEL + SEND_MESSAGES + READ_MESSAGE_HISTORY
 const BOT_PERMISSIONS = 68608;
@@ -42,6 +46,8 @@ const en = {
   'title.dns': 'DNS',
   'title.certificate': 'Certificate method',
   'title.tls': 'HTTPS certificate',
+  'title.livekit-cloud': 'LiveKit Cloud',
+  'title.turn': 'TURN over TLS',
   'title.listeners': 'Local listeners',
   'title.service': 'Background service',
   'title.tray': 'Tray icon',
@@ -157,6 +163,27 @@ const en = {
   healthFail: '{url}/healthz did not answer from the internet: {error}',
   healthFailFix: 'Check that telinha is running (listeners check) and that the ingress reaches it.',
 
+  cloudSkipSelf: 'Skipped: MEDIA=self runs LiveKit on this machine.',
+  cloudOk: 'Connected to {host}: {n} room(s) open there.',
+  cloudAuth: 'LiveKit Cloud rejected the API key or secret for {host}.',
+  cloudAuthFix: 'Cloud dashboard → your project → Settings → Keys: copy the key and secret into LIVEKIT_API_KEY / LIVEKIT_API_SECRET (or run telinha setup --non-interactive --media cloud --cloud-url ... --livekit-key ... with LIVEKIT_API_SECRET set).',
+  cloudUnreachable: 'Could not reach LiveKit Cloud at {host}: {error}',
+  cloudUnreachableFix: 'Check LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<project>.livekit.cloud) and this machine\'s internet access.',
+  cloudAutoCreate: 'In the project\'s settings, turn automatic room creation off: Telinha creates and deletes rooms itself, and a closed room must not come back when someone opens an old link.',
+  cloudLimits: 'Free Build plan: 5,000 WebRTC participant-minutes and 50 GB downstream a month, as a hard cap (past that, LiveKit Cloud refuses new connections until the next month), and up to 100 participants connected at once.',
+
+  turnOff: 'Skipped: TURN=off.',
+  turnNotHere: 'Skipped: TURN over TLS on 443 is for a VPS in direct mode on port 443 ({why}).',
+  turnAvailable: 'TURN over TLS is available: create the DNS record turn.{host} → {ip} (A record, same IP as {host}) and set TURN=on in telinha.env. It lets people on networks that only allow port 443 watch and stream.',
+  turnDnsFail: 'turn.{host} does not resolve: {error}',
+  turnDnsWrong: 'turn.{host} points at {ips}, but the public IP is {ip}.',
+  turnDnsFix: 'Create an A record turn.{host} → {ip}. DuckDNS and sslip.io names need nothing.',
+  turnDnsUnknownIp: 'turn.{host} resolves to {ips}; the public IP is unknown, so it could not be compared.',
+  turnTlsBad: 'turn.{host}:443 has no valid certificate: {error}',
+  turnTlsFix: 'Caddy obtains it after the start (a few minutes; it needs port 80 open for the HTTP challenge, or 443 for TLS-ALPN). Look at the [caddy] lines in the log.',
+  turnLocalDown: 'LiveKit\'s TURN is not listening on 127.0.0.1:{port} (TURN_PORT).',
+  turnOk: 'turn.{host}:443 has a valid certificate and LiveKit\'s TURN is listening on 127.0.0.1:{port} behind Caddy. Whether a phone can relay through it is what the phone test\'s TURN/TLS row shows.',
+
   listenDown: 'telinha is not running on this computer ({url}).',
   listenDownFix: 'Start it: telinha service start (or telinha run).',
   listenOk: 'telinha answers on {url}, every child process is up.',
@@ -166,6 +193,8 @@ const en = {
   livekitDown: 'LiveKit does not answer on port {port}.',
   mediaTcpDown: 'Nothing accepts connections on media TCP port {port}.',
   httpsDown: 'Nothing listens on HTTPS port {port}.',
+  listenTurnUp: 'TURN (TURN_PORT): listening on 127.0.0.1:{port}',
+  listenTurnDown: 'TURN (TURN_PORT): nothing listening on 127.0.0.1:{port}',
   lowPortFix: 'Ports below 1024 need root on Linux. Allow them once (it survives every update): {cmd}. The standard home options of telinha setup need no low port.',
   fwUfw: 'If ufw is active, open the ports: {cmd}',
   fwFirewalld: 'If firewalld is running, open the ports: {cmd}',
@@ -208,7 +237,8 @@ const en = {
   cgnatSkip: 'Skipped: no router to ask for its external IP.',
   cgnatOk: 'The router has the public IP {ip}.',
   cgnatFail: 'Your internet provider uses carrier NAT (router external IP {ip}): nobody on the internet can reach this network.',
-  cgnatFailFix: 'For the web side use INGRESS=tunnel or a VPS. Screen sharing still needs a public IP: ask your provider for one (a public IPv4 or a CGNAT opt-out).',
+  cgnatFailFix: 'For the web side use INGRESS=tunnel or a VPS. For the video, either ask your provider for a public IPv4 (a public IP or a CGNAT opt-out) or set MEDIA=cloud: LiveKit Cloud carries the media and needs no open port (free Build plan: 5,000 participant-minutes and 50 GB a month, up to 100 participants connected at once).',
+  cgnatCloud: 'Your provider uses carrier NAT ({ip}); the video goes through LiveKit Cloud, so only the pages need a way in: INGRESS=tunnel or a VPS.',
   doubleNat: 'Double NAT: the router\'s external IP {ip} is a private address, so another router (often the provider\'s modem) sits in front.',
   doubleNatFix: 'Put the provider\'s modem in bridge mode, or forward the ports on both devices: {list}',
   natMismatch: 'The router reports {ext}, but the internet sees {ip}: there is probably another NAT in front.',
@@ -250,6 +280,8 @@ const ptBR: Dict = {
   'title.dns': 'DNS',
   'title.certificate': 'Como vem o certificado',
   'title.tls': 'Certificado HTTPS',
+  'title.livekit-cloud': 'LiveKit Cloud',
+  'title.turn': 'TURN sobre TLS',
   'title.listeners': 'Portas locais',
   'title.service': 'Serviço em segundo plano',
   'title.tray': 'Ícone na bandeja',
@@ -365,6 +397,27 @@ const ptBR: Dict = {
   healthFail: '{url}/healthz não respondeu pela internet: {error}',
   healthFailFix: 'Confere se a Telinha está rodando (teste de portas locais) e se a entrada chega nela.',
 
+  cloudSkipSelf: 'Pulado: com MEDIA=self o LiveKit roda neste computador.',
+  cloudOk: 'Conectado a {host}: {n} sala(s) aberta(s) lá.',
+  cloudAuth: 'O LiveKit Cloud recusou a chave ou o segredo da API pra {host}.',
+  cloudAuthFix: 'Painel do Cloud → teu projeto → Settings → Keys: copia a chave e o segredo pro LIVEKIT_API_KEY / LIVEKIT_API_SECRET (ou roda telinha setup --non-interactive --media cloud --cloud-url ... --livekit-key ... com o LIVEKIT_API_SECRET definido).',
+  cloudUnreachable: 'Não deu pra falar com o LiveKit Cloud em {host}: {error}',
+  cloudUnreachableFix: 'Confere o LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<projeto>.livekit.cloud) e a internet deste computador.',
+  cloudAutoCreate: 'Nas configurações do projeto, desliga a criação automática de salas: a Telinha cria e apaga as salas sozinha, e uma sala fechada não pode voltar quando alguém abre um link antigo.',
+  cloudLimits: 'Plano gratuito Build: 5.000 participante-minutos de WebRTC e 50 GB de download por mês, como teto rígido (passou disso, o LiveKit Cloud recusa conexões novas até o mês seguinte), e até 100 participantes conectados ao mesmo tempo.',
+
+  turnOff: 'Pulado: TURN=off.',
+  turnNotHere: 'Pulado: TURN sobre TLS na 443 é pra uma VPS no modo direto na porta 443 ({why}).',
+  turnAvailable: 'TURN sobre TLS está disponível: cria o registro DNS turn.{host} → {ip} (registro A, mesmo IP de {host}) e põe TURN=on no telinha.env. Ele deixa quem está numa rede que só libera a porta 443 assistir e transmitir.',
+  turnDnsFail: 'turn.{host} não resolve: {error}',
+  turnDnsWrong: 'turn.{host} aponta pra {ips}, mas o IP público é {ip}.',
+  turnDnsFix: 'Cria um registro A turn.{host} → {ip}. Nomes do DuckDNS e do sslip.io não precisam de nada.',
+  turnDnsUnknownIp: 'turn.{host} resolve pra {ips}; o IP público é desconhecido, então não deu pra comparar.',
+  turnTlsBad: 'turn.{host}:443 não tem certificado válido: {error}',
+  turnTlsFix: 'O Caddy pega ele depois de iniciar (alguns minutos; precisa da porta 80 aberta pro desafio HTTP, ou da 443 pro TLS-ALPN). Olha as linhas [caddy] do log.',
+  turnLocalDown: 'O TURN do LiveKit não está escutando em 127.0.0.1:{port} (TURN_PORT).',
+  turnOk: 'turn.{host}:443 tem certificado válido e o TURN do LiveKit está escutando em 127.0.0.1:{port} atrás do Caddy. Se um celular consegue passar por ele é o que mostra a linha TURN/TLS do teste no celular.',
+
   listenDown: 'A Telinha não está rodando neste computador ({url}).',
   listenDownFix: 'Inicia: telinha service start (ou telinha run).',
   listenOk: 'A Telinha responde em {url}, todos os processos filhos estão de pé.',
@@ -374,6 +427,8 @@ const ptBR: Dict = {
   livekitDown: 'O LiveKit não responde na porta {port}.',
   mediaTcpDown: 'Nada aceita conexões na porta TCP de mídia {port}.',
   httpsDown: 'Nada escuta na porta HTTPS {port}.',
+  listenTurnUp: 'TURN (TURN_PORT): escutando em 127.0.0.1:{port}',
+  listenTurnDown: 'TURN (TURN_PORT): nada escutando em 127.0.0.1:{port}',
   lowPortFix: 'No Linux, portas abaixo de 1024 precisam de root. Libera uma vez (vale pra todas as atualizações): {cmd}. As opções padrão pra casa do telinha setup não precisam de porta baixa.',
   fwUfw: 'Se o ufw estiver ativo, abre as portas: {cmd}',
   fwFirewalld: 'Se o firewalld estiver rodando, abre as portas: {cmd}',
@@ -416,7 +471,8 @@ const ptBR: Dict = {
   cgnatSkip: 'Pulado: nenhum roteador pra perguntar o IP externo.',
   cgnatOk: 'O roteador tem o IP público {ip}.',
   cgnatFail: 'Tua operadora usa NAT de operadora (IP externo do roteador {ip}): ninguém na internet alcança esta rede.',
-  cgnatFailFix: 'Pro lado web usa INGRESS=tunnel ou uma VPS. O compartilhamento de tela ainda precisa de IP público: pede um pra operadora (IPv4 público ou sair do CGNAT).',
+  cgnatFailFix: 'Pro lado web usa INGRESS=tunnel ou uma VPS. Pro vídeo, ou pede um IPv4 público pra operadora (IP público ou sair do CGNAT) ou põe MEDIA=cloud: o LiveKit Cloud leva a mídia e não precisa de porta aberta (plano gratuito Build: 5.000 participante-minutos e 50 GB por mês, até 100 participantes conectados ao mesmo tempo).',
+  cgnatCloud: 'Tua operadora usa NAT de operadora ({ip}); o vídeo passa pelo LiveKit Cloud, então só as páginas precisam de uma entrada: INGRESS=tunnel ou uma VPS.',
   doubleNat: 'NAT duplo: o IP externo do roteador {ip} é privado, então tem outro roteador na frente (geralmente o modem da operadora).',
   doubleNatFix: 'Põe o modem da operadora em modo bridge, ou redireciona as portas nos dois aparelhos: {list}',
   natMismatch: 'O roteador informa {ext}, mas a internet vê {ip}: provavelmente tem outro NAT na frente.',
@@ -575,6 +631,25 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function publicIp(ctx: CheckContext): Promise<string | null> {
   return once(ctx, 'publicIp', () => net(ctx).lookupPublicIp(ctx.fetch).catch(() => null));
+}
+
+async function sdkListRooms(apiUrl: string, key: string, secret: string): Promise<{ rooms: number }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${CLOUD_TIMEOUT_MS / 1000} s`)), CLOUD_TIMEOUT_MS);
+  });
+  try {
+    const rooms = await Promise.race([new RoomServiceClient(apiUrl, key, secret).listRooms(), timeout]);
+    return { rooms: rooms.length };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** A rejected key or secret, as LiveKit's Twirp errors carry it (status or text). */
+function authError(e: unknown): boolean {
+  const status = e && typeof e === 'object' && 'status' in e ? e.status : undefined;
+  return status === 401 || status === 403 || /\b(401|403)\b|unauthori[sz]ed|invalid/i.test(errMsg(e));
 }
 
 function natProbe(ctx: CheckContext): Promise<NatProbeLike | null> {
@@ -1070,6 +1145,74 @@ const tlsCheck: Check = {
   },
 };
 
+const livekitCloud: Check = {
+  id: 'livekit-cloud',
+  internet: true,
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'livekit-cloud', 'skip', tr(L, 'needConfig'));
+    if (c.media !== 'cloud') return make(ctx, 'livekit-cloud', 'skip', tr(L, 'cloudSkipSelf'));
+    const host = c.livekitCloudHost ?? c.livekitApiUrl;
+    // Cloud's own settings Telinha cannot read: said on every run, ok or not.
+    const detail = [tr(L, 'cloudAutoCreate'), tr(L, 'cloudLimits')];
+    const list = net(ctx).livekitListRooms ?? sdkListRooms;
+    try {
+      const { rooms } = await list(c.livekitApiUrl, c.livekitKey, c.livekitSecret);
+      return make(ctx, 'livekit-cloud', 'ok', tr(L, 'cloudOk', { host, n: rooms }), { detail });
+    } catch (e) {
+      if (authError(e)) return make(ctx, 'livekit-cloud', 'fail', tr(L, 'cloudAuth', { host }), { fix: tr(L, 'cloudAuthFix'), detail });
+      // The SDK's messages carry the URL at most; the credentials are scrubbed anyway.
+      let error = errMsg(e);
+      for (const v of [c.livekitSecret, c.livekitKey]) if (v) error = error.replaceAll(v, '***');
+      return make(ctx, 'livekit-cloud', 'fail', tr(L, 'cloudUnreachable', { host, error }), { fix: tr(L, 'cloudUnreachableFix'), detail });
+    }
+  },
+};
+
+const turnCheck: Check = {
+  id: 'turn',
+  internet: true,
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'turn', 'skip', tr(L, 'needConfig'));
+    if (c.turnSetting === 'off') return make(ctx, 'turn', 'skip', tr(L, 'turnOff'));
+    const why = turnIneligibility(c);
+    if (why) return make(ctx, 'turn', 'skip', tr(L, 'turnNotHere', { why }));
+    const host = c.publicHost;
+    const expected = c.livekitNodeIp ?? (await publicIp(ctx));
+    // Eligible but left off by auto (own domain, or HOSTING unset): a pointer, not a warning,
+    // so such a VPS stays clean without TURN.
+    if (!c.turn) return make(ctx, 'turn', 'skip', tr(L, 'turnAvailable', { host, ip: expected ?? '?' }));
+
+    let ips: string[];
+    try {
+      ips = await net(ctx).resolveA(c.turn.host);
+      if (!ips.length) throw new Error('no A record');
+    } catch (e) {
+      return make(ctx, 'turn', 'fail', tr(L, 'turnDnsFail', { host, error: errMsg(e) }), { fix: tr(L, 'turnDnsFix', { host, ip: expected ?? '?' }) });
+    }
+    const list = ips.join(', ');
+    const findings: Finding[] = [];
+    if (!expected) findings.push({ status: 'warn', summary: tr(L, 'turnDnsUnknownIp', { host, ips: list }) });
+    else if (!ips.includes(expected)) {
+      return make(ctx, 'turn', 'fail', tr(L, 'turnDnsWrong', { host, ips: list, ip: expected }), { fix: tr(L, 'turnDnsFix', { host, ip: expected }) });
+    }
+
+    const info = await net(ctx).tlsInfo(c.turn.host, 443);
+    const detail = [info.subjectAltNames.join(', ')].filter(Boolean);
+    if (!info.authorized) {
+      findings.push({ status: 'fail', summary: tr(L, 'turnTlsBad', { host, error: info.error ?? '?' }), fix: tr(L, 'turnTlsFix') });
+    }
+    // Connect-and-close reachability only: LiveKit wants a PROXY header first, so it accepts and drops this.
+    if (!(await net(ctx).tcpOpen('127.0.0.1', c.turn.port, 2000))) {
+      findings.push({ status: 'warn', summary: tr(L, 'turnLocalDown', { port: c.turn.port }), fix: tr(L, 'listenDownFix') });
+    }
+    return combine(ctx, 'turn', findings, tr(L, 'turnOk', { host, port: c.turn.port }), detail);
+  },
+};
+
 const listeners: Check = {
   id: 'listeners',
   async run(ctx) {
@@ -1094,7 +1237,6 @@ const listeners: Check = {
     const detail = [
       tr(L, 'listenRooms', { n: health.rooms ?? 0 }),
       ...children.map(([name, state]) => tr(L, 'listenChild', { name, state })),
-      ...fw,
     ];
     const down = children.filter(([, state]) => state !== 'up').map(([name]) => name);
     if (down.length) findings.push({ status: 'warn', summary: tr(L, 'childDown', { list: down.join(', ') }), fix: tr(L, 'listenDownFix') });
@@ -1109,13 +1251,19 @@ const listeners: Check = {
       if (!(await net(ctx).tcpOpen('127.0.0.1', c.mediaTcpPort, 2000))) {
         findings.push({ status: 'warn', summary: tr(L, 'mediaTcpDown', { port: c.mediaTcpPort }) });
       }
+      if (c.turn) {
+        // Reachability only (no PROXY header, so LiveKit drops it): shown here so --local sees it too.
+        const up = await net(ctx).tcpOpen('127.0.0.1', c.turn.port, 2000);
+        detail.push(tr(L, up ? 'listenTurnUp' : 'listenTurnDown', { port: c.turn.port }));
+        if (!up) findings.push({ status: 'warn', summary: tr(L, 'turnLocalDown', { port: c.turn.port }), fix: tr(L, 'listenDownFix') });
+      }
     }
     if (c.ingress === 'direct' && !(await net(ctx).tcpOpen('127.0.0.1', c.httpsPort, 2000))) {
       const lowPorts = c.httpsPort < 1024 || (c.httpPort > 0 && c.httpPort < 1024);
       const hint = s.platform === 'linux' && !s.isRoot && lowPorts;
       findings.push({ status: 'warn', summary: tr(L, 'httpsDown', { port: c.httpsPort }), fix: hint ? tr(L, 'lowPortFix', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }) : undefined });
     }
-    return combine(ctx, 'listeners', findings, tr(L, 'listenOk', { url: base }), detail);
+    return combine(ctx, 'listeners', findings, tr(L, 'listenOk', { url: base }), [...detail, ...fw]);
   },
 };
 
@@ -1203,7 +1351,11 @@ const cgnat: Check = {
     const ext = p.externalIp;
     if (!p.gateway || !ext) return make(ctx, 'cgnat', 'skip', tr(L, 'cgnatSkip'));
     const list = ctx.config ? portList(neededPorts(ctx.config)) : '';
-    if (netinfo.isCgnatIpv4(ext)) return make(ctx, 'cgnat', 'fail', tr(L, 'cgnatFail', { ip: ext }), { fix: tr(L, 'cgnatFailFix') });
+    if (netinfo.isCgnatIpv4(ext)) {
+      // With Cloud carrying the media, only the pages still need a way in.
+      if (ctx.config?.media === 'cloud') return make(ctx, 'cgnat', 'warn', tr(L, 'cgnatCloud', { ip: ext }));
+      return make(ctx, 'cgnat', 'fail', tr(L, 'cgnatFail', { ip: ext }), { fix: tr(L, 'cgnatFailFix') });
+    }
     if (netinfo.isPrivateIpv4(ext)) return make(ctx, 'cgnat', 'warn', tr(L, 'doubleNat', { ip: ext }), { fix: tr(L, 'doubleNatFix', { list }) });
     const ip = ctx.local ? null : await publicIp(ctx);
     if (ip && ip !== ext) return make(ctx, 'cgnat', 'warn', tr(L, 'natMismatch', { ext, ip }), { fix: tr(L, 'doubleNatFix', { list }) });
@@ -1290,7 +1442,7 @@ const update: Check = {
 export const CHECKS: readonly Check[] = [
   config, binaries,
   discordToken, discordIntents, discordGuild, discordRole, discordChannels, discordRedirect,
-  publicIpCheck, dnsCheck, certificate, tlsCheck,
+  publicIpCheck, dnsCheck, certificate, tlsCheck, livekitCloud, turnCheck,
   listeners, service, tray,
   gateway, cgnat, mappings,
   update,

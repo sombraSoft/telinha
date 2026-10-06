@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { NatProbe } from '../src/nat/index.ts';
 import type { HostInfo } from '../src/cli/setup/host.ts';
 import {
-  addressChoice, addressValues, ALWAYS_COUNTED, answered, flowIds, kindOf, lowPorts, question, QUESTIONS, redirectUri, stepsFor, trayChoice,
+  addressChoice, addressValues, ALWAYS_COUNTED, answered, cloudUrl, flowIds, kindOf, lowPorts, question, QUESTIONS, redirectUri, stepsFor, trayChoice, turnBlocked,
   type Answers, type ModelEnv, type QuestionId,
 } from '../src/cli/setup/model.ts';
 import { q } from '../src/cli/setup/qstrings.ts';
@@ -31,14 +31,14 @@ describe('the catalog', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.slice(0, 2)).toEqual(['lang', 'hosting']);
     const steps = QUESTIONS.map((x) => x.step);
-    // Steps never interleave: Where, Address, Discord, Ports, Updates, Tray icon.
-    expect([...new Set(steps)]).toEqual(['where', 'address', 'discord', 'ports', 'updates', 'tray']);
+    // Steps never interleave: Where, Address, Discord, Video, Ports, Updates, Tray icon.
+    expect([...new Set(steps)]).toEqual(['where', 'address', 'discord', 'media', 'ports', 'updates', 'tray']);
     for (const id of ids) expect(question(id).id).toBe(id);
     expect(() => question('nope' as QuestionId)).toThrow();
   });
 
   test('ALWAYS_COUNTED: the hidden answers and the client id', () => {
-    expect([...ALWAYS_COUNTED].sort()).toEqual(['clientId', 'httpPort', 'httpsPortDirect', 'pinnedIp', 'publicUrl']);
+    expect([...ALWAYS_COUNTED].sort()).toEqual(['clientId', 'httpPort', 'httpsPortDirect', 'pinnedIp', 'publicUrl', 'turnSetting']);
   });
 
   test('the first question is only home vs a rented server; the home branch never defaults to advanced', () => {
@@ -76,7 +76,7 @@ describe('the catalog', () => {
 
 describe('flowIds', () => {
   test('nothing answered: hosting, then the Discord and port questions; the address waits for its branch', () => {
-    expect(flowOf({})).toEqual(['lang', 'hosting', ...DISCORD, 'mediaPorts']);
+    expect(flowOf({})).toEqual(['lang', 'hosting', ...DISCORD, 'media', 'mediaPorts']);
     expect(flowOf({}, envOf({ langFlag: true }))[0]).toBe('hosting');
     expect(flowOf({}, envOf({ file: { LOCALE: 'pt-BR' } }))[0]).toBe('hosting');
   });
@@ -145,19 +145,72 @@ describe('flowIds', () => {
 
 describe('steps', () => {
   test('Updates only for the native binary outside Docker', () => {
-    expect(stepsFor({ compiled: true, docker: false })).toEqual(['where', 'address', 'discord', 'ports', 'updates', 'review', 'install']);
-    expect(stepsFor({ compiled: false, docker: false })).toEqual(['where', 'address', 'discord', 'ports', 'review', 'install']);
-    expect(stepsFor({ compiled: true, docker: true })).toEqual(['where', 'address', 'discord', 'ports', 'review', 'install']);
+    expect(stepsFor({ compiled: true, docker: false })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'updates', 'review', 'install']);
+    expect(stepsFor({ compiled: false, docker: false })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'review', 'install']);
+    expect(stepsFor({ compiled: true, docker: true })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'review', 'install']);
     expect(flowOf({}, envOf({ compiled: true }))).toContain('autoUpdate');
     expect(flowOf({}, envOf({ compiled: true, docker: true }))).not.toContain('autoUpdate');
     expect(flowOf({}, envOf({ compiled: false }))).not.toContain('autoUpdate');
   });
 
   test('Tray icon only for the native Windows binary outside Docker', () => {
-    expect(stepsFor({ compiled: true, docker: false, platform: 'win32' })).toEqual(['where', 'address', 'discord', 'ports', 'updates', 'tray', 'review', 'install']);
+    expect(stepsFor({ compiled: true, docker: false, platform: 'win32' })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'updates', 'tray', 'review', 'install']);
     expect(stepsFor({ compiled: true, docker: false, platform: 'linux' })).not.toContain('tray');
     expect(stepsFor({ compiled: false, docker: false, platform: 'win32' })).not.toContain('tray');
     expect(stepsFor({ compiled: true, docker: true, platform: 'win32' })).not.toContain('tray');
+  });
+});
+
+describe('video: this computer or LiveKit Cloud, and TURN on 443', () => {
+  const vps = (a: Answers = {}): Answers => ({ hosting: 'vps', ...a });
+
+  test('LiveKit Cloud asks its URL, key and secret instead of the media ports', () => {
+    const flow = flowOf(vps({ vpsAddress: 'tunnel', media: 'cloud' }));
+    expect(flow).toEqual(expect.arrayContaining(['media', 'cloudUrl', 'cloudKey', 'cloudSecret']));
+    expect(flow).not.toContain('mediaPorts');
+    // A port change answered before switching to Cloud is not asked again.
+    expect(flowOf(vps({ vpsAddress: 'tunnel', media: 'cloud', mediaPorts: 'change' }))).not.toContain('mediaTcp');
+    expect(flowOf(vps({ vpsAddress: 'tunnel', media: 'self' }))).toEqual(expect.arrayContaining(['mediaPorts']));
+  });
+
+  test('a self file\'s generated pair is never offered as the Cloud key', () => {
+    const self = envOf({ file: { LIVEKIT_API_KEY: 'telinha1234', LIVEKIT_API_SECRET: 'x'.repeat(43) } });
+    expect(question('cloudKey').default({}, self)).toBeUndefined();
+    const cloud = envOf({ file: { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud', LIVEKIT_API_KEY: 'APIk', LIVEKIT_API_SECRET: 's' } });
+    expect(question('cloudKey').default({}, cloud)).toBe('APIk');
+    expect(question('media').default({}, cloud)).toBe('cloud');
+  });
+
+  test('the project URL: wss or https, kept as wss://host', () => {
+    expect(cloudUrl('https://my-proj.livekit.cloud/settings?x=1')).toBe('wss://my-proj.livekit.cloud');
+    expect(cloudUrl(' wss://my-proj.livekit.cloud ')).toBe('wss://my-proj.livekit.cloud');
+    expect(cloudUrl('ws://localhost:7880')).toBeNull();
+    expect(cloudUrl('my-proj.livekit.cloud')).toBeNull();
+  });
+
+  test('TURN is asked on a VPS in direct mode on 443 with a name, with LiveKit here', () => {
+    const env = envOf({ host: VPS });
+    expect(flowOf(vps({ vpsAddress: 'domain', domain: 't.example.com', media: 'self' }), env)).toContain('turn');
+    expect(flowOf(vps({ vpsAddress: 'sslip', media: 'self' }), env)).toContain('turn');
+    expect(flowOf(vps({ vpsAddress: 'domain', domain: 't.example.com', media: 'cloud' }), env)).not.toContain('turn');
+    expect(flowOf(vps({ vpsAddress: 'tunnel', tunnelHost: 't.example.com', media: 'self' }), env)).not.toContain('turn');
+    expect(flowOf(vps({ vpsAddress: 'domain', domain: 't.example.com', httpsPortDirect: '8443', media: 'self' }), env)).not.toContain('turn');
+    expect(flowOf({ hosting: 'home', homeCf: 'no', duckName: 'x', media: 'self' }, env)).not.toContain('turn');
+    expect(turnBlocked({ HOSTING: 'vps', PUBLIC_URL: 'https://203.0.113.9' })).toContain('DNS name');
+  });
+
+  test('TURN defaults to yes on a fresh install; a re-run keeps what the file says', () => {
+    const a = vps({ vpsAddress: 'domain', domain: 't.example.com' });
+    expect(question('turn').default(a, envOf({ host: VPS }))).toBe('on');
+    const file = { HOSTING: 'vps', PUBLIC_URL: 'https://t.example.com' };
+    expect(question('turn').default(a, envOf({ host: VPS, file }))).toBe('off');
+    expect(question('turn').default(a, envOf({ host: VPS, file: { ...file, TURN: 'on' } }))).toBe('on');
+    expect(question('turn').default(vps({ vpsAddress: 'duckdns', duckName: 'x' }), envOf({ host: VPS, file: { HOSTING: 'vps', PUBLIC_URL: 'https://x.duckdns.org' } }))).toBe('on');
+  });
+
+  test('at home LiveKit Cloud behind a tunnel leaves nothing for the router', () => {
+    expect(flowOf({ hosting: 'home', homeCf: 'yes', media: 'cloud' })).not.toContain('upnp');
+    expect(flowOf({ hosting: 'home', homeCf: 'no', media: 'cloud' })).toContain('upnp');
   });
 });
 

@@ -295,6 +295,10 @@ describe('the install', () => {
     await typeText(r.s, 't.example.com');
     await press(r.s, 'enter');
     await discordKeys(r);
+    await at(r, 'media');
+    await press(r.s, 'enter');
+    await at(r, 'turn');
+    await press(r.s, '2');
     await at(r, 'mediaPorts');
     await press(r.s, 'enter');
     const sysctl = await at(r, 'sysctl');
@@ -640,7 +644,7 @@ describe('language, re-runs and flags', () => {
     await press(r.s, '2');
     f = await at(r, 'hosting');
     expect(f).toContain('Onde a Telinha vai rodar?');
-    expect(f).toContain('Onde · Passo 1 de 6');
+    expect(f).toContain('Onde · Passo 1 de 7');
     expect(f).toContain('○ Endereço');
     expect(f).toContain('Compartilhamento de tela pro seu grupo do Discord');
     expect(f).toContain('↑↓ mover  1-9 atalho  enter escolher  esc/← voltar  tab passos  ctrl+c sair');
@@ -661,7 +665,7 @@ describe('language, re-runs and flags', () => {
     const text = first.files.get(ENV)!;
     const r = await startSetup(['--no-service', '--no-upnp', '--no-doctor'], { yes: true, files: { [ENV]: text } });
     const f = await at(r, 'review');
-    expect(f).toContain('Review · Step 5 of 6');
+    expect(f).toContain('Review · Step 6 of 7');
     expect(f).toMatch(/Discord bot token +kept/);
     expect(f).toMatch(/DuckDNS token +kept/);
     expect(f).toContain('2. Apply with a new cookie secret');

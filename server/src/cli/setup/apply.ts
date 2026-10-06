@@ -4,6 +4,7 @@
 // the plain run (lines as they come). A task's lines are the steps' own
 // output, captured per task; what happens after a failure is the caller's
 // decide().
+import { toolsFor } from '../../bins.ts';
 import type { Config } from '../../config.ts';
 import type { CheckResult } from '../../doctor/types.ts';
 import type { Out } from '../term.ts';
@@ -12,7 +13,7 @@ import { checkDiscord } from './discord.ts';
 import type { PreviousEnv } from './envwrite.ts';
 import type { QuestionId } from './model.ts';
 import {
-  doctorCli, downloadBinaries, generateSecrets, routerStep, serviceStep, startService, validateValues, waitForCertificate, writeConfig,
+  doctorCli, downloadBinaries, generateSecrets, publicPorts, routerStep, serviceStep, startService, validateValues, waitForCertificate, writeConfig,
   type StartOutcome, type Values, type WithTerminal, type Wizard,
 } from './steps.ts';
 import { trayStep, type TrayChoice } from './tray.ts';
@@ -111,11 +112,13 @@ export function planTasks(values: Values, o: ApplyOptions): TaskId[] {
   if (values.DDNS_PROVIDER === 'duckdns') plan.push('duckdns');
   plan.push('config');
   if (o.docker) return plan;
-  plan.push('binaries');
+  const ingress = (values.INGRESS || 'direct') as Config['ingress'];
+  // LiveKit Cloud behind a proxy runs no child; behind a tunnel nothing reaches this machine.
+  if (toolsFor({ media: values.MEDIA === 'cloud' ? 'cloud' : 'self', ingress }).length) plan.push('binaries');
   if (!o.flags.noService) plan.push('service');
   // Early, so the icon shows the service coming up while the rest runs.
   if (o.tray) plan.push('tray');
-  if (!o.flags.noUpnp) plan.push('router');
+  if (!o.flags.noUpnp && publicPorts(values).length) plan.push('router');
   plan.push('start');
   if (!o.flags.noDoctor) {
     // Only direct mode has a certificate of its own to wait for.

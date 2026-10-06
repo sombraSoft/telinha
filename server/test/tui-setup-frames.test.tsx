@@ -64,6 +64,8 @@ describe.each(LANGS)('setup frames, %s 120x34', (lang) => {
     await press(s, 'enter');
     await at(r, 'group');
     await press(s, 'enter');
+    await at(r, 'media');
+    await press(s, 'enter');
     await at(r, 'mediaPorts');
     await press(s, 'enter');
     expect(await at(r, 'upnp')).toMatchSnapshot('router');
@@ -153,7 +155,7 @@ describe.each(LANGS)('setup frames, %s 80x24 (the smallest terminal)', (lang) =>
     await press(r.s, 'enter');
     await at(r, 'redirect');
     await press(r.s, '2');
-    for (const id of ['guild', 'role', 'channels', 'command', 'group', 'mediaPorts', 'upnp', 'autoUpdate'] as const) {
+    for (const id of ['guild', 'role', 'channels', 'command', 'group', 'media', 'mediaPorts', 'upnp', 'autoUpdate'] as const) {
       await at(r, id);
       await press(r.s, ...(id === 'channels' ? ['space', 'enter'] : ['enter']));
     }

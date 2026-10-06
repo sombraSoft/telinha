@@ -327,6 +327,24 @@ describe('the tray icon: flags and the setup screens agree', () => {
   });
 });
 
+describe('LiveKit Cloud and TURN from the flags', () => {
+  test('lenient: the media flags become the defaults of the Video questions; auto is no answer', () => {
+    const lenient = (flags: SetupFlagValues, secrets = {}) => answersFromFlags(flags, modelEnv(), { secrets, locale: 'en', lenient: true, advanced: false }).answers;
+    expect(lenient({ media: 'cloud', 'cloud-url': 'https://p.livekit.cloud/', 'livekit-key': ' APIk ' }, { LIVEKIT_API_SECRET: 's' }))
+      .toEqual({ media: 'cloud', cloudUrl: 'wss://p.livekit.cloud', cloudKey: 'APIk', cloudSecret: 's' });
+    expect(lenient({ turn: 'off' })).toEqual({ turn: 'off' });
+    expect(lenient({ turn: 'auto' })).toEqual({});
+  });
+
+  test('a cloud file switched back to self: the URL goes, the pair is made again', () => {
+    const file = { HOSTING: 'vps', INGRESS: 'tunnel', PUBLIC_URL: URL_, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud', LIVEKIT_API_KEY: 'APIk', LIVEKIT_API_SECRET: 's' };
+    const env = modelEnv({ file });
+    const v = resolveValues({ ...defaultAnswers(env), media: 'self' }, env, baseOf(env));
+    expect(v).toMatchObject({ MEDIA: '', LIVEKIT_CLOUD_URL: '', LIVEKIT_API_KEY: '', LIVEKIT_API_SECRET: '' });
+    expect(resolveValues(defaultAnswers(env), env, baseOf(env))).toMatchObject({ MEDIA: 'cloud', LIVEKIT_API_KEY: 'APIk', LIVEKIT_API_SECRET: 's' });
+  });
+});
+
 describe('resolveValues', () => {
   const vps = modelEnv({ host: hostOf({ platform: 'linux', isRoot: true, docker: false, nat: 'vps' }) });
   const home = modelEnv();

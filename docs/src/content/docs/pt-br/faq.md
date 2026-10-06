@@ -1,6 +1,6 @@
 ---
 title: Perguntas frequentes
-description: Respostas sobre custo, domínio, CGNAT, dados, segurança, remoção e o que está planejado.
+description: Respostas sobre custo, domínio, CGNAT, redes rígidas, dados, segurança e remoção.
 ---
 
 ## É grátis?
@@ -13,7 +13,7 @@ O Go Live é bloqueado no Brasil. A Telinha dá ao grupo a mesma coisa numa máq
 
 ## Quantas pessoas podem assistir?
 
-A Telinha não impõe um limite fixo. Quem compartilha envia um único vídeo para o LiveKit, e o LiveKit entrega uma cópia a cada espectador, então o que pesa é a velocidade de upload da máquina que roda a Telinha. Em casa, olhe a velocidade de upload da sua linha; numa VPS, a banda do plano.
+A Telinha não impõe um limite fixo. Quem compartilha envia um único vídeo para o LiveKit, e o LiveKit entrega uma cópia a cada espectador, então o que pesa é a velocidade de upload da máquina que roda a Telinha. Em casa, olhe a velocidade de upload da sua linha; numa VPS, a banda do plano. Com `MEDIA=cloud` quem envia é o LiveKit Cloud, e o que conta são os limites mensais do plano gratuito dele (veja [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/#o-plano-gratuito)).
 
 ## Funciona no celular?
 
@@ -33,7 +33,11 @@ Porque a Telinha roda em casa com um endereço do DuckDNS. A internet de casa em
 
 ## Dá para rodar atrás de CGNAT?
 
-Em casa, não. Com CGNAT a operadora divide um IPv4 público entre vários clientes e nada da internet chega à sua rede, então encaminhamento de portas e UPnP não ajudam. Peça à operadora um IPv4 público (muitas vezes é de graça) ou rode a Telinha numa VPS pequena. Um Cloudflare Tunnel leva as páginas até você, mas as portas de mídia continuam precisando ser alcançáveis. O `telinha doctor` detecta o problema com a verificação `cgnat`. Um modo LiveKit Cloud, para quem não consegue abrir portas, está planejado. Detalhes: [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
+Dá, com duas peças. Com CGNAT a operadora divide um IPv4 público entre vários clientes e nada da internet chega à sua rede, então encaminhamento de portas e UPnP não ajudam. As páginas precisam de um Cloudflare Tunnel (um domínio na Cloudflare) ou de uma VPS. O vídeo precisa de um IPv4 público (peça à operadora; muitas vezes é de graça) ou de `MEDIA=cloud`: o [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/) leva a mídia e não precisa de porta aberta, e o plano gratuito Build dele permite 5.000 participante-minutos e 50 GB de download por mês, com até 100 participantes conectados ao mesmo tempo. Ou rode tudo numa VPS pequena. O `telinha doctor` detecta o CGNAT com a verificação `cgnat`. Detalhes: [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
+
+## Quem está numa rede rígida (só porta 443) consegue assistir?
+
+Algumas redes (empresas, escolas, algumas operadoras de celular) só deixam o navegador chegar na porta 443, o que bloqueia as portas de mídia. Numa VPS na porta 443, a Telinha serve [TURN sobre TLS na porta 443](/telinha/pt-br/guides/turn/): o navegador passa a retransmitir o vídeo por `turn.<host>:443`, que para a rede parece um site HTTPS qualquer. Ele liga sozinho com um nome do DuckDNS ou do sslip.io; com domínio próprio, basta um registro DNS e `TURN=on`. Em casa a Telinha não serve TURN (a internet de casa não deixa a porta 443 entrar), mas um projeto do [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/) traz os servidores TURN do próprio LiveKit, onde quer que a Telinha rode.
 
 ## Duas instalações da Telinha podem usar o mesmo servidor do Discord?
 
@@ -72,7 +76,7 @@ Dentro dela (`TELINHA_HOME`, ou `--home DIR` em qualquer comando, aponta para ou
 
 ## É seguro deixar exposto?
 
-Todas as páginas ficam atrás do login do Discord e da verificação de cargo. A própria Telinha repassa a sinalização do LiveKit e encaminha só `/livekit/rtc`, então a API do LiveKit nunca fica acessível de fora. Segredos nunca vão na linha de comando (o setup recusa `--discord-token` e parecidos e lê do ambiente ou de um arquivo), e o `telinha.env` só pode ser lido pelo dono (e pelo grupo do serviço numa instalação como root no Linux). Os binários auxiliares são fixados por sha256, e cada versão traz o `SHA256SUMS` e uma atestação de proveniência do build que você pode conferir à mão; os dois cobrem também o build do Caddy da Telinha, veja [Atualizações](/telinha/pt-br/guides/updates/).
+Todas as páginas ficam atrás do login do Discord e da verificação de cargo. A própria Telinha repassa a sinalização do LiveKit e encaminha só `/livekit/rtc`, então a API do LiveKit nunca fica acessível de fora (com `MEDIA=cloud` o navegador fala direto com o LiveKit Cloud, com um token da sala que dura 10 minutos). Segredos nunca vão na linha de comando (o setup recusa `--discord-token` e parecidos e lê do ambiente ou de um arquivo), e o `telinha.env` só pode ser lido pelo dono (e pelo grupo do serviço numa instalação como root no Linux). Os binários auxiliares são fixados por sha256, e cada versão traz o `SHA256SUMS` e uma atestação de proveniência do build que você pode conferir à mão; os dois cobrem também o build do Caddy da Telinha, veja [Atualizações](/telinha/pt-br/guides/updates/).
 
 ## Como removo?
 
@@ -94,9 +98,3 @@ sudo rm -rf /opt/telinha
 ```
 
 O `down -v` também remove o volume `telinha-data` (o registro das salas e os certificados).
-
-## O que está planejado?
-
-- Mídia: LiveKit Cloud (`MEDIA=cloud`) para quem não consegue abrir portas, e TURN sobre TLS na 443 (o módulo layer4 de que isso precisa já está no build do Caddy da Telinha).
-
-Nada disso tem data.

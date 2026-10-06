@@ -66,6 +66,52 @@ grep -q "$duck_token" "$caddy_dir/Caddyfile" && fail 'the rendered Caddyfile hol
 DUCKDNS_TOKEN=$duck_token XDG_DATA_HOME="$caddy_dir" XDG_CONFIG_HOME="$caddy_dir" \
 	caddy validate --adapter caddyfile --config "$caddy_dir/Caddyfile" || fail 'caddy rejected the DNS-01 Caddyfile'
 
+step 'caddy validates the TURN Caddyfile'
+# TURN=auto turns on for a DuckDNS host on a VPS. Validating proves the layer4
+# syntax (the proxy block included) matches the module in this build; livekit.yaml
+# comes from the same config so both sides of the PROXY protocol are checked together.
+turn_dir=/tmp/smoke-turn
+mkdir -p "$turn_dir"
+OUT="$turn_dir" bun -e '
+	const { loadConfig } = await import("./server/src/config.ts");
+	const { renderCaddyfile, renderLivekitYaml } = await import("./server/src/render.ts");
+	const c = loadConfig({
+		DISCORD_TOKEN: "smoke", DISCORD_CLIENT_ID: "1", DISCORD_CLIENT_SECRET: "smoke", GUILD_ID: "2", ROLE_ID: "3", CHANNEL_IDS: "4",
+		COOKIE_SECRET: "smoke", LIVEKIT_API_KEY: "smoke", LIVEKIT_API_SECRET: "smoke", DATA_DIR: "/tmp/smoke-turn/data",
+		HOSTING: "vps", INGRESS: "direct", PUBLIC_URL: "https://smoke.duckdns.org", TURN: "auto",
+		DDNS_PROVIDER: "duckdns", DUCKDNS_DOMAIN: "smoke", DUCKDNS_TOKEN: "smoke-duckdns-token", // gitleaks:allow
+	});
+	if (!c.turn) throw new Error("the fixture did not turn TURN on");
+	await Bun.write(process.env.OUT + "/Caddyfile", renderCaddyfile(c));
+	await Bun.write(process.env.OUT + "/livekit.yaml", renderLivekitYaml(c));
+' || fail 'could not render the TURN Caddyfile'
+cat "$turn_dir/Caddyfile"
+for want in 'listener_wrappers' 'layer4' 'tls sni turn.smoke.duckdns.org' 'alpn stun.turn' 'proxy 127.0.0.1:5349 {' 'proxy_protocol v2'; do
+	grep -qF "$want" "$turn_dir/Caddyfile" || fail "the TURN Caddyfile lacks: $want"
+done
+for want in 'proxy_protocol: true' 'external_tls: true'; do
+	grep -qF "$want" "$turn_dir/livekit.yaml" || fail "livekit.yaml lacks: $want"
+done
+XDG_DATA_HOME="$turn_dir" XDG_CONFIG_HOME="$turn_dir" \
+	caddy validate --adapter caddyfile --config "$turn_dir/Caddyfile" || fail 'caddy rejected the TURN Caddyfile'
+
+step 'cloud mode starts no LiveKit child'
+# Fake binary lookup and port probe: nothing is spawned and nothing touches the network.
+bun -e '
+	const { loadConfig } = await import("./server/src/config.ts");
+	const { childSpecs } = await import("./server/src/children.ts");
+	const c = loadConfig({
+		DISCORD_TOKEN: "smoke", DISCORD_CLIENT_ID: "1", DISCORD_CLIENT_SECRET: "smoke", GUILD_ID: "2", ROLE_ID: "3", CHANNEL_IDS: "4",
+		COOKIE_SECRET: "smoke", LIVEKIT_API_KEY: "smoke", LIVEKIT_API_SECRET: "smoke", DATA_DIR: "/tmp/smoke-cloud/data",
+		MEDIA: "cloud", LIVEKIT_CLOUD_URL: "wss://smoke.livekit.cloud",
+		HOSTING: "vps", INGRESS: "direct", PUBLIC_URL: "https://smoke.duckdns.org",
+		DDNS_PROVIDER: "duckdns", DUCKDNS_DOMAIN: "smoke", DUCKDNS_TOKEN: "smoke-duckdns-token", // gitleaks:allow
+	});
+	const paths = { bin: "/tmp/smoke-cloud/bin", run: "/tmp/smoke-cloud/run", data: "/tmp/smoke-cloud/data" };
+	const names = childSpecs(c, paths as never, (name) => "/fake/" + name, async () => false).map((s) => s.name);
+	if (JSON.stringify(names) !== JSON.stringify(["caddy"])) throw new Error("children: " + names.join(","));
+' || fail 'cloud mode does not start only caddy'
+
 step 'server (INGRESS=external, MEDIA=self)'
 # LIVEKIT_NODE_IP skips STUN (the container may have no internet); LiveKit
 # logs an error for an API secret under 32 characters. Not a real secret.

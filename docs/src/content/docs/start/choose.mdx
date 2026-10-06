@@ -21,7 +21,8 @@ words, so nothing you decide here is final.
    server's IP.
 
 3. [Can the internet reach your network?](#can-the-internet-reach-your-network)
-   If your line is behind CGNAT, a home install cannot work and a VPS can.
+   If your line is behind CGNAT, a home install needs LiveKit Cloud for the
+   video, or you run Telinha on a VPS.
 
 </Steps>
 
@@ -83,6 +84,14 @@ certificate over them.
 In every case the two media ports, TCP 7881 and UDP 7882, must reach the
 machine: no tunnel carries WebRTC media. See
 [How it works](/telinha/start/how-it-works/#media-goes-straight-to-livekit).
+The one exception is `MEDIA=cloud`, where
+[LiveKit Cloud](/telinha/guides/livekit-cloud/) carries the video and no media
+port is needed.
+
+Some networks (offices, schools, some mobile carriers) only let browsers reach
+port 443, which keeps the media ports out. On a VPS with the address on 443
+(your own domain, DuckDNS or sslip.io), Telinha can relay the video for those
+viewers through [TURN over TLS on port 443](/telinha/guides/turn/).
 
 ## Can the internet reach your network?
 
@@ -97,14 +106,16 @@ CGNAT?" Once Telinha is installed,
 `telinha doctor` runs the same test for you (the `cgnat` check, which needs a
 router that answers UPnP, NAT-PMP or PCP), and the setup warns about
 it. Behind CGNAT a Cloudflare Tunnel still gets the pages through, but not
-the media, so ask your ISP for a public IPv4 (often free, sometimes called
-"removing CGNAT") or run Telinha on a VPS. A private WAN address instead
-means double NAT: a second router in front of yours, where the ports must be
-forwarded too. A LiveKit Cloud mode for hosts that cannot open any port is
-planned, without a date.
+the media. For the video, ask your ISP for a public IPv4 (often free,
+sometimes called "removing CGNAT"), or set `MEDIA=cloud`: a LiveKit Cloud
+project carries the media and needs no open port, within its free plan's
+monthly limits. Or run Telinha on a VPS. A private WAN address instead means
+double NAT: a second router in front of yours, where the ports must be
+forwarded too.
 
 <CardGrid>
   <LinkCard title="CGNAT and double NAT" description="How to tell them apart and what to ask your ISP." href="/telinha/guides/domains/#cgnat-and-double-nat" />
+  <LinkCard title="LiveKit Cloud" description="Keep Telinha at home and let LiveKit Cloud carry the video: no media port to open." href="/telinha/guides/livekit-cloud/" />
   <LinkCard title="VPS" description="Run Telinha on a rented server instead." href="/telinha/start/vps/" />
 </CardGrid>
 

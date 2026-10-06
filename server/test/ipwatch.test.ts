@@ -26,12 +26,17 @@ function fakeFetch(replies: Record<string, Reply[]>) {
   return { fetch: fn as unknown as typeof fetch, calls, signals, replies };
 }
 
-function watch(replies: Record<string, Reply[]>, o: { statePath?: string; onChange?: (ip: string, prev: string) => Promise<void> } = {}) {
+const SELF = { changed: 'restarting livekit', startedWith: 'livekit started with the new one' };
+const CLOUD = { changed: 'nothing to restart', startedWith: 'nothing to restart' };
+
+function watch(replies: Record<string, Reply[]>, o: {
+  statePath?: string; onChange?: (ip: string, prev: string) => Promise<void>; labels?: { changed: string; startedWith: string };
+} = {}) {
   const f = fakeFetch(replies);
   const logs: unknown[][] = [];
   const changes: [string, string][] = [];
   const w = createIpWatch({
-    fetch: f.fetch, intervalMs: 60_000, log: (...a) => logs.push(a), statePath: o.statePath,
+    fetch: f.fetch, intervalMs: 60_000, log: (...a) => logs.push(a), statePath: o.statePath, labels: o.labels ?? SELF,
     onChange: async (ip, prev) => {
       changes.push([ip, prev]);
       await o.onChange?.(ip, prev);
@@ -144,7 +149,7 @@ describe('createIpWatch', () => {
     expect(b.changes).toEqual([]);
     expect(b.w.current()).toBe('203.0.113.9');
     expect(readFileSync(statePath, 'utf8')).toBe('203.0.113.9\n');
-    expect(b.logs).toContainEqual(['public IP 203.0.113.7 -> 203.0.113.9 while telinha was down; livekit started with the new one']);
+    expect(b.logs).toContainEqual(['public IP 203.0.113.7 -> 203.0.113.9 while telinha was down, livekit started with the new one']);
     await b.w.check();
     expect(b.changes).toEqual([]);
     // From then on a change in this process restarts livekit as usual.
@@ -157,6 +162,25 @@ describe('createIpWatch', () => {
     await c.w.check();
     expect(c.changes).toEqual([]);
     expect(c.logs).toEqual([]);
+  });
+
+  test('the labels name what a change does, live and while telinha was down', async () => {
+    for (const [labels, changed, startedWith] of [
+      [SELF, 'restarting livekit', 'livekit started with the new one'],
+      [CLOUD, 'nothing to restart', 'nothing to restart'],
+    ] as const) {
+      const statePath = join(tmp, `labels-${labels === SELF ? 'self' : 'cloud'}`, 'public-ip');
+      const a = watch({ [TRACE]: [trace('203.0.113.7')] }, { statePath, labels });
+      await a.w.check();
+      const b = watch({ [TRACE]: [trace('203.0.113.9'), trace('203.0.113.11')] }, { statePath, labels });
+      await b.w.check();
+      await b.w.check();
+      expect(b.logs).toEqual([
+        [`public IP 203.0.113.7 -> 203.0.113.9 while telinha was down, ${startedWith}`],
+        [`public IP 203.0.113.9 -> 203.0.113.11, ${changed}`],
+      ]);
+      expect(b.changes).toEqual([['203.0.113.11', '203.0.113.9']]);
+    }
   });
 
   test('a missing or garbage state file means no IP yet', () => {

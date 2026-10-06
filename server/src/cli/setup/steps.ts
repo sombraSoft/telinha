@@ -5,6 +5,7 @@
 // against fakes; every line goes through Wizard.out.
 import { randomBytes } from 'node:crypto';
 import { posix, win32 } from 'node:path';
+import { toolsFor } from '../../bins.ts';
 import { loadConfig, type Config } from '../../config.ts';
 import type { Ddns } from '../../ddns.ts';
 import { firewallCommands } from '../../doctor/checks.ts';
@@ -154,14 +155,17 @@ export function generateSecrets(values: Values, random: (n: number) => Uint8Arra
     values.COOKIE_SECRET = b64(random(48));
     made.push('COOKIE_SECRET');
   }
-  if (!values.LIVEKIT_API_KEY) {
-    values.LIVEKIT_API_KEY = `telinha${hex(random(4))}`;
-    made.push('LIVEKIT_API_KEY');
-  }
-  // LiveKit refuses secrets shorter than 32 characters.
-  if (!values.LIVEKIT_API_SECRET || values.LIVEKIT_API_SECRET.length < 32) {
-    values.LIVEKIT_API_SECRET = b64url(random(32));
-    made.push('LIVEKIT_API_SECRET');
+  // LiveKit Cloud's pair is the project's: nothing to make up.
+  if (values.MEDIA !== 'cloud') {
+    if (!values.LIVEKIT_API_KEY) {
+      values.LIVEKIT_API_KEY = `telinha${hex(random(4))}`;
+      made.push('LIVEKIT_API_KEY');
+    }
+    // LiveKit refuses secrets shorter than 32 characters.
+    if (!values.LIVEKIT_API_SECRET || values.LIVEKIT_API_SECRET.length < 32) {
+      values.LIVEKIT_API_SECRET = b64url(random(32));
+      made.push('LIVEKIT_API_SECRET');
+    }
   }
   return made;
 }
@@ -209,6 +213,7 @@ export async function writeConfig(w: Wizard, file: string, text: string, shown =
 
 export async function downloadBinaries(w: Wizard, config: Pick<Config, 'media' | 'ingress'>): Promise<boolean> {
   const { out, s } = w;
+  if (!toolsFor(config).length) return true; // LiveKit Cloud behind an external proxy runs no child
   // A root install's bin/ belongs to the service user: root writing there could
   // be steered onto any file through a planted symlink. The service fetches
   // them itself at start, as that user.
@@ -444,7 +449,8 @@ function publicUrlPort(url: string | undefined): string {
  * the rule of upnpMappings, so never for a public 80 or 443.
  */
 function routerEntries(values: Values): { port: string; mapper: boolean }[] {
-  const out = [{ port: `TCP ${values.MEDIA_TCP_PORT || '7881'}`, mapper: true }, { port: `UDP ${values.MEDIA_UDP_PORT || '7882'}`, mapper: true }];
+  // LiveKit Cloud carries the media: nothing of it reaches this machine.
+  const out: { port: string; mapper: boolean }[] = values.MEDIA === 'cloud' ? [] : [{ port: `TCP ${values.MEDIA_TCP_PORT || '7881'}`, mapper: true }, { port: `UDP ${values.MEDIA_UDP_PORT || '7882'}`, mapper: true }];
   if ((values.INGRESS || 'direct') === 'direct') {
     const https = values.HTTPS_PORT || '443';
     const pub = publicUrlPort(values.PUBLIC_URL);
@@ -461,7 +467,7 @@ export function publicPorts(values: Values): string[] {
 
 /** What this host listens on, for its own firewall (ufw/firewalld take the internal ports). */
 export function hostPorts(values: Values): string[] {
-  const out = [`${values.MEDIA_TCP_PORT || '7881'}/tcp`, `${values.MEDIA_UDP_PORT || '7882'}/udp`];
+  const out: string[] = values.MEDIA === 'cloud' ? [] : [`${values.MEDIA_TCP_PORT || '7881'}/tcp`, `${values.MEDIA_UDP_PORT || '7882'}/udp`];
   if ((values.INGRESS || 'direct') === 'direct') {
     out.push(`${values.HTTPS_PORT || '443'}/tcp`);
     if ((values.HTTP_PORT || '80') !== '0') out.push(`${values.HTTP_PORT || '80'}/tcp`);
@@ -471,6 +477,7 @@ export function hostPorts(values: Values): string[] {
 
 export async function routerStep(w: Wizard, values: Values, hosting: Hosting = 'home'): Promise<void> {
   const { out, s } = w;
+  if (!routerEntries(values).length) return; // LiveKit Cloud behind a tunnel or a proxy: nothing to open
   const ports = publicPorts(values).join(', ');
   // A VPS has no router: its provider's firewall and its own are what block.
   if (hosting === 'vps') {
@@ -498,7 +505,7 @@ export async function routerStep(w: Wizard, values: Values, hosting: Hosting = '
   }
   // The mapper never asks for 80/443 (the advanced path forwards them by hand): name only what it owns.
   const entries = routerEntries(values);
-  out.info(s('upnpWillMap', { ports: entries.filter((e) => e.mapper).map((e) => e.port).join(', ') }));
+  if (entries.some((e) => e.mapper)) out.info(s('upnpWillMap', { ports: entries.filter((e) => e.mapper).map((e) => e.port).join(', ') }));
   const byHand = entries.filter((e) => !e.mapper).map((e) => e.port);
   if (byHand.length) out.info(s('forwardByHand', { ports: byHand.join(', ') }));
 }

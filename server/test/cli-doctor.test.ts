@@ -7,6 +7,7 @@ import type { DoctorReport, DoctorSessionState } from '../src/cli/control.ts';
 import { buildCheckContext, DOCTOR_FLAGS, phoneHints, phoneRows, phoneStatus, run, type DoctorControl, type DoctorTuiRunner } from '../src/cli/doctor.ts';
 import { doctorStrings } from '../src/cli/doctor-strings.ts';
 import type { Check, CheckContext, CheckStatus } from '../src/doctor/types.ts';
+import { loadConfig } from '../src/config.ts';
 import { resolvePaths } from '../src/paths.ts';
 import { PROD_ENV } from './helpers.ts';
 
@@ -210,6 +211,38 @@ describe('telinha doctor', () => {
     expect(c.text()).toContain("open TCP 7881 and UDP 7882 to this machine (router forwarding at home; the provider's firewall or security group on a VPS");
   });
 
+  test('phone test with LiveKit Cloud: UDP/TCP rows without a port, Cloud hints, no LIVEKIT_NODE_IP hint', async () => {
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
+    const config = loadConfig({ ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc.livekit.cloud', LIVEKIT_NODE_IP: '198.51.100.1' });
+    const report: DoctorReport = { ...REPORT, udp: { ok: false, error: 'timed out' } };
+    const ctl = control({ states: [{ state: 'done', report }] });
+    expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')], context: { config } })).toBe(0);
+    const text = c.text();
+    expect(text).toMatch(/✗ UDP +failed: timed out/);
+    expect(text).toMatch(/✓ TCP +works, 60 ms/);
+    expect(text).not.toMatch(/UDP 7882|TCP 7881/);
+    expect(text).toContain('UDP to LiveKit Cloud did not work from the phone; video falls back to TCP with more delay. Nothing to open on your side.');
+    expect(text).not.toContain('LIVEKIT_NODE_IP');
+    expect(text).not.toContain('TURN/TLS');
+  });
+
+  test('phone test with TURN on: a TURN/TLS 443 row, and its failure is a warning', async () => {
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
+    const config = loadConfig({ ...PROD_ENV, HOSTING: 'vps', TURN: 'on' });
+    const report: DoctorReport = { ...REPORT, turn: { ok: false, error: 'not relayed' } };
+    const ctl = control({ states: [{ state: 'done', report }] });
+    expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')], context: { config } })).toBe(0);
+    const text = c.text();
+    expect(text).toMatch(/✗ TURN\/TLS 443 +failed: not relayed/);
+    expect(text).toContain('✓ UDP 7882');
+    expect(text).toContain('TURN over TLS on port 443 did not work from the phone: see the turn check above (DNS record and certificate for turn.telinha.example.com).');
+    const good = ctx({ argv: ['doctor', '--json'], tty: true });
+    const ok = control({ states: [{ state: 'done', report: { ...REPORT, turn: { ok: true, rttMs: 120 } } }] });
+    await run(args, good.ctx, { ...noPhone, out: good.out, control: ok.client, checks: [fakeCheck('a', 'ok')], context: { config } });
+    expect(good.text()).toMatch(/✓ TURN\/TLS 443 +works, 120 ms/);
+    expect(good.text()).toContain('The phone reached Telinha over UDP and TCP.');
+  });
+
   test('phone test: an expired link is a warning, not a failure', async () => {
     const c = ctx({ argv: ['doctor', '--json'], tty: true });
     const ctl = control({ states: [{ state: 'pending' }, { state: 'expired' }] });
@@ -301,6 +334,10 @@ describe('phone result', () => {
     expect(phoneStatus({ ...REPORT, tcp: { ok: false } })).toBe('warn');
     expect(phoneStatus({ ...REPORT, tcp: { ok: false }, udp: { ok: false } })).toBe('fail');
     expect(phoneStatus({ ...REPORT, signaling: { ok: false } })).toBe('fail');
+    // TURN is the strict-network fallback: its failure alone is a warning.
+    expect(phoneStatus({ ...REPORT, turn: { ok: false } })).toBe('warn');
+    expect(phoneStatus({ ...REPORT, turn: { ok: true } })).toBe('ok');
+    expect(phoneStatus({ ...REPORT, turn: null })).toBe('ok');
   });
 
   test('hints', () => {
@@ -322,5 +359,34 @@ describe('phone result', () => {
       ['udp', true, 'UDP 7882', 'works, 40 ms'],
       ['tcp', true, 'TCP 7881', 'works, 60 ms'],
     ]);
+  });
+
+  test("hints with LiveKit Cloud: nothing to open, and the candidate IP is Cloud's", () => {
+    const keys = (r: DoctorReport) => phoneHints(r, null, '198.51.100.1', 'cloud').map((h) => h.key);
+    expect(keys(REPORT)).toEqual([]);
+    expect(keys({ ...REPORT, tcp: { ok: false }, udp: { ok: false } })).toEqual(['hintCloudBoth']);
+    expect(keys({ ...REPORT, udp: { ok: false } })).toEqual(['hintCloudUdp']);
+    expect(keys({ ...REPORT, tcp: { ok: false } })).toEqual(['hintCloudTcp']);
+    expect(keys({ ...REPORT, signaling: { ok: false } })).toEqual(['hintCloudSignaling']);
+  });
+
+  test('phone test with LiveKit Cloud and failed signaling: points at the livekit-cloud check, not at DNS or the router', async () => {
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
+    const config = loadConfig({ ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc.livekit.cloud' });
+    const report: DoctorReport = { ...REPORT, signaling: { ok: false, error: 'could not connect' }, initial: null, udp: { ok: false }, tcp: { ok: false } };
+    const ctl = control({ states: [{ state: 'done', report }] });
+    await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')], context: { config } });
+    const text = c.text();
+    expect(text).toContain('The phone loaded Telinha but could not connect to LiveKit Cloud: check the livekit-cloud check above (LIVEKIT_CLOUD_URL, API key and secret) or try another network.');
+    expect(text).not.toContain('DNS, TLS and router');
+  });
+
+  test('hints: a failed TURN step adds the TURN hint after the media one', () => {
+    expect(phoneHints({ ...REPORT, turn: { ok: false } }, ports).map((h) => h.key)).toEqual(['hintTurn']);
+    expect(phoneHints({ ...REPORT, udp: { ok: false }, turn: { ok: false } }, ports).map((h) => h.key)).toEqual(['hintUdp', 'hintTurn']);
+    expect(phoneHints({ ...REPORT, turn: { ok: true } }, ports)).toEqual([]);
+    expect(phoneHints({ ...REPORT, turn: { ok: false } }, ports, null, 'self', 'turn.x.duckdns.org'))
+      .toEqual([{ key: 'hintTurn', params: { turnHost: 'turn.x.duckdns.org' } }]);
+    expect(phoneHints({ ...REPORT, turn: { ok: false } }, ports)[0]!.params).toEqual({ turnHost: 'turn.<host>' });
   });
 });

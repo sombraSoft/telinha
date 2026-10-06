@@ -21,8 +21,8 @@ o `telinha doctor`.
 
 | Porta (padrão) | Quando | Para quê |
 | --- | --- | --- |
-| TCP `MEDIA_TCP_PORT` (7881) | sempre | Mídia WebRTC por TCP, para redes que bloqueiam UDP |
-| UDP `MEDIA_UDP_PORT` (7882) | sempre | Mídia WebRTC por UDP, o caminho normal |
+| TCP `MEDIA_TCP_PORT` (7881) | só `MEDIA=self` | Mídia WebRTC por TCP, para redes que bloqueiam UDP |
+| UDP `MEDIA_UDP_PORT` (7882) | só `MEDIA=self` | Mídia WebRTC por UDP, o caminho normal |
 | TCP `HTTPS_PORT` (8443 em casa, 443 numa VPS) | `INGRESS=direct` | Caddy, HTTPS; a porta do `PUBLIC_URL` |
 | TCP `HTTP_PORT` (80) | `INGRESS=direct` numa VPS (`0` em casa) | Desafio HTTP do Let's Encrypt, redirecionamento para HTTPS |
 
@@ -38,8 +38,11 @@ Ou seja, por [modo de entrada](/telinha/pt-br/guides/domains/):
 Em casa a Telinha nunca depende da 80 nem da 443: a internet de casa em geral
 não deixa as portas web 80 e 443 entrarem.
 
-As portas de mídia valem para todos os modos porque o navegador manda o vídeo
-direto para o LiveKit; um Cloudflare Tunnel leva as páginas, não o WebRTC. Se
+Com `MEDIA=self` (o padrão) as portas de mídia valem para todos os modos
+porque o navegador manda o vídeo direto para o LiveKit; um Cloudflare Tunnel
+leva as páginas, não o WebRTC. Com `MEDIA=cloud` tire a TCP 7881 e a UDP 7882
+da tabela: o vídeo passa pelo [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/),
+e aí um túnel não precisa de nenhuma porta encaminhada. Se
 você mudou alguma porta no `telinha.env`, encaminhe o seu valor. Use o mesmo
 número dos dois lados da regra.
 
@@ -186,7 +189,8 @@ Com os valores padrão, um endereço do DuckDNS e a máquina em `192.168.0.10`:
 | telinha-media-udp | UDP | 7882 | 192.168.0.10 | 7882 |
 | telinha-https | TCP | 8443 | 192.168.0.10 | 8443 |
 
-Com um Cloudflare Tunnel, só as duas primeiras.
+Com um Cloudflare Tunnel, só as duas primeiras; com `MEDIA=cloud`, só a
+última (e nenhuma com um túnel).
 
 O `telinha doctor` diz o que está faltando. A verificação `gateway` avisa
 quando nenhum roteador responde UPnP e lista as portas para encaminhar na mão;
@@ -215,7 +219,10 @@ público próprio ou está atrás de CGNAT?"
 
 O `telinha doctor` faz isso por você quando o roteador fala UPnP, NAT-PMP ou
 PCP: a verificação `cgnat` falha com CGNAT e avisa com NAT duplo. O que fazer
-em cada caso: [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
+em cada caso: [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo);
+para deixar a máquina onde está, o vídeo pode passar pelo
+[LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/) com um túnel levando as
+páginas.
 
 ## Firewalls
 
@@ -226,8 +233,9 @@ ainda decide se deixa entrar.
   <TabItem label="Windows">
 
 O `telinha service install --firewall` (que o passo de administrador do
-setup roda) primeiro remove toda regra de entrada ligada ao
-`livekit-server.exe` ou ao `caddy.exe` da pasta `bin\`, e depois cria regras
+setup roda) primeiro remove todas as regras da Telinha abaixo e toda
+regra de entrada ligada ao `livekit-server.exe` ou ao `caddy.exe` da pasta
+`bin\`, e depois cria regras
 de entrada que permitem o tráfego em todos os perfis de rede, cada uma ligada
 ao seu programa. A remoção importa: se você rodou a Telinha num console antes
 e fechou o Alerta de Segurança do Windows, o Windows deixou regras de bloqueio
@@ -240,16 +248,20 @@ para esses programas, e bloquear ganha de permitir.
 | `Telinha HTTPS` (direct) | `caddy.exe` | TCP `HTTPS_PORT` |
 | `Telinha HTTP` (direct, `HTTP_PORT` diferente de 0, então não nas instalações de casa) | `caddy.exe` | TCP `HTTP_PORT` |
 
-Depois de mudar uma porta, rode o setup de novo (ou o comando de
-instalação num terminal de administrador). O
-`telinha service uninstall --firewall` remove as regras.
+As duas regras do LiveKit só existem com `MEDIA=self`. As regras são
+reescritas pelo `telinha setup` (no passo do serviço, a menos que use
+`--no-service`) ou pelo `telinha service install --firewall` num terminal de
+administrador, então depois de mudar uma porta ou o `MEDIA` rode um dos dois;
+uma troca feita com `--no-service` mantém as regras antigas até um deles
+rodar. O `telinha service uninstall --firewall` remove as regras.
 
   </TabItem>
   <TabItem label="Linux">
 
 No Linux a Telinha não cria regras de firewall. Com ufw ou firewalld ativo,
 libere as portas você mesmo. Em casa, com os valores padrão e um endereço do
-DuckDNS (tire o `8443/tcp` com um túnel):
+DuckDNS (tire o `8443/tcp` com um túnel, e o `7881/tcp` e o `7882/udp` com
+`MEDIA=cloud`, numa VPS também):
 
 ```
 sudo ufw allow 8443/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp

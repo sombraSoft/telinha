@@ -8,7 +8,7 @@ import type { Config } from '../../../server/src/config.ts';
 export type Locale = 'en' | 'pt-BR';
 export interface L { en: string; 'pt-BR': string }
 
-export type Section = 'discord' | 'ingress' | 'media' | 'rooms' | 'native' | 'paths' | 'dev' | 'reserved';
+export type Section = 'discord' | 'ingress' | 'media' | 'rooms' | 'native' | 'paths' | 'dev';
 
 export interface ConfigKeyDoc {
   section: Section;
@@ -46,7 +46,6 @@ export const SECTION_TITLES: Record<Section, L> = {
   native: { en: 'Native install', 'pt-BR': 'Instalação nativa' },
   paths: { en: 'Locations', 'pt-BR': 'Locais' },
   dev: { en: 'Dev only', 'pt-BR': 'Só desenvolvimento' },
-  reserved: { en: 'Reserved for LiveKit Cloud / TURN', 'pt-BR': 'Reservado para LiveKit Cloud / TURN' },
 };
 
 export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
@@ -216,50 +215,57 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   MEDIA: {
     section: 'media', required: no, probe: (c) => c.media, default: 'self',
     notes: {
-      en: '`self` runs the bundled `livekit-server`; `cloud` is reserved and rejected for now.',
-      'pt-BR': '`self` roda o `livekit-server` embutido; `cloud` está reservado e é recusado por enquanto.',
+      en: '`self` runs the bundled `livekit-server` on this machine, and the media ports must reach it. `cloud` uses a LiveKit Cloud project at `LIVEKIT_CLOUD_URL` instead: no LiveKit child and no media port to open. Its free Build plan allows 5,000 participant-minutes and 50 GB downstream a month, with up to 100 participants connected at once, as a hard cap. Turn automatic room creation off in the project’s settings: Telinha creates and deletes rooms itself.',
+      'pt-BR': '`self` roda o `livekit-server` embutido nesta máquina, e as portas de mídia precisam chegar nele. `cloud` usa um projeto do LiveKit Cloud em `LIVEKIT_CLOUD_URL` no lugar: nenhum LiveKit filho e nenhuma porta de mídia para abrir. O plano gratuito Build permite 5.000 participante-minutos e 50 GB de download por mês, com até 100 participantes conectados ao mesmo tempo, como teto rígido. Desligue a criação automática de salas nas configurações do projeto: a Telinha cria e apaga as salas sozinha.',
     },
   },
   LIVEKIT_API_KEY: {
     section: 'media', required: yes,
     notes: {
-      en: 'Any key you make up (`openssl rand -hex 16`); handed to LiveKit through its environment. The setup generates it.',
-      'pt-BR': 'Qualquer chave que você inventar (`openssl rand -hex 16`); entregue ao LiveKit pelo ambiente. O setup gera.',
+      en: '`self`: any key you make up (`openssl rand -hex 16`), handed to LiveKit through its environment; the setup generates it. `cloud`: the project’s API key (Settings → Keys).',
+      'pt-BR': '`self`: qualquer chave que você inventar (`openssl rand -hex 16`), entregue ao LiveKit pelo ambiente; o setup gera. `cloud`: a chave de API do projeto (Settings → Keys).',
     },
   },
   LIVEKIT_API_SECRET: {
     section: 'media', required: yes,
     notes: {
-      en: 'Its secret, 32+ characters (`openssl rand -base64 32`). The setup generates it.',
-      'pt-BR': 'O segredo correspondente, 32+ caracteres (`openssl rand -base64 32`). O setup gera.',
+      en: '`self`: its secret, 32+ characters (`openssl rand -base64 32`); the setup generates it. `cloud`: the secret of the project’s key pair.',
+      'pt-BR': '`self`: o segredo correspondente, 32+ caracteres (`openssl rand -base64 32`); o setup gera. `cloud`: o segredo do par de chaves do projeto.',
+    },
+  },
+  LIVEKIT_CLOUD_URL: {
+    section: 'media', required: { en: 'with `MEDIA=cloud`', 'pt-BR': 'com `MEDIA=cloud`' },
+    notes: {
+      en: 'The LiveKit Cloud project’s URL (Settings → Project), `wss://<project>.livekit.cloud`; `https://` works too, and a pasted path, query or trailing slash is dropped. Browsers connect to it directly and Telinha calls its room API over `https://`. `ws://` or `http://` only with `DEV_USER`.',
+      'pt-BR': 'A URL do projeto no LiveKit Cloud (Settings → Project), `wss://<projeto>.livekit.cloud`; `https://` também serve, e um caminho, query ou barra final colados são descartados. Os navegadores se conectam direto nela e a Telinha chama a API de salas dela por `https://`. `ws://` ou `http://` só com `DEV_USER`.',
     },
   },
   LIVEKIT_PORT: {
     section: 'media', required: no, probe: (c) => c.livekitPort, default: '7880',
     notes: {
-      en: "LiveKit's signaling/API port, loopback only; never forwarded.",
-      'pt-BR': 'A porta de sinalização/API do LiveKit, só loopback; nunca encaminhada.',
+      en: "`MEDIA=self` only: LiveKit's signaling/API port, loopback only; never forwarded.",
+      'pt-BR': 'Só `MEDIA=self`: a porta de sinalização/API do LiveKit, só loopback; nunca encaminhada.',
     },
   },
   MEDIA_TCP_PORT: {
     section: 'media', required: no, probe: (c) => c.mediaTcpPort, default: '7881',
     notes: {
-      en: 'WebRTC media over TCP (the fallback where UDP is blocked). Forward it on the router in every ingress mode.',
-      'pt-BR': 'Mídia WebRTC por TCP (o caminho reserva onde o UDP é bloqueado). Encaminhe no roteador em qualquer modo de entrada.',
+      en: '`MEDIA=self` only: WebRTC media over TCP (the fallback where UDP is blocked). Forward it on the router in every ingress mode.',
+      'pt-BR': 'Só `MEDIA=self`: mídia WebRTC por TCP (o caminho reserva onde o UDP é bloqueado). Encaminhe no roteador em qualquer modo de entrada.',
     },
   },
   MEDIA_UDP_PORT: {
     section: 'media', required: no, probe: (c) => c.mediaUdpPort, default: '7882',
     notes: {
-      en: 'WebRTC media over UDP (the normal path). Forward it on the router in every ingress mode.',
-      'pt-BR': 'Mídia WebRTC por UDP (o caminho normal). Encaminhe no roteador em qualquer modo de entrada.',
+      en: '`MEDIA=self` only: WebRTC media over UDP (the normal path). Forward it on the router in every ingress mode.',
+      'pt-BR': 'Só `MEDIA=self`: mídia WebRTC por UDP (o caminho normal). Encaminhe no roteador em qualquer modo de entrada.',
     },
   },
   UPNP: {
     section: 'media', required: no, probe: (c) => (c.upnp ? 'auto' : 'off'), default: 'auto',
     notes: {
-      en: '`auto` asks the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and in direct mode `HTTPS_PORT` when the `PUBLIC_URL` port is not 443 (8443 at home), while Telinha runs; never 80 or 443. `off` when you forward by hand; the setup sets `off` on a VPS.',
-      'pt-BR': '`auto` pede ao roteador (UPnP IGD, NAT-PMP ou PCP) para encaminhar as portas de mídia, e no modo direct a `HTTPS_PORT` quando a porta da `PUBLIC_URL` não é 443 (8443 em casa), enquanto a Telinha roda; nunca a 80 nem a 443. `off` quando você encaminha à mão; o setup põe `off` numa VPS.',
+      en: '`auto` asks the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports (`MEDIA=self`), and in direct mode `HTTPS_PORT` when the `PUBLIC_URL` port is not 443 (8443 at home), while Telinha runs; never 80 or 443. `off` when you forward by hand; the setup sets `off` on a VPS.',
+      'pt-BR': '`auto` pede ao roteador (UPnP IGD, NAT-PMP ou PCP) para encaminhar as portas de mídia (`MEDIA=self`), e no modo direct a `HTTPS_PORT` quando a porta da `PUBLIC_URL` não é 443 (8443 em casa), enquanto a Telinha roda; nunca a 80 nem a 443. `off` quando você encaminha à mão; o setup põe `off` numa VPS.',
     },
   },
   LIVEKIT_NODE_IP: {
@@ -272,22 +278,36 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   LIVEKIT_API_URL: {
     section: 'media', required: no, probe: (c) => c.livekitApiUrl, default: 'http://127.0.0.1:7880',
     notes: {
-      en: "LiveKit's HTTP API as Telinha reaches it; the default follows `LIVEKIT_PORT`.",
-      'pt-BR': 'A API HTTP do LiveKit como a Telinha a alcança; o padrão segue `LIVEKIT_PORT`.',
+      en: "`MEDIA=self` only: LiveKit's HTTP API as Telinha reaches it; the default follows `LIVEKIT_PORT`.",
+      'pt-BR': 'Só `MEDIA=self`: a API HTTP do LiveKit como a Telinha a alcança; o padrão segue `LIVEKIT_PORT`.',
     },
   },
   LIVEKIT_PUBLIC_URL: {
     section: 'media', required: no, default: { en: '`PUBLIC_URL` as `wss://` + `/livekit`', 'pt-BR': 'a `PUBLIC_URL` como `wss://` + `/livekit`' },
     notes: {
-      en: "The signaling URL browsers use; Telinha relays it, so LiveKit's own API never faces the internet.",
-      'pt-BR': 'A URL de sinalização que os navegadores usam; a Telinha faz o relay, então a API do LiveKit nunca fica exposta à internet.',
+      en: "`MEDIA=self` only: the signaling URL browsers use; Telinha relays it, so LiveKit's own API never faces the internet.",
+      'pt-BR': 'Só `MEDIA=self`: a URL de sinalização que os navegadores usam; a Telinha faz o relay, então a API do LiveKit nunca fica exposta à internet.',
     },
   },
   IP_WATCH_SECONDS: {
     section: 'media', required: no, probe: (c) => c.ipWatchSeconds, default: '300',
     notes: {
-      en: 'How often the public IP is checked; on a change the router mappings are renewed, DuckDNS is nudged and the LiveKit child restarts. `0` = off; forced off by `LIVEKIT_NODE_IP`.',
-      'pt-BR': 'De quanto em quanto tempo o IP público é conferido; numa mudança os mapeamentos do roteador são renovados, o DuckDNS é avisado e o LiveKit reinicia. `0` = desligado; desligado também por `LIVEKIT_NODE_IP`.',
+      en: 'How often the public IP is checked; on a change the router mappings are renewed, DuckDNS is nudged and (`MEDIA=self`) the LiveKit child restarts. `0` = off; forced off by `LIVEKIT_NODE_IP`.',
+      'pt-BR': 'De quanto em quanto tempo o IP público é conferido; numa mudança os mapeamentos do roteador são renovados, o DuckDNS é avisado e (`MEDIA=self`) o LiveKit reinicia. `0` = desligado; desligado também por `LIVEKIT_NODE_IP`.',
+    },
+  },
+  TURN: {
+    section: 'media', required: no, probe: (c) => c.turnSetting, default: 'auto',
+    notes: {
+      en: 'TURN over TLS on port 443, for viewers on networks that only let 443 through: Caddy routes `turn.<host>` to LiveKit’s TURN. Only for a VPS in direct mode on 443 with `MEDIA=self`. `auto` turns it on only for a VPS install (`HOSTING=vps`) with a DuckDNS or sslip.io name, where `turn.<host>` resolves by itself; with your own domain, or a file without `HOSTING`, create the DNS record `turn.<host>` and set `on`. `on` where it cannot run stops the start with the reason; `off` never.',
+      'pt-BR': 'TURN sobre TLS na porta 443, para quem assiste de uma rede que só deixa a 443 passar: o Caddy leva o `turn.<host>` até o TURN do LiveKit. Só para uma VPS no modo direct na 443 com `MEDIA=self`. `auto` liga só numa instalação de VPS (`HOSTING=vps`) com um nome do DuckDNS ou do sslip.io, onde o `turn.<host>` resolve sozinho; com um domínio próprio, ou um arquivo sem `HOSTING`, crie o registro DNS `turn.<host>` e ponha `on`. `on` onde ele não pode rodar impede a inicialização com o motivo; `off` nunca.',
+    },
+  },
+  TURN_PORT: {
+    section: 'media', required: no, probe: (c) => c.turnPort, default: '5349',
+    notes: {
+      en: 'With TURN on: the local TCP port LiveKit’s TURN listens on. Caddy terminates TLS on 443 and forwards the plain stream here with a PROXY protocol header carrying the viewer’s address; LiveKit accepts only Caddy’s connections from the same machine and closes any other. Never forwarded; keep it closed in the firewall anyway.',
+      'pt-BR': 'Com o TURN ligado: a porta TCP local em que o TURN do LiveKit escuta. O Caddy termina o TLS na 443 e repassa o fluxo puro para cá com um cabeçalho PROXY protocol que leva o endereço de quem assiste; o LiveKit só aceita as conexões do Caddy na mesma máquina e fecha qualquer outra. Nunca encaminhada; mantenha fechada no firewall mesmo assim.',
     },
   },
 
@@ -384,22 +404,6 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
     section: 'dev', required: no, default: none,
     notes: { en: 'The fake login’s page language.', 'pt-BR': 'O idioma das páginas do login falso.' },
   },
-
-  // --- Reserved ---
-  LIVEKIT_CLOUD_URL: {
-    section: 'reserved', required: no,
-    notes: {
-      en: 'Reserved for a LiveKit Cloud mode; accepted without a warning and ignored for now.',
-      'pt-BR': 'Reservado para um modo LiveKit Cloud; aceito sem aviso e ignorado por enquanto.',
-    },
-  },
-  TURN_TLS_PORT: {
-    section: 'reserved', required: no,
-    notes: {
-      en: 'Reserved for TURN over TLS; accepted without a warning and ignored for now.',
-      'pt-BR': 'Reservado para TURN sobre TLS; aceito sem aviso e ignorado por enquanto.',
-    },
-  },
 };
 
 export const GLOBAL_FLAG_DOCS: Record<string, FlagDoc> = {
@@ -457,6 +461,23 @@ export const SETUP_FLAG_DOCS: Record<string, FlagDoc> = {
   'media-tcp': { value: 'N', sets: 'MEDIA_TCP_PORT', en: 'WebRTC TCP port.', 'pt-BR': 'Porta TCP do WebRTC.' },
   'media-udp': { value: 'N', sets: 'MEDIA_UDP_PORT', en: 'WebRTC UDP port.', 'pt-BR': 'Porta UDP do WebRTC.' },
   'node-ip': { value: 'IP', sets: 'LIVEKIT_NODE_IP', en: 'Static public IPv4 (a VPS).', 'pt-BR': 'IPv4 público fixo (uma VPS).' },
+  media: {
+    value: 'self|cloud', sets: 'MEDIA',
+    en: 'Where the video goes through: `self` (the bundled LiveKit, the default) or `cloud` (a LiveKit Cloud project; needs `--cloud-url`, `--livekit-key` and the secret). `cloud` drops the media ports from the file; switching back to `self` drops the Cloud URL and key pair and generates a local pair.',
+    'pt-BR': 'Por onde o vídeo passa: `self` (o LiveKit embutido, o padrão) ou `cloud` (um projeto do LiveKit Cloud; precisa de `--cloud-url`, `--livekit-key` e do segredo). `cloud` tira as portas de mídia do arquivo; voltar para `self` tira a URL e o par de chaves do Cloud e gera um par local.',
+  },
+  'cloud-url': { value: 'URL', sets: 'LIVEKIT_CLOUD_URL', en: 'The LiveKit Cloud project’s URL, `wss://<project>.livekit.cloud`.', 'pt-BR': 'A URL do projeto no LiveKit Cloud, `wss://<projeto>.livekit.cloud`.' },
+  'livekit-key': { value: 'KEY', sets: 'LIVEKIT_API_KEY', en: 'With `--media cloud`: the project’s API key (an identifier, not a secret).', 'pt-BR': 'Com `--media cloud`: a chave de API do projeto (um identificador, não um segredo).' },
+  'livekit-secret-file': {
+    value: 'PATH|-', sets: 'LIVEKIT_API_SECRET',
+    en: 'With `--media cloud`: file holding the project’s API secret; `-` reads stdin. Or set `LIVEKIT_API_SECRET` in the environment.',
+    'pt-BR': 'Com `--media cloud`: arquivo com o segredo de API do projeto; `-` lê do stdin. Ou defina `LIVEKIT_API_SECRET` no ambiente.',
+  },
+  turn: {
+    value: 'auto|on|off', sets: 'TURN',
+    en: 'TURN over TLS on 443 (a VPS in direct mode on 443 only). `on` where it cannot run exits 1 with the reason.',
+    'pt-BR': 'TURN sobre TLS na 443 (só numa VPS no modo direct na 443). `on` onde ele não pode rodar sai com 1 e o motivo.',
+  },
   'discord-token-file': { value: 'PATH|-', sets: 'DISCORD_TOKEN', en: 'File holding the bot token; `-` reads stdin.', 'pt-BR': 'Arquivo com o token do bot; `-` lê do stdin.' },
   'client-secret-file': { value: 'PATH|-', sets: 'DISCORD_CLIENT_SECRET', en: 'File holding the OAuth2 client secret; `-` reads stdin.', 'pt-BR': 'Arquivo com o client secret do OAuth2; `-` lê do stdin.' },
   'client-id': {
@@ -577,8 +598,8 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
   },
   binaries: {
     looksAt: {
-      en: 'The helper programs this configuration needs (`livekit-server`; `caddy` or `cloudflared`) are in `bin/` at the pinned versions (`caddy`: the build of this release), or on `PATH`. With `ACME_DNS=duckdns` it reads the `caddy` file (never runs it) and fails when the DuckDNS module is missing (an upstream or distro Caddy).',
-      'pt-BR': 'Os programas auxiliares que esta configuração precisa (`livekit-server`; `caddy` ou `cloudflared`) estão em `bin/` nas versões fixadas (`caddy`: o build desta versão), ou no `PATH`. Com `ACME_DNS=duckdns` ela lê o arquivo do `caddy` (sem nunca rodar ele) e falha quando falta o módulo do DuckDNS (um Caddy oficial ou de distribuição).',
+      en: 'The helper programs this configuration needs (`livekit-server` with `MEDIA=self`; `caddy` or `cloudflared`) are in `bin/` at the pinned versions (`caddy`: the build of this release), or on `PATH`. With `ACME_DNS=duckdns` it reads the `caddy` file (never runs it) and fails when the DuckDNS module is missing (an upstream or distro Caddy).',
+      'pt-BR': 'Os programas auxiliares que esta configuração precisa (`livekit-server` com `MEDIA=self`; `caddy` ou `cloudflared`) estão em `bin/` nas versões fixadas (`caddy`: o build desta versão), ou no `PATH`. Com `ACME_DNS=duckdns` ela lê o arquivo do `caddy` (sem nunca rodar ele) e falha quando falta o módulo do DuckDNS (um Caddy oficial ou de distribuição).',
     },
     fixes: {
       en: 'Start Telinha (the native binary downloads what is missing) or run `telinha setup`. A `caddy` in `bin/` without the DuckDNS module: delete it and run `telinha setup` again, which fetches Telinha’s own build; one on `PATH` (used only when that download failed) stays as it is, and `telinha setup` run again while online puts Telinha’s build in `bin/`. From source: `bun scripts/bins.ts --out <bin>` (or `bun run caddy --out <bin>` to build `caddy`), with the `bin/` folder the check names.',
@@ -649,10 +670,30 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
       'pt-BR': 'direct com DuckDNS (em casa): confira o token do DuckDNS (`dns`), se a `HTTPS_PORT` está livre para o Caddy (`listeners`) e as linhas `[caddy]` do log; uma instalação nova leva alguns minutos. direct numa VPS: o Caddy obtém o certificado sozinho quando as portas 80 e 443 chegam à máquina (veja `dns`, `listeners`). tunnel/external: confira o proxy ou o túnel na frente.',
     },
   },
+  'livekit-cloud': {
+    looksAt: {
+      en: '`MEDIA=cloud` only: lists the project’s rooms with `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`, which proves both the URL and the key pair. Detail lines repeat the auto-create advice and the free plan’s limits.',
+      'pt-BR': 'Só com `MEDIA=cloud`: lista as salas do projeto com `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`, o que prova a URL e o par de chaves. As linhas de detalhe repetem o conselho sobre a criação automática de salas e os limites do plano gratuito.',
+    },
+    fixes: {
+      en: 'Rejected key: copy the key and secret again from the project’s Settings → Keys. Unreachable: check `LIVEKIT_CLOUD_URL` (Settings → Project) and the machine’s internet access.',
+      'pt-BR': 'Chave recusada: copie a chave e o segredo de novo em Settings → Keys do projeto. Inalcançável: confira a `LIVEKIT_CLOUD_URL` (Settings → Project) e a internet da máquina.',
+    },
+  },
+  turn: {
+    looksAt: {
+      en: 'With TURN on: the DNS record of `turn.<host>` against the public IP, the certificate `turn.<host>` presents on 443, and whether LiveKit’s TURN is listening locally on `TURN_PORT`. Skipped with the reason where TURN cannot run; on a VPS with your own domain and `TURN=auto` it says how to turn it on.',
+      'pt-BR': 'Com o TURN ligado: o registro DNS de `turn.<host>` comparado ao IP público, o certificado que o `turn.<host>` apresenta na 443, e se o TURN do LiveKit está escutando localmente na `TURN_PORT`. Pulada com o motivo onde o TURN não pode rodar; numa VPS com domínio próprio e `TURN=auto` ela diz como ligar.',
+    },
+    fixes: {
+      en: 'Create the A record `turn.<host>` → the VPS IP (DuckDNS and sslip.io names need nothing); the certificate comes from Caddy a few minutes after the start (`[caddy]` lines in the log). Whether a phone relays through it is the phone test’s TURN/TLS row.',
+      'pt-BR': 'Crie o registro A `turn.<host>` → o IP da VPS (nomes do DuckDNS e do sslip.io não precisam de nada); o certificado vem do Caddy alguns minutos depois da inicialização (linhas `[caddy]` do log). Se um celular consegue passar por ele é o que a linha TURN/TLS do teste pelo celular mostra.',
+    },
+  },
   listeners: {
     looksAt: {
-      en: 'Telinha answers on `LISTEN`, every child is up, LiveKit and the media TCP port listen, and in direct mode `HTTPS_PORT` listens. Prints the ufw/firewalld commands and the low-port hint for Linux users.',
-      'pt-BR': 'A Telinha responde em `LISTEN`, todos os filhos estão de pé, o LiveKit e a porta TCP de mídia escutam, e no modo direct a `HTTPS_PORT` escuta. Imprime os comandos do ufw/firewalld e a dica de portas baixas para usuários Linux.',
+      en: 'Telinha answers on `LISTEN`, every child is up, LiveKit and the media TCP port listen (`MEDIA=self`; with TURN on also `TURN_PORT` on 127.0.0.1), and in direct mode `HTTPS_PORT` listens. Prints the ufw/firewalld commands and the low-port hint for Linux users.',
+      'pt-BR': 'A Telinha responde em `LISTEN`, todos os filhos estão de pé, o LiveKit e a porta TCP de mídia escutam (`MEDIA=self`; com o TURN ligado também a `TURN_PORT` em 127.0.0.1), e no modo direct a `HTTPS_PORT` escuta. Imprime os comandos do ufw/firewalld e a dica de portas baixas para usuários Linux.',
     },
     fixes: {
       en: '`telinha service start` (or `telinha run`). Linux user install on 80/443 (a VPS): the one-time sysctl it prints; the standard home setups need no low port. Open the firewall with the printed commands.',
@@ -688,18 +729,18 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
   },
   cgnat: {
     looksAt: {
-      en: 'The router’s external IP against the public IP: an address in `100.64.0.0/10` (CGNAT) fails; a private address (double NAT) or a mismatch warns.',
-      'pt-BR': 'O IP externo do roteador comparado ao IP público: um endereço em `100.64.0.0/10` (CGNAT) falha; um endereço privado (NAT duplo) ou uma diferença gera aviso.',
+      en: 'The router’s external IP against the public IP: an address in `100.64.0.0/10` (CGNAT) fails (only warns with `MEDIA=cloud`, where just the pages need a way in); a private address (double NAT) or a mismatch warns.',
+      'pt-BR': 'O IP externo do roteador comparado ao IP público: um endereço em `100.64.0.0/10` (CGNAT) falha (com `MEDIA=cloud` só avisa, porque só as páginas precisam de uma entrada); um endereço privado (NAT duplo) ou uma diferença gera aviso.',
     },
     fixes: {
-      en: 'CGNAT: ask the provider for a public IPv4, or use a VPS (`INGRESS=tunnel` carries the pages but not the media). Double NAT: bridge mode on the provider’s modem, or forward the ports on both devices.',
-      'pt-BR': 'CGNAT: peça um IPv4 público à operadora, ou use uma VPS (`INGRESS=tunnel` leva as páginas, mas não a mídia). NAT duplo: modo bridge no modem da operadora, ou encaminhe as portas nos dois aparelhos.',
+      en: 'CGNAT: for the pages, `INGRESS=tunnel` or a VPS; for the video, a public IPv4 from the provider or `MEDIA=cloud` (LiveKit Cloud needs no open port). Double NAT: bridge mode on the provider’s modem, or forward the ports on both devices.',
+      'pt-BR': 'CGNAT: para as páginas, `INGRESS=tunnel` ou uma VPS; para o vídeo, um IPv4 público da operadora ou `MEDIA=cloud` (o LiveKit Cloud não precisa de porta aberta). NAT duplo: modo bridge no modem da operadora, ou encaminhe as portas nos dois aparelhos.',
     },
   },
   mappings: {
     looksAt: {
-      en: 'The ports Telinha asks the router for (the media ports, and 8443 at home with DuckDNS) are mapped (with `UPNP=auto` and the service running); otherwise the list to forward by hand. Ports it never asks for, such as 80 and 443 on the advanced home setup, show up as a detail line, not a problem.',
-      'pt-BR': 'As portas que a Telinha pede ao roteador (as de mídia, e a 8443 em casa com DuckDNS) estão mapeadas (com `UPNP=auto` e o serviço rodando); senão, a lista para encaminhar à mão. Portas que ela nunca pede, como a 80 e a 443 na configuração avançada em casa, aparecem numa linha de detalhe, não como problema.',
+      en: 'The ports Telinha asks the router for (the media ports with `MEDIA=self`, and 8443 at home with DuckDNS) are mapped (with `UPNP=auto` and the service running); otherwise the list to forward by hand. Ports it never asks for, such as 80 and 443 on the advanced home setup, show up as a detail line, not a problem.',
+      'pt-BR': 'As portas que a Telinha pede ao roteador (as de mídia com `MEDIA=self`, e a 8443 em casa com DuckDNS) estão mapeadas (com `UPNP=auto` e o serviço rodando); senão, a lista para encaminhar à mão. Portas que ela nunca pede, como a 80 e a 443 na configuração avançada em casa, aparecem numa linha de detalhe, não como problema.',
     },
     fixes: { en: 'Forward the listed ports on the router to this machine’s LAN IP.', 'pt-BR': 'Encaminhe as portas listadas no roteador para o IP desta máquina na rede local.' },
   },

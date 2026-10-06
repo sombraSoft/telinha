@@ -49,20 +49,22 @@ const fromResult = (r: CheckResult, i: number): DoctorRow => ({
 function phoneRowStatus(row: PhoneRow, r: DoctorReport, hinted: boolean): CheckStatus {
   if (row.ok) return hinted ? 'warn' : 'ok';
   if (row.id === 'udp' || row.id === 'tcp') return !r.udp.ok && !r.tcp.ok ? 'fail' : 'warn';
-  if (row.id === 'publish' || row.id === 'initial') return 'warn';
+  // TURN is the fallback for strict networks: its failure alone never fails the run.
+  if (row.id === 'publish' || row.id === 'initial' || row.id === 'turn') return 'warn';
   return 'fail';
 }
 
 // Which row a hint explains.
 const HINT_ROWS: Record<string, PhoneRow['id'][]> = {
   hintSignaling: ['signaling'], hintBoth: ['udp', 'tcp'], hintUdp: ['udp'], hintTcp: ['tcp'], hintIp: ['initial'],
+  hintCloudSignaling: ['signaling'], hintCloudBoth: ['udp', 'tcp'], hintCloudUdp: ['udp'], hintCloudTcp: ['tcp'], hintTurn: ['turn'],
 };
 
 /** The phone report as doctor rows, the hints as the fix of the row they explain. */
 export function phoneReportRows(r: DoctorReport, config: Config | null, locale: Locale): DoctorRow[] {
   const s = (key: Parameters<typeof doctorStrings>[1], params?: Record<string, string | number>) => doctorStrings(locale, key, params);
   const ports = mediaPorts(config);
-  const hints = phoneHints(r, ports, config?.livekitNodeIp ?? null);
+  const hints = phoneHints(r, ports, config?.livekitNodeIp ?? null, config?.media ?? 'self', config?.turn?.host);
   return phoneRows(r, ports, s).map((row) => {
     const fixes = hints.filter((h) => HINT_ROWS[h.key]?.includes(row.id)).map((h) => s(h.key, h.params));
     const status = phoneRowStatus(row, r, fixes.length > 0);

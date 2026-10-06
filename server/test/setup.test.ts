@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { posix, win32 } from 'node:path';
+import { toolsFor } from '../src/bins.ts';
 import { loadConfig } from '../src/config.ts';
 import type { Ddns } from '../src/ddns.ts';
 import type { CheckResult } from '../src/doctor/types.ts';
@@ -1173,6 +1174,178 @@ describe('non-interactive', () => {
     expect(await go(ctxFor([...ARGS, '--no-upnp', '--no-doctor'], { compiled: true, env: SECRETS, home, isRoot: false }).ctx, deps)).toBe(0);
     expect(term.text_()).toContain('Without it Telinha stops whenever you log out of this machine');
   });
+
+  describe('media', () => {
+    const CLOUD = 'wss://my-proj.livekit.cloud';
+    const CLOUD_ARGS = ['--media', 'cloud', '--cloud-url', CLOUD, '--livekit-key', 'APIcloudkey'];
+    const CLOUD_ENV = { ...SECRETS, LIVEKIT_API_SECRET: 'cloud-secret' };
+
+    /** A file as a fresh VPS run writes it, in self or cloud mode. */
+    async function vpsFile(extra: string[] = [], env: Record<string, string> = SECRETS): Promise<string> {
+      const { deps, files } = fakeDeps(new FakeTerm());
+      expect(await go(ctxFor([...ARGS, ...extra, ...QUIET], { env }).ctx, deps)).toBe(0);
+      return files.get(ENV)!;
+    }
+
+    test('fresh VPS on LiveKit Cloud: the project\'s pair, no media ports, Caddy only, no media ports in the firewall hints', async () => {
+      const term = new FakeTerm();
+      const { ctx } = ctxFor([...ARGS, ...CLOUD_ARGS, '--livekit-secret-file', '-', '--no-service', '--no-doctor'], { env: SECRETS });
+      const { deps, rec, files } = fakeDeps(term, { which: (c) => (c === 'ufw' ? '/usr/sbin/ufw' : null) });
+      expect(await go(ctx, deps, { stdin: async () => 'cloud-secret\n' })).toBe(0);
+      const text = files.get(ENV)!;
+      const vars = parseEnvFile(text).vars;
+      expect(vars).toMatchObject({ MEDIA: 'cloud', LIVEKIT_CLOUD_URL: CLOUD, LIVEKIT_API_KEY: 'APIcloudkey', LIVEKIT_API_SECRET: 'cloud-secret', HOSTING: 'vps' });
+      for (const k of ['MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'TURN']) expect(vars[k]).toBeUndefined();
+      expect(text).toContain("LIVEKIT_API_SECRET='cloud-secret'");
+      const c = config(text);
+      expect(c.media).toBe('cloud');
+      expect(c.warnings).toEqual([]);
+      expect(rec.bins).toEqual([{ media: 'cloud', ingress: 'direct' }]);
+      expect(toolsFor(c)).toEqual(['caddy']);
+      const out = term.text_();
+      expect(out).toContain("Open these ports in your provider's firewall (security group / security list) and in this machine's own firewall: TCP 443, TCP 80");
+      expect(out).toContain('ufw is installed; if it is active: sudo ufw allow 443/tcp && sudo ufw allow 80/tcp');
+      expect(out).not.toMatch(/7881|7882/);
+    });
+
+    test('LiveKit Cloud behind an external proxy runs no child: no download step at all', async () => {
+      const term = new FakeTerm();
+      const { deps, rec } = fakeDeps(term);
+      const argv = [...ARGS, ...CLOUD_ARGS, '--ingress', 'external', '--public-url', 'https://x.example.com', ...QUIET];
+      expect(await go(ctxFor(argv, { env: CLOUD_ENV }).ctx, deps)).toBe(0);
+      expect(rec.bins).toEqual([]);
+      expect(term.text_()).not.toMatch(/Downloading|Programs/);
+    });
+
+    test('at home on LiveKit Cloud behind a tunnel: nothing to forward, so no router step and no empty port list', async () => {
+      const term = new FakeTerm();
+      const { ctx } = ctxFor([...HOME_ARGS, '--ingress', 'tunnel', '--public-url', URL_, ...CLOUD_ARGS, '--no-service', '--no-doctor'], { env: { ...CLOUD_ENV, TUNNEL_TOKEN: TUNNEL } });
+      const { deps } = fakeDeps(term);
+      expect(await go(ctx, deps)).toBe(0);
+      const out = term.text_();
+      expect(out).not.toContain('step Router');
+      for (const line of ['asks the router for', 'Forward these ports', "provider's firewall"]) expect(out).not.toContain(line);
+    });
+
+    test('at home on LiveKit Cloud: the router step asks only for the HTTPS port', async () => {
+      const term = new FakeTerm();
+      const { ctx } = ctxFor([...HOME_ARGS, '--duckdns-domain', 'my-group', ...CLOUD_ARGS, '--no-service', '--no-doctor'], { env: { ...DUCK, LIVEKIT_API_SECRET: 'cloud-secret' } });
+      const { deps } = fakeDeps(term);
+      expect(await go(ctx, deps)).toBe(0);
+      expect(term.text_()).toContain('Telinha asks the router for TCP 8443 while it runs');
+      expect(term.text_()).not.toMatch(/7881|7882/);
+    });
+
+    test('every missing Cloud answer is listed at once', async () => {
+      const { ctx, err } = ctxFor([...ARGS, '--media', 'cloud'], { env: SECRETS });
+      const { deps, files } = fakeDeps(new FakeTerm());
+      expect(await go(ctx, deps)).toBe(2);
+      expect(err).toEqual(['missing in non-interactive mode: --cloud-url, --livekit-key, LIVEKIT_API_SECRET (environment) or --livekit-secret-file <path|->']);
+      expect(files.size).toBe(0);
+    });
+
+    test('--livekit-secret is a usage error naming the variable and the -file form', async () => {
+      const { ctx, err } = ctxFor([...ARGS, ...CLOUD_ARGS, '--livekit-secret', 'abc'], { env: SECRETS });
+      const { deps } = fakeDeps(new FakeTerm());
+      expect(await go(ctx, deps)).toBe(2);
+      expect(err[0]).toContain('LIVEKIT_API_SECRET');
+      expect(err[0]).toContain('--livekit-secret-file');
+      expect(err.join('\n')).not.toContain('abc');
+    });
+
+    test('bad --media and --turn values: exit 2', async () => {
+      const { ctx, err } = ctxFor([...ARGS, '--media', 'mars', '--turn', 'maybe'], { env: SECRETS });
+      const { deps } = fakeDeps(new FakeTerm());
+      expect(await go(ctx, deps)).toBe(2);
+      expect(err.join('\n')).toContain('--media: mars is not valid (want self | cloud)');
+      expect(err.join('\n')).toContain('--turn: maybe is not valid (want auto | on | off)');
+    });
+
+    test('a self file switched to cloud: its generated pair is not the project\'s, so key and secret are asked for', async () => {
+      const self = await vpsFile();
+      expect(parseEnvFile(self).vars.LIVEKIT_API_KEY).toStartWith('telinha');
+      const { ctx, err } = ctxFor([...ARGS, '--media', 'cloud', '--cloud-url', CLOUD, ...QUIET], { env: SECRETS });
+      const { deps } = fakeDeps(new FakeTerm(), { files: { [ENV]: self } });
+      expect(await go(ctx, deps)).toBe(2);
+      expect(err).toEqual(['missing in non-interactive mode: --livekit-key, LIVEKIT_API_SECRET (environment) or --livekit-secret-file <path|->']);
+    });
+
+    test('a cloud file: a plain re-run keeps it; --media self drops the URL and makes a fresh local pair', async () => {
+      const cloud = await vpsFile(CLOUD_ARGS, CLOUD_ENV);
+      const again = fakeDeps(new FakeTerm(), { files: { [ENV]: cloud } });
+      expect(await go(ctxFor([...ARGS, ...QUIET], { env: SECRETS }).ctx, again.deps)).toBe(0);
+      expect(parseEnvFile(again.files.get(ENV)!).vars).toMatchObject({ MEDIA: 'cloud', LIVEKIT_CLOUD_URL: CLOUD, LIVEKIT_API_KEY: 'APIcloudkey', LIVEKIT_API_SECRET: 'cloud-secret' });
+
+      const back = fakeDeps(new FakeTerm(), { files: { [ENV]: cloud } });
+      expect(await go(ctxFor([...ARGS, '--media', 'self', ...QUIET], { env: SECRETS }).ctx, back.deps)).toBe(0);
+      const text = back.files.get(ENV)!;
+      const vars = parseEnvFile(text).vars;
+      expect(vars.MEDIA).toBeUndefined();
+      expect(vars.LIVEKIT_CLOUD_URL).toBeUndefined();
+      expect(vars.LIVEKIT_API_KEY).toStartWith('telinha');
+      expect(vars.LIVEKIT_API_SECRET).not.toBe('cloud-secret');
+      expect(vars.LIVEKIT_API_SECRET!.length).toBe(43);
+      expect(text).toContain('#MEDIA=self');
+      expect(config(text).media).toBe('self');
+    });
+
+    test('--turn on is refused at home and with cloud: exit 1 with the config error, nothing written', async () => {
+      const home = new FakeTerm();
+      const a = fakeDeps(home);
+      expect(await go(ctxFor([...HOME_ARGS, '--duckdns-domain', 'my-group', '--turn', 'on', ...QUIET], { env: DUCK }).ctx, a.deps)).toBe(1);
+      expect(home.text_()).toContain('fail the resulting configuration is invalid: TURN=on is not possible here: home installs get no TURN');
+      expect(a.files.size).toBe(0);
+
+      const cloud = new FakeTerm();
+      const b = fakeDeps(cloud);
+      expect(await go(ctxFor([...ARGS, ...CLOUD_ARGS, '--turn', 'on', ...QUIET], { env: CLOUD_ENV }).ctx, b.deps)).toBe(1);
+      expect(cloud.text_()).toContain("TURN=on is not possible here: MEDIA=cloud brings LiveKit Cloud's own TURN");
+      expect(b.files.size).toBe(0);
+    });
+
+    test('a VPS file with TURN=on moved where TURN cannot run: TURN goes back to the default; an explicit --turn on still fails', async () => {
+      const on = await vpsFile(['--turn', 'on']);
+      expect(parseEnvFile(on).vars.TURN).toBe('on');
+      const tunnel = fakeDeps(new FakeTerm(), { files: { [ENV]: on } });
+      expect(await go(ctxFor([...ARGS, '--ingress', 'tunnel', ...QUIET], { env: { ...SECRETS, TUNNEL_TOKEN: TUNNEL } }).ctx, tunnel.deps)).toBe(0);
+      const text = tunnel.files.get(ENV)!;
+      expect(parseEnvFile(text).vars).toMatchObject({ INGRESS: 'tunnel', PUBLIC_URL: URL_ });
+      expect(parseEnvFile(text).vars.TURN).toBeUndefined();
+      expect(config(text).turn).toBeNull();
+
+      const port = fakeDeps(new FakeTerm(), { files: { [ENV]: on } });
+      expect(await go(ctxFor([...ARGS, '--https-port', '8443', ...QUIET], { env: SECRETS }).ctx, port.deps)).toBe(0);
+      expect(parseEnvFile(port.files.get(ENV)!).vars.TURN).toBeUndefined();
+
+      const term = new FakeTerm();
+      const explicit = fakeDeps(term, { files: { [ENV]: on } });
+      expect(await go(ctxFor([...ARGS, '--ingress', 'tunnel', '--turn', 'on', ...QUIET], { env: { ...SECRETS, TUNNEL_TOKEN: TUNNEL } }).ctx, explicit.deps)).toBe(1);
+      expect(term.text_()).toContain('TURN=on is not possible here: it needs INGRESS=direct');
+      expect(explicit.files.get(ENV)).toBe(on);
+    });
+
+    test('VPS DuckDNS: auto stays commented (and turns TURN on); --turn on and off are written', async () => {
+      const duck = ['setup', '--non-interactive', '--host', 'vps', '--duckdns-domain', 'my-group', '--guild', GUILD, '--role', ROLE, '--channels', CHANNEL, '--docker'];
+      const write = async (extra: string[]) => {
+        const { deps, files } = fakeDeps(new FakeTerm());
+        expect(await go(ctxFor([...duck, ...extra], { home: '/telinha', env: DUCK }).ctx, deps)).toBe(0);
+        return files.get('/telinha/config/telinha.env')!;
+      };
+      const auto = await write([]);
+      expect(parseEnvFile(auto).vars.TURN).toBeUndefined();
+      expect(auto).toContain('#TURN=auto');
+      expect(config(auto, '/telinha').turn).toEqual({ host: 'turn.my-group.duckdns.org', port: 5349 });
+      const explicitAuto = await write(['--turn', 'auto']);
+      expect(parseEnvFile(explicitAuto).vars.TURN).toBeUndefined();
+
+      const on = await write(['--turn', 'on']);
+      expect(parseEnvFile(on).vars.TURN).toBe('on');
+      expect(config(on, '/telinha').turn).toEqual({ host: 'turn.my-group.duckdns.org', port: 5349 });
+      const off = await write(['--turn', 'off']);
+      expect(parseEnvFile(off).vars.TURN).toBe('off');
+      expect(config(off, '/telinha').turn).toBeNull();
+    });
+  });
 });
 
 describe('pieces', () => {
@@ -1187,12 +1360,20 @@ describe('pieces', () => {
     expect(values.LIVEKIT_API_SECRET!.length).toBe(43);
   });
 
+  test('generateSecrets leaves the LiveKit Cloud pair to the project', () => {
+    const values: Record<string, string> = { MEDIA: 'cloud' };
+    expect(generateSecrets(values, (n) => new Uint8Array(n))).toEqual(['COOKIE_SECRET']);
+    expect(values.LIVEKIT_API_KEY).toBeUndefined();
+    expect(values.LIVEKIT_API_SECRET).toBeUndefined();
+  });
+
   test('publicPorts: the public port from the URL, a translation only when it differs, no HTTP port when off', () => {
     expect(publicPorts({ INGRESS: 'direct', PUBLIC_URL: 'https://x:8443', HTTPS_PORT: '8443', HTTP_PORT: '0' })).toEqual(['TCP 7881', 'UDP 7882', 'TCP 8443']);
     expect(publicPorts({ INGRESS: 'direct', PUBLIC_URL: 'https://x', HTTPS_PORT: '8443', HTTP_PORT: '0' })).toEqual(['TCP 7881', 'UDP 7882', 'TCP 443 -> 8443']);
     expect(publicPorts({ INGRESS: 'direct', PUBLIC_URL: 'https://x', HTTPS_PORT: '443', HTTP_PORT: '80' })).toEqual(['TCP 7881', 'UDP 7882', 'TCP 443', 'TCP 80']);
     expect(publicPorts({ PUBLIC_URL: 'https://x' })).toEqual(['TCP 7881', 'UDP 7882', 'TCP 443', 'TCP 80']);
     expect(publicPorts({ INGRESS: 'tunnel', MEDIA_UDP_PORT: '50000' })).toEqual(['TCP 7881', 'UDP 50000']);
+    expect(publicPorts({ MEDIA: 'cloud', INGRESS: 'direct', PUBLIC_URL: 'https://x', HTTPS_PORT: '443', HTTP_PORT: '80' })).toEqual(['TCP 443', 'TCP 80']);
   });
 
   test('offerSetup: the welcome card declined -> null; set up -> setup runs (quit at the Review: 1)', async () => {

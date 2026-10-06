@@ -43,11 +43,19 @@ let these ports in:
 | TCP 7881 | always | Video over TCP, for networks that block UDP |
 | UDP 7882 | always | Video over UDP, the normal path |
 | TCP 443 | your own domain, DuckDNS or sslip.io | The pages, over HTTPS |
+| TCP 443 (TURN over TLS) | TURN on | The same port: video relayed for viewers on networks that only allow 443; nothing more to open |
 | TCP 80 | same, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
 
 With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
 carry WebRTC. If you will pick another port in the setup, open that one
 instead.
+
+:::note
+With TURN on, LiveKit's TURN listens on `TURN_PORT` (5349) and relays on UDP
+30000-40000, both for use inside the machine only: Caddy reaches the first
+from the same machine, and the relay talks only to LiveKit itself. Leave them
+closed in both firewalls.
+:::
 
 **The provider's firewall.** Add an inbound rule per line of the table in the
 provider's panel (security group, security list or firewall rules), from
@@ -226,6 +234,21 @@ Without a terminal, or with `--non-interactive`, setup prints plain lines and
 takes every answer from flags, the environment and the existing file: see
 [Command line](/telinha/reference/cli/#telinha-setup).
 
+## Strict networks
+
+Some viewers sit on networks that only let browsers reach port 443 (offices,
+schools, some mobile carriers), where the media ports never get through. With
+the address on 443, Telinha relays their video through `turn.<host>:443`,
+which looks like any HTTPS site to those networks:
+[TURN over TLS on port 443](/telinha/guides/turn/). The setup's Video step
+asks *Also serve video through port 443 for strict networks?* (yes by default).
+With a DuckDNS or sslip.io name that is all; with your own domain it first asks
+you to add the DNS record `turn.<host>`, where `<host>` is the host of
+`PUBLIC_URL` (for `https://telinha.example.com` that is
+`turn.telinha.example.com`, see [DNS](/telinha/guides/turn/#dns)), pointing at
+the VPS, and checks that it resolves. The `turn` row of doctor says whether it
+works.
+
 ## Check it
 
 ```sh
@@ -238,7 +261,8 @@ result. Press Enter on a row to see its detail and, when it is not ok, the fix;
 panel shows a link and a QR code for the phone test: open it on your phone with
 Wi-Fi off, so the test runs over mobile data like many of your friends'
 connections. It tells you whether the page, the LiveKit connection, UDP and TCP
-all work from there, and `p` starts a new test; a first path to an IP that is
+all work from there, and with TURN on whether the video can relay through
+`turn.<host>:443` (the TURN/TLS 443 row); `p` starts a new test; a first path to an IP that is
 not the VPS's public IP means a wrong `LIVEKIT_NODE_IP`.
 [Doctor and troubleshooting](/telinha/guides/doctor/) explains every row and
 what a failure means.

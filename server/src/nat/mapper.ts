@@ -329,6 +329,8 @@ export function createPortMapper(o: {
     }
     if (stopped) return;
     if (!gateway) {
+      // Nothing to map (only stale entries to drop): no advice, and the state file keeps them for a later run.
+      if (!entries.length) return;
       for (const e of entries) {
         e.state = 'failed';
         e.error = 'no gateway';
@@ -406,11 +408,17 @@ export function createPortMapper(o: {
       if (started) return;
       started = true;
       readState();
+      // Nothing to map (LiveKit Cloud behind a tunnel, say): one cycle only to drop
+      // what a previous run left, and no rediscovery loop.
+      if (!entries.length) {
+        if (stale.length) await runCycle(false);
+        return;
+      }
       await runCycle(false);
       if (!stopped) void loop();
     },
     async refresh() {
-      if (!started || stopped) return;
+      if (!started || stopped || !entries.length) return;
       await runCycle(true);
       wake?.abort();
     },
@@ -418,7 +426,8 @@ export function createPortMapper(o: {
       if (stopped) return;
       stopped = true;
       // Never started: keep the state file, its stale entries are for the next start().
-      if (!started) return;
+      // Nothing to map: nothing to delete, and stale entries no gateway took stay listed.
+      if (!started || !entries.length) return;
       wake?.abort();
       const work = (async () => {
         const first = deleteMapped();

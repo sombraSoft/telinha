@@ -50,6 +50,11 @@ export const SETUP_FLAGS = {
   'media-tcp': 'string',
   'media-udp': 'string',
   'node-ip': 'string',
+  media: 'string',
+  'cloud-url': 'string',
+  'livekit-key': 'string',
+  'livekit-secret-file': 'string',
+  turn: 'string',
   'discord-token-file': 'string',
   'client-secret-file': 'string',
   'client-id': 'string',
@@ -77,6 +82,7 @@ const SECRETS = [
   ['DISCORD_CLIENT_SECRET', 'client-secret-file'],
   ['TUNNEL_TOKEN', 'tunnel-token-file'],
   ['DUCKDNS_TOKEN', 'duckdns-token-file'],
+  ['LIVEKIT_API_SECRET', 'livekit-secret-file'],
 ] as const;
 type SecretKey = (typeof SECRETS)[number][0];
 

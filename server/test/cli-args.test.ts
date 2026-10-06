@@ -70,7 +70,7 @@ describe('parseArgs', () => {
   });
 
   test('secret flags are refused, naming the env var and the -file form', () => {
-    for (const [flag, env] of [['discord-token', 'DISCORD_TOKEN'], ['client-secret', 'DISCORD_CLIENT_SECRET'], ['tunnel-token', 'TUNNEL_TOKEN'], ['duckdns-token', 'DUCKDNS_TOKEN']]) {
+    for (const [flag, env] of [['discord-token', 'DISCORD_TOKEN'], ['client-secret', 'DISCORD_CLIENT_SECRET'], ['tunnel-token', 'TUNNEL_TOKEN'], ['duckdns-token', 'DUCKDNS_TOKEN'], ['livekit-secret', 'LIVEKIT_API_SECRET']]) {
       for (const argv of [[`--${flag}`, 'abc'], [`--${flag}=abc`]]) {
         const msg = usage(() => parseArgs(argv, SPEC));
         expect(msg).toContain(env!);

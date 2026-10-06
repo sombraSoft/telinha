@@ -1,6 +1,7 @@
 // LiveKit resolves the public IP once at start (STUN) and advertises it in ICE
 // candidates. When a residential IP changes, onChange restarts livekit so
-// streams keep working.
+// streams keep working (and renews router mappings and DuckDNS, which a cloud
+// install needs too).
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { IPV4_RE } from './config.ts';
@@ -18,6 +19,8 @@ const TIMEOUT_MS = 10_000;
 export function createIpWatch(o: {
   fetch: typeof fetch; intervalMs: number; log: (...a: unknown[]) => void;
   onChange: (ip: string, previous: string) => Promise<void>;
+  /** What a change means here, for the log: a cloud install has no livekit to restart. */
+  labels: { changed: string; startedWith: string };
   /** <run>/public-ip; remembers the last IP across restarts (for current(): /internal/status). */
   statePath?: string;
 }): IpWatch {
@@ -56,19 +59,19 @@ export function createIpWatch(o: {
       // First observation: LiveKit just started with this IP, nothing to restart.
       observed = true;
       if (found === ip) return;
-      if (ip !== null) o.log(`public IP ${ip} -> ${found} while telinha was down; livekit started with the new one`);
+      if (ip !== null) o.log(`public IP ${ip} -> ${found} while telinha was down, ${o.labels.startedWith}`);
       ip = found;
       persist(found);
       return;
     }
     if (found === ip) return;
     const previous = ip!;
-    o.log(`public IP ${previous} -> ${found}, restarting livekit`);
+    o.log(`public IP ${previous} -> ${found}, ${o.labels.changed}`);
     try {
       await o.onChange(found, previous);
     } catch (e) {
       // Keep the old IP so the next tick sees the change again and retries.
-      o.log('ipwatch: restart after IP change failed, will retry', (e as Error).message);
+      o.log('ipwatch: handling the IP change failed, will retry', (e as Error).message);
       return;
     }
     ip = found;

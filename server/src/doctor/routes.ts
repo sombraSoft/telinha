@@ -15,7 +15,8 @@ export { DOCTOR_COOKIE };
 export const MAX_REPORT_BYTES = 16 * 1024;
 
 export type DoctorConfig = Pick<Config,
-  'cookieSecret' | 'secureCookies' | 'livekitUrl' | 'livekitKey' | 'livekitSecret' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort'>;
+  'cookieSecret' | 'secureCookies' | 'livekitUrl' | 'livekitKey' | 'livekitSecret' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort'
+  | 'media' | 'turn'>;
 
 export type DoctorHandler = (req: Request, url: URL) => Promise<Response | null>;
 
@@ -74,6 +75,10 @@ export function parseReport(body: unknown): DoctorReport | null {
   const startedAt = time(body.startedAt);
   const finishedAt = time(body.finishedAt);
   if (!signaling || !publish || !tcp || !udp || startedAt === undefined || finishedAt === undefined) return null;
+  // Only a page that ran the TURN step sends one; anything else there is malformed.
+  const noTurn = body.turn === undefined || body.turn === null;
+  const turn = noTurn ? null : pathStep(body.turn);
+  if (!noTurn && !turn) return null;
   let init: DoctorReport['initial'] = null;
   if (initial) {
     const protocol = typeof initial.protocol === 'string' && /^[a-z]{1,8}$/.test(initial.protocol) ? initial.protocol : null;
@@ -87,6 +92,7 @@ export function parseReport(body: unknown): DoctorReport | null {
     tcp,
     udp,
     publish,
+    ...(turn ? { turn } : {}),
     client: { ua: text(client.ua, 200) ?? '' },
     startedAt,
     finishedAt,
@@ -158,7 +164,14 @@ export function createDoctorRoutes(o: {
         room, roomJoin: true, canSubscribe: false, canPublish: true, canPublishData: false,
         canPublishSources: [TrackSource.SCREEN_SHARE],
       });
-      return json(200, { url: c.livekitUrl, token: await at.toJwt(), ports: { tcp: c.mediaTcpPort, udp: c.mediaUdpPort } });
+      return json(200, {
+        url: c.livekitUrl,
+        token: await at.toJwt(),
+        media: c.media,
+        // Cloud's media ports are Cloud's: nothing for the page to name.
+        ports: c.media === 'self' ? { tcp: c.mediaTcpPort, udp: c.mediaUdpPort } : null,
+        turn: c.turn ? { host: c.turn.host } : null,
+      });
     }
 
     if (path === '/doctor/api/report' && req.method === 'POST') {
@@ -179,7 +192,7 @@ export function createDoctorRoutes(o: {
       const ip = clientIp(req);
       if (ip) report.client.ip = ip;
       if (!store.report(s.id, report, now())) return json(409, { error: 'done' });
-      log('doctor report', s.id.slice(0, 8), `tcp=${report.tcp.ok} udp=${report.udp.ok} signaling=${report.signaling.ok}`);
+      log('doctor report', s.id.slice(0, 8), `tcp=${report.tcp.ok} udp=${report.udp.ok} signaling=${report.signaling.ok}${report.turn ? ` turn=${report.turn.ok}` : ''}`);
       await rooms.deleteRoom(doctorRoom(s.id)).catch((e: unknown) => log('doctor deleteRoom failed', (e as Error).message));
       return new Response(null, { status: 204, headers: NO_STORE });
     }
