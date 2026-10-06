@@ -13,7 +13,7 @@ export const PROD_ENV = {
   PUBLIC_URL: 'https://telinha.example.com/', COOKIE_SECRET: 'secret',
   LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'lksecret',
   // Pinned rather than defaulted, so these tests never read the host's layout.
-  INGRESS: 'direct', TELINHA_HOME: '/srv/telinha',
+  INGRESS: 'direct', TELINHA_HOME: '/srv/telinha', UPNP: 'off',
 };
 export const DEV_ENV = {
   DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:8081', COOKIE_SECRET: 'x',
@@ -49,7 +49,14 @@ export interface Setup {
   proxy?: Deps['proxy'];
   openRooms?: Deps['openRooms'];
   children?: Deps['children'];
+  control?: Deps['control'];
+  timeout?: Deps['timeout'];
+  doctor?: Deps['doctor'];
+  doctorCookie?: Deps['doctorCookie'];
 }
+
+/** What /healthz reports as the version in these tests. */
+export const VERSION = '9.9.9';
 
 export function setup(o: Setup = {}) {
   const config = loadConfig({ ...(o.env ?? PROD_ENV), ...(o.command ? { COMMAND_NAME: o.command } : {}) });
@@ -81,6 +88,11 @@ export function setup(o: Setup = {}) {
     proxy: o.proxy,
     openRooms: o.openRooms,
     children: o.children,
+    version: VERSION,
+    control: o.control,
+    timeout: o.timeout,
+    doctor: o.doctor,
+    doctorCookie: o.doctorCookie,
   });
   const base = config.publicUrl;
   /** The handler for requests that must answer (undefined only follows an upgrade). */

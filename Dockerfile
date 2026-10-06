@@ -26,13 +26,15 @@ COPY web/package.json web/
 RUN bun install --frozen-lockfile --production
 
 # Child binaries for the target arch, sha256-checked against versions.json.
-# Repo layout kept: bins.ts finds versions.json one directory above itself.
+# Repo layout kept (versions.json, scripts/, server/src/): server/src/bins.ts
+# imports ../../versions.json and archive.ts and nothing else of server/.
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS bins
 # Set by buildx and podman from --platform (default: the host's).
 ARG TARGETOS TARGETARCH
 WORKDIR /b
 COPY versions.json ./
 COPY scripts/bins.ts scripts/
+COPY server/src/bins.ts server/src/archive.ts server/src/
 RUN bun scripts/bins.ts --os "$TARGETOS" --arch "$TARGETARCH" --out /out livekit caddy cloudflared
 
 # Same base as the build: busybox wget stays available for the compose healthcheck.
@@ -54,8 +56,12 @@ COPY --from=build /app/server/test server/test
 # server/test reads it (every key is a KNOWN_KEY); also a reference config for `docker run`.
 COPY deploy/telinha.env.example deploy/
 COPY --from=build /app/web/dist web/dist
-# The smoke test ships in the image so `run --rm <tag> sh scripts/smoke.sh` needs no mount.
+# The smoke test ships in the image so `run --rm --entrypoint sh <tag> scripts/smoke.sh` needs no mount.
 COPY scripts/smoke.sh scripts/
 USER bun
 VOLUME /telinha/data
-CMD ["bun", "server/src/index.ts"]
+# The program is the entrypoint so `docker run ... <image> setup --docker` and
+# `docker exec telinha bun server/src/index.ts doctor` read like the native CLI.
+# No ENV for UPNP/AUTO_UPDATE: an image ENV would override telinha.env.
+ENTRYPOINT ["bun", "server/src/index.ts"]
+CMD ["run"]

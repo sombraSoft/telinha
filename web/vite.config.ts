@@ -21,7 +21,14 @@ export default defineConfig({
   base: '/r/',
   plugins: [svelte(), rootRedirect()],
   // livekit-client alone is ~450 kB minified; one chunk is fine for this page.
-  build: { outDir: 'dist', emptyOutDir: true, chunkSizeWarningLimit: 800 },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 800,
+    // Two pages under /r/: the room page and the phone test (served at /doctor).
+    // livekit-client becomes a chunk both share in assets/.
+    rolldownOptions: { input: { index: 'index.html', doctor: 'doctor.html' } },
+  },
   server: {
     port: 5173,
     strictPort: true,

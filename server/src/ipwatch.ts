@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { IPV4_RE } from './config.ts';
+import { lookupPublicIp } from './netinfo.ts';
 
 export interface IpWatch {
   /** Checks now, then every intervalMs; returns a stop function. */
@@ -14,15 +15,10 @@ export interface IpWatch {
 
 const TIMEOUT_MS = 10_000;
 
-const SOURCES: { url: string; parse: (body: string) => string }[] = [
-  { url: 'https://1.1.1.1/cdn-cgi/trace', parse: (b) => /^ip=(.*)$/m.exec(b)?.[1]?.trim() ?? '' },
-  { url: 'https://api.ipify.org', parse: (b) => b.trim() },
-];
-
 export function createIpWatch(o: {
   fetch: typeof fetch; intervalMs: number; log: (...a: unknown[]) => void;
   onChange: (ip: string, previous: string) => Promise<void>;
-  /** <run>/public-ip; remembers the last IP across restarts (for current(), e.g. phase-2 DDNS). */
+  /** <run>/public-ip; remembers the last IP across restarts (for current(): /internal/status). */
   statePath?: string;
 }): IpWatch {
   let ip = readState(o.statePath);
@@ -33,21 +29,7 @@ export function createIpWatch(o: {
   let failing = false;
   let running: Promise<void> | null = null;
 
-  const lookup = async (): Promise<string> => {
-    const errors: string[] = [];
-    for (const s of SOURCES) {
-      try {
-        const res = await o.fetch(s.url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const found = s.parse(await res.text());
-        if (!IPV4_RE.test(found)) throw new Error(`not an IPv4 address: ${found.slice(0, 40)}`);
-        return found;
-      } catch (e) {
-        errors.push(`${new URL(s.url).host}: ${(e as Error).message}`);
-      }
-    }
-    throw new Error(errors.join('; '));
-  };
+  const lookup = () => lookupPublicIp(o.fetch, TIMEOUT_MS);
 
   const persist = (value: string) => {
     if (!o.statePath) return;

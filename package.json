@@ -14,6 +14,7 @@
     "test": "bun test ./server ./web",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p .",
     "e2e": "playwright test",
+    "compile": "bun scripts/build-binary.ts",
     "image": "bun scripts/image.ts",
     "bins": "bun scripts/bins.ts",
     "versions": "bun scripts/versions.ts"

@@ -5,6 +5,7 @@
 set -eu
 
 base=http://127.0.0.1:18081
+data=/tmp/smoke
 
 fail() {
 	echo "smoke: FAIL: $*" >&2
@@ -29,11 +30,15 @@ cloudflared --version
 step 'server (INGRESS=external, MEDIA=self)'
 # LIVEKIT_NODE_IP skips STUN (the container may have no internet); LiveKit
 # logs an error for an API secret under 32 characters. Not a real secret.
+# No router and no self-update in a test; exec makes $! (and the kill) bun itself.
 lk_secret=smoke-secret-of-at-least-32-chars # gitleaks:allow
-INGRESS=external MEDIA=self DEV_USER=1:smoke PUBLIC_URL=http://localhost:18081 LISTEN=127.0.0.1:18081 \
-	LIVEKIT_PORT=17880 MEDIA_TCP_PORT=17881 MEDIA_UDP_PORT=17882 LIVEKIT_NODE_IP=127.0.0.1 \
-	DATA_DIR=/tmp/smoke COOKIE_SECRET=smoke LIVEKIT_API_KEY=smoke LIVEKIT_API_SECRET="$lk_secret" \
-	bun server/src/index.ts &
+serve() {
+	exec env INGRESS=external MEDIA=self DEV_USER=1:smoke PUBLIC_URL=http://localhost:18081 LISTEN=127.0.0.1:18081 \
+		LIVEKIT_PORT=17880 MEDIA_TCP_PORT=17881 MEDIA_UDP_PORT=17882 LIVEKIT_NODE_IP=127.0.0.1 \
+		DATA_DIR="$data" COOKIE_SECRET=smoke LIVEKIT_API_KEY=smoke LIVEKIT_API_SECRET="$lk_secret" \
+		UPNP=off AUTO_UPDATE=off bun server/src/index.ts run
+}
+serve &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
 
@@ -59,10 +64,13 @@ case $proxied in *'"ok":true'*) ;; *) fail 'forwarded /healthz is not ok' ;; esa
 # One request with redirects not followed (busybox wget always follows them and
 # has no cookie jar). Sets $out to "<status> <location> <first Set-Cookie
 # name=value>" ("-" for a missing header) and splits it into $status,
-# $location and $setcookie.
+# $location and $setcookie. A third argument is sent as a bearer token.
 probe() {
-	out=$(URL=$1 COOKIE=${2-} bun -e '
-		const r = await fetch(process.env.URL, { redirect: "manual", headers: process.env.COOKIE ? { cookie: process.env.COOKIE } : {} });
+	out=$(URL=$1 COOKIE=${2-} TOKEN=${3-} bun -e '
+		const headers = {};
+		if (process.env.COOKIE) headers.cookie = process.env.COOKIE;
+		if (process.env.TOKEN) headers.authorization = "Bearer " + process.env.TOKEN;
+		const r = await fetch(process.env.URL, { redirect: "manual", headers });
 		const cookie = (r.headers.get("set-cookie") ?? "").split(";")[0];
 		console.log(r.status, r.headers.get("location") || "-", cookie || "-");
 	') || fail "request to $1 failed"
@@ -90,5 +98,55 @@ case $page in *'telinha-command'*) ;; *) fail '/r/ lacks the telinha-command met
 step 'proxy: /livekit/ outside the /rtc allowlist -> 404'
 probe "$base/livekit/twirp/x" "$cookie"
 [ "$status" = 404 ] || fail "/livekit/twirp/x is not a 404: $out"
+
+step 'page assets need no login'
+for f in web/dist/assets/*.js; do
+	asset=${f##*/}
+	break
+done
+probe "$base/r/assets/$asset"
+[ "$status" = 200 ] || fail "/r/assets/$asset without a cookie is not a 200: $out"
+
+step 'doctor: nothing without a one-time link'
+probe "$base/doctor"
+[ "$status" = 404 ] || fail "/doctor without a token is not a 404: $out"
+
+step 'control endpoint: 404 without the token or through a proxy, status with it'
+probe "$base/internal/status"
+[ "$status" = 404 ] || fail "/internal/status without a token is not a 404: $out"
+token=$(cat "$data/run/control.token") || fail 'no control token'
+probe "$base/internal/status" '' "$token"
+[ "$status" = 200 ] || fail "/internal/status with the token is not a 200: $out"
+body=$(wget -qO- --header "Authorization: Bearer $token" "$base/internal/status")
+echo "status: $body"
+case $body in *'"version"'*) ;; *) fail '/internal/status has no version' ;; esac
+forwarded=$(wget -qO- --header "Authorization: Bearer $token" --header 'X-Forwarded-For: 1.2.3.4' "$base/internal/status" 2>/dev/null || true)
+[ -z "$forwarded" ] || fail '/internal/status answers a forwarded request'
+
+step 'a second run on the same data refuses to start and leaves the first alone'
+second=0
+(serve) >/tmp/smoke-second.log 2>&1 || second=$?
+cat /tmp/smoke-second.log
+[ "$second" = 1 ] || fail "second run exited $second, want 1"
+grep -q 'already running' /tmp/smoke-second.log || fail 'second run did not say it is already running'
+[ "$(cat "$data/run/control.token")" = "$token" ] || fail 'second run replaced the control token'
+kill -0 "$pid" 2>/dev/null || fail 'the first server died'
+case $(wget -qO- "$base/healthz") in *'"livekit":"up"'*) ;; *) fail 'livekit not up after the second run' ;; esac
+
+step 'control endpoint: graceful stop'
+URL="$base/internal/shutdown" TOKEN=$token bun -e '
+	const r = await fetch(process.env.URL, {
+		method: "POST",
+		headers: { authorization: "Bearer " + process.env.TOKEN, "content-type": "application/json" },
+		body: JSON.stringify({ reason: "stop" }),
+	});
+	if (r.status !== 202) throw new Error("shutdown answered " + r.status);
+' || fail '/internal/shutdown was not accepted'
+code=0
+wait "$pid" || code=$?
+trap - EXIT
+[ "$code" = 0 ] || fail "exit $code after /internal/shutdown"
+[ ! -e "$data/run/control.token" ] || fail 'control token left behind'
+[ ! -e "$data/run/telinha.pid" ] || fail 'pidfile left behind'
 
 step 'ok'

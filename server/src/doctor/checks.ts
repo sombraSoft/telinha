@@ -1,0 +1,1091 @@
+// The doctor's checks, in the order a person fixes things: config, binaries,
+// Discord, the public address, the local service, the router, updates. Every
+// outside call goes through the CheckContext so tests run offline.
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import versionsJson from '../../../versions.json' with { type: 'json' };
+import { KNOWN_KEYS, type Config } from '../config.ts';
+import { parseEnvFile } from '../envfile.ts';
+import type { Locale } from '../i18n.ts';
+import * as netinfo from '../netinfo.ts';
+import { SYSCTL_SCRIPT } from '../service/systemd.ts';
+import type {
+  Check, CheckContext, CheckResult, CheckStatus, MapperStatusLike, MappingLike, NatProbeLike, NetLike, SysLike,
+  UpdateStatusLike,
+} from './types.ts';
+
+const DISCORD_API = 'https://discord.com/api/v10';
+const DAY_MS = 86_400_000;
+// VIEW_CHANNEL + SEND_MESSAGES + READ_MESSAGE_HISTORY
+const BOT_PERMISSIONS = 68608;
+// Either the limited (unverified app) or the full intent bit counts.
+const PRESENCE_BITS = (1 << 12) | (1 << 13);
+const MEMBERS_BITS = (1 << 14) | (1 << 15);
+
+// ---------- strings ----------
+
+const en = {
+  'title.config': 'Configuration',
+  'title.binaries': 'Helper programs',
+  'title.discord-token': 'Discord bot token',
+  'title.discord-intents': 'Discord intents',
+  'title.discord-guild': 'Discord server',
+  'title.discord-role': 'Discord role',
+  'title.discord-channels': 'Discord channels',
+  'title.discord-redirect': 'Discord login redirect',
+  'title.public-ip': 'Public IP',
+  'title.dns': 'DNS',
+  'title.tls': 'HTTPS certificate',
+  'title.listeners': 'Local listeners',
+  'title.service': 'Background service',
+  'title.gateway': 'Router',
+  'title.cgnat': 'Carrier NAT',
+  'title.mappings': 'Port forwarding',
+  'title.update': 'Updates',
+
+  skipLocal: 'Skipped (--local: no internet checks).',
+  timedOut: 'Did not finish within {s} s.',
+  crashed: 'The check itself failed: {error}',
+  needConfig: 'Skipped: fix the configuration first.',
+  devLogin: 'Skipped: DEV_USER fake login does not use Discord.',
+  needToken: 'Skipped: the bot token check did not pass.',
+  needGuild: 'Skipped: the bot is not in the server yet.',
+  discordUnreachable: 'Could not reach Discord: {error}',
+  discordHttp: 'Discord answered HTTP {status}.',
+  rerunSetup: 'Run telinha setup.',
+
+  configOk: 'telinha.env is valid.',
+  configEnvOnly: 'No telinha.env: the configuration comes from the environment.',
+  configError: 'The configuration has an error: {error}',
+  configErrorFix: 'Edit {file} (or run telinha setup again).',
+  configWarning: '{warning}',
+  configUnknown: 'Unknown key {key} in telinha.env (typo?).',
+  permSkipped: 'No telinha.env, so there are no file permissions to check.',
+  permOpen: 'telinha.env can be read by other users of this computer, and it holds secrets.',
+  permOpenFixLinux: 'Run: chmod 600 "{file}"',
+  permOpenFixWindows: 'Run telinha setup again (it locks the file down), or: icacls "{file}" /inheritance:r /grant:r "%USERNAME%:F" "*S-1-5-18:F" "*S-1-5-32-544:F"',
+  permUnknown: 'Could not read the permissions of telinha.env.',
+
+  binOk: 'All helper programs are in place.',
+  binNone: 'No helper programs needed for this configuration.',
+  binLine: '{tool} {version} ({where})',
+  binPath: '{tool} found on PATH ({where})',
+  binMissing: '{tool} is missing.',
+  binMissingFixCompiled: 'Start telinha (it downloads missing programs) or run telinha setup.',
+  binMissingFixDev: 'Run: bun scripts/bins.ts',
+  binStale: '{tool} {have} is installed, {want} is pinned: the next start downloads {want}.',
+  binNoSidecar: '{tool} in {dir} has no version record: the next start downloads it again.',
+
+  tokenOk: 'The token works (application "{name}").',
+  tokenBad: 'Discord rejected DISCORD_TOKEN.',
+  tokenBadFix: 'Developer Portal → your app → Bot → Reset Token, then run telinha setup.',
+  clientIdMismatch: 'DISCORD_CLIENT_ID {have} is not this bot\'s application ({want}).',
+  clientIdMismatchFix: 'Set DISCORD_CLIENT_ID={want} (or run telinha setup).',
+
+  intentsOk: 'Presence and Server Members intents are on.',
+  intentsMissing: 'Intents switched off: {list}. The bot cannot log in without them.',
+  intentsFix: 'Run telinha setup (it switches them on), or toggle them on the Bot page of the Developer Portal.',
+  intentPresence: 'Presence',
+  intentMembers: 'Server Members',
+
+  guildOk: 'The bot is in "{name}".',
+  guildMissing: 'The bot is not in the server GUILD_ID {id}.',
+  guildMissingFix: 'Invite it: {url}',
+
+  roleOk: 'Role "{name}" exists.',
+  roleMissing: 'ROLE_ID {id} is not a role in this server.',
+  roleFix: 'Run telinha setup again: it lists the server\'s roles to pick from.',
+
+  channelsAll: 'No CHANNEL_IDS: the command works in every channel.',
+  channelsOk: 'Command channels: {list}.',
+  channelMissing: 'CHANNEL_IDS has {id}, which is not a channel in this server.',
+  channelWrongType: 'Channel #{name} ({id}) is not a text or announcement channel.',
+  channelsFix: 'Run telinha setup again: it lists the channels the bot can see to pick from.',
+
+  redirectOk: 'Login redirect {uri} is registered.',
+  redirectMissing: 'Discord does not know the login redirect {uri}: login fails with "Invalid OAuth2 redirect_uri".',
+  redirectFix: 'Developer Portal → your app → OAuth2 → Redirects → add {uri}, then Save Changes',
+  redirectHave: 'Registered: {list}',
+
+  ipOk: 'The internet sees this network as {ip}.',
+  ipFail: 'Could not find the public IP: is this computer offline?',
+
+  dnsLocal: 'Skipped: PUBLIC_URL points at this computer.',
+  dnsIp: 'Skipped: PUBLIC_URL uses an IP address, no DNS involved.',
+  dnsFail: '{host} does not resolve: {error}',
+  dnsFailFix: 'Create an A record for {host} pointing at {ip}.',
+  dnsTunnelOk: '{host} resolves ({ips}); Cloudflare routes it through the tunnel.',
+  dnsOk: '{host} points at {ip}.',
+  dnsUnknownIp: '{host} resolves to {ips}; the public IP is unknown, so it could not be compared.',
+  dnsWrong: '{host} points at {ips}, but the public IP is {ip}.',
+  dnsWrongFix: 'Change the A record of {host} to {ip}.',
+  dnsDuck: 'DuckDNS points {host} at {ips}, the public IP is {ip}; the running service updates it.',
+  dnsExternal: '{host} points at {ips}, not at this network ({ip}): fine if another proxy in front forwards to telinha.',
+
+  tlsHttp: 'Skipped: PUBLIC_URL is plain http.',
+  tlsBad: 'The certificate of {host} is not valid: {error}',
+  tlsBadFixDirect: 'Caddy gets the certificate by itself once ports 80 and 443 reach this computer: see the DNS, listeners and port forwarding checks.',
+  tlsBadFix: 'Check the proxy or tunnel in front of telinha.',
+  tlsExpired: 'The certificate of {host} expired.',
+  tlsSoon: 'The certificate of {host} expires in {days} days.',
+  tlsSoonFix: 'Caddy renews it on its own when it can reach Let\'s Encrypt; check the logs.',
+  tlsOk: 'Valid certificate by {issuer}, {days} days left; {url}/healthz answers.',
+  healthFail: '{url}/healthz did not answer from the internet: {error}',
+  healthFailFix: 'Check that telinha is running (listeners check) and that the ingress reaches it.',
+
+  listenDown: 'telinha is not running on this computer ({url}).',
+  listenDownFix: 'Start it: telinha service start (or telinha run).',
+  listenOk: 'telinha answers on {url}, every child process is up.',
+  listenRooms: 'Open rooms: {n}',
+  listenChild: '{name}: {state}',
+  childDown: 'Child processes not up: {list}.',
+  livekitDown: 'LiveKit does not answer on port {port}.',
+  mediaTcpDown: 'Nothing accepts connections on media TCP port {port}.',
+  httpsDown: 'Nothing listens on HTTPS port {port}.',
+  lowPortFix: 'Ports below 1024 need root on Linux. Allow them once (it survives every update): {cmd}. Or set HTTPS_PORT=8443 and HTTP_PORT=0 and have the router forward 443 to 8443. telinha setup offers both.',
+  fwUfw: 'If ufw is active, open the ports: {cmd}',
+  fwFirewalld: 'If firewalld is running, open the ports: {cmd}',
+
+  serviceNone: 'Skipped: not a native install (Docker, a source checkout) or no service manager here.',
+  serviceNotInstalled: 'telinha is not installed as a background service: it stops when you close the terminal.',
+  serviceNotInstalledFix: 'Run: telinha service install',
+  serviceNotInstalledFixWin: 'Run telinha setup again: it installs the service (and the firewall rules) with one administrator prompt.',
+  serviceNotInstalledFixRoot: 'Run: sudo telinha service install',
+  serviceStopped: 'The service is installed but not running.',
+  serviceStoppedFix: 'Run: telinha service start',
+  serviceDisabled: 'The service does not start with the computer.',
+  serviceDisabledFix: 'Run: telinha service install (again)',
+  serviceDisabledFixWin: 'Run telinha setup again: it re-registers the service with one administrator prompt.',
+  serviceDisabledFixRoot: 'Run: sudo telinha service install (again)',
+  serviceOk: 'The service is installed, enabled and running.',
+
+  natNone: 'Skipped: the router probe is not available here.',
+  natPublicHost: 'This computer has a public address ({ip}); no router in the way.',
+  gatewayOk: 'Router at {gw} speaks {kind}; it reports external IP {ip}.',
+  gatewayNoIp: 'Router at {gw} speaks {kind} but did not report its external IP.',
+  gatewayNone: 'No router answered UPnP, NAT-PMP or PCP.',
+  gatewayNoneFix: 'Open the ports on the router by hand: {list}',
+
+  cgnatSkip: 'Skipped: no router to ask for its external IP.',
+  cgnatOk: 'The router has the public IP {ip}.',
+  cgnatFail: 'Your internet provider uses carrier NAT (router external IP {ip}): nobody on the internet can reach this network.',
+  cgnatFailFix: 'For the web side use INGRESS=tunnel or a VPS. Screen sharing still needs a public IP: ask your provider for one (a public IPv4 or a CGNAT opt-out).',
+  doubleNat: 'Double NAT: the router\'s external IP {ip} is a private address, so another router (often the provider\'s modem) sits in front.',
+  doubleNatFix: 'Put the provider\'s modem in bridge mode, or forward the ports on both devices: {list}',
+  natMismatch: 'The router reports {ext}, but the internet sees {ip}: there is probably another NAT in front.',
+
+  mapSkipNoPorts: 'Skipped: this configuration needs no inbound ports.',
+  mapSkipNoGw: 'Skipped: no router supports automatic port forwarding.',
+  mapSkipOff: 'Skipped: UPNP=off. Forward by hand: {list}',
+  mapSkipNoStatus: 'Skipped: the running service opens the ports; start it to see them.',
+  mapOk: 'Every needed port is forwarded: {list}.',
+  mapPartial: 'Not forwarded: {list}.',
+  mapPartialFix: 'Forward them by hand on the router to {ip}: {list}',
+
+  updSkip: 'Skipped: Docker/dev, updates are not managed here.',
+  updOk: 'Up to date ({version}).',
+  updUnknown: 'Running {version}; the newest release is unknown.',
+  updAvailable: '{latest} is available (running {version}).',
+  updAvailableFix: 'It installs by itself when no room is open, or now: telinha update --now',
+  updStaged: 'Update to {tag} installed, waiting for the restart to confirm it.',
+  updFailed: 'Update to {tag} failed ({reason}); it is retried when a newer release appears.',
+  updFailedFix: 'Retry now: telinha update --now',
+  updPending: '{tag} is published but its files are not ready yet; retried automatically.',
+} as const;
+
+type Key = keyof typeof en;
+type Dict = { readonly [K in Key]: string };
+
+const ptBR: Dict = {
+  'title.config': 'Configuração',
+  'title.binaries': 'Programas auxiliares',
+  'title.discord-token': 'Token do bot',
+  'title.discord-intents': 'Intents do Discord',
+  'title.discord-guild': 'Servidor do Discord',
+  'title.discord-role': 'Cargo do Discord',
+  'title.discord-channels': 'Canais do Discord',
+  'title.discord-redirect': 'Redirect do login',
+  'title.public-ip': 'IP público',
+  'title.dns': 'DNS',
+  'title.tls': 'Certificado HTTPS',
+  'title.listeners': 'Portas locais',
+  'title.service': 'Serviço em segundo plano',
+  'title.gateway': 'Roteador',
+  'title.cgnat': 'NAT da operadora',
+  'title.mappings': 'Redirecionamento de portas',
+  'title.update': 'Atualizações',
+
+  skipLocal: 'Pulado (--local: sem testes de internet).',
+  timedOut: 'Não terminou em {s} s.',
+  crashed: 'O próprio teste falhou: {error}',
+  needConfig: 'Pulado: arruma a configuração primeiro.',
+  devLogin: 'Pulado: o login falso DEV_USER não usa o Discord.',
+  needToken: 'Pulado: o teste do token do bot não passou.',
+  needGuild: 'Pulado: o bot ainda não está no servidor.',
+  discordUnreachable: 'Não deu pra falar com o Discord: {error}',
+  discordHttp: 'O Discord respondeu HTTP {status}.',
+  rerunSetup: 'Roda o telinha setup.',
+
+  configOk: 'O telinha.env está certo.',
+  configEnvOnly: 'Sem telinha.env: a configuração vem das variáveis de ambiente.',
+  configError: 'A configuração tem um erro: {error}',
+  configErrorFix: 'Edita o {file} (ou roda o telinha setup de novo).',
+  configWarning: '{warning}',
+  configUnknown: 'Chave desconhecida {key} no telinha.env (erro de digitação?).',
+  permSkipped: 'Sem telinha.env, então não há permissões de arquivo pra conferir.',
+  permOpen: 'Outros usuários deste computador conseguem ler o telinha.env, e ele guarda segredos.',
+  permOpenFixLinux: 'Roda: chmod 600 "{file}"',
+  permOpenFixWindows: 'Roda o telinha setup de novo (ele tranca o arquivo), ou: icacls "{file}" /inheritance:r /grant:r "%USERNAME%:F" "*S-1-5-18:F" "*S-1-5-32-544:F"',
+  permUnknown: 'Não deu pra ler as permissões do telinha.env.',
+
+  binOk: 'Todos os programas auxiliares estão no lugar.',
+  binNone: 'Esta configuração não precisa de programas auxiliares.',
+  binLine: '{tool} {version} ({where})',
+  binPath: '{tool} achado no PATH ({where})',
+  binMissing: 'Falta o {tool}.',
+  binMissingFixCompiled: 'Inicia a Telinha (ela baixa o que falta) ou roda o telinha setup.',
+  binMissingFixDev: 'Roda: bun scripts/bins.ts',
+  binStale: '{tool} {have} está instalado, a versão fixada é {want}: a próxima inicialização baixa a {want}.',
+  binNoSidecar: '{tool} em {dir} não tem registro de versão: a próxima inicialização baixa de novo.',
+
+  tokenOk: 'O token funciona (aplicação "{name}").',
+  tokenBad: 'O Discord recusou o DISCORD_TOKEN.',
+  tokenBadFix: 'Developer Portal → teu app → Bot → Reset Token, depois roda o telinha setup.',
+  clientIdMismatch: 'DISCORD_CLIENT_ID {have} não é a aplicação deste bot ({want}).',
+  clientIdMismatchFix: 'Põe DISCORD_CLIENT_ID={want} (ou roda o telinha setup).',
+
+  intentsOk: 'As intents Presence e Server Members estão ligadas.',
+  intentsMissing: 'Intents desligadas: {list}. O bot não entra sem elas.',
+  intentsFix: 'Roda o telinha setup (ele liga elas), ou liga na página Bot do Developer Portal.',
+  intentPresence: 'Presence',
+  intentMembers: 'Server Members',
+
+  guildOk: 'O bot está em "{name}".',
+  guildMissing: 'O bot não está no servidor GUILD_ID {id}.',
+  guildMissingFix: 'Convida ele: {url}',
+
+  roleOk: 'O cargo "{name}" existe.',
+  roleMissing: 'ROLE_ID {id} não é um cargo deste servidor.',
+  roleFix: 'Roda o telinha setup de novo: ele lista os cargos do servidor pra escolher.',
+
+  channelsAll: 'Sem CHANNEL_IDS: o comando funciona em qualquer canal.',
+  channelsOk: 'Canais do comando: {list}.',
+  channelMissing: 'CHANNEL_IDS tem {id}, que não é um canal deste servidor.',
+  channelWrongType: 'O canal #{name} ({id}) não é de texto nem de anúncios.',
+  channelsFix: 'Roda o telinha setup de novo: ele lista os canais que o bot vê pra escolher.',
+
+  redirectOk: 'O redirect do login {uri} está cadastrado.',
+  redirectMissing: 'O Discord não conhece o redirect {uri}: o login falha com "Invalid OAuth2 redirect_uri".',
+  redirectFix: 'Developer Portal → teu app → OAuth2 → Redirects → adiciona {uri} e clica em Save Changes',
+  redirectHave: 'Cadastrados: {list}',
+
+  ipOk: 'A internet vê esta rede como {ip}.',
+  ipFail: 'Não deu pra descobrir o IP público: o computador está sem internet?',
+
+  dnsLocal: 'Pulado: PUBLIC_URL aponta pra este computador.',
+  dnsIp: 'Pulado: PUBLIC_URL usa um endereço IP, sem DNS no meio.',
+  dnsFail: '{host} não resolve: {error}',
+  dnsFailFix: 'Cria um registro A pra {host} apontando pra {ip}.',
+  dnsTunnelOk: '{host} resolve ({ips}); a Cloudflare leva pelo túnel.',
+  dnsOk: '{host} aponta pra {ip}.',
+  dnsUnknownIp: '{host} resolve pra {ips}; o IP público é desconhecido, então não deu pra comparar.',
+  dnsWrong: '{host} aponta pra {ips}, mas o IP público é {ip}.',
+  dnsWrongFix: 'Muda o registro A de {host} pra {ip}.',
+  dnsDuck: 'O DuckDNS aponta {host} pra {ips}, o IP público é {ip}; o serviço rodando atualiza isso.',
+  dnsExternal: '{host} aponta pra {ips}, não pra esta rede ({ip}): tudo bem se outro proxy na frente repassa pra Telinha.',
+
+  tlsHttp: 'Pulado: PUBLIC_URL é http simples.',
+  tlsBad: 'O certificado de {host} não é válido: {error}',
+  tlsBadFixDirect: 'O Caddy pega o certificado sozinho quando as portas 80 e 443 chegam neste computador: olha os testes de DNS, portas locais e redirecionamento.',
+  tlsBadFix: 'Confere o proxy ou o túnel na frente da Telinha.',
+  tlsExpired: 'O certificado de {host} venceu.',
+  tlsSoon: 'O certificado de {host} vence em {days} dias.',
+  tlsSoonFix: 'O Caddy renova sozinho quando alcança o Let\'s Encrypt; olha os logs.',
+  tlsOk: 'Certificado válido de {issuer}, faltam {days} dias; {url}/healthz responde.',
+  healthFail: '{url}/healthz não respondeu pela internet: {error}',
+  healthFailFix: 'Confere se a Telinha está rodando (teste de portas locais) e se a entrada chega nela.',
+
+  listenDown: 'A Telinha não está rodando neste computador ({url}).',
+  listenDownFix: 'Inicia: telinha service start (ou telinha run).',
+  listenOk: 'A Telinha responde em {url}, todos os processos filhos estão de pé.',
+  listenRooms: 'Salas abertas: {n}',
+  listenChild: '{name}: {state}',
+  childDown: 'Processos filhos fora do ar: {list}.',
+  livekitDown: 'O LiveKit não responde na porta {port}.',
+  mediaTcpDown: 'Nada aceita conexões na porta TCP de mídia {port}.',
+  httpsDown: 'Nada escuta na porta HTTPS {port}.',
+  lowPortFix: 'No Linux, portas abaixo de 1024 precisam de root. Libera uma vez (vale pra todas as atualizações): {cmd}. Ou usa HTTPS_PORT=8443 e HTTP_PORT=0 e faz o roteador mandar a 443 pra 8443. O telinha setup oferece os dois.',
+  fwUfw: 'Se o ufw estiver ativo, abre as portas: {cmd}',
+  fwFirewalld: 'Se o firewalld estiver rodando, abre as portas: {cmd}',
+
+  serviceNone: 'Pulado: não é uma instalação nativa (Docker, código-fonte) ou não há gerenciador de serviços aqui.',
+  serviceNotInstalled: 'A Telinha não está instalada como serviço: ela para quando fecha o terminal.',
+  serviceNotInstalledFix: 'Roda: telinha service install',
+  serviceNotInstalledFixWin: 'Roda o telinha setup de novo: ele instala o serviço (e as regras de firewall) com um pedido de administrador.',
+  serviceNotInstalledFixRoot: 'Roda: sudo telinha service install',
+  serviceStopped: 'O serviço está instalado mas parado.',
+  serviceStoppedFix: 'Roda: telinha service start',
+  serviceDisabled: 'O serviço não inicia junto com o computador.',
+  serviceDisabledFix: 'Roda: telinha service install (de novo)',
+  serviceDisabledFixWin: 'Roda o telinha setup de novo: ele registra o serviço de novo com um pedido de administrador.',
+  serviceDisabledFixRoot: 'Roda: sudo telinha service install (de novo)',
+  serviceOk: 'O serviço está instalado, habilitado e rodando.',
+
+  natNone: 'Pulado: o teste do roteador não está disponível aqui.',
+  natPublicHost: 'Este computador tem endereço público ({ip}); nenhum roteador no meio.',
+  gatewayOk: 'O roteador em {gw} fala {kind}; ele informa o IP externo {ip}.',
+  gatewayNoIp: 'O roteador em {gw} fala {kind} mas não informou o IP externo.',
+  gatewayNone: 'Nenhum roteador respondeu UPnP, NAT-PMP ou PCP.',
+  gatewayNoneFix: 'Abre as portas no roteador na mão: {list}',
+
+  cgnatSkip: 'Pulado: nenhum roteador pra perguntar o IP externo.',
+  cgnatOk: 'O roteador tem o IP público {ip}.',
+  cgnatFail: 'Tua operadora usa NAT de operadora (IP externo do roteador {ip}): ninguém na internet alcança esta rede.',
+  cgnatFailFix: 'Pro lado web usa INGRESS=tunnel ou uma VPS. O compartilhamento de tela ainda precisa de IP público: pede um pra operadora (IPv4 público ou sair do CGNAT).',
+  doubleNat: 'NAT duplo: o IP externo do roteador {ip} é privado, então tem outro roteador na frente (geralmente o modem da operadora).',
+  doubleNatFix: 'Põe o modem da operadora em modo bridge, ou redireciona as portas nos dois aparelhos: {list}',
+  natMismatch: 'O roteador informa {ext}, mas a internet vê {ip}: provavelmente tem outro NAT na frente.',
+
+  mapSkipNoPorts: 'Pulado: esta configuração não precisa de portas de entrada.',
+  mapSkipNoGw: 'Pulado: nenhum roteador aceita redirecionamento automático.',
+  mapSkipOff: 'Pulado: UPNP=off. Redireciona na mão: {list}',
+  mapSkipNoStatus: 'Pulado: o serviço rodando abre as portas; inicia ele pra ver.',
+  mapOk: 'Todas as portas necessárias estão redirecionadas: {list}.',
+  mapPartial: 'Sem redirecionamento: {list}.',
+  mapPartialFix: 'Redireciona na mão no roteador pra {ip}: {list}',
+
+  updSkip: 'Pulado: Docker/dev, as atualizações não são gerenciadas aqui.',
+  updOk: 'Atualizada ({version}).',
+  updUnknown: 'Rodando {version}; a versão mais nova é desconhecida.',
+  updAvailable: '{latest} está disponível (rodando {version}).',
+  updAvailableFix: 'Instala sozinha quando nenhuma sala estiver aberta, ou agora: telinha update --now',
+  updStaged: 'Atualização pra {tag} instalada, esperando a reinicialização confirmar.',
+  updFailed: 'A atualização pra {tag} falhou ({reason}); tenta de novo quando sair uma versão mais nova.',
+  updFailedFix: 'Tenta agora: telinha update --now',
+  updPending: '{tag} foi publicada mas os arquivos ainda não estão prontos; tenta de novo sozinha.',
+};
+
+const dicts: Record<Locale, Dict> = { en, 'pt-BR': ptBR };
+
+function tr(locale: Locale, key: Key, params: Record<string, string | number> = {}): string {
+  const s = dicts[locale][key] ?? en[key];
+  return s.replace(/\{(\w+)\}/g, (m, k: string) => (Object.hasOwn(params, k) ? String(params[k]) : m));
+}
+
+/** Localized title of a check id; the id itself for an unknown one. */
+export function checkTitle(id: string, locale: Locale): string {
+  const key = `title.${id}`;
+  return Object.hasOwn(en, key) ? tr(locale, key as Key) : id;
+}
+
+// ---------- helpers ----------
+
+interface Finding { status: Exclude<CheckStatus, 'skip'>; summary: string; fix?: string }
+
+const RANK: Record<CheckStatus, number> = { skip: 0, ok: 1, warn: 2, fail: 3 };
+
+function make(ctx: CheckContext, id: string, status: CheckStatus, summary: string, extra: { detail?: string[]; fix?: string } = {}): CheckResult {
+  const r: CheckResult = { id, title: checkTitle(id, ctx.locale), status, summary };
+  if (extra.detail?.length) r.detail = extra.detail;
+  if (extra.fix && (status === 'warn' || status === 'fail')) r.fix = extra.fix;
+  return r;
+}
+
+/** Worst finding leads (summary + fix); the others become detail lines. */
+function combine(ctx: CheckContext, id: string, findings: Finding[], okSummary: string, detail: string[] = []): CheckResult {
+  const bad = findings.filter((f) => f.status !== 'ok');
+  if (!bad.length) return make(ctx, id, 'ok', okSummary, { detail });
+  const worst = bad.reduce((a, b) => (RANK[b.status] > RANK[a.status] ? b : a));
+  const rest = bad.filter((f) => f !== worst).map((f) => f.summary);
+  return make(ctx, id, worst.status, worst.summary, { detail: [...rest, ...detail], fix: worst.fix });
+}
+
+const memo = new WeakMap<CheckContext, Map<string, Promise<unknown>>>();
+/** One lookup per doctor run, shared by the checks that need it. */
+function once<T>(ctx: CheckContext, key: string, fn: () => Promise<T>): Promise<T> {
+  let m = memo.get(ctx);
+  if (!m) memo.set(ctx, (m = new Map()));
+  if (!m.has(key)) m.set(key, fn());
+  return m.get(key) as Promise<T>;
+}
+
+const realSys: SysLike = {
+  platform: process.platform,
+  isRoot: process.getuid?.() === 0,
+  readText(path) {
+    try {
+      return readFileSync(path, 'utf8');
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw e;
+    }
+  },
+  fileMode(path) {
+    try {
+      return statSync(path).mode;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw e;
+    }
+  },
+  fileUid(path) {
+    try {
+      return statSync(path).uid;
+    } catch {
+      return null;
+    }
+  },
+  async icacls(path) {
+    try {
+      const p = Bun.spawn(['icacls', path], { stdout: 'pipe', stderr: 'ignore' });
+      const out = await new Response(p.stdout).text();
+      return (await p.exited) === 0 ? out : null;
+    } catch {
+      return null;
+    }
+  },
+  which: (name) => Bun.which(name),
+  exists: (path) => existsSync(path),
+};
+
+const sys = (ctx: CheckContext): SysLike => ({ ...realSys, ...ctx.sys });
+const net = (ctx: CheckContext): NetLike => ctx.net ?? netinfo;
+
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+function publicIp(ctx: CheckContext): Promise<string | null> {
+  return once(ctx, 'publicIp', () => net(ctx).lookupPublicIp(ctx.fetch).catch(() => null));
+}
+
+function natProbe(ctx: CheckContext): Promise<NatProbeLike | null> {
+  return once(ctx, 'nat', async () => (ctx.nat ? ctx.nat.probe() : null));
+}
+
+function controlStatus(ctx: CheckContext) {
+  return once(ctx, 'control', async () => {
+    if (!ctx.control) return null;
+    try {
+      return (await ctx.control.available()) ? await ctx.control.status() : null;
+    } catch {
+      return null;
+    }
+  });
+}
+
+interface DiscordReply<T> { status: number; body: T | null }
+
+function discordGet<T>(ctx: CheckContext, config: Config, path: string): Promise<DiscordReply<T>> {
+  return once(ctx, `discord:${path}`, async () => {
+    const res = await ctx.fetch(`${DISCORD_API}${path}`, {
+      headers: { Authorization: `Bot ${config.discordToken}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    return { status: res.status, body: res.ok ? ((await res.json()) as T) : null };
+  });
+}
+
+interface DiscordApp { id: string; name: string; flags?: number; redirect_uris?: string[] }
+interface DiscordGuild { id: string; name: string }
+interface DiscordRole { id: string; name: string }
+interface DiscordChannel { id: string; name: string; type: number }
+
+/** Common gate for the Discord checks: a usable config with a real bot. */
+function discordConfig(ctx: CheckContext, id: string): Config | CheckResult {
+  if (!ctx.config) return make(ctx, id, 'skip', tr(ctx.locale, 'needConfig'));
+  if (ctx.config.dev) return make(ctx, id, 'skip', tr(ctx.locale, 'devLogin'));
+  return ctx.config;
+}
+
+/** The application, or the skip/fail result to return instead. */
+async function discordApp(ctx: CheckContext, id: string): Promise<DiscordApp | CheckResult> {
+  const c = discordConfig(ctx, id);
+  if (!('discordToken' in c)) return c;
+  let r: DiscordReply<DiscordApp>;
+  try {
+    r = await discordGet<DiscordApp>(ctx, c, '/applications/@me');
+  } catch (e) {
+    return make(ctx, id, id === 'discord-token' ? 'warn' : 'skip', tr(ctx.locale, 'discordUnreachable', { error: errMsg(e) }));
+  }
+  if (r.status === 200 && r.body) return r.body;
+  if (id !== 'discord-token') return make(ctx, id, 'skip', tr(ctx.locale, 'needToken'));
+  if (r.status === 401) return make(ctx, id, 'fail', tr(ctx.locale, 'tokenBad'), { fix: tr(ctx.locale, 'tokenBadFix') });
+  return make(ctx, id, 'warn', tr(ctx.locale, 'discordHttp', { status: r.status }));
+}
+
+const isResult = (x: object): x is CheckResult => 'status' in x && 'summary' in x;
+
+export function inviteUrl(clientId: string, guildId: string): string {
+  return `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=${BOT_PERMISSIONS}&guild_id=${guildId}&disable_guild_select=true`;
+}
+
+interface NeededPort { protocol: 'tcp' | 'udp'; external: number; internal: number }
+
+/** Inbound ports the router must forward for this config. */
+export function neededPorts(c: Config): NeededPort[] {
+  const out: NeededPort[] = [];
+  if (c.ingress === 'direct') {
+    const url = new URL(c.publicUrl);
+    out.push({ protocol: 'tcp', external: Number(url.port || 443), internal: c.httpsPort });
+    if (c.httpPort) out.push({ protocol: 'tcp', external: 80, internal: c.httpPort });
+  }
+  if (c.media === 'self') {
+    out.push({ protocol: 'tcp', external: c.mediaTcpPort, internal: c.mediaTcpPort });
+    out.push({ protocol: 'udp', external: c.mediaUdpPort, internal: c.mediaUdpPort });
+  }
+  return out;
+}
+
+const portLabel = (p: NeededPort) => `${p.protocol.toUpperCase()} ${p.external}${p.internal !== p.external ? ` → ${p.internal}` : ''}`;
+const portList = (ps: NeededPort[]) => ps.map(portLabel).join(', ');
+
+/** The commands that open `ports` ("443/tcp") in ufw and firewalld, for the ones installed here. */
+export function firewallCommands(ports: string[], which: (cmd: string) => string | null): { ufw?: string; firewalld?: string } {
+  if (!ports.length) return {};
+  const out: { ufw?: string; firewalld?: string } = {};
+  if (which('ufw')) out.ufw = ports.map((p) => `sudo ufw allow ${p}`).join(' && ');
+  if (which('firewall-cmd')) out.firewalld = `sudo firewall-cmd --permanent ${ports.map((p) => `--add-port=${p}`).join(' ')} && sudo firewall-cmd --reload`;
+  return out;
+}
+
+/** Linux hosts with ufw or firewalld: the commands that open what this host listens on. */
+function firewallHints(ctx: CheckContext, c: Config): string[] {
+  const s = sys(ctx);
+  if (s.platform !== 'linux') return [];
+  const cmds = firewallCommands([...new Set(neededPorts(c).map((p) => `${p.internal}/${p.protocol}`))], (cmd) => s.which(cmd));
+  const out: string[] = [];
+  if (cmds.ufw) out.push(tr(ctx.locale, 'fwUfw', { cmd: cmds.ufw }));
+  if (cmds.firewalld) out.push(tr(ctx.locale, 'fwFirewalld', { cmd: cmds.firewalld }));
+  return out;
+}
+
+/** -1, 0, 1; null when either side is not a vX.Y.Z version. Pre-release suffixes are ignored. */
+export function compareVersions(a: string, b: string): number | null {
+  const parse = (v: string) => /^v?(\d+)\.(\d+)\.(\d+)/.exec(v)?.slice(1).map(Number) ?? null;
+  const x = parse(a);
+  const y = parse(b);
+  if (!x || !y) return null;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i]! > y[i]! ? 1 : -1;
+  return 0;
+}
+
+/** Lines of `icacls` output that grant access to a broad group (English or Portuguese Windows). */
+export function broadAclEntries(icaclsOutput: string): string[] {
+  // Names are localized and the console code page may mangle accents, hence `Usu.{1,2}rios`.
+  const BROAD = /(^|[\\\s])(Everyone|Todos|Users|Usu.{1,2}rios|Authenticated Users|Usu.{1,2}rios autenticados):\(/i;
+  return icaclsOutput.split(/\r?\n/).map((l) => l.trim()).filter((l) => BROAD.test(l));
+}
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function listenBase(c: Config): string {
+  const h = c.host === '0.0.0.0' ? '127.0.0.1' : c.host === '::' ? '::1' : c.host;
+  return `http://${h.includes(':') ? `[${h}]` : h}:${c.port}`;
+}
+
+// ---------- checks ----------
+
+const config: Check = {
+  id: 'config',
+  async run(ctx) {
+    const L = ctx.locale;
+    const s = sys(ctx);
+    const findings: Finding[] = [];
+    const detail: string[] = [];
+    const text = s.readText(ctx.envFile);
+    const parsed = text === null ? null : parseEnvFile(text);
+    if (ctx.configError) {
+      findings.push({ status: 'fail', summary: tr(L, 'configError', { error: ctx.configError }), fix: tr(L, 'configErrorFix', { file: ctx.envFile }) });
+    }
+    for (const w of parsed?.warnings ?? []) findings.push({ status: 'warn', summary: w });
+    for (const k of Object.keys(parsed?.vars ?? {})) {
+      if (!KNOWN_KEYS.has(k)) findings.push({ status: 'warn', summary: tr(L, 'configUnknown', { key: k }) });
+    }
+    for (const w of ctx.config?.warnings ?? []) findings.push({ status: 'warn', summary: w });
+
+    if (text === null) {
+      detail.push(tr(L, 'permSkipped'));
+    } else if (s.platform === 'win32') {
+      const out = await s.icacls(ctx.envFile);
+      if (out === null) detail.push(tr(L, 'permUnknown'));
+      else {
+        const broad = broadAclEntries(out);
+        if (broad.length) {
+          findings.push({ status: 'fail', summary: tr(L, 'permOpen'), fix: tr(L, 'permOpenFixWindows', { file: ctx.envFile }) });
+          detail.push(...broad);
+        }
+      }
+    } else {
+      const mode = s.fileMode(ctx.envFile);
+      // The root install's file is root:telinha 0640: the service reads it through its group.
+      const groupRead = mode !== null && s.fileUid?.(ctx.envFile) === 0 ? 0o040 : 0;
+      if (mode === null) detail.push(tr(L, 'permUnknown'));
+      else if (mode & 0o077 & ~groupRead) {
+        findings.push({ status: 'fail', summary: tr(L, 'permOpen'), fix: tr(L, 'permOpenFixLinux', { file: ctx.envFile }) });
+        detail.push(`mode ${(mode & 0o777).toString(8).padStart(3, '0')}`);
+      }
+    }
+    return combine(ctx, 'config', findings, tr(L, text === null ? 'configEnvOnly' : 'configOk'), detail);
+  },
+};
+
+const PINNED: Record<string, { version: string }> = {
+  livekit: versionsJson.livekit, caddy: versionsJson.caddy, cloudflared: versionsJson.cloudflared,
+};
+
+const MEMBERS: Record<string, string> = { livekit: 'livekit-server', caddy: 'caddy', cloudflared: 'cloudflared' };
+
+const binaries: Check = {
+  id: 'binaries',
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'binaries', 'skip', tr(L, 'needConfig'));
+    const s = sys(ctx);
+    const versions = ctx.versions ?? PINNED;
+    const tools: string[] = [];
+    if (c.media === 'self') tools.push('livekit');
+    if (c.ingress === 'direct') tools.push('caddy');
+    if (c.ingress === 'tunnel') tools.push('cloudflared');
+    if (!tools.length) return make(ctx, 'binaries', 'ok', tr(L, 'binNone'));
+    const exe = s.platform === 'win32' ? '.exe' : '';
+    const findings: Finding[] = [];
+    const detail: string[] = [];
+    for (const tool of tools) {
+      const member = MEMBERS[tool]!;
+      const want = versions[tool]?.version ?? '?';
+      const local = join(ctx.paths.bin, member + exe);
+      if (s.exists(local)) {
+        const have = s.readText(join(ctx.paths.bin, `${tool}.version`))?.trim();
+        if (!have) findings.push({ status: 'warn', summary: tr(L, 'binNoSidecar', { tool, dir: ctx.paths.bin }) });
+        else if (have !== want) findings.push({ status: 'warn', summary: tr(L, 'binStale', { tool, have, want }) });
+        else detail.push(tr(L, 'binLine', { tool, version: have, where: local }));
+        continue;
+      }
+      const onPath = s.which(member);
+      if (onPath) {
+        detail.push(tr(L, 'binPath', { tool, where: onPath }));
+        continue;
+      }
+      findings.push({ status: 'fail', summary: tr(L, 'binMissing', { tool }), fix: tr(L, ctx.compiled ? 'binMissingFixCompiled' : 'binMissingFixDev') });
+    }
+    return combine(ctx, 'binaries', findings, tr(L, 'binOk'), detail);
+  },
+};
+
+const discordToken: Check = {
+  id: 'discord-token',
+  internet: true,
+  async run(ctx) {
+    const app = await discordApp(ctx, 'discord-token');
+    if (isResult(app)) return app;
+    const c = ctx.config!;
+    if (c.clientId && app.id && c.clientId !== app.id) {
+      return make(ctx, 'discord-token', 'fail', tr(ctx.locale, 'clientIdMismatch', { have: c.clientId, want: app.id }), {
+        fix: tr(ctx.locale, 'clientIdMismatchFix', { want: app.id }),
+      });
+    }
+    return make(ctx, 'discord-token', 'ok', tr(ctx.locale, 'tokenOk', { name: app.name }));
+  },
+};
+
+const discordIntents: Check = {
+  id: 'discord-intents',
+  internet: true,
+  async run(ctx) {
+    const app = await discordApp(ctx, 'discord-intents');
+    if (isResult(app)) return app;
+    const L = ctx.locale;
+    const flags = app.flags ?? 0;
+    const missing: string[] = [];
+    if (!(flags & PRESENCE_BITS)) missing.push(tr(L, 'intentPresence'));
+    if (!(flags & MEMBERS_BITS)) missing.push(tr(L, 'intentMembers'));
+    if (!missing.length) return make(ctx, 'discord-intents', 'ok', tr(L, 'intentsOk'));
+    return make(ctx, 'discord-intents', 'fail', tr(L, 'intentsMissing', { list: missing.join(', ') }), { fix: tr(L, 'intentsFix') });
+  },
+};
+
+/** The bot's guild entry, or the result to return instead. */
+async function botGuild(ctx: CheckContext, id: string): Promise<DiscordGuild | CheckResult> {
+  const c = discordConfig(ctx, id);
+  if (!('discordToken' in c)) return c;
+  const L = ctx.locale;
+  let r: DiscordReply<DiscordGuild[]>;
+  try {
+    r = await discordGet<DiscordGuild[]>(ctx, c, '/users/@me/guilds');
+  } catch (e) {
+    return make(ctx, id, id === 'discord-guild' ? 'warn' : 'skip', tr(L, 'discordUnreachable', { error: errMsg(e) }));
+  }
+  if (r.status === 401) return make(ctx, id, 'skip', tr(L, 'needToken'));
+  if (!r.body) return make(ctx, id, id === 'discord-guild' ? 'warn' : 'skip', tr(L, 'discordHttp', { status: r.status }));
+  const g = r.body.find((x) => x.id === c.guildId);
+  if (g) return g;
+  if (id !== 'discord-guild') return make(ctx, id, 'skip', tr(L, 'needGuild'));
+  const app = await discordApp(ctx, 'discord-guild');
+  const clientId = isResult(app) ? c.clientId : app.id;
+  return make(ctx, id, 'fail', tr(L, 'guildMissing', { id: c.guildId }), { fix: tr(L, 'guildMissingFix', { url: inviteUrl(clientId, c.guildId) }) });
+}
+
+const discordGuild: Check = {
+  id: 'discord-guild',
+  internet: true,
+  async run(ctx) {
+    const g = await botGuild(ctx, 'discord-guild');
+    if (isResult(g)) return g;
+    return make(ctx, 'discord-guild', 'ok', tr(ctx.locale, 'guildOk', { name: g.name }));
+  },
+};
+
+const discordRole: Check = {
+  id: 'discord-role',
+  internet: true,
+  async run(ctx) {
+    const g = await botGuild(ctx, 'discord-role');
+    if (isResult(g)) return g;
+    const L = ctx.locale;
+    const c = ctx.config!;
+    const r = await discordGet<DiscordRole[]>(ctx, c, `/guilds/${c.guildId}/roles`);
+    if (!r.body) return make(ctx, 'discord-role', 'warn', tr(L, 'discordHttp', { status: r.status }));
+    const role = r.body.find((x) => x.id === c.roleId);
+    if (role) return make(ctx, 'discord-role', 'ok', tr(L, 'roleOk', { name: role.name }));
+    return make(ctx, 'discord-role', 'fail', tr(L, 'roleMissing', { id: c.roleId }), { fix: tr(L, 'roleFix') });
+  },
+};
+
+const discordChannels: Check = {
+  id: 'discord-channels',
+  internet: true,
+  async run(ctx) {
+    const g = await botGuild(ctx, 'discord-channels');
+    if (isResult(g)) return g;
+    const L = ctx.locale;
+    const c = ctx.config!;
+    if (!c.channelIds.length) return make(ctx, 'discord-channels', 'ok', tr(L, 'channelsAll'));
+    const r = await discordGet<DiscordChannel[]>(ctx, c, `/guilds/${c.guildId}/channels`);
+    if (!r.body) return make(ctx, 'discord-channels', 'warn', tr(L, 'discordHttp', { status: r.status }));
+    const findings: Finding[] = [];
+    const names: string[] = [];
+    for (const id of c.channelIds) {
+      const ch = r.body.find((x) => x.id === id);
+      // 0 = text, 5 = announcement: the only kinds a slash command is used in here.
+      if (!ch) findings.push({ status: 'fail', summary: tr(L, 'channelMissing', { id }), fix: tr(L, 'channelsFix') });
+      else if (ch.type !== 0 && ch.type !== 5) findings.push({ status: 'fail', summary: tr(L, 'channelWrongType', { id, name: ch.name }), fix: tr(L, 'channelsFix') });
+      else names.push(`#${ch.name}`);
+    }
+    return combine(ctx, 'discord-channels', findings, tr(L, 'channelsOk', { list: names.join(', ') }));
+  },
+};
+
+const discordRedirect: Check = {
+  id: 'discord-redirect',
+  internet: true,
+  async run(ctx) {
+    const app = await discordApp(ctx, 'discord-redirect');
+    if (isResult(app)) return app;
+    const L = ctx.locale;
+    const uri = `${ctx.config!.publicUrl}/auth/callback`;
+    const have = app.redirect_uris ?? [];
+    if (have.includes(uri)) return make(ctx, 'discord-redirect', 'ok', tr(L, 'redirectOk', { uri }));
+    return make(ctx, 'discord-redirect', 'fail', tr(L, 'redirectMissing', { uri }), {
+      fix: tr(L, 'redirectFix', { uri }),
+      detail: have.length ? [tr(L, 'redirectHave', { list: have.join(', ') })] : [],
+    });
+  },
+};
+
+const publicIpCheck: Check = {
+  id: 'public-ip',
+  internet: true,
+  async run(ctx) {
+    const ip = await publicIp(ctx);
+    if (ip) return make(ctx, 'public-ip', 'ok', tr(ctx.locale, 'ipOk', { ip }));
+    return make(ctx, 'public-ip', 'fail', tr(ctx.locale, 'ipFail'));
+  },
+};
+
+const dnsCheck: Check = {
+  id: 'dns',
+  internet: true,
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'dns', 'skip', tr(L, 'needConfig'));
+    const host = c.publicHost;
+    if (LOCAL_HOSTS.has(host)) return make(ctx, 'dns', 'skip', tr(L, 'dnsLocal'));
+    if (/^[\d.]+$/.test(host) || host.startsWith('[')) return make(ctx, 'dns', 'skip', tr(L, 'dnsIp'));
+    const expected = c.livekitNodeIp ?? (await publicIp(ctx));
+    let ips: string[];
+    try {
+      ips = await net(ctx).resolveA(host);
+      if (!ips.length) throw new Error('no A record');
+    } catch (e) {
+      return make(ctx, 'dns', 'fail', tr(L, 'dnsFail', { host, error: errMsg(e) }), {
+        fix: c.ingress === 'tunnel' ? tr(L, 'rerunSetup') : tr(L, 'dnsFailFix', { host, ip: expected ?? '?' }),
+      });
+    }
+    const list = ips.join(', ');
+    // Cloudflare answers with its own anycast addresses for a tunnel.
+    if (c.ingress === 'tunnel') return make(ctx, 'dns', 'ok', tr(L, 'dnsTunnelOk', { host, ips: list }));
+    if (!expected) return make(ctx, 'dns', 'warn', tr(L, 'dnsUnknownIp', { host, ips: list }));
+    if (ips.includes(expected)) return make(ctx, 'dns', 'ok', tr(L, 'dnsOk', { host, ip: expected }));
+    if (c.ddns?.provider === 'duckdns' && host.endsWith('.duckdns.org')) {
+      return make(ctx, 'dns', 'warn', tr(L, 'dnsDuck', { host, ips: list, ip: expected }));
+    }
+    if (c.ingress === 'external') return make(ctx, 'dns', 'warn', tr(L, 'dnsExternal', { host, ips: list, ip: expected }));
+    return make(ctx, 'dns', 'fail', tr(L, 'dnsWrong', { host, ips: list, ip: expected }), { fix: tr(L, 'dnsWrongFix', { host, ip: expected }) });
+  },
+};
+
+const tlsCheck: Check = {
+  id: 'tls',
+  internet: true,
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'tls', 'skip', tr(L, 'needConfig'));
+    const url = new URL(c.publicUrl);
+    if (url.protocol !== 'https:') return make(ctx, 'tls', 'skip', tr(L, 'tlsHttp'));
+    const host = url.hostname;
+    const info = await net(ctx).tlsInfo(host, Number(url.port || 443));
+    if (!info.authorized) {
+      return make(ctx, 'tls', 'fail', tr(L, 'tlsBad', { host, error: info.error ?? '?' }), {
+        fix: tr(L, c.ingress === 'direct' ? 'tlsBadFixDirect' : 'tlsBadFix'),
+      });
+    }
+    const days = Math.floor((info.validTo - Date.now()) / DAY_MS);
+    if (days < 0) return make(ctx, 'tls', 'fail', tr(L, 'tlsExpired', { host }), { fix: tr(L, 'tlsSoonFix') });
+    let health: string | null = null;
+    try {
+      const res = await ctx.fetch(`${c.publicUrl}/healthz`, { signal: AbortSignal.timeout(8000) });
+      const body = (await res.json().catch(() => null)) as { ok?: unknown } | null;
+      if (!res.ok || body?.ok !== true) health = `HTTP ${res.status}`;
+    } catch (e) {
+      health = errMsg(e);
+    }
+    const detail = [info.subjectAltNames.join(', ')].filter(Boolean);
+    if (health) {
+      return make(ctx, 'tls', 'fail', tr(L, 'healthFail', { url: c.publicUrl, error: health }), { fix: tr(L, 'healthFailFix'), detail });
+    }
+    if (days < 14) return make(ctx, 'tls', 'warn', tr(L, 'tlsSoon', { host, days }), { fix: tr(L, 'tlsSoonFix'), detail });
+    return make(ctx, 'tls', 'ok', tr(L, 'tlsOk', { issuer: info.issuer || '?', days, url: c.publicUrl }), { detail });
+  },
+};
+
+const listeners: Check = {
+  id: 'listeners',
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'listeners', 'skip', tr(L, 'needConfig'));
+    const s = sys(ctx);
+    const base = listenBase(c);
+    type Health = { rooms?: number; children?: Record<string, string> };
+    let health: Health | null = null;
+    try {
+      const res = await ctx.fetch(`${base}/healthz`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) health = (await res.json()) as Health;
+    } catch {
+      // reported below
+    }
+    const fw = firewallHints(ctx, c);
+    if (!health) return make(ctx, 'listeners', 'warn', tr(L, 'listenDown', { url: base }), { fix: tr(L, 'listenDownFix'), detail: fw });
+
+    const findings: Finding[] = [];
+    const children = Object.entries(health.children ?? {});
+    const detail = [
+      tr(L, 'listenRooms', { n: health.rooms ?? 0 }),
+      ...children.map(([name, state]) => tr(L, 'listenChild', { name, state })),
+      ...fw,
+    ];
+    const down = children.filter(([, state]) => state !== 'up').map(([name]) => name);
+    if (down.length) findings.push({ status: 'warn', summary: tr(L, 'childDown', { list: down.join(', ') }), fix: tr(L, 'listenDownFix') });
+    if (c.media === 'self') {
+      let lk = false;
+      try {
+        lk = (await ctx.fetch(`http://127.0.0.1:${c.livekitPort}/`, { signal: AbortSignal.timeout(3000) })).status === 200;
+      } catch {
+        // stays false
+      }
+      if (!lk) findings.push({ status: 'warn', summary: tr(L, 'livekitDown', { port: c.livekitPort }) });
+      if (!(await net(ctx).tcpOpen('127.0.0.1', c.mediaTcpPort, 2000))) {
+        findings.push({ status: 'warn', summary: tr(L, 'mediaTcpDown', { port: c.mediaTcpPort }) });
+      }
+    }
+    if (c.ingress === 'direct' && !(await net(ctx).tcpOpen('127.0.0.1', c.httpsPort, 2000))) {
+      const lowPorts = c.httpsPort < 1024 || (c.httpPort > 0 && c.httpPort < 1024);
+      const hint = s.platform === 'linux' && !s.isRoot && lowPorts;
+      findings.push({ status: 'warn', summary: tr(L, 'httpsDown', { port: c.httpsPort }), fix: hint ? tr(L, 'lowPortFix', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }) : undefined });
+    }
+    return combine(ctx, 'listeners', findings, tr(L, 'listenOk', { url: base }), detail);
+  },
+};
+
+const service: Check = {
+  id: 'service',
+  async run(ctx) {
+    const L = ctx.locale;
+    if (!ctx.service) return make(ctx, 'service', 'skip', tr(L, 'serviceNone'));
+    const st = await ctx.service();
+    const detail = st.detail ? [st.detail] : [];
+    // Windows: an unelevated `service install` is refused, and an elevated one by
+    // hand misses --firewall and the account (--user/--sid); setup does it right.
+    const s = sys(ctx);
+    const flavour = s.platform === 'win32' ? 'Win' : s.platform === 'linux' && s.isRoot ? 'Root' : '';
+    if (!st.installed) return make(ctx, 'service', 'warn', tr(L, 'serviceNotInstalled'), { fix: tr(L, `serviceNotInstalledFix${flavour}`), detail });
+    if (!st.running) return make(ctx, 'service', 'warn', tr(L, 'serviceStopped'), { fix: tr(L, 'serviceStoppedFix'), detail });
+    if (!st.enabled) return make(ctx, 'service', 'warn', tr(L, 'serviceDisabled'), { fix: tr(L, `serviceDisabledFix${flavour}`), detail });
+    return make(ctx, 'service', 'ok', tr(L, 'serviceOk'), { detail });
+  },
+};
+
+const KIND: Record<string, string> = { igd: 'UPnP', pcp: 'PCP', natpmp: 'NAT-PMP' };
+
+/** A host whose own address is public (a VPS) has no router to ask. */
+const publicHost = (p: NatProbeLike) =>
+  !p.gateway && p.localIp && !netinfo.isPrivateIpv4(p.localIp) && !netinfo.isCgnatIpv4(p.localIp) && !p.localIp.startsWith('127.') && !p.localIp.startsWith('169.254.');
+
+const gateway: Check = {
+  id: 'gateway',
+  async run(ctx) {
+    const L = ctx.locale;
+    const p = await natProbe(ctx);
+    if (!p) return make(ctx, 'gateway', 'skip', tr(L, 'natNone'));
+    if (publicHost(p)) return make(ctx, 'gateway', 'ok', tr(L, 'natPublicHost', { ip: p.localIp! }));
+    const g = p.gateway;
+    if (!g) {
+      const list = ctx.config ? portList(neededPorts(ctx.config)) : '';
+      return make(ctx, 'gateway', 'warn', tr(L, 'gatewayNone'), { fix: list ? tr(L, 'gatewayNoneFix', { list }) : undefined, detail: p.errors });
+    }
+    const kind = KIND[g.kind] ?? g.kind;
+    if (!p.externalIp) return make(ctx, 'gateway', 'ok', tr(L, 'gatewayNoIp', { gw: g.gatewayIp, kind }));
+    return make(ctx, 'gateway', 'ok', tr(L, 'gatewayOk', { gw: g.gatewayIp, kind, ip: p.externalIp }));
+  },
+};
+
+const cgnat: Check = {
+  id: 'cgnat',
+  async run(ctx) {
+    const L = ctx.locale;
+    const p = await natProbe(ctx);
+    if (!p) return make(ctx, 'cgnat', 'skip', tr(L, 'natNone'));
+    if (publicHost(p)) return make(ctx, 'cgnat', 'ok', tr(L, 'natPublicHost', { ip: p.localIp! }));
+    const ext = p.externalIp;
+    if (!p.gateway || !ext) return make(ctx, 'cgnat', 'skip', tr(L, 'cgnatSkip'));
+    const list = ctx.config ? portList(neededPorts(ctx.config)) : '';
+    if (netinfo.isCgnatIpv4(ext)) return make(ctx, 'cgnat', 'fail', tr(L, 'cgnatFail', { ip: ext }), { fix: tr(L, 'cgnatFailFix') });
+    if (netinfo.isPrivateIpv4(ext)) return make(ctx, 'cgnat', 'warn', tr(L, 'doubleNat', { ip: ext }), { fix: tr(L, 'doubleNatFix', { list }) });
+    const ip = ctx.local ? null : await publicIp(ctx);
+    if (ip && ip !== ext) return make(ctx, 'cgnat', 'warn', tr(L, 'natMismatch', { ext, ip }), { fix: tr(L, 'doubleNatFix', { list }) });
+    return make(ctx, 'cgnat', 'ok', tr(L, 'cgnatOk', { ip: ext }));
+  },
+};
+
+/** upnp.json as the port mapper leaves it; read loosely, the doctor only needs the mappings. */
+function readMapperFile(ctx: CheckContext): MapperStatusLike | null {
+  try {
+    const text = sys(ctx).readText(join(ctx.paths.run, 'upnp.json'));
+    if (!text) return null;
+    const raw = JSON.parse(text) as { mappings?: Partial<MappingLike>[] };
+    if (!Array.isArray(raw.mappings)) return null;
+    return {
+      enabled: true,
+      mappings: raw.mappings.map((m) => ({
+        protocol: String(m.protocol), externalPort: Number(m.externalPort), internalPort: Number(m.internalPort ?? m.externalPort),
+        // The file lists active mappings; one without a state is mapped.
+        state: m.state ?? 'mapped',
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const mappings: Check = {
+  id: 'mappings',
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'mappings', 'skip', tr(L, 'needConfig'));
+    const needed = neededPorts(c);
+    if (!needed.length) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoPorts'));
+    const p = await natProbe(ctx);
+    if (!p || publicHost(p) || !p.gateway) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoGw'));
+    if (!c.upnp) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipOff', { list: portList(needed) }));
+    const st = (await controlStatus(ctx))?.upnp ?? readMapperFile(ctx);
+    if (!st) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoStatus'));
+    const missing = needed.filter((n) => !st.mappings.some((m) =>
+      m.protocol.toLowerCase() === n.protocol && m.externalPort === n.external && m.state === 'mapped'));
+    if (!missing.length) return make(ctx, 'mappings', 'ok', tr(L, 'mapOk', { list: portList(needed) }));
+    const errors = st.mappings.filter((m) => m.error).map((m) => `${m.protocol.toUpperCase()} ${m.externalPort}: ${m.error}`);
+    return make(ctx, 'mappings', 'warn', tr(L, 'mapPartial', { list: portList(missing) }), {
+      fix: tr(L, 'mapPartialFix', { ip: p.localIp ?? '?', list: portList(missing) }),
+      detail: errors,
+    });
+  },
+};
+
+const update: Check = {
+  id: 'update',
+  async run(ctx) {
+    const L = ctx.locale;
+    if (!ctx.compiled) return make(ctx, 'update', 'skip', tr(L, 'updSkip'));
+    // The running service knows best; without it, update.json and a release lookup.
+    const live: UpdateStatusLike | null = (await controlStatus(ctx))?.update ?? null;
+    const st = live ?? ctx.updateState ?? {};
+    let latest = live?.latest ?? null;
+    if (!latest && !ctx.local && ctx.latestTag) latest = await ctx.latestTag().catch(() => null);
+    const v = ctx.version;
+    const findings: Finding[] = [];
+    if (st.failed) findings.push({ status: 'warn', summary: tr(L, 'updFailed', { tag: st.failed.tag, reason: st.failed.reason ?? '?' }), fix: tr(L, 'updFailedFix') });
+    if (st.staged) findings.push({ status: 'warn', summary: tr(L, 'updStaged', { tag: st.staged.tag }) });
+    if (st.pending) findings.push({ status: 'warn', summary: tr(L, 'updPending', { tag: st.pending.tag }) });
+    const newer = latest ? compareVersions(latest, v) === 1 : false;
+    // A failed, staged or pending tag already says what the newest one is.
+    const known = [st.failed?.tag, st.staged?.tag, st.pending?.tag];
+    if (latest && newer && !known.includes(latest)) {
+      findings.push({ status: 'warn', summary: tr(L, 'updAvailable', { latest, version: v }), fix: tr(L, 'updAvailableFix') });
+    }
+    return combine(ctx, 'update', findings, tr(L, latest ? 'updOk' : 'updUnknown', { version: v }));
+  },
+};
+
+/** Every check, in the order they are shown. */
+export const CHECKS: readonly Check[] = [
+  config, binaries,
+  discordToken, discordIntents, discordGuild, discordRole, discordChannels, discordRedirect,
+  publicIpCheck, dnsCheck, tlsCheck,
+  listeners, service,
+  gateway, cgnat, mappings,
+  update,
+];
+
+/**
+ * Runs checks one after another, each capped at timeoutMs so a hung network
+ * call cannot hang the doctor. A check that throws becomes a 'fail'.
+ */
+export async function runChecks(
+  checks: readonly Check[], ctx: CheckContext, onResult?: (r: CheckResult) => void, o: { timeoutMs?: number } = {},
+): Promise<CheckResult[]> {
+  const timeoutMs = o.timeoutMs ?? 10_000;
+  const out: CheckResult[] = [];
+  for (const check of checks) {
+    let r: CheckResult;
+    if (ctx.local && check.internet) {
+      r = make(ctx, check.id, 'skip', tr(ctx.locale, 'skipLocal'));
+    } else {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<CheckResult>((resolve) => {
+        timer = setTimeout(() => resolve(make(ctx, check.id, 'fail', tr(ctx.locale, 'timedOut', { s: Math.round(timeoutMs / 1000) }))), timeoutMs);
+      });
+      try {
+        r = await Promise.race([check.run(ctx), timeout]);
+      } catch (e) {
+        r = make(ctx, check.id, 'fail', tr(ctx.locale, 'crashed', { error: errMsg(e) }));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    onResult?.(r);
+    out.push(r);
+  }
+  return out;
+}

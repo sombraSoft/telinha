@@ -67,6 +67,175 @@ jobs:
             test-results/
           retention-days: 7
 
+  # Native binaries. Windows targets build on Windows: Bun writes the version
+  # resource (ProductName etc.) only there. Not a required check yet.
+  binaries:
+    name: binaries (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+    runs-on: ${{ matrix.os }}
+    # The run smoke: DEV_USER mode, no Discord, no ingress, no router.
+    env:
+      INGRESS: external
+      MEDIA: self
+      DEV_USER: "1:smoke"
+      PUBLIC_URL: http://localhost:18081
+      LISTEN: 127.0.0.1:18081
+      LIVEKIT_PORT: "17880"
+      MEDIA_TCP_PORT: "17881"
+      MEDIA_UDP_PORT: "17882"
+      # Skips STUN: the runner's public address is irrelevant here.
+      LIVEKIT_NODE_IP: 127.0.0.1
+      IP_WATCH_SECONDS: "0"
+      AUTO_UPDATE: "off"
+      UPNP: "off"
+      # Fixture values (as in scripts/smoke.sh), not secrets.
+      COOKIE_SECRET: smoke
+      LIVEKIT_API_KEY: smoke
+      LIVEKIT_API_SECRET: smoke-secret-of-at-least-32-chars # gitleaks:allow
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # The compile targets (bun-<target>-v<version>) land in the install cache
+      # too: they change with Bun, the packages with bun.lock.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache/bun-*-v${{ steps.bun.outputs.bun-version }}
+          key: bun-targets-${{ runner.os }}-${{ steps.bun.outputs.bun-version }}
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.bun/install/cache
+            !~/.bun/install/cache/bun-*-v${{ steps.bun.outputs.bun-version }}
+          key: bun-install-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-install-${{ runner.os }}-
+      # The binary downloads livekit-server into <TELINHA_HOME>/bin itself;
+      # versions.json pins it.
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/th/bin
+          key: telinha-bin-${{ runner.os }}-${{ hashFiles('versions.json') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      # --smoke runs the host binary's --version.
+      - name: compile
+        shell: bash
+        run: bun scripts/build-binary.ts --target ${{ matrix.target }} --smoke
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binaries-${{ matrix.target }}
+          path: |
+            dist-bin/telinha-*
+            dist-bin/SHA256SUMS
+          retention-days: 7
+
+      - name: run (linux-x64)
+        if: runner.os == 'Linux'
+        env:
+          TELINHA_HOME: ${{ runner.temp }}/th
+        run: |
+          base=http://127.0.0.1:18081
+          log="$RUNNER_TEMP/telinha.log"
+          dist-bin/linux-x64/telinha run >"$log" 2>&1 &
+          pid=$!
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            echo '--- telinha log'
+            cat "$log"
+          }
+          trap cleanup EXIT
+          fail() { echo "FAIL: $*" >&2; exit 1; }
+          # Up means HTTP answers and livekit-server (downloaded on a cold cache) runs.
+          health=''
+          for _ in $(seq 120); do
+            kill -0 "$pid" 2>/dev/null || fail 'telinha exited'
+            health=$(curl -fsS "$base/healthz" 2>/dev/null || true)
+            case $health in *'"livekit":"up"'*) break ;; esac
+            sleep 1
+          done
+          echo "healthz: $health"
+          case $health in *'"livekit":"up"'*) ;; *) fail 'livekit not up within 120 s' ;; esac
+          out=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "$base/r/")
+          case $out in '302 '*/auth/login*) ;; *) fail "/r/ is not a 302 to /auth/login: $out" ;; esac
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/doctor")
+          [ "$code" = 404 ] || fail "/doctor without a token is not a 404: $code"
+          kill -TERM "$pid"
+          status=0
+          wait "$pid" || status=$?
+          [ "$status" = 0 ] || fail "exit $status after SIGTERM"
+          echo ok
+      # No arm64 runner: QEMU runs the arm64 binary's --version.
+      - if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+      - name: --version (linux-arm64)
+        if: runner.os == 'Linux'
+        run: docker run --rm --platform linux/arm64 -v "$PWD/dist-bin:/b:ro" debian:bookworm-slim /b/linux-arm64/telinha --version
+
+      - name: run (windows-x64)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TELINHA_HOME: ${{ runner.temp }}/th
+        run: |
+          $base = 'http://127.0.0.1:18081'
+          $log = Join-Path $env:RUNNER_TEMP 'telinha.log'
+          $p = Start-Process dist-bin/windows-x64/telinha.exe -ArgumentList run -NoNewWindow -PassThru `
+            -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+          # Holding the handle keeps ExitCode readable once the process ends.
+          $null = $p.Handle
+          function Fail($why) {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+            Get-Content $log, "$log.err" -ErrorAction SilentlyContinue
+            Write-Error "FAIL: $why" -ErrorAction Continue
+            exit 1
+          }
+          # Up means HTTP answers and livekit-server (downloaded on a cold cache) runs.
+          $health = ''
+          foreach ($i in 1..120) {
+            if ($p.HasExited) { Fail "telinha exited ($($p.ExitCode))" }
+            $health = "$(curl.exe -fsS "$base/healthz" 2>$null)"
+            if ($health -like '*"livekit":"up"*') { break }
+            Start-Sleep -Seconds 1
+          }
+          "healthz: $health"
+          if ($health -notlike '*"livekit":"up"*') { Fail 'livekit not up within 120 s' }
+          $out = curl.exe -sS -o NUL -w '%{http_code} %{redirect_url}' "$base/r/"
+          if ($out -notlike '302 */auth/login*') { Fail "/r/ is not a 302 to /auth/login: $out" }
+          $code = curl.exe -sS -o NUL -w '%{http_code}' "$base/doctor"
+          if ($code -ne '404') { Fail "/doctor without a token is not a 404: $code" }
+          # No SIGTERM on Windows: the local control endpoint is the graceful stop.
+          $token = (Get-Content (Join-Path $env:TELINHA_HOME 'data/run/control.token') -Raw).Trim()
+          $body = Join-Path $env:RUNNER_TEMP 'shutdown.json'
+          Set-Content $body '{"reason":"stop"}' -NoNewline
+          $code = curl.exe -sS -o NUL -w '%{http_code}' -X POST -H "Authorization: Bearer $token" `
+            -H 'Content-Type: application/json' --data-binary "@$body" "$base/internal/shutdown"
+          if ($code -ne '202') { Fail "/internal/shutdown answered $code" }
+          if (-not $p.WaitForExit(30000)) { Fail 'still running 30 s after /internal/shutdown' }
+          if ($p.ExitCode -ne 0) { Fail "exit $($p.ExitCode) after /internal/shutdown" }
+          Get-Content $log
+          'ok'
+      # The version resource is why the Windows targets build here.
+      - name: version resource
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($t in 'windows-x64', 'windows-arm64') {
+            $info = (Get-Item "dist-bin/$t/telinha.exe").VersionInfo
+            "${t}: $($info.ProductName) $($info.FileVersion) ($($info.CompanyName))"
+            if ($info.ProductName -ne 'Telinha') { Write-Error "$t has no version resource" -ErrorAction Continue; exit 1 }
+          }
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -79,8 +248,24 @@ jobs:
         run: >-
           shellcheck
           deploy/install-docker.sh
+          deploy/install.sh
           deploy/telinha-update
           scripts/smoke.sh
+      # The runner's pwsh parses it; Write-Host is how the bootstrap talks to
+      # the person running it.
+      - name: install.ps1
+        shell: pwsh
+        run: |
+          $path = (Resolve-Path deploy/install.ps1).Path
+          $errs = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errs)
+          if ($errs) { $errs; exit 1 }
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+            try { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop }
+            catch { Write-Warning "PSScriptAnalyzer not installable, parse check only: $_"; exit 0 }
+          }
+          $issues = Invoke-ScriptAnalyzer -Path $path -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
+          if ($issues) { $issues | Format-Table -AutoSize | Out-String -Width 200; exit 1 }
       # The image bundles shellcheck, so run: blocks are checked too.
       - name: actionlint
         uses: docker://rhysd/actionlint:1.7.12
@@ -136,6 +321,7 @@ jobs:
           push: false
           load: true
           tags: telinha:ci
-      # Same script as `bun run image`; it ships in the image.
+      # Same script as `bun run image`; it ships in the image, whose
+      # entrypoint is the program itself.
       - name: smoke
-        run: docker run --rm telinha:ci sh scripts/smoke.sh
+        run: docker run --rm --entrypoint sh telinha:ci scripts/smoke.sh

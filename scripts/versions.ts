@@ -1,9 +1,20 @@
 // Maintains versions.json: `check` validates structure and hashes (CI), `refresh`
 // downloads every pinned asset and rewrites the sha256 values (run after a Renovate bump).
 import { writeFile } from 'node:fs/promises';
-import { PLATFORMS, TOOLS, VERSIONS_FILE, assetSpec, download, sha256, type Arch, type Os, type Platform, type Tool, type Versions } from './bins.ts';
+import { PLATFORMS, TOOLS, VERSIONS_FILE, assetSpec, download, sha256, type Arch, type Os, type Platform, type Tool, type Versions } from '../server/src/bins.ts';
 
 const HEX64 = /^[0-9a-f]{64}$/;
+
+/** One per distinct asset: platforms that fall back to another platform's build share its key. */
+export function assets(tool: Tool, version: string): { key: Platform; spec: ReturnType<typeof assetSpec> }[] {
+  const seen = new Map<Platform, ReturnType<typeof assetSpec>>();
+  for (const p of PLATFORMS) {
+    const [os, arch] = p.split('-') as [Os, Arch];
+    const spec = assetSpec(tool, version, os, arch);
+    if (!seen.has(spec.hashKey)) seen.set(spec.hashKey, spec);
+  }
+  return [...seen].map(([key, spec]) => ({ key, spec }));
+}
 
 export function validate(v: unknown): string[] {
   const errors: string[] = [];
@@ -15,9 +26,13 @@ export function validate(v: unknown): string[] {
       errors.push(`${tool}: missing version`);
       continue;
     }
-    for (const p of PLATFORMS) {
-      const h = e.sha256?.[p];
-      if (typeof h !== 'string' || !HEX64.test(h)) errors.push(`${tool}: sha256 for ${p} missing or not 64 hex chars`);
+    const keys = assets(tool, e.version).map((a) => a.key);
+    for (const key of keys) {
+      const h = e.sha256?.[key];
+      if (typeof h !== 'string' || !HEX64.test(h)) errors.push(`${tool}: sha256 for ${key} missing or not 64 hex chars`);
+    }
+    for (const key of Object.keys(e.sha256 ?? {})) {
+      if (!keys.includes(key as Platform)) errors.push(`${tool}: sha256 for ${key} matches no asset`);
     }
   }
   return errors;
@@ -67,14 +82,12 @@ async function refresh(): Promise<void> {
   for (const tool of TOOLS) {
     const entry = versions[tool];
     const upstream = await upstreamChecksums(tool, entry.version);
-    const hashes = {} as Record<Platform, string>;
+    const list = assets(tool, entry.version);
+    const hashes = new Map<Platform, string>();
     await Promise.all(
-      PLATFORMS.map(async (p) => {
-        const [os, arch] = p.split('-') as [Os, Arch];
-        const spec = assetSpec(tool, entry.version, os, arch);
+      list.map(async ({ key, spec }) => {
         console.log(`[versions] ${spec.asset}`);
         const data = await download(spec.url);
-        const actual = sha256(data);
         const listed = upstream?.get(spec.asset);
         if (upstream && !listed) throw new Error(`${spec.asset} not listed in upstream checksums`);
         if (listed) {
@@ -83,11 +96,11 @@ async function refresh(): Promise<void> {
           const computed = new Bun.CryptoHasher(algo).update(data).digest('hex');
           if (computed !== listed) throw new Error(`${spec.asset}: computed ${algo} ${computed}, upstream says ${listed}`);
         }
-        hashes[p] = actual;
+        hashes.set(key, sha256(data));
       }),
     );
     // Fixed platform order keeps the diff of versions.json stable.
-    entry.sha256 = Object.fromEntries(PLATFORMS.map((p) => [p, hashes[p]])) as Record<Platform, string>;
+    entry.sha256 = Object.fromEntries(list.map(({ key }) => [key, hashes.get(key)!]));
     console.log(`[versions] ${tool} ${entry.version}: ${upstream ? 'cross-checked against upstream' : 'upstream publishes no checksums, pinned as downloaded'}`);
   }
   await writeFile(VERSIONS_FILE, `${JSON.stringify(versions, null, 2)}\n`);

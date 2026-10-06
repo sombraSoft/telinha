@@ -1,11 +1,11 @@
 // Generic child-process supervisor: spawns the ChildSpec[] it is given, pipes
 // their output to the log as "[name] line", restarts crashes with backoff and
 // stops everything on request. It knows nothing about LiveKit or Caddy:
-// children.ts builds the specs and index.ts passes the environment children
+// children.ts builds the specs and run.ts passes the environment children
 // start from.
 //
 // Shutdown facts verified on Bun 1.4.2 (Windows 11, Windows Terminal as the
-// console host; WSL for Linux) that index.ts's signal wiring relies on:
+// console host; WSL for Linux) that run.ts's signal wiring relies on:
 // - Closing the console window delivers SIGHUP to every bun process on that
 //   console, newest first: a child spawned by telinha got its SIGHUP first and
 //   was force-terminated ~5 s later while its handler still ran; only then did
@@ -26,7 +26,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { basename, dirname } from 'node:path';
 
 export interface ChildSpec {
-  name: string;                       // log prefix, restart key: "livekit" | "caddy" | "cloudflared" | (phase 5) "caddy-l4"
+  name: string;                       // log prefix, restart key: "livekit" | "caddy" | "cloudflared" | "caddy-l4" (TURN over TLS, later)
   cmd: string[];                      // argv; cmd[0] absolute (from findBinary). NEVER a secret (shows in ps/tasklist and logs)
   env?: Record<string, string>;       // merged over deps.baseEnv, not over process.env
   cwd?: string;
@@ -51,10 +51,13 @@ export interface Supervisor {
   status(): { name: string; state: ChildState; pid: number | null; restarts: number; since: number }[];
 }
 
+/** Is `pid` alive, and which executable runs there (basename; Linux comm may be cut at 15 chars). */
+export type ProcessInfo = (pid: number) => { alive: boolean; exe: string | null };
+
 export interface SupervisorDeps {
   specs: ChildSpec[];
   log: (...a: unknown[]) => void;
-  /** Environment every child starts from; spec.env is merged over it. index.ts passes childBaseEnv(process.env). Default: {} — never process.env. */
+  /** Environment every child starts from; spec.env is merged over it. run.ts passes childBaseEnv(process.env). Default: {} — never process.env. */
   baseEnv?: Record<string, string>;
   /** Injected for tests; default Bun.spawn. Receives the final env. */
   spawn?: (spec: ChildSpec, env: Record<string, string>) => ChildHandle;
@@ -64,7 +67,7 @@ export interface SupervisorDeps {
   /** Pidfile for stale-child cleanup; omit in tests. */
   pidfile?: string;
   /** Default oracle reads /proc or tasklist; tests inject a fake. */
-  processInfo?: (pid: number) => { alive: boolean; exe: string | null };
+  processInfo?: ProcessInfo;
   platform?: NodeJS.Platform;
 }
 export interface ChildHandle { pid: number; exited: Promise<number | null>; stdout: ReadableStream<Uint8Array> | null; stderr: ReadableStream<Uint8Array> | null; kill(signal?: NodeJS.Signals): void }
@@ -153,7 +156,7 @@ function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** Is `pid` alive and what runs there: /proc on Linux, tasklist on Windows. */
-function defaultProcessInfo(platform: NodeJS.Platform): NonNullable<SupervisorDeps['processInfo']> {
+export function defaultProcessInfo(platform: NodeJS.Platform = process.platform): ProcessInfo {
   const dead = { alive: false, exe: null };
   if (platform === 'win32') {
     return (pid) => {
@@ -189,7 +192,7 @@ function killPid(pid: number, platform: NodeJS.Platform) {
 }
 
 /** Same executable? Case-insensitive on Windows, `.exe` ignored; /proc/<pid>/comm is cut at 15 chars, so a prefix counts. */
-function sameExe(recorded: string, seen: string | null, platform: NodeJS.Platform): boolean {
+export function sameExe(recorded: string, seen: string | null, platform: NodeJS.Platform = process.platform): boolean {
   if (!seen) return false;
   const norm = (s: string) => {
     const b = basename(s).replace(/\.exe$/i, '');
