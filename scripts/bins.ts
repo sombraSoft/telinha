@@ -1,13 +1,20 @@
-// `bun run bins`: downloads the pinned child binaries into a directory. Used by
-// dev/E2E and the Docker build (which copies server/src/bins.ts + archive.ts and
-// versions.json next to this file, so nothing else of server/ is needed).
+// `bun run bins`: downloads the child binaries into a directory. Used by dev/E2E
+// and the Docker build (which copies server/src/bins.ts, archive.ts, version.ts,
+// releasetag.ts and versions.json next to this file, so nothing else of server/
+// is needed). caddy is Telinha's own build, taken from a release: --release
+// picks which one, the latest by default.
 import { join } from 'node:path';
-import { ROOT, TOOLS, ensureBinaries, hostArch, hostOs, type Arch, type Os, type Tool } from '../server/src/bins.ts';
+import { ROOT, TOOLS, caddyRelease, ensureBinaries, hostArch, hostOs, type Arch, type Os, type Tool } from '../server/src/bins.ts';
+import { latestReleaseTag } from '../server/src/releasetag.ts';
+
+const USAGE = `usage: bun scripts/bins.ts [--os linux|windows] [--arch amd64|arm64] [--out DIR] [--release vX.Y.Z] [${TOOLS.join(' ')}]
+  --release  the Telinha release whose caddy to fetch (default: the latest one; only read when caddy is asked for)`;
 
 function parseArgs(argv: string[]) {
   let os: Os | undefined;
   let arch: Arch | undefined;
   let outDir = process.env.BIN_DIR || join(ROOT, '.cache', 'telinha', 'bin');
+  let release: string | undefined;
   const names: Tool[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -26,10 +33,12 @@ function parseArgs(argv: string[]) {
       arch = v;
     } else if (a === '--out') {
       outDir = value();
+    } else if (a === '--release') {
+      release = value();
     } else if ((TOOLS as readonly string[]).includes(a)) {
       names.push(a as Tool);
     } else {
-      throw new Error(`unknown argument ${a}\nusage: bun scripts/bins.ts [--os linux|windows] [--arch amd64|arm64] [--out DIR] [${TOOLS.join(' ')}]`);
+      throw new Error(`unknown argument ${a}\n${USAGE}`);
     }
   }
   // Host defaults only when not given: the image build passes both for another platform.
@@ -39,14 +48,33 @@ function parseArgs(argv: string[]) {
   } catch (e) {
     throw new Error(`${e instanceof Error ? e.message : e}; pass --os and --arch`);
   }
-  return { os, arch, outDir, names: names.length ? names : [...TOOLS] };
+  return { os, arch, outDir, release, names: names.length ? names : [...TOOLS], explicit: names.length > 0 };
 }
 
 if (import.meta.main) {
   try {
-    const { names, ...o } = parseArgs(process.argv.slice(2));
-    const { paths } = await ensureBinaries(names, o);
-    for (const p of Object.values(paths)) console.log(p);
+    const { names, explicit, release: given, ...o } = parseArgs(process.argv.slice(2));
+    // The pinned tools first: caddy depends on a release that has its asset,
+    // and its failure must not cost the others.
+    const pinned = names.filter((n) => n !== 'caddy');
+    if (pinned.length) {
+      const { paths } = await ensureBinaries(pinned, o);
+      for (const p of Object.values(paths)) console.log(p);
+    }
+    // Only caddy needs a release, so the Docker build (no caddy) never asks GitHub for one.
+    if (names.includes('caddy')) {
+      try {
+        const tag = given ?? (await latestReleaseTag(fetch));
+        if (!tag) throw new Error('no Telinha release found for caddy (offline?): pass --release vX.Y.Z');
+        const { paths } = await ensureBinaries(['caddy'], { ...o, release: caddyRelease(tag, fetch) });
+        for (const p of Object.values(paths)) console.log(p);
+      } catch (e) {
+        // Asked for by name: a hard failure. Part of "everything": releases cut
+        // before Telinha shipped its Caddy have no asset, so say how to get one.
+        if (explicit) throw e;
+        console.warn(`caddy: ${e instanceof Error ? e.message : e}; build it with bun run caddy, or pass --release vX.Y.Z caddy`);
+      }
+    }
   } catch (e) {
     console.error(e instanceof Error ? e.message : e);
     process.exit(1);

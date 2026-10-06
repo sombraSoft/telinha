@@ -114,7 +114,9 @@ assistente mostra o endereço e espera você:
 
 1. Copie o endereço que o assistente mostra. Com
    `PUBLIC_URL=https://telinha.example.com`, ele é
-   `https://telinha.example.com/auth/callback`.
+   `https://telinha.example.com/auth/callback`; com um endereço do DuckDNS em
+   casa ele leva a porta, como em
+   `https://my-group.duckdns.org:8443/auth/callback`.
 
 2. Na página **OAuth2**, em **Redirecionamentos** (*Redirects*), clique em
    **Adicionar redirecionamento** (*Add Redirect*) e cole.
@@ -212,7 +214,8 @@ entrada padrão, um segredo por execução:
 | Segredo do cliente | `DISCORD_CLIENT_SECRET` | `--client-secret-file PATH` |
 
 ```
-telinha setup --non-interactive --public-url https://telinha.example.com \
+telinha setup --non-interactive --host home --duckdns-domain my-group \
+  --duckdns-token-file ./duckdns-token \
   --guild <id> --role <id> --channels <id>,<id> \
   --discord-token-file ./discord-token --client-secret-file - < ./client-secret
 ```

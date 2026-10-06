@@ -92,7 +92,12 @@ export function childSpecs(
       name: 'caddy',
       cmd: [bin('caddy', 'caddy'), 'run', '--config', file, '--adapter', 'caddyfile'],
       // Certificates must survive restarts and live on the data volume.
-      env: { XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage },
+      env: {
+        XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage,
+        ...(config.acmeDns ? { DUCKDNS_TOKEN: config.acmeDns.token } : {}),
+      },
+      // Caddy's failed DNS challenges log the DuckDNS URL, token included.
+      ...(config.acmeDns ? { redact: [config.acmeDns.token] } : {}),
       prepare: async () => {
         await mkdir(paths.run, { recursive: true });
         await mkdir(storage, { recursive: true });

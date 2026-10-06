@@ -27,6 +27,40 @@ livekit-server --version
 caddy version
 cloudflared --version
 
+step 'caddy version matches versions.json'
+# Go's version selection may raise Caddy when a module needs a newer one; the pin must be the truth.
+want="v$(bun -e 'console.log((await Bun.file("versions.json").json()).caddy.version)')"
+[ "$(caddy version | cut -d' ' -f1)" = "$want" ] || fail "caddy is $(caddy version), versions.json says $want"
+
+step 'caddy modules'
+caddy list-modules | grep -q '^dns\.providers\.duckdns$' || fail 'caddy lacks dns.providers.duckdns'
+caddy list-modules | grep -q '^layer4$' || fail 'caddy lacks layer4'
+
+step 'caddy validates the DNS-01 Caddyfile'
+# Renders the home configuration through the real code and lets Caddy parse it: the
+# provider syntax and the module must both be right for the file to be accepted.
+# validate provisions the modules but never contacts the CA. Not a real token.
+duck_token=smoke-duckdns-token # gitleaks:allow
+caddy_dir=/tmp/smoke-caddy
+mkdir -p "$caddy_dir"
+OUT="$caddy_dir/Caddyfile" DUCKDNS_TOKEN=$duck_token bun -e '
+	const { loadConfig } = await import("./server/src/config.ts");
+	const { renderCaddyfile } = await import("./server/src/render.ts");
+	const c = loadConfig({
+		DISCORD_TOKEN: "smoke", DISCORD_CLIENT_ID: "1", DISCORD_CLIENT_SECRET: "smoke", GUILD_ID: "2", ROLE_ID: "3", CHANNEL_IDS: "4",
+		COOKIE_SECRET: "smoke", LIVEKIT_API_KEY: "smoke", LIVEKIT_API_SECRET: "smoke", DATA_DIR: "/tmp/smoke-caddy/data",
+		HOSTING: "home", INGRESS: "direct", PUBLIC_URL: "https://smoke.duckdns.org:8443", HTTPS_PORT: "8443", HTTP_PORT: "0",
+		ACME_DNS: "duckdns", DDNS_PROVIDER: "duckdns", DUCKDNS_DOMAIN: "smoke", DUCKDNS_TOKEN: process.env.DUCKDNS_TOKEN,
+	});
+	if (!c.acmeDns) throw new Error("the fixture did not select DNS-01");
+	await Bun.write(process.env.OUT, renderCaddyfile(c));
+' || fail 'could not render the DNS-01 Caddyfile'
+cat "$caddy_dir/Caddyfile"
+grep -q "$duck_token" "$caddy_dir/Caddyfile" && fail 'the rendered Caddyfile holds the DuckDNS token'
+# XDG_*: whatever Caddy sets up while provisioning stays out of the bun user's home.
+DUCKDNS_TOKEN=$duck_token XDG_DATA_HOME="$caddy_dir" XDG_CONFIG_HOME="$caddy_dir" \
+	caddy validate --adapter caddyfile --config "$caddy_dir/Caddyfile" || fail 'caddy rejected the DNS-01 Caddyfile'
+
 step 'server (INGRESS=external, MEDIA=self)'
 # LIVEKIT_NODE_IP skips STUN (the container may have no internet); LiveKit
 # logs an error for an API secret under 32 characters. Not a real secret.

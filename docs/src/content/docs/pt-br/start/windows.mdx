@@ -23,13 +23,14 @@ mantém tudo rodando desde a inicialização, com ou sem alguém logado.
 - Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
   Dá para criar o aplicativo antes do assistente ou durante ele: veja
   [Aplicativo do Discord](/telinha/pt-br/start/discord/).
-- Uma ideia do endereço que o pessoal vai usar: um domínio seu, um nome
-  gratuito do DuckDNS ou um Cloudflare Tunnel.
+- Para o endereço que o pessoal abre: um domínio na Cloudflare, ou nada, e
+  nesse caso o assistente te dá um endereço grátis do DuckDNS.
   [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
-  compara as opções.
+  compara os dois.
 - Acesso à página de administração do roteador, a não ser que ele faça UPnP
   (muitos roteadores vêm com isso desligado, e os da operadora muitas vezes
-  escondem a opção).
+  escondem a opção). Em casa a Telinha nunca precisa das portas 80 ou 443: só
+  das duas portas de mídia, mais a 8443 com um endereço do DuckDNS.
   Sem acesso e sem UPnP, por exemplo com um roteador da operadora travado ou a
   rede compartilhada de um prédio? Aí a Telinha neste PC não consegue abrir as portas
   sozinha: peça à operadora ou a quem cuida da rede para encaminhar, ou use uma
@@ -60,8 +61,10 @@ mantém tudo rodando desde a inicialização, com ou sem alguém logado.
 
 </Steps>
 
-O script não baixa mais nada. Quem baixa o `livekit-server` e o `caddy` ou o
-`cloudflared` é o próprio assistente, cada um conferido contra um sha256 fixo.
+O script não baixa mais nada. Quem baixa os programas auxiliares é o próprio
+assistente: o `livekit-server` e o `cloudflared` dos projetos originais, cada
+um conferido contra um sha256 fixo, e o `caddy` da mesma versão da Telinha,
+conferido com o `SHA256SUMS` dela.
 
 Três variáveis de ambiente mudam o que o script faz. Defina na mesma janela,
 antes da linha do `irm`:
@@ -96,18 +99,26 @@ Windows em casa, o caminho é este:
 <Steps>
 
 1. **Onde a Telinha roda.** Ele mostra o IP público e o roteador, se algum
-   responder UPnP, NAT-PMP ou PCP. Escolha *em casa*, ou *só atrás da
-   Cloudflare* se for usar um Cloudflare Tunnel.
+   responder UPnP, NAT-PMP ou PCP, e pergunta *Onde a Telinha vai rodar?*
+   Escolha *Um computador em casa (um PC ou um servidor caseiro)*.
 
-2. **Endereço.** Um domínio seu (o
-   [registro A](/telinha/pt-br/guides/domains/#seu-próprio-domínio) é
-   comparado com o IP público),
-   DuckDNS (o token é testado na hora), um Cloudflare Tunnel ou o seu próprio
-   proxy reverso. Com domínio próprio ou DuckDNS, a Telinha pega o certificado
-   HTTPS sozinha, então ele pergunta se as portas 80 e 443 da internet chegam
-   no PC: sim; só a 443, para outra porta do PC; ou nenhuma, e aí ele recomenda
-   o túnel. Por fim, pergunta se a Telinha pode abrir as portas no roteador por
-   UPnP.
+2. **Endereço.** A internet de casa em geral não deixa as portas web 80 e 443
+   entrarem, então a Telinha não conta com elas. Ele pergunta *Você tem um
+   domínio na Cloudflare?*
+
+   - *Sim: usar um Cloudflare Tunnel.* O seu próprio endereço, e nada pra
+     abrir pras páginas. Você cola o token do túnel e o public hostname dele;
+     veja [Cloudflare Tunnel](/telinha/pt-br/guides/domains/#cloudflare-tunnel).
+   - *Não: usar um endereço grátis do DuckDNS.* Você entra no duckdns.org,
+     adiciona um nome e cola o token, que é testado na hora. A Telinha serve
+     HTTPS na porta 8443 (dá pra escolher outra) e pega o certificado pelo
+     DuckDNS, então o endereço fica tipo `https://my-group.duckdns.org:8443` e
+     os links levam a porta. Algumas redes rígidas (empresas, escolas) só
+     deixam o navegador chegar na porta 443, então quem estiver nelas não
+     abre; um domínio na Cloudflare não tem essa limitação. Veja
+     [DuckDNS na porta 8443](/telinha/pt-br/guides/domains/#duckdns-na-porta-8443).
+
+   Por fim, pergunta se a Telinha pode abrir as portas no roteador por UPnP.
 
 3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
    não ser que outro programa do PC já use alguma.
@@ -145,11 +156,13 @@ clique em **Sim**.
 :::
 
 :::note[Vai encaminhar as portas na mão?]
-Quando nenhum roteador responde UPnP (ou você não deixou usar), o assistente só lista as portas para encaminhar e segue em frente, então a
-espera pelo certificado e o teste pelo celular falham no final. Isso é
-esperado: encaminhe as portas como em [Abra as portas](#abra-as-portas) logo
-abaixo e rode o `telinha doctor` de novo (o certificado pode levar alguns
-minutos depois que as portas chegarem no PC).
+Quando nenhum roteador responde UPnP (ou você não deixou usar), o assistente
+só lista as portas para encaminhar e segue em frente, então o teste pelo
+celular falha no final. Isso é esperado: encaminhe as portas como em
+[Abra as portas](#abra-as-portas) logo abaixo e rode o `telinha doctor` de
+novo. O certificado não depende delas: com um endereço do DuckDNS ele vem pelo
+DuckDNS (em geral de 1 a 3 minutos), e com um túnel quem cuida dele é a
+Cloudflare.
 :::
 
 Se você recusou o UAC, a tarefa em segundo plano não foi registrada: o
@@ -164,11 +177,11 @@ A internet precisa chegar no PC por estas portas:
 | --- | --- | --- |
 | TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
 | UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
-| TCP 443 | domínio próprio ou DuckDNS | As páginas, por HTTPS |
-| TCP 80 | domínio próprio ou DuckDNS, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
+| TCP 8443 | endereço do DuckDNS (a sua porta, se você mudou) | As páginas, por HTTPS |
 
-Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
-levam WebRTC. Se você mudou alguma porta no assistente, use o seu valor.
+Nada além disso: nem a 80, nem a 443. Com um Cloudflare Tunnel só as duas
+portas de mídia são necessárias (túneis não levam WebRTC). Se você mudou
+alguma porta no assistente, use o seu valor.
 
 **Primeiro o UPnP.** Se o roteador respondeu e você deixou, a Telinha pede essas
 portas ao roteador enquanto roda e você não precisa fazer nada. Se não, faça o
@@ -179,10 +192,11 @@ duas coisas, e há páginas para os roteadores da
 [Vivo](/telinha/pt-br/routers/vivo/), da [Claro](/telinha/pt-br/routers/claro/),
 da [TIM](/telinha/pt-br/routers/tim/) e da [Oi](/telinha/pt-br/routers/oi/).
 
-**Firewall do Windows.** O passo do UAC cria quatro regras de entrada, cada uma
-presa ao seu programa em `bin\`: `Telinha LiveKit TCP` e `Telinha LiveKit UDP`
-para o `livekit-server.exe`, `Telinha HTTPS` e `Telinha HTTP` para o
-`caddy.exe` (essas duas só com domínio próprio ou DuckDNS). Rodar o `telinha`
+**Firewall do Windows.** O passo do UAC cria regras de entrada, cada uma presa
+ao seu programa em `bin\`: `Telinha LiveKit TCP` e `Telinha LiveKit UDP` para
+o `livekit-server.exe` e, com um endereço do DuckDNS, `Telinha HTTPS` para o
+`caddy.exe` na 8443. Em casa não tem regra `Telinha HTTP`: nada escuta na
+porta 80. Rodar o `telinha`
 num console antes do serviço e fechar o alerta de Segurança do Windows deixa
 regras de bloqueio para trás, e o bloqueio vence a permissão; a instalação
 remove essas regras antes. Rode o `telinha setup` de novo depois de mudar uma

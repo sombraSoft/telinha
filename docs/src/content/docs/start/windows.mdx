@@ -22,11 +22,14 @@ from boot, whether or not anyone is logged on.
 - A Discord server where you can create an application and add a bot. You can
   create the app before the setup or while it runs: see
   [Discord app](/telinha/start/discord/).
-- An idea of the address people will use: your own domain, a free DuckDNS
-  name or a Cloudflare Tunnel. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
-  compares them.
+- For the address people open: a domain on Cloudflare, or nothing, in which
+  case the wizard gives you a free DuckDNS address.
+  [Address, HTTPS and ingress modes](/telinha/guides/domains/) compares the
+  two.
 - Access to your router's admin page, unless it does UPnP (many routers ship
-  with it off, and ISP routers often hide the switch).
+  with it off, and ISP routers often hide the switch). Telinha never needs
+  ports 80 or 443 at home: only the two media ports, plus 8443 with a DuckDNS
+  address.
   No access and no UPnP, for example a locked ISP router or a shared building
   network? Then this PC cannot open the ports itself: ask the ISP or
   whoever runs the network to forward them, or use a [VPS](/telinha/start/vps/).
@@ -57,7 +60,8 @@ from boot, whether or not anyone is logged on.
 </Steps>
 
 The script downloads nothing else. The setup downloads `livekit-server` and
-`caddy` or `cloudflared` itself, each checked against a pinned sha256.
+`cloudflared` from upstream, each checked against a pinned sha256, and
+`caddy` from the same Telinha release, checked against its `SHA256SUMS`.
 
 Three environment variables change what the script does. Set them in the same
 window before the `irm` line:
@@ -92,17 +96,27 @@ Windows PC at home it goes like this:
 <Steps>
 
 1. **Where Telinha runs.** It shows the public IP and the router if one
-   answers UPnP, NAT-PMP or PCP. Choose *at home*, or *behind Cloudflare
-   only* if you will use a Cloudflare Tunnel.
+   answers UPnP, NAT-PMP or PCP, then asks *Where will Telinha run?* Choose
+   *A computer at home (a PC or a home server)*.
 
-2. **Address.** Your own domain (its
-   [A record](/telinha/guides/domains/#your-own-domain) is compared with the
-   public IP), DuckDNS (the token is tried at once), a Cloudflare Tunnel or your own
-   reverse proxy. With your own domain or DuckDNS, Telinha gets the HTTPS
-   certificate itself, so it asks whether ports 80 and 443 from the internet
-   can reach the PC: yes; only 443, to another port on the PC; or neither, and
-   then it recommends the tunnel. Last, it asks whether Telinha may open the
-   ports on the router through UPnP.
+2. **Address.** Home internet connections usually do not let the web ports
+   80 and 443 in, so Telinha does not count on them. It asks *Do you have a
+   domain on Cloudflare?*
+
+   - *Yes: use a Cloudflare Tunnel.* Your own address, and nothing to open
+     for the pages. You paste the tunnel's token and its public hostname; see
+     [Cloudflare Tunnel](/telinha/guides/domains/#cloudflare-tunnel).
+   - *No: use a free DuckDNS address.* You sign in on duckdns.org, add a name
+     and paste the token, which is tried at once. Telinha serves HTTPS on port
+     8443 (you can pick another) and gets the certificate through DuckDNS, so
+     the address looks like `https://my-group.duckdns.org:8443` and the links
+     carry the port. Some strict networks (offices, schools) only let browsers
+     reach port 443, so people there cannot open them; a domain on Cloudflare
+     has no such limit. See
+     [DuckDNS on port 8443](/telinha/guides/domains/#duckdns-on-port-8443).
+
+   Last, it asks whether Telinha may open the ports on the router through
+   UPnP.
 
 3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
    something else on the PC uses them.
@@ -138,11 +152,12 @@ details* shows the path) and click **Yes**.
 :::
 
 :::note[Forwarding the ports by hand?]
-When no router answered UPnP (or you did not allow it), the wizard only lists the ports to forward and carries on, so the
-certificate wait and the phone test fail at the end. That is expected: forward
-the ports as in [Open the ports](#open-the-ports) below, then run
-`telinha doctor` again (the certificate can take a few minutes once the ports
-reach the PC).
+When no router answered UPnP (or you did not allow it), the wizard only lists
+the ports to forward and carries on, so the phone test fails at the end. That
+is expected: forward the ports as in [Open the ports](#open-the-ports) below,
+then run `telinha doctor` again. The certificate does not wait for them: with
+a DuckDNS address it comes through DuckDNS (usually 1-3 minutes), and with a
+tunnel Cloudflare holds it.
 :::
 
 If you said no to the UAC prompt, the background task is not registered: the
@@ -157,11 +172,11 @@ The internet has to reach the PC on these ports:
 | --- | --- | --- |
 | TCP 7881 | always | Video over TCP, for networks that block UDP |
 | UDP 7882 | always | Video over UDP, the normal path |
-| TCP 443 | your own domain or DuckDNS | The pages, over HTTPS |
-| TCP 80 | your own domain or DuckDNS, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
+| TCP 8443 | DuckDNS address (your port if you changed it) | The pages, over HTTPS |
 
-With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
-carry WebRTC. If you changed a port in the setup, use your value.
+Nothing more: not 80, not 443. With a Cloudflare Tunnel only the two media
+ports are needed (tunnels do not carry WebRTC). If you changed a port in the
+setup, use your value.
 
 **UPnP first.** When the router answered and you allowed it, Telinha asks the
 router for these ports while it runs and you have nothing to do. Otherwise
@@ -171,10 +186,11 @@ so the rule keeps pointing at it.
 are pages for [Vivo](/telinha/routers/vivo/), [Claro](/telinha/routers/claro/),
 [TIM](/telinha/routers/tim/) and [Oi](/telinha/routers/oi/) routers.
 
-**Windows Firewall.** The UAC step adds four inbound rules, each bound to its
+**Windows Firewall.** The UAC step adds inbound rules, each bound to its
 program in `bin\`: `Telinha LiveKit TCP` and `Telinha LiveKit UDP` for
-`livekit-server.exe`, `Telinha HTTPS` and `Telinha HTTP` for `caddy.exe` (the
-last two only with your own domain or DuckDNS). Running `telinha` in a console
+`livekit-server.exe`, and with a DuckDNS address `Telinha HTTPS` for
+`caddy.exe` on 8443. There is no `Telinha HTTP` rule at home: nothing listens
+on port 80. Running `telinha` in a console
 before the service and dismissing the Windows Security alert leaves Block
 rules behind, and Block wins over Allow; the install removes those first. Run
 `telinha setup` again after changing a port so the rules follow.

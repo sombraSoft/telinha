@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createSupervisor, type ChildHandle, type ChildSpec, type SupervisorDeps } from '../src/supervisor.ts';
+import { createSupervisor, redactLine, type ChildHandle, type ChildSpec, type SupervisorDeps } from '../src/supervisor.ts';
 
 const T0 = 1_700_000_000_000;
 // Not a pid anywhere: Windows pids are multiples of 4, Linux pid_max is <= 4194304.
@@ -162,6 +162,50 @@ describe('start', () => {
     await settle();
     expect(f.logs.filter((l) => l.startsWith('[lk]'))).toEqual(['[lk] hello', '[lk] world', '[lk] last']);
     await sup.stop();
+  });
+
+  test('redact blanks a secret in forwarded output, even when a chunk splits it', async () => {
+    const secret = 'SECRET-duck-0123'; // gitleaks:allow
+    const f = fakes();
+    const sup = f.create([f.spec('caddy', { redact: [secret] })]);
+    await sup.start();
+    const h = f.last();
+    h.push('error: Get "https://www.duckdns.org/update?domains=g&token=SECRET-du');
+    h.push('ck-0123&txt=x": dial tcp: lookup www.duckdns.org: no such host\ntrailing token=SECRET-duck-0123'); // gitleaks:allow
+    h.closeOut();
+    await settle();
+    expect(f.logs.filter((l) => l.startsWith('[caddy]'))).toEqual([
+      '[caddy] error: Get "https://www.duckdns.org/update?domains=g&token=***&txt=x": dial tcp: lookup www.duckdns.org: no such host',
+      '[caddy] trailing token=***',
+    ]);
+    expect(f.logs.join('\n')).not.toContain(secret);
+    await sup.stop();
+  });
+
+  test('a spec without redact forwards lines verbatim', async () => {
+    const f = fakes();
+    const sup = f.create([f.spec('lk')]);
+    await sup.start();
+    f.last().push('token=abc&x=***\n');
+    await settle();
+    expect(f.logs.filter((l) => l.startsWith('[lk]'))).toEqual(['[lk] token=abc&x=***']);
+    await sup.stop();
+  });
+});
+
+describe('redactLine', () => {
+  test.each([
+    ['no secrets', 'token=abc', [], 'token=abc'],
+    ['empty secret is skipped', 'token=abc', [''], 'token=abc'],
+    ['every occurrence', 'abc abc', ['abc'], '*** ***'],
+    ['several secrets', 'a=one b=two', ['one', 'two'], 'a=*** b=***'],
+    ['the URL-encoded form too', 'token=a%2Bb%2Fc and a+b/c', ['a+b/c'], 'token=*** and ***'],
+  ] as const)('%s', (_, line, secrets, want) => {
+    expect(redactLine(line, secrets)).toBe(want);
+  });
+
+  test('no list leaves the line alone', () => {
+    expect(redactLine('token=abc')).toBe('token=abc');
   });
 });
 

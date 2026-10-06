@@ -8,6 +8,8 @@ const PROD_ENV = {
   PUBLIC_URL: 'https://tela.example.com', COOKIE_SECRET: 'secret',
   LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'lksecret',
 };
+const DUCK_TOKEN = 'S3CR3T-duckdns-token'; // gitleaks:allow
+const HOME = { PUBLIC_URL: 'https://my-group.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns', DUCKDNS_TOKEN: DUCK_TOKEN };
 const caddy = (env: Record<string, string> = {}) => renderCaddyfile(loadConfig({ ...PROD_ENV, ...env }));
 const livekit = (env: Record<string, string> = {}) => renderLivekitYaml(loadConfig({ ...PROD_ENV, ...env }));
 
@@ -89,6 +91,80 @@ tela.example.com {
 }
 `);
     expect(out).not.toContain('tela.example.com:');
+  });
+
+  test('DNS-01 through DuckDNS: the home default', () => {
+    const out = caddy(HOME);
+    expect(out).toBe(`# Rendered by telinha from telinha.env; do not edit.
+{
+	admin off
+	auto_https disable_redirects
+	https_port 8443
+}
+
+my-group.duckdns.org {
+	tls {
+		issuer acme {
+			dns duckdns {env.DUCKDNS_TOKEN}
+			disable_http_challenge
+			disable_tlsalpn_challenge
+			resolvers 1.1.1.1 8.8.8.8
+		}
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8081
+}
+`);
+    expect(out).not.toContain(DUCK_TOKEN);
+  });
+
+  test('DNS-01 with ACME_EMAIL: the email moves into the issuer block', () => {
+    expect(caddy({ ...HOME, ACME_EMAIL: 'ops@example.com' })).toBe(`# Rendered by telinha from telinha.env; do not edit.
+{
+	admin off
+	auto_https disable_redirects
+	https_port 8443
+}
+
+my-group.duckdns.org {
+	tls {
+		issuer acme {
+			email ops@example.com
+			dns duckdns {env.DUCKDNS_TOKEN}
+			disable_http_challenge
+			disable_tlsalpn_challenge
+			resolvers 1.1.1.1 8.8.8.8
+		}
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8081
+}
+`);
+  });
+
+  test('DNS-01 with HTTP_PORT=80 keeps the redirect listener', () => {
+    const out = caddy({ ...HOME, PUBLIC_URL: 'https://my-group.duckdns.org', HTTPS_PORT: '443', HTTP_PORT: '80' });
+    expect(out).toBe(`# Rendered by telinha from telinha.env; do not edit.
+{
+	admin off
+	http_port 80
+	https_port 443
+}
+
+my-group.duckdns.org {
+	tls {
+		issuer acme {
+			dns duckdns {env.DUCKDNS_TOKEN}
+			disable_http_challenge
+			disable_tlsalpn_challenge
+			resolvers 1.1.1.1 8.8.8.8
+		}
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8081
+}
+`);
+    expect(out).not.toContain(DUCK_TOKEN);
   });
 
   test('LISTEN=[::1]:8081 brackets the IPv6 upstream', () => {

@@ -125,9 +125,10 @@ The page opens on your network but not on mobile data. Look at, in order:
 - `tls`: besides the certificate, it fetches `<PUBLIC_URL>/healthz` from the
   internet. A failure there with a valid certificate means the request does
   not reach Telinha.
-- `gateway`, `cgnat` and `mappings`: the router forwards TCP 443 (and 80) to
-  this machine, and the line is not behind CGNAT. See
-  [Port forwarding](/telinha/guides/port-forwarding/).
+- `gateway`, `cgnat` and `mappings`: the router forwards TCP 8443 (a DuckDNS
+  address at home) to this machine, or the tunnel is up (`listeners`), and the
+  line is not behind CGNAT. On a VPS, 443 and 80 are open in the provider's
+  firewall. See [Port forwarding](/telinha/guides/port-forwarding/).
 - `listeners`: Telinha and its helpers are up locally.
 
 ### Works from outside but not from your own network
@@ -185,15 +186,32 @@ watch follows changes, see [Dynamic IP](/telinha/guides/domains/#dynamic-ip)).
 ### The certificate is not issued
 
 `tls` fails in `direct` mode. Caddy gets the certificate from Let's Encrypt by
-itself once the name points here (`dns`) and the ports reach Caddy (`mappings`,
-`listeners`); its attempts are in the log as `[caddy]` lines.
+itself; its attempts are in the log as `[caddy]` lines. The `certificate` row
+says which way it goes.
 
-- Port 80 closed: Let's Encrypt can validate over TLS on 443 instead. Set
-  `HTTP_PORT=0` so nothing waits on 80, and make sure public 443 reaches
-  Caddy. See [Port translation](/telinha/guides/domains/#port-translation).
+**At home with DuckDNS** (the DNS challenge, `ACME_DNS=duckdns`), no port
+plays a part in the certificate:
+
+- The DuckDNS token must be right: the `dns` row asks DuckDNS whether it
+  accepts the token (sending the IP the record already holds, so nothing
+  changes) and fails when it does not; run `telinha setup` again to enter
+  the right one. A wrong token shows up as `ddns:` errors in the log too.
+- `listeners` must show Caddy on `HTTPS_PORT` (8443): another program on that
+  port stops it.
+- `binaries` fails when the `caddy` in use lacks the DuckDNS module (an
+  upstream or distro Caddy on `PATH`): run `telinha setup` again to get
+  Telinha's own build into `bin/`; the one on `PATH` is left alone.
+- The first certificate usually takes 1-3 minutes: Caddy waits until public
+  DNS shows the challenge record. Run `telinha doctor` again before changing
+  anything.
+
+**On a VPS** (the HTTP challenge), the name must point here (`dns`) and ports
+80 and 443 must reach Caddy: open them in the provider's firewall and in ufw
+or firewalld (`listeners` prints the commands).
+
 - `listeners` says nothing listens on the HTTPS port, on a Linux user
-  install: ports below 1024 need the one-time sysctl step it prints, or
-  `HTTPS_PORT=8443`. See [Running as a service](/telinha/guides/service/#linux-as-a-user).
+  install: ports below 1024 need the one-time sysctl step it prints. See
+  [Running as a service](/telinha/guides/service/#low-ports-on-a-vps-user-install).
 - On sslip.io the shared domain can hit Let's Encrypt's weekly limit; a
   DuckDNS name or your own domain avoids it.
 
@@ -242,7 +260,7 @@ docker ps
 
 The container is `unhealthy` in `docker ps` while a helper (LiveKit, Caddy,
 `cloudflared`) is down and waiting to restart: for example Caddy cannot bind
-80/443, or the tunnel token is wrong. The log says which. `telinha-update`
+its port, or the tunnel token is wrong. The log says which. `telinha-update`
 rolls back a release that never turns healthy. With the journald override,
 `journalctl -t telinha` keeps the log across container recreation; see
 [Running as a service](/telinha/guides/service/#docker).

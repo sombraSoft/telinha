@@ -4,7 +4,8 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import versionsJson from '../../../versions.json' with { type: 'json' };
-import { KNOWN_KEYS, type Config } from '../config.ts';
+import { KNOWN_KEYS, upnpMappings, type Config } from '../config.ts';
+import { createDuckDns, DUCKDNS_REJECTED } from '../ddns.ts';
 import { parseEnvFile } from '../envfile.ts';
 import type { Locale } from '../i18n.ts';
 import * as netinfo from '../netinfo.ts';
@@ -35,6 +36,7 @@ const en = {
   'title.discord-redirect': 'Discord login redirect',
   'title.public-ip': 'Public IP',
   'title.dns': 'DNS',
+  'title.certificate': 'Certificate method',
   'title.tls': 'HTTPS certificate',
   'title.listeners': 'Local listeners',
   'title.service': 'Background service',
@@ -75,6 +77,11 @@ const en = {
   binMissingFixDev: 'Run: bun scripts/bins.ts',
   binStale: '{tool} {have} is installed, {want} is pinned: the next start downloads {want}.',
   binNoSidecar: '{tool} in {dir} has no version record: the next start downloads it again.',
+  binCaddyNoDns: 'The caddy at {where} has no DuckDNS module: the certificate (DNS challenge) cannot be obtained.',
+  binCaddyNoDnsFixCompiled: 'Delete {where} and run telinha setup again: it downloads Telinha\'s own Caddy build.',
+  binCaddyNoDnsFixPath: 'Telinha\'s own Caddy is not in {bin}, so the one on PATH is used: run telinha setup again (or restart telinha) while online and it downloads Telinha\'s build into {bin}. The caddy at {where} is left as it is.',
+  binCaddyNoDnsFixDev: 'Fetch Telinha\'s Caddy build (bun scripts/bins.ts --out {bin} caddy) or build one (bun run caddy --out {bin}).',
+  binCaddyNoProbe: 'Could not read {where} to look for the DuckDNS module.',
 
   tokenOk: 'The token works (application "{name}").',
   tokenBad: 'Discord rejected DISCORD_TOKEN.',
@@ -120,11 +127,23 @@ const en = {
   dnsWrong: '{host} points at {ips}, but the public IP is {ip}.',
   dnsWrongFix: 'Change the A record of {host} to {ip}.',
   dnsDuck: 'DuckDNS points {host} at {ips}, the public IP is {ip}; the running service updates it.',
+  dnsDuckToken: 'DuckDNS rejected the token for {host}: the record cannot be updated and the certificate (DNS challenge) cannot be obtained.',
+  dnsDuckTokenFix: 'Copy the token from duckdns.org (shown at the top once you sign in, with {host} among your domains) and run telinha setup again.',
+  dnsDuckTokenOk: 'DuckDNS accepts the token for {host}.',
+  dnsDuckTokenUnknown: 'Could not ask DuckDNS about the token: {error}',
   dnsExternal: '{host} points at {ips}, not at this network ({ip}): fine if another proxy in front forwards to telinha.',
+
+  certTunnel: 'Cloudflare terminates HTTPS for {host}; nothing to obtain here.',
+  certExternal: 'Your reverse proxy holds the certificate for {host}.',
+  certDns: 'Let\'s Encrypt through DuckDNS (DNS challenge) for {host}; HTTPS on port {port}, ports 80 and 443 are not used.',
+  certHttp: 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for {host}.',
+  certAlpn: 'Let\'s Encrypt over port 443 (TLS-ALPN challenge) for {host}.',
+  certHomeAdvanced: 'Advanced home setup: ports 80 and 443 must reach this machine, forwarded by hand. The standard home options (a Cloudflare Tunnel, or a DuckDNS address with HTTPS on port 8443) need neither.',
 
   tlsHttp: 'Skipped: PUBLIC_URL is plain http.',
   tlsBad: 'The certificate of {host} is not valid: {error}',
   tlsBadFixDirect: 'Caddy gets the certificate by itself once ports 80 and 443 reach this computer: see the DNS, listeners and port forwarding checks.',
+  tlsBadFixDns: 'Caddy asks Let\'s Encrypt through DuckDNS: check the DuckDNS token (dns check), that port {port} is free for Caddy (listeners) and the [caddy] lines in the log; a fresh install can take a few minutes.',
   tlsBadFix: 'Check the proxy or tunnel in front of telinha.',
   tlsExpired: 'The certificate of {host} expired.',
   tlsSoon: 'The certificate of {host} expires in {days} days.',
@@ -142,7 +161,7 @@ const en = {
   livekitDown: 'LiveKit does not answer on port {port}.',
   mediaTcpDown: 'Nothing accepts connections on media TCP port {port}.',
   httpsDown: 'Nothing listens on HTTPS port {port}.',
-  lowPortFix: 'Ports below 1024 need root on Linux. Allow them once (it survives every update): {cmd}. Or set HTTPS_PORT=8443 and HTTP_PORT=0 and have the router forward 443 to 8443. telinha setup offers both.',
+  lowPortFix: 'Ports below 1024 need root on Linux. Allow them once (it survives every update): {cmd}. The standard home options of telinha setup need no low port.',
   fwUfw: 'If ufw is active, open the ports: {cmd}',
   fwFirewalld: 'If firewalld is running, open the ports: {cmd}',
 
@@ -175,12 +194,14 @@ const en = {
   natMismatch: 'The router reports {ext}, but the internet sees {ip}: there is probably another NAT in front.',
 
   mapSkipNoPorts: 'Skipped: this configuration needs no inbound ports.',
+  mapSkipNoneAsked: 'Skipped: nothing here is asked of the router. Forward by hand: {list}',
   mapSkipNoGw: 'Skipped: no router supports automatic port forwarding.',
   mapSkipOff: 'Skipped: UPNP=off. Forward by hand: {list}',
   mapSkipNoStatus: 'Skipped: the running service opens the ports; start it to see them.',
   mapOk: 'Every needed port is forwarded: {list}.',
   mapPartial: 'Not forwarded: {list}.',
   mapPartialFix: 'Forward them by hand on the router to {ip}: {list}',
+  mapByHand: 'Forwarded by hand, not asked of the router: {list}',
 
   updSkip: 'Skipped: Docker/dev, updates are not managed here.',
   updOk: 'Up to date ({version}).',
@@ -207,6 +228,7 @@ const ptBR: Dict = {
   'title.discord-redirect': 'Redirect do login',
   'title.public-ip': 'IP público',
   'title.dns': 'DNS',
+  'title.certificate': 'Como vem o certificado',
   'title.tls': 'Certificado HTTPS',
   'title.listeners': 'Portas locais',
   'title.service': 'Serviço em segundo plano',
@@ -247,6 +269,11 @@ const ptBR: Dict = {
   binMissingFixDev: 'Roda: bun scripts/bins.ts',
   binStale: '{tool} {have} está instalado, a versão fixada é {want}: a próxima inicialização baixa a {want}.',
   binNoSidecar: '{tool} em {dir} não tem registro de versão: a próxima inicialização baixa de novo.',
+  binCaddyNoDns: 'O caddy em {where} não tem o módulo do DuckDNS: o certificado (desafio DNS) não tem como sair.',
+  binCaddyNoDnsFixCompiled: 'Apaga {where} e roda o telinha setup de novo: ele baixa o Caddy da própria Telinha.',
+  binCaddyNoDnsFixPath: 'O Caddy da própria Telinha não está em {bin}, então o do PATH é que está sendo usado: roda o telinha setup de novo (ou reinicia a Telinha) com internet e ele baixa o build da Telinha em {bin}. O caddy em {where} fica como está.',
+  binCaddyNoDnsFixDev: 'Baixa o Caddy da Telinha (bun scripts/bins.ts --out {bin} caddy) ou compila um (bun run caddy --out {bin}).',
+  binCaddyNoProbe: 'Não deu pra ler {where} pra procurar o módulo do DuckDNS.',
 
   tokenOk: 'O token funciona (aplicação "{name}").',
   tokenBad: 'O Discord recusou o DISCORD_TOKEN.',
@@ -292,11 +319,23 @@ const ptBR: Dict = {
   dnsWrong: '{host} aponta pra {ips}, mas o IP público é {ip}.',
   dnsWrongFix: 'Muda o registro A de {host} pra {ip}.',
   dnsDuck: 'O DuckDNS aponta {host} pra {ips}, o IP público é {ip}; o serviço rodando atualiza isso.',
+  dnsDuckToken: 'O DuckDNS recusou o token pra {host}: o registro não atualiza e o certificado (desafio DNS) não tem como sair.',
+  dnsDuckTokenFix: 'Copia o token do duckdns.org (aparece no topo depois de entrar, com {host} entre os teus domínios) e roda o telinha setup de novo.',
+  dnsDuckTokenOk: 'O DuckDNS aceita o token pra {host}.',
+  dnsDuckTokenUnknown: 'Não deu pra perguntar ao DuckDNS sobre o token: {error}',
   dnsExternal: '{host} aponta pra {ips}, não pra esta rede ({ip}): tudo bem se outro proxy na frente repassa pra Telinha.',
+
+  certTunnel: 'A Cloudflare cuida do HTTPS de {host}; não há nada pra obter aqui.',
+  certExternal: 'Teu proxy reverso guarda o certificado de {host}.',
+  certDns: 'Let\'s Encrypt pelo DuckDNS (desafio DNS) pra {host}; HTTPS na porta {port}, as portas 80 e 443 não são usadas.',
+  certHttp: 'Let\'s Encrypt pelas portas 80 e 443 (desafio HTTP) pra {host}.',
+  certAlpn: 'Let\'s Encrypt pela porta 443 (desafio TLS-ALPN) pra {host}.',
+  certHomeAdvanced: 'Configuração avançada em casa: as portas 80 e 443 precisam chegar neste computador, redirecionadas na mão. As opções padrão pra casa (um Cloudflare Tunnel, ou um endereço DuckDNS com HTTPS na porta 8443) não precisam de nenhuma das duas.',
 
   tlsHttp: 'Pulado: PUBLIC_URL é http simples.',
   tlsBad: 'O certificado de {host} não é válido: {error}',
   tlsBadFixDirect: 'O Caddy pega o certificado sozinho quando as portas 80 e 443 chegam neste computador: olha os testes de DNS, portas locais e redirecionamento.',
+  tlsBadFixDns: 'O Caddy pede ao Let\'s Encrypt pelo DuckDNS: confere o token do DuckDNS (teste de DNS), se a porta {port} está livre pro Caddy (portas locais) e as linhas [caddy] do log; numa instalação nova pode levar alguns minutos.',
   tlsBadFix: 'Confere o proxy ou o túnel na frente da Telinha.',
   tlsExpired: 'O certificado de {host} venceu.',
   tlsSoon: 'O certificado de {host} vence em {days} dias.',
@@ -314,7 +353,7 @@ const ptBR: Dict = {
   livekitDown: 'O LiveKit não responde na porta {port}.',
   mediaTcpDown: 'Nada aceita conexões na porta TCP de mídia {port}.',
   httpsDown: 'Nada escuta na porta HTTPS {port}.',
-  lowPortFix: 'No Linux, portas abaixo de 1024 precisam de root. Libera uma vez (vale pra todas as atualizações): {cmd}. Ou usa HTTPS_PORT=8443 e HTTP_PORT=0 e faz o roteador mandar a 443 pra 8443. O telinha setup oferece os dois.',
+  lowPortFix: 'No Linux, portas abaixo de 1024 precisam de root. Libera uma vez (vale pra todas as atualizações): {cmd}. As opções padrão pra casa do telinha setup não precisam de porta baixa.',
   fwUfw: 'Se o ufw estiver ativo, abre as portas: {cmd}',
   fwFirewalld: 'Se o firewalld estiver rodando, abre as portas: {cmd}',
 
@@ -347,12 +386,14 @@ const ptBR: Dict = {
   natMismatch: 'O roteador informa {ext}, mas a internet vê {ip}: provavelmente tem outro NAT na frente.',
 
   mapSkipNoPorts: 'Pulado: esta configuração não precisa de portas de entrada.',
+  mapSkipNoneAsked: 'Pulado: nada aqui é pedido ao roteador. Redireciona na mão: {list}',
   mapSkipNoGw: 'Pulado: nenhum roteador aceita redirecionamento automático.',
   mapSkipOff: 'Pulado: UPNP=off. Redireciona na mão: {list}',
   mapSkipNoStatus: 'Pulado: o serviço rodando abre as portas; inicia ele pra ver.',
   mapOk: 'Todas as portas necessárias estão redirecionadas: {list}.',
   mapPartial: 'Sem redirecionamento: {list}.',
   mapPartialFix: 'Redireciona na mão no roteador pra {ip}: {list}',
+  mapByHand: 'Redirecionadas na mão, sem pedir ao roteador: {list}',
 
   updSkip: 'Pulado: Docker/dev, as atualizações não são gerenciadas aqui.',
   updOk: 'Atualizada ({version}).',
@@ -440,6 +481,15 @@ const realSys: SysLike = {
       const p = Bun.spawn(['icacls', path], { stdout: 'pipe', stderr: 'ignore' });
       const out = await new Response(p.stdout).text();
       return (await p.exited) === 0 ? out : null;
+    } catch {
+      return null;
+    }
+  },
+  async readBytes(path, maxBytes) {
+    try {
+      const f = Bun.file(path);
+      if (f.size > maxBytes) return null;
+      return await f.bytes();
     } catch {
       return null;
     }
@@ -634,6 +684,24 @@ const PINNED: Record<string, { version: string }> = {
 
 const MEMBERS: Record<string, string> = { livekit: 'livekit-server', caddy: 'caddy', cloudflared: 'cloudflared' };
 
+/** Far above any Caddy build (~50 MB); a bigger file is not read whole. */
+const CADDY_MAX_BYTES = 256 * 1024 * 1024;
+// A Go binary carries its module IDs and its build info as plain strings.
+const DUCKDNS_MARKERS = ['dns.providers.duckdns', 'github.com/caddy-dns/duckdns'];
+
+/**
+ * Whether the caddy at `path` has the DuckDNS module, or null when it cannot
+ * be read. Read, never run: doctor runs as root at the end of a system
+ * setup, and bin/ belongs to the service user, so whoever controls that user
+ * could otherwise put a program there for root to execute.
+ */
+async function hasDuckDnsModule(s: SysLike, path: string): Promise<boolean | null> {
+  const bytes = s.readBytes ? await s.readBytes(path, CADDY_MAX_BYTES) : null;
+  if (!bytes) return null;
+  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return DUCKDNS_MARKERS.some((m) => buf.includes(m));
+}
+
 const binaries: Check = {
   id: 'binaries',
   async run(ctx) {
@@ -652,21 +720,39 @@ const binaries: Check = {
     const detail: string[] = [];
     for (const tool of tools) {
       const member = MEMBERS[tool]!;
-      const want = versions[tool]?.version ?? '?';
+      // Our caddy ships with each Telinha release, so its sidecar holds that release's tag; from
+      // source any release's caddy does.
+      const want = tool === 'caddy' ? (ctx.compiled ? `v${ctx.version}` : null) : (versions[tool]?.version ?? '?');
       const local = join(ctx.paths.bin, member + exe);
+      let found: string | null = null;
       if (s.exists(local)) {
+        found = local;
         const have = s.readText(join(ctx.paths.bin, `${tool}.version`))?.trim();
         if (!have) findings.push({ status: 'warn', summary: tr(L, 'binNoSidecar', { tool, dir: ctx.paths.bin }) });
-        else if (have !== want) findings.push({ status: 'warn', summary: tr(L, 'binStale', { tool, have, want }) });
+        else if (want !== null && have !== want) findings.push({ status: 'warn', summary: tr(L, 'binStale', { tool, have, want }) });
         else detail.push(tr(L, 'binLine', { tool, version: have, where: local }));
+      } else {
+        found = s.which(member);
+        if (found) detail.push(tr(L, 'binPath', { tool, where: found }));
+      }
+      if (!found) {
+        findings.push({ status: 'fail', summary: tr(L, 'binMissing', { tool }), fix: tr(L, ctx.compiled ? 'binMissingFixCompiled' : 'binMissingFixDev') });
         continue;
       }
-      const onPath = s.which(member);
-      if (onPath) {
-        detail.push(tr(L, 'binPath', { tool, where: onPath }));
-        continue;
+      // An upstream caddy (a distro package, an old download) cannot do the DuckDNS challenge.
+      if (tool === 'caddy' && c.acmeDns) {
+        const has = await hasDuckDnsModule(s, found);
+        if (has === null) detail.push(tr(L, 'binCaddyNoProbe', { where: found }));
+        else if (!has) {
+          // Ours in bin/ can go (the next setup or start downloads it again); a caddy on PATH
+          // is only in use because Telinha's own download failed, and may belong to a package.
+          const fix = !ctx.compiled ? 'binCaddyNoDnsFixDev' : found === local ? 'binCaddyNoDnsFixCompiled' : 'binCaddyNoDnsFixPath';
+          findings.push({
+            status: 'fail', summary: tr(L, 'binCaddyNoDns', { where: found }),
+            fix: tr(L, fix, { where: found, bin: ctx.paths.bin }),
+          });
+        }
       }
-      findings.push({ status: 'fail', summary: tr(L, 'binMissing', { tool }), fix: tr(L, ctx.compiled ? 'binMissingFixCompiled' : 'binMissingFixDev') });
     }
     return combine(ctx, 'binaries', findings, tr(L, 'binOk'), detail);
   },
@@ -802,6 +888,27 @@ const publicIpCheck: Check = {
   },
 };
 
+/**
+ * Whether DuckDNS takes the token for a DuckDNS name: rejected, a detail
+ * line, or null when there is no DuckDNS token to ask about. A wrong or
+ * revoked token is how a DuckDNS name breaks: DuckDNS answers KO to the
+ * updater and to Caddy's DNS challenge alike, and the only other trace is the
+ * redacted [caddy] lines in the log. The update carries the IP the record
+ * already holds, so asking changes nothing.
+ */
+async function duckDnsToken(ctx: CheckContext, c: Config, host: string, current: string): Promise<{ rejected: true } | { line: string } | null> {
+  const token = c.acmeDns?.token ?? (c.ddns?.provider === 'duckdns' ? c.ddns.token : undefined);
+  if (!token || !host.endsWith('.duckdns.org')) return null;
+  const domain = c.ddns?.domain ?? host.slice(0, -'.duckdns.org'.length);
+  const ddns = createDuckDns({ domain, token, fetch: ctx.fetch, log: () => {} });
+  await ddns.update(current);
+  const last = ddns.last();
+  if (last?.ok) return { line: tr(ctx.locale, 'dnsDuckTokenOk', { host }) };
+  // The error never holds the token (ddns.ts scrubs it).
+  if (last?.error === DUCKDNS_REJECTED) return { rejected: true };
+  return { line: tr(ctx.locale, 'dnsDuckTokenUnknown', { error: last?.error ?? '?' }) };
+}
+
 const dnsCheck: Check = {
   id: 'dns',
   internet: true,
@@ -825,13 +932,36 @@ const dnsCheck: Check = {
     const list = ips.join(', ');
     // Cloudflare answers with its own anycast addresses for a tunnel.
     if (c.ingress === 'tunnel') return make(ctx, 'dns', 'ok', tr(L, 'dnsTunnelOk', { host, ips: list }));
-    if (!expected) return make(ctx, 'dns', 'warn', tr(L, 'dnsUnknownIp', { host, ips: list }));
-    if (ips.includes(expected)) return make(ctx, 'dns', 'ok', tr(L, 'dnsOk', { host, ip: expected }));
+    const duck = await duckDnsToken(ctx, c, host, ips[0]!);
+    if (duck && 'rejected' in duck) return make(ctx, 'dns', 'fail', tr(L, 'dnsDuckToken', { host }), { fix: tr(L, 'dnsDuckTokenFix', { host }) });
+    const detail = duck ? [duck.line] : [];
+    if (!expected) return make(ctx, 'dns', 'warn', tr(L, 'dnsUnknownIp', { host, ips: list }), { detail });
+    if (ips.includes(expected)) return make(ctx, 'dns', 'ok', tr(L, 'dnsOk', { host, ip: expected }), { detail });
     if (c.ddns?.provider === 'duckdns' && host.endsWith('.duckdns.org')) {
-      return make(ctx, 'dns', 'warn', tr(L, 'dnsDuck', { host, ips: list, ip: expected }));
+      return make(ctx, 'dns', 'warn', tr(L, 'dnsDuck', { host, ips: list, ip: expected }), { detail });
     }
-    if (c.ingress === 'external') return make(ctx, 'dns', 'warn', tr(L, 'dnsExternal', { host, ips: list, ip: expected }));
-    return make(ctx, 'dns', 'fail', tr(L, 'dnsWrong', { host, ips: list, ip: expected }), { fix: tr(L, 'dnsWrongFix', { host, ip: expected }) });
+    if (c.ingress === 'external') return make(ctx, 'dns', 'warn', tr(L, 'dnsExternal', { host, ips: list, ip: expected }), { detail });
+    return make(ctx, 'dns', 'fail', tr(L, 'dnsWrong', { host, ips: list, ip: expected }), { fix: tr(L, 'dnsWrongFix', { host, ip: expected }), detail });
+  },
+};
+
+/** How the certificate is obtained; informational, the tls check says whether it worked. */
+const certificate: Check = {
+  id: 'certificate',
+  async run(ctx) {
+    const L = ctx.locale;
+    const c = ctx.config;
+    if (!c) return make(ctx, 'certificate', 'skip', tr(L, 'needConfig'));
+    const url = new URL(c.publicUrl);
+    if (url.protocol !== 'https:') return make(ctx, 'certificate', 'skip', tr(L, 'tlsHttp'));
+    const host = c.publicHost;
+    if (c.ingress === 'tunnel') return make(ctx, 'certificate', 'ok', tr(L, 'certTunnel', { host }));
+    if (c.ingress === 'external') return make(ctx, 'certificate', 'ok', tr(L, 'certExternal', { host }));
+    if (c.acmeDns) return make(ctx, 'certificate', 'ok', tr(L, 'certDns', { host, port: Number(url.port || 443) }));
+    const summary = tr(L, c.httpPort ? 'certHttp' : 'certAlpn', { host });
+    // Chosen on purpose in setup's advanced path: a note, not a finding, so every doctor run stays clean.
+    const detail = c.hosting === 'home' ? [tr(L, 'certHomeAdvanced')] : [];
+    return make(ctx, 'certificate', 'ok', summary, { detail });
   },
 };
 
@@ -848,7 +978,7 @@ const tlsCheck: Check = {
     const info = await net(ctx).tlsInfo(host, Number(url.port || 443));
     if (!info.authorized) {
       return make(ctx, 'tls', 'fail', tr(L, 'tlsBad', { host, error: info.error ?? '?' }), {
-        fix: tr(L, c.ingress === 'direct' ? 'tlsBadFixDirect' : 'tlsBadFix'),
+        fix: c.ingress !== 'direct' ? tr(L, 'tlsBadFix') : c.acmeDns ? tr(L, 'tlsBadFixDns', { port: c.httpsPort }) : tr(L, 'tlsBadFixDirect'),
       });
     }
     const days = Math.floor((info.validTo - Date.now()) / DAY_MS);
@@ -1006,19 +1136,25 @@ const mappings: Check = {
     const c = ctx.config;
     if (!c) return make(ctx, 'mappings', 'skip', tr(L, 'needConfig'));
     const needed = neededPorts(c);
-    if (!needed.length) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoPorts'));
+    // The mapper never asks for 80/443: judge it on what it owns, and name the rest as by hand.
+    const owned: NeededPort[] = upnpMappings(c).map((m) => ({ protocol: m.protocol, external: m.externalPort, internal: m.internalPort }));
+    if (!owned.length) {
+      return make(ctx, 'mappings', 'skip', needed.length ? tr(L, 'mapSkipNoneAsked', { list: portList(needed) }) : tr(L, 'mapSkipNoPorts'));
+    }
+    const byHand = needed.filter((n) => !owned.some((o) => o.protocol === n.protocol && o.external === n.external));
+    const byHandLine = byHand.length ? [tr(L, 'mapByHand', { list: portList(byHand) })] : [];
     const p = await natProbe(ctx);
     if (!p || publicHost(p) || !p.gateway) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoGw'));
     if (!c.upnp) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipOff', { list: portList(needed) }));
     const st = (await controlStatus(ctx))?.upnp ?? readMapperFile(ctx);
     if (!st) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoStatus'));
-    const missing = needed.filter((n) => !st.mappings.some((m) =>
+    const missing = owned.filter((n) => !st.mappings.some((m) =>
       m.protocol.toLowerCase() === n.protocol && m.externalPort === n.external && m.state === 'mapped'));
-    if (!missing.length) return make(ctx, 'mappings', 'ok', tr(L, 'mapOk', { list: portList(needed) }));
+    if (!missing.length) return make(ctx, 'mappings', 'ok', tr(L, 'mapOk', { list: portList(owned) }), { detail: byHandLine });
     const errors = st.mappings.filter((m) => m.error).map((m) => `${m.protocol.toUpperCase()} ${m.externalPort}: ${m.error}`);
     return make(ctx, 'mappings', 'warn', tr(L, 'mapPartial', { list: portList(missing) }), {
       fix: tr(L, 'mapPartialFix', { ip: p.localIp ?? '?', list: portList(missing) }),
-      detail: errors,
+      detail: [...errors, ...byHandLine],
     });
   },
 };
@@ -1052,7 +1188,7 @@ const update: Check = {
 export const CHECKS: readonly Check[] = [
   config, binaries,
   discordToken, discordIntents, discordGuild, discordRole, discordChannels, discordRedirect,
-  publicIpCheck, dnsCheck, tlsCheck,
+  publicIpCheck, dnsCheck, certificate, tlsCheck,
   listeners, service,
   gateway, cgnat, mappings,
   update,

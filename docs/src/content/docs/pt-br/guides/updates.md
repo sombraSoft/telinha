@@ -42,7 +42,9 @@ e o `SHA256SUMS` da versão, e não instala nada se o sha256 não bater. O
 executável em uso é renomeado para `telinha.old-<version>` e o novo toma o
 lugar dele; o loop do serviço inicia o novo na hora. Quando a versão nova fixa
 programas auxiliares mais novos, esse primeiro início baixa os programas e
-registra `binaries updated: livekit` (ou o que tiver mudado).
+registra `binaries updated: livekit` (ou o que tiver mudado). Com
+`INGRESS=direct` ela também baixa o build do Caddy da versão nova, conferido
+com o `SHA256SUMS` dessa versão, já que cada versão traz o seu.
 
 Rodando num console, a Telinha instala a atualização mas não reinicia
 sozinha; ela registra "update to vX installed; restart telinha to apply it".

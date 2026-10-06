@@ -76,8 +76,17 @@ Um valor inválido impede a inicialização (e falha a verificação `config` do
 `ports collide: MEDIA_TCP_PORT=7881, LISTEN=7881`. As regras:
 
 - `direct` e `tunnel` precisam de uma `PUBLIC_URL` `https://`.
+- `HOSTING` é `home`, `vps` ou vazio; `ACME_DNS` é `none` ou `duckdns`.
+- `ACME_DNS=duckdns` (direct) precisa do `DUCKDNS_TOKEN` e de uma `PUBLIC_URL`
+  com host sob `duckdns.org`: o DuckDNS só responde o desafio para os nomes
+  dele.
+- No direct sem `ACME_DNS`, uma `PUBLIC_URL` numa porta que não é a 443 junto
+  com `HTTP_PORT=0` é recusada: o Let's Encrypt só valida pela porta 80 ou 443
+  públicas, então essa configuração nunca conseguiria um certificado. Use
+  `ACME_DNS=duckdns` com um nome do DuckDNS, ou uma `PUBLIC_URL` na 443.
 - `LIVEKIT_PORT`, as duas portas de mídia, a porta do `LISTEN` e, no modo
-  direct, `HTTPS_PORT` e `HTTP_PORT` precisam ser todas diferentes.
+  direct, `HTTPS_PORT` e `HTTP_PORT` (a não ser que seja `0`) precisam ser
+  todas diferentes.
 - `MEDIA=cloud` é recusado: ainda não há suporte.
 - `COMMAND_NAME` precisa ser minúsculo, 1-32 letras, dígitos, `-` ou `_`;
   `UPDATE_PIN` uma tag como `v1.2.3`; `LOCALE` `en` ou `pt-BR`;
@@ -87,9 +96,12 @@ Um valor inválido impede a inicialização (e falha a verificação `config` do
   `http://127.0.0.1`, o `LISTEN` seja loopback e o `INGRESS` seja `external`.
 
 Avisos vão para o log e a inicialização segue: uma porta da `PUBLIC_URL`
-diferente de `HTTPS_PORT` (o roteador traduz), um `DUCKDNS_DOMAIN` escrito com
-`.duckdns.org` (o sufixo é removido), um nome do DuckDNS que não é o host da
-`PUBLIC_URL`, e `AUTO_UPDATE=on` fora do binário nativo (ignorado).
+diferente de `HTTPS_PORT` (o roteador traduz), uma `PUBLIC_URL` numa porta que
+não é a 443 sem `ACME_DNS` com o `HTTP_PORT` ligado (aí o certificado precisa
+da porta 80 pública chegando no `HTTP_PORT`), `ACME_DNS` definido fora do modo
+direct (ignorado), um `DUCKDNS_DOMAIN` escrito com `.duckdns.org` (o sufixo é
+removido), um nome do DuckDNS que não é o host da `PUBLIC_URL`, e
+`AUTO_UPDATE=on` fora do binário nativo (ignorado).
 
 ## O que os filhos recebem do ambiente
 
@@ -100,5 +112,8 @@ variáveis como opções). `PATH`, `HOME`, `TEMP`, `SystemRoot`, `LANG`,
 configurações de proxy e afins passam. Além disso, cada filho recebe só o que
 precisa: o LiveKit recebe `LIVEKIT_KEYS` (montada a partir do par de chaves da
 API), o cloudflared recebe `TUNNEL_TOKEN`, e o Caddy recebe `XDG_DATA_HOME`,
-`XDG_CONFIG_HOME` e `HOME` apontando para `data/caddy`. Nenhum segredo vai
+`XDG_CONFIG_HOME` e `HOME` apontando para `data/caddy`, mais o
+`DUCKDNS_TOKEN` com `ACME_DNS=duckdns` (o `Caddyfile` renderizado lê o token
+como `{env.DUCKDNS_TOKEN}`, e a Telinha apaga o token das linhas de log do
+Caddy). Nenhum segredo vai
 para a linha de comando de um filho nem para um arquivo renderizado.

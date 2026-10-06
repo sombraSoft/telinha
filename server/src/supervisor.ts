@@ -38,6 +38,8 @@ export interface ChildSpec {
   restart?: { minMs: number; maxMs: number; resetAfterMs: number };
   /** How long SIGTERM gets before SIGKILL; default 5000. */
   stopGraceMs?: number;
+  /** Secret values to blank out in forwarded output (`***`): a child may echo a URL that carries its token in an error. */
+  redact?: string[];
 }
 
 export type ChildState = 'starting' | 'up' | 'restarting' | 'stopped';
@@ -203,20 +205,33 @@ export function sameExe(recorded: string, seen: string | null, platform: NodeJS.
   return a === b || (b.length >= 15 && a.startsWith(b));
 }
 
-async function pipe(name: string, stream: ReadableStream<Uint8Array> | null, log: SupervisorDeps['log']) {
+/** Replaces every non-empty secret, raw or URL-encoded, with `***`. */
+export function redactLine(line: string, secrets: readonly string[] = []): string {
+  let out = line;
+  for (const secret of secrets) {
+    if (!secret) continue;
+    out = out.split(secret).join('***');
+    const encoded = encodeURIComponent(secret);
+    if (encoded !== secret) out = out.split(encoded).join('***');
+  }
+  return out;
+}
+
+async function pipe(spec: ChildSpec, stream: ReadableStream<Uint8Array> | null, log: SupervisorDeps['log']) {
   if (!stream) return;
+  const { name, redact } = spec;
   const decoder = new TextDecoder();
   let rest = '';
   try {
     for await (const chunk of stream) {
       const lines = (rest + decoder.decode(chunk, { stream: true })).split(/\r?\n/);
       rest = lines.pop() ?? '';
-      for (const line of lines) log(`[${name}] ${line}`);
+      for (const line of lines) log(`[${name}] ${redactLine(line, redact)}`);
     }
   } catch {
     // the pipe breaks when the child is killed: whatever arrived is logged below
   }
-  if (rest) log(`[${name}] ${rest}`);
+  if (rest) log(`[${name}] ${redactLine(rest, redact)}`);
 }
 
 const seconds = (ms: number) => `${ms / 1000}s`;
@@ -319,8 +334,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     child.exitCode = undefined;
     child.startedAt = now();
     setState(child, spec.ready ? 'starting' : 'up');
-    void pipe(spec.name, handle.stdout, log);
-    void pipe(spec.name, handle.stderr, log);
+    void pipe(spec, handle.stdout, log);
+    void pipe(spec, handle.stderr, log);
     void handle.exited.then((code) => onExit(child, handle, code));
     writePidfile();
   }

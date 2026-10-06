@@ -1,5 +1,5 @@
 {
-  "$comment": "Pinned child binaries. Renovate bumps `version`; run `bun scripts/versions.ts refresh` to recompute the sha256 of every asset. CI fails on a stale hash.",
+  "$comment": "Pinned child binaries. livekit and cloudflared are downloaded from upstream: Renovate bumps `version`, `bun scripts/versions.ts refresh` recomputes every sha256, CI fails on a stale hash. caddy is built by us with xcaddy (scripts/caddy-build.ts) from `version`, `xcaddy` and `modules`, in the Docker image and as release assets verified through the release's SHA256SUMS.",
   "livekit": {
     "version": "1.13.7",
     "sha256": {
@@ -11,11 +11,10 @@
   },
   "caddy": {
     "version": "2.11.4",
-    "sha256": {
-      "linux-amd64": "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9",
-      "linux-arm64": "52d42ae12b3462097e9868da6dfed3c9648ae12edd3b3638102312af84cb6904",
-      "windows-amd64": "1708333f79e274c7697285afe6d592ab39314e0b131e9ec6bea08ad27df62ebf",
-      "windows-arm64": "c7f16da93728f61455f77c04eac1ff4de06a38da281ed6d3dcbfae795be2a936"
+    "xcaddy": "v0.4.7",
+    "modules": {
+      "github.com/caddy-dns/duckdns": "v0.5.0",
+      "github.com/mholt/caddy-l4": "v0.1.2"
     }
   },
   "cloudflared": {

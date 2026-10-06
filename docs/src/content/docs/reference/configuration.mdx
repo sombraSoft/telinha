@@ -74,8 +74,16 @@ line, for example `telinha: bad INGRESS x (want direct | tunnel | external)`
 or `ports collide: MEDIA_TCP_PORT=7881, LISTEN=7881`. The rules:
 
 - `direct` and `tunnel` need an `https://` `PUBLIC_URL`.
+- `HOSTING` is `home`, `vps` or unset; `ACME_DNS` is `none` or `duckdns`.
+- `ACME_DNS=duckdns` (direct) needs `DUCKDNS_TOKEN` and a `PUBLIC_URL` host
+  under `duckdns.org`: DuckDNS can only answer the challenge for its own
+  names.
+- Direct without `ACME_DNS`, a `PUBLIC_URL` on a port other than 443 together
+  with `HTTP_PORT=0` is refused: Let's Encrypt validates only over public
+  port 80 or 443, so that setup could never get a certificate. Use
+  `ACME_DNS=duckdns` with a DuckDNS name, or a `PUBLIC_URL` on 443.
 - `LIVEKIT_PORT`, both media ports, the `LISTEN` port and, in direct mode,
-  `HTTPS_PORT` and `HTTP_PORT` must all differ.
+  `HTTPS_PORT` and `HTTP_PORT` (unless it is `0`) must all differ.
 - `MEDIA=cloud` is refused: not supported yet.
 - `COMMAND_NAME` must be lowercase, 1-32 letters, digits, `-` or `_`;
   `UPDATE_PIN` a tag like `v1.2.3`; `LOCALE` `en` or `pt-BR`;
@@ -85,9 +93,12 @@ or `ports collide: MEDIA_TCP_PORT=7881, LISTEN=7881`. The rules:
   `http://127.0.0.1`, `LISTEN` is loopback and `INGRESS` is `external`.
 
 Warnings are logged and the start goes on: a `PUBLIC_URL` port that differs
-from `HTTPS_PORT` (the router translates), a `DUCKDNS_DOMAIN` written with
-`.duckdns.org` (trimmed), a DuckDNS name that is not the `PUBLIC_URL` host,
-and `AUTO_UPDATE=on` outside the native binary (ignored).
+from `HTTPS_PORT` (the router translates), a `PUBLIC_URL` on a port other
+than 443 without `ACME_DNS` while `HTTP_PORT` is on (the certificate then
+needs public port 80 reaching `HTTP_PORT`), `ACME_DNS` set outside direct
+mode (ignored), a `DUCKDNS_DOMAIN` written with `.duckdns.org` (trimmed), a
+DuckDNS name that is not the `PUBLIC_URL` host, and `AUTO_UPDATE=on` outside
+the native binary (ignored).
 
 ## What children get from the environment
 
@@ -97,5 +108,7 @@ The helper programs are started with Telinha's own environment minus every
 `PATH`, `HOME`, `TEMP`, `SystemRoot`, `LANG`, proxy settings and the like pass
 through. On top of that each child gets only what it needs: LiveKit
 `LIVEKIT_KEYS` (built from the API key pair), cloudflared `TUNNEL_TOKEN`, Caddy
-`XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `HOME` pointed at `data/caddy`. No
+`XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `HOME` pointed at `data/caddy`, plus
+`DUCKDNS_TOKEN` with `ACME_DNS=duckdns` (the rendered `Caddyfile` reads it as
+`{env.DUCKDNS_TOKEN}`, and Telinha blanks it out of Caddy's log lines). No
 secret is ever in a child's command line or in a rendered file.

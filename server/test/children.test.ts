@@ -10,16 +10,19 @@ import { resolvePaths } from '../src/paths.ts';
 const SECRETS = {
   DISCORD_TOKEN: 'S3CR3T-discord-token', DISCORD_CLIENT_SECRET: 'S3CR3T-client-secret',
   COOKIE_SECRET: 'S3CR3T-cookie', LIVEKIT_API_SECRET: 'S3CR3T-livekit', TUNNEL_TOKEN: 'S3CR3T-tunnel', // gitleaks:allow
+  DUCKDNS_TOKEN: 'S3CR3T-duckdns', // gitleaks:allow
 };
+// The home default: a DuckDNS name on 8443 with the certificate over DNS-01.
+const DNS01 = { PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns' };
 const tmp = mkdtempSync(join(tmpdir(), 'telinha-children-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
 let n = 0;
-function setup(ingress: 'direct' | 'tunnel' | 'external') {
+function setup(ingress: 'direct' | 'tunnel' | 'external', extra: Record<string, string> = {}) {
   const home = join(tmp, `home${n++}`);
   const env = {
     ...SECRETS, DISCORD_CLIENT_ID: 'cid', GUILD_ID: '100', ROLE_ID: '200', CHANNEL_IDS: '300',
-    PUBLIC_URL: 'https://tela.example.com', LIVEKIT_API_KEY: 'devkey', INGRESS: ingress, TELINHA_HOME: home,
+    PUBLIC_URL: 'https://tela.example.com', LIVEKIT_API_KEY: 'devkey', INGRESS: ingress, TELINHA_HOME: home, ...extra,
   };
   const config = loadConfig(env);
   return { config, paths: resolvePaths(env) };
@@ -27,8 +30,8 @@ function setup(ingress: 'direct' | 'tunnel' | 'external') {
 const fake: FindBinary = (name, paths) => join(paths.bin, name);
 // prepare() must not depend on what this machine runs on 7880/7881.
 const free = async () => false;
-const specsFor = (ingress: 'direct' | 'tunnel' | 'external', find = fake) => {
-  const { config, paths } = setup(ingress);
+const specsFor = (ingress: 'direct' | 'tunnel' | 'external', extra: Record<string, string> = {}, find = fake) => {
+  const { config, paths } = setup(ingress, extra);
   return { config, paths, specs: childSpecs(config, paths, find, free) };
 };
 
@@ -43,6 +46,17 @@ describe('childSpecs', () => {
     const storage = join(paths.data, 'caddy');
     expect(caddy!.env).toEqual({ XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage });
     expect(caddy!.ready).toBeUndefined();
+    expect(caddy!.redact).toBeUndefined();
+  });
+
+  test('direct with DNS-01: the DuckDNS token only in caddy env, and redacted from its output', () => {
+    const { paths, specs } = specsFor('direct', DNS01);
+    const [lk, caddy] = specs;
+    const storage = join(paths.data, 'caddy');
+    expect(caddy!.env).toEqual({ XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage, DUCKDNS_TOKEN: SECRETS.DUCKDNS_TOKEN });
+    expect(caddy!.redact).toEqual([SECRETS.DUCKDNS_TOKEN]);
+    expect(caddy!.cmd).toEqual([join(paths.bin, 'caddy'), 'run', '--config', join(paths.run, 'Caddyfile'), '--adapter', 'caddyfile']);
+    expect(lk!.env).not.toHaveProperty('DUCKDNS_TOKEN');
   });
 
   test('tunnel: livekit then cloudflared, token only via env', () => {
@@ -65,8 +79,8 @@ describe('childSpecs', () => {
   });
 
   test('no cmd element of any spec contains any secret', () => {
-    for (const mode of ['direct', 'tunnel', 'external'] as const) {
-      for (const spec of specsFor(mode).specs) {
+    for (const [mode, extra] of [['direct', {}], ['direct', DNS01], ['tunnel', {}], ['external', {}]] as const) {
+      for (const spec of specsFor(mode, extra).specs) {
         for (const arg of spec.cmd) {
           for (const secret of Object.values(SECRETS)) expect(arg).not.toContain(secret);
         }
@@ -84,6 +98,14 @@ describe('childSpecs', () => {
       const text = readFileSync(join(paths.run, f), 'utf8');
       for (const secret of Object.values(SECRETS)) expect(text).not.toContain(secret);
     }
+  });
+
+  test('a DNS-01 Caddyfile names the token by placeholder only', async () => {
+    const { paths, specs } = specsFor('direct', DNS01);
+    for (const s of specs) await s.prepare?.();
+    const text = readFileSync(join(paths.run, 'Caddyfile'), 'utf8');
+    expect(text).toContain('dns duckdns {env.DUCKDNS_TOKEN}');
+    for (const secret of Object.values(SECRETS)) expect(text).not.toContain(secret);
   });
 
   test('tunnel mode renders no Caddyfile', async () => {

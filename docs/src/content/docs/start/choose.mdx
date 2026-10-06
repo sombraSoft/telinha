@@ -8,16 +8,17 @@ sidebar:
 import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
 
 Answer three questions in order. Each answer points to a quickstart or a
-guide, and the setup wizard (`telinha setup`) asks the same things, so
-nothing you decide here is final.
+guide, and the setup wizard (`telinha setup`) asks the first two in the same
+words, so nothing you decide here is final.
 
 <Steps>
 
-1. [Where will it run?](#where-will-it-run) A Windows PC, a Linux box at
-   home, Docker, or a rented server.
+1. [Where will it run?](#where-will-it-run) A computer at home (a Windows
+   PC, a Linux box, or Docker on one of them) or a rented server (VPS).
 
-2. [How will people reach it?](#how-will-people-reach-it) Your own domain,
-   a free name, a Cloudflare Tunnel or the reverse proxy you already run.
+2. [Which address?](#which-address) At home: do you have a domain on
+   Cloudflare? On a VPS: your own domain, a free name or one made from the
+   server's IP.
 
 3. [Can the internet reach your network?](#can-the-internet-reach-your-network)
    If your line is behind CGNAT, a home install cannot work and a VPS can.
@@ -28,32 +29,58 @@ nothing you decide here is final.
 
 The machine has to stay on while people watch. Anything that runs one of
 the [supported builds](/telinha/start/how-it-works/#machine-and-operating-system)
-works.
+works. The wizard asks *Where will Telinha run?* and offers two answers.
+
+**A computer at home (a PC or a home server)**, behind your internet router:
 
 <CardGrid>
   <LinkCard title="Windows PC" description="The PC you already have. No administrator needed to install; one UAC prompt sets up the service." href="/telinha/start/windows/" />
   <LinkCard title="Linux at home" description="A mini PC, a Raspberry Pi 4 or 5 with a 64-bit OS, or any 64-bit Linux box with glibc." href="/telinha/start/linux/" />
   <LinkCard title="Docker" description="A NAS or server that already runs Docker, or a musl system such as Alpine. One container bundles everything." href="/telinha/start/docker/" />
+</CardGrid>
+
+**A rented server (VPS)**, which has its own public IP:
+
+<CardGrid>
   <LinkCard title="VPS" description="A rented server with its own public IP. No router to configure; works when your home line cannot." href="/telinha/start/vps/" />
 </CardGrid>
 
 On Linux, native and Docker do the same job. Native is a single program
 that updates itself and runs as a systemd service; Docker suits a machine
-that already runs containers.
+that already runs containers, at home or on a VPS.
 
-## How will people reach it?
+## Which address?
 
-People open an HTTPS address. Pick the first row that fits:
+People open an HTTPS address. What fits depends on the answer above.
+
+### At home: do you have a domain on Cloudflare?
+
+Home internet connections usually do not let the web ports 80 and 443 in, so
+Telinha does not count on them, and nothing here asks you to open them.
+
+| Your answer | What Telinha does | What it means |
+| --- | --- | --- |
+| Yes | [Cloudflare Tunnel](/telinha/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | Your own address, such as `https://telinha.example.com`; `cloudflared` carries the pages, nothing to open for them |
+| No | [DuckDNS on port 8443](/telinha/guides/domains/#duckdns-on-port-8443), `INGRESS=direct` | A free address such as `https://my-group.duckdns.org:8443`; the certificate comes through DuckDNS, and the router forwards TCP 8443 |
+
+With DuckDNS the links carry the port. Some strict networks (offices,
+schools) only let browsers reach port 443, so people there cannot open them;
+a domain on Cloudflare has no such limit and is the most compatible choice.
+
+### On a VPS: which address?
+
+A VPS has ports 80 and 443 of its own, so the bundled Caddy gets the
+certificate over them.
 
 | Your situation | Choose | What it means |
 | --- | --- | --- |
-| You own a domain | [Your own domain](/telinha/guides/domains/#your-own-domain), `INGRESS=direct` | The bundled Caddy gets a Let's Encrypt certificate; forward TCP 80 and 443 (or only 443) |
-| No domain, at home | [DuckDNS](/telinha/guides/domains/#duckdns) | A free `<name>.duckdns.org` that Telinha keeps pointing at your changing IP |
-| No domain, on a VPS | [sslip.io](/telinha/guides/domains/#sslipio) | An address made from the VPS's fixed IP, no account at all; it is a shared domain, so Let's Encrypt may refuse a certificate in a busy week |
-| You cannot open 80/443, but can open the media ports | [Cloudflare Tunnel](/telinha/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | No inbound web ports; needs a domain on Cloudflare |
+| You own a domain | [Your own domain](/telinha/guides/domains/#your-own-domain), `INGRESS=direct` | An A record pointing at the VPS; open TCP 80 and 443 in the provider's firewall |
+| No domain, want a name | [DuckDNS](/telinha/guides/domains/#duckdns), `INGRESS=direct` | A free `<name>.duckdns.org`, on 80 and 443 like your own domain |
+| No domain, no account | [sslip.io](/telinha/guides/domains/#sslipio), `INGRESS=direct` | An address made from the VPS's fixed IP; it is a shared domain, so Let's Encrypt may refuse a certificate in a busy week |
+| A domain on Cloudflare | [Cloudflare Tunnel](/telinha/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | Optional on a VPS: no inbound web ports |
 | You already run nginx, Traefik or Caddy | [Your own reverse proxy](/telinha/guides/domains/#your-own-reverse-proxy), `INGRESS=external` | Your proxy terminates HTTPS and forwards to Telinha; it must pass WebSockets |
 
-In every mode the two media ports, TCP 7881 and UDP 7882, must reach the
+In every case the two media ports, TCP 7881 and UDP 7882, must reach the
 machine: no tunnel carries WebRTC media. See
 [How it works](/telinha/start/how-it-works/#media-goes-straight-to-livekit).
 
@@ -88,7 +115,7 @@ planned, without a date.
 | Install | `install.ps1` in PowerShell, no administrator | `install.sh` as root or as a user | `install.sh` as root | `install.sh --docker` as root |
 | Service | Task Scheduler task `Telinha`, one UAC prompt during setup | systemd: a system unit as root, a user unit otherwise | systemd system unit | compose with `restart: unless-stopped` |
 | Updates | The program updates itself | The program updates itself | The program updates itself | `telinha-update` timer, when you enable it |
-| What you forward | TCP 7881 and UDP 7882 on the router (UPnP may do it); direct mode also TCP 80 and 443 | Same as Windows | No router: open the same ports in the provider's firewall and in ufw or firewalld | Same as the machine it runs on |
+| What you forward | TCP 7881, UDP 7882 and, with DuckDNS, TCP 8443 on the router (UPnP may do it); with a Cloudflare Tunnel just the two media ports | Same as Windows | No router: open TCP 7881, UDP 7882, TCP 443 and TCP 80 in the provider's firewall and in ufw or firewalld | Same as the machine it runs on |
 
 The install commands, as each quickstart gives them:
 

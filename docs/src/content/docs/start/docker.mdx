@@ -8,8 +8,8 @@ sidebar:
 import { Steps } from '@astrojs/starlight/components';
 
 One container runs everything: the image `ghcr.io/sombrasoft/telinha`
-(`linux/amd64` and `linux/arm64`) bundles `livekit-server`, `caddy` and
-`cloudflared`. The host keeps the compose file and the configuration in
+(`linux/amd64` and `linux/arm64`) bundles `livekit-server`, Telinha's own
+`caddy` build and `cloudflared`. The host keeps the compose file and the configuration in
 `/opt/telinha`, and an optional timer, `telinha-update`, keeps it on the newest
 stable release.
 
@@ -21,9 +21,10 @@ stable release.
 - A Discord server where you can create an application and add a bot. You can
   create the app before the setup or while it runs: see
   [Discord app](/telinha/start/discord/).
-- An idea of the address people will use: your own domain, a free DuckDNS
-  name, sslip.io on a VPS or a Cloudflare Tunnel.
-  [Address, HTTPS and ingress modes](/telinha/guides/domains/) compares them.
+- For the address people open: at home a domain on Cloudflare, or nothing (the
+  wizard gives you a free DuckDNS address); on a VPS your own domain, DuckDNS
+  or sslip.io. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
+  compares them.
 - At home, access to your router's admin page unless it does UPnP, and a line
   that is not behind CGNAT: see
   [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat). No
@@ -36,7 +37,8 @@ On Windows the [native install](/telinha/start/windows/) is the simpler path.
 Docker Desktop also works: the compose file uses host networking, which needs
 Docker Desktop 4.34 or newer with **Settings → Resources → Network → Enable
 host networking** turned on. Video over UDP through that path is unverified, so
-use a Cloudflare Tunnel there (`INGRESS=tunnel`, nothing to bind on 80/443).
+use a Cloudflare Tunnel or the DuckDNS option there (nothing to bind on
+80/443).
 `install-docker.sh` and `telinha-update` are Linux only.
 :::
 
@@ -94,14 +96,19 @@ in a line or two; servers, roles and channels come from lists.
 
 <Steps>
 
-1. **Where Telinha runs.** At home behind a router, a VPS, or behind
-   Cloudflare only.
+1. **Where Telinha runs.** *Where will Telinha run?* Answer for the machine
+   the container runs on: *A computer at home (a PC or a home server)* or *A
+   rented server (VPS)*.
 
-2. **Address.** Your own domain, DuckDNS, sslip.io (VPS only), a Cloudflare
-   Tunnel or your own reverse proxy. With the bundled Caddy it asks whether
-   ports 80 and 443 from the internet reach the machine; at home, whether
-   Telinha may open the ports on the router through UPnP (it works from the
-   container, thanks to host networking).
+2. **Address.** At home, where connections usually do not let the web ports
+   80 and 443 in, it asks *Do you have a domain on Cloudflare?*: yes gives a
+   Cloudflare Tunnel, no gives a free DuckDNS address with HTTPS on port 8443
+   (`https://my-group.duckdns.org:8443`, the certificate comes through
+   DuckDNS). On a VPS it asks *How will people reach Telinha?*: your own
+   domain, DuckDNS or sslip.io on 80 and 443, a Cloudflare Tunnel or your own
+   reverse proxy. At home it then asks whether Telinha may open the ports on
+   the router through UPnP (it works from the container, thanks to host
+   networking).
 
 3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
    something else on the host uses them.
@@ -138,11 +145,13 @@ The container uses the host's network, so the ports are the host's:
 | --- | --- | --- |
 | TCP 7881 | always | Video over TCP, for networks that block UDP |
 | UDP 7882 | always | Video over UDP, the normal path |
-| TCP 443 | your own domain, DuckDNS or sslip.io | The pages, over HTTPS |
-| TCP 80 | same, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
+| TCP 8443 | at home, DuckDNS address (your port if you changed it) | The pages, over HTTPS |
+| TCP 443 | on a VPS, your own domain, DuckDNS or sslip.io | The pages, over HTTPS |
+| TCP 80 | on a VPS, same | The Let's Encrypt challenge and the redirect to HTTPS |
 
-With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
-carry WebRTC. If you changed a port in the setup, use your value.
+At home that is all: never 80 or 443. With a Cloudflare Tunnel only the two
+media ports are needed (tunnels do not carry WebRTC). If you changed a port in
+the setup, use your value.
 
 **At home**, UPnP comes first: when it is on (`UPNP=auto`) and the router
 accepts it, Telinha maps these ports while it runs. Otherwise forward them by
@@ -151,8 +160,15 @@ and the pages for [Vivo](/telinha/routers/vivo/), [Claro](/telinha/routers/claro
 [TIM](/telinha/routers/tim/) and [Oi](/telinha/routers/oi/) routers. **On a
 VPS**, open them in the provider's firewall (see [VPS](/telinha/start/vps/)).
 
-If ufw or firewalld is active on the host, open the same ports there; with the
-default ports:
+If ufw or firewalld is active on the host, open the same ports there. At home
+with a DuckDNS address (drop `8443/tcp` with a tunnel):
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 8443/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=8443/tcp && sudo firewall-cmd --reload
+```
+
+On a VPS with the bundled Caddy:
 
 ```sh
 sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
@@ -176,8 +192,8 @@ from there. [Doctor and troubleshooting](/telinha/guides/doctor/) explains
 every row and what a failure means.
 
 The container also has a healthcheck: `docker compose ps` shows it unhealthy
-while a bundled program is down, for example a Caddy that cannot bind 80/443 or
-a bad tunnel token.
+while a bundled program is down, for example a Caddy that cannot bind its port
+or a bad tunnel token.
 
 ## Use it
 

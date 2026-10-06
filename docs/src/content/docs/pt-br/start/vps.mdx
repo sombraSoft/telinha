@@ -122,7 +122,9 @@ O programa vai para `/usr/local/lib/telinha/telinha`, chamado pelo comando
 `/usr/local/bin/telinha`; a pasta da instalação é `/opt/telinha`, e o assistente
 copia o programa para `/opt/telinha/bin/` para o serviço, que atualiza essa
 cópia sozinho. O script não baixa mais nada: o `livekit-server` e o `caddy` ou o
-`cloudflared` vêm depois, cada um conferido contra um sha256 fixo. Para pular a
+`cloudflared` vêm depois, o `livekit-server` e o `cloudflared` dos projetos
+originais conferidos contra um sha256 fixo, o `caddy` da mesma versão da
+Telinha conferido com o `SHA256SUMS` dela. Para pular a
 pergunta, ponha `-s -- --native` depois do `sh` (`--no-setup` instala sem abrir
 o assistente). `TELINHA_VERSION` instala uma tag específica.
 
@@ -135,16 +137,15 @@ caminho é este:
 
 <Steps>
 
-1. **Onde a Telinha roda.** Escolha *numa VPS ou servidor na nuvem*. Depois
-   disso não tem pergunta sobre roteador.
+1. **Onde a Telinha roda.** Ele pergunta *Onde a Telinha vai rodar?* Escolha
+   *Um servidor alugado (VPS)*. Depois disso não tem pergunta sobre roteador.
 
-2. **Endereço.** Um domínio seu (o registro A é comparado com o IP público),
-   DuckDNS, sslip.io, um Cloudflare Tunnel ou o seu próprio proxy reverso. Nas
-   três primeiras opções a Telinha pega o certificado HTTPS sozinha, então ele
-   pergunta se as portas 80 e 443 da internet chegam no servidor: responda que
-   sim, você já liberou as portas acima. Com o sslip.io ele
-   usa o IPv4 público do servidor (e pergunta quando não consegue ver) e grava
-   o endereço e o IP que o LiveKit anuncia:
+2. **Endereço.** Ele pergunta *Como o pessoal vai chegar na Telinha?*: um
+   domínio seu (o registro A é comparado com o IP público), DuckDNS, sslip.io,
+   um Cloudflare Tunnel ou o seu próprio proxy reverso. Nas três primeiras
+   opções a Telinha pega o certificado HTTPS pela 80 e pela 443, que você já
+   liberou acima. Com o sslip.io ele usa o IPv4 público do servidor (e pergunta
+   quando não consegue ver) e grava o endereço e o IP que o LiveKit anuncia:
 
    ```ini
    PUBLIC_URL=https://203-0-113-9.sslip.io

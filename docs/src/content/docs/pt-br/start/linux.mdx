@@ -23,13 +23,14 @@ tudo rodando.
 - Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
   Dá para criar o aplicativo antes do assistente ou durante ele: veja
   [Aplicativo do Discord](/telinha/pt-br/start/discord/).
-- Uma ideia do endereço que o pessoal vai usar: um domínio seu, um nome
-  gratuito do DuckDNS ou um Cloudflare Tunnel.
+- Para o endereço que o pessoal abre: um domínio na Cloudflare, ou nada, e
+  nesse caso o assistente te dá um endereço grátis do DuckDNS.
   [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
-  compara as opções.
+  compara os dois.
 - Acesso à página de administração do roteador, a não ser que ele faça UPnP
   (muitos roteadores vêm com isso desligado, e os da operadora muitas vezes
-  escondem a opção).
+  escondem a opção). Em casa a Telinha nunca precisa das portas 80 ou 443: só
+  das duas portas de mídia, mais a 8443 com um endereço do DuckDNS.
   Sem acesso e sem UPnP, por exemplo com um roteador da operadora travado ou a
   rede compartilhada de um prédio? Aí a Telinha nesta máquina não consegue abrir as portas
   sozinha: peça à operadora ou a quem cuida da rede para encaminhar, ou use uma
@@ -46,7 +47,6 @@ As duas usam a mesma linha; o `sudo` faz a diferença.
 | --- | --- | --- |
 | Pasta da instalação | `/opt/telinha` | `~/.local/share/telinha` (respeita o `$XDG_DATA_HOME`) |
 | Serviço | Unidade do sistema `/etc/systemd/system/telinha.service`, rodando com um usuário de sistema `telinha` | Unidade do usuário `~/.config/systemd/user/telinha.service` |
-| Portas 80 e 443 | Liberadas por uma capability da unidade | Precisam de um comando com `sudo`, ou da porta 8443 |
 | Continua rodando depois do logout | Sim | Só com o lingering (o assistente liga) |
 | Comandos | `sudo telinha ...` | `telinha ...` |
 
@@ -87,7 +87,9 @@ export PATH="$HOME/.local/share/telinha/bin:$PATH"
 ```
 
 O script não baixa mais nada: o `livekit-server` e o `caddy` ou o
-`cloudflared` vêm depois, cada um conferido contra um sha256 fixo. Para pular a
+`cloudflared` vêm depois, o `livekit-server` e o `cloudflared` dos projetos
+originais conferidos contra um sha256 fixo, o `caddy` da mesma versão da
+Telinha conferido com o `SHA256SUMS` dela. Para pular a
 pergunta, ponha `-s -- --native` depois do `sh` (`--no-setup` instala sem abrir
 o assistente), ou defina `TELINHA_INSTALL=native`. `TELINHA_VERSION` instala
 uma tag específica e `TELINHA_HOME` usa outra pasta.
@@ -102,18 +104,26 @@ Linux em casa, o caminho é este:
 <Steps>
 
 1. **Onde a Telinha roda.** Ele mostra o IP público e o roteador, se algum
-   responder UPnP, NAT-PMP ou PCP. Escolha *em casa*, ou *só atrás da
-   Cloudflare* se for usar um Cloudflare Tunnel.
+   responder UPnP, NAT-PMP ou PCP, e pergunta *Onde a Telinha vai rodar?*
+   Escolha *Um computador em casa (um PC ou um servidor caseiro)*.
 
-2. **Endereço.** Um domínio seu (o
-   [registro A](/telinha/pt-br/guides/domains/#seu-próprio-domínio) é
-   comparado com o IP público),
-   DuckDNS (o token é testado na hora), um Cloudflare Tunnel ou o seu próprio
-   proxy reverso. Com domínio próprio ou DuckDNS, a Telinha pega o certificado
-   HTTPS sozinha, então ele pergunta se as portas 80 e 443 da internet chegam
-   na máquina: sim; só a 443, para outra porta da máquina; ou nenhuma, e aí ele
-   recomenda o túnel. Por fim, pergunta se a Telinha pode abrir as portas no
-   roteador por UPnP.
+2. **Endereço.** A internet de casa em geral não deixa as portas web 80 e 443
+   entrarem, então a Telinha não conta com elas. Ele pergunta *Você tem um
+   domínio na Cloudflare?*
+
+   - *Sim: usar um Cloudflare Tunnel.* O seu próprio endereço, e nada pra
+     abrir pras páginas. Você cola o token do túnel e o public hostname dele;
+     veja [Cloudflare Tunnel](/telinha/pt-br/guides/domains/#cloudflare-tunnel).
+   - *Não: usar um endereço grátis do DuckDNS.* Você entra no duckdns.org,
+     adiciona um nome e cola o token, que é testado na hora. A Telinha serve
+     HTTPS na porta 8443 (dá pra escolher outra) e pega o certificado pelo
+     DuckDNS, então o endereço fica tipo `https://my-group.duckdns.org:8443` e
+     os links levam a porta. Algumas redes rígidas (empresas, escolas) só
+     deixam o navegador chegar na porta 443, então quem estiver nelas não
+     abre; um domínio na Cloudflare não tem essa limitação. Veja
+     [DuckDNS na porta 8443](/telinha/pt-br/guides/domains/#duckdns-na-porta-8443).
+
+   Por fim, pergunta se a Telinha pode abrir as portas no roteador por UPnP.
 
 3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
    não ser que outro programa da máquina já use alguma.
@@ -143,25 +153,17 @@ Linux em casa, o caminho é este:
 </Steps>
 
 :::note[Vai encaminhar as portas na mão?]
-Quando nenhum roteador responde UPnP (ou você não deixou usar), o assistente só lista as portas para encaminhar e segue em frente, então a
-espera pelo certificado e o teste pelo celular falham no final. Isso é
-esperado: encaminhe as portas como em [Abra as portas](#abra-as-portas) logo
-abaixo e rode o `telinha doctor` de novo (o certificado pode levar alguns
-minutos depois que as portas chegarem na máquina).
+Quando nenhum roteador responde UPnP (ou você não deixou usar), o assistente
+só lista as portas para encaminhar e segue em frente, então o teste pelo
+celular falha no final. Isso é esperado: encaminhe as portas como em
+[Abra as portas](#abra-as-portas) logo abaixo e rode o `telinha doctor` de
+novo. O certificado não depende delas: com um endereço do DuckDNS ele vem pelo
+DuckDNS (em geral de 1 a 3 minutos), e com um túnel quem cuida dele é a
+Cloudflare.
 :::
 
-**Instalação de usuário com as portas 80 e 443.** O Linux só deixa o root usar
-portas abaixo de 1024, então o assistente oferece um comando com `sudo` que
-libera as portas a partir da 80 para todos os usuários. Ele vale para todas as
-atualizações:
-
-```sh
-sudo sh -c 'printf "net.ipv4.ip_unprivileged_port_start=80\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system'
-```
-
-Se você recusar, ele oferece a alternativa: a Telinha escuta na 8443
-(`HTTPS_PORT=8443`, `HTTP_PORT=0`) e o roteador encaminha a 443 pública para a
-8443.
+Em casa, uma instalação de usuário não usa nenhuma porta abaixo de 1024 (a
+8443 e as portas de mídia ficam todas acima), então nada precisa de root.
 
 ## Abra as portas
 
@@ -171,12 +173,11 @@ A internet precisa chegar na máquina por estas portas:
 | --- | --- | --- |
 | TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
 | UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
-| TCP 443 | domínio próprio ou DuckDNS | As páginas, por HTTPS |
-| TCP 80 | domínio próprio ou DuckDNS, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
+| TCP 8443 | endereço do DuckDNS (a sua porta, se você mudou) | As páginas, por HTTPS |
 
-Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
-levam WebRTC. Se você mudou alguma porta no assistente, use o seu valor (com
-`HTTPS_PORT=8443` o roteador encaminha a 443 pública para a 8443).
+Nada além disso: nem a 80, nem a 443. Com um Cloudflare Tunnel só as duas
+portas de mídia são necessárias (túneis não levam WebRTC). Se você mudou
+alguma porta no assistente, use o seu valor.
 
 **Primeiro o UPnP.** Se o roteador respondeu e você deixou, a Telinha pede essas
 portas ao roteador enquanto roda e você não precisa fazer nada. Se não, faça o
@@ -189,11 +190,11 @@ da [TIM](/telinha/pt-br/routers/tim/) e da [Oi](/telinha/pt-br/routers/oi/).
 
 **O firewall da própria máquina.** A Telinha não cria regras de firewall no
 Linux. Se o ufw ou o firewalld estiver ativo, libere as mesmas portas nele. Com
-as portas padrão e domínio próprio:
+as portas padrão e um endereço do DuckDNS (tire o `8443/tcp` com um túnel):
 
 ```sh
-sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
-sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 8443/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=8443/tcp && sudo firewall-cmd --reload
 ```
 
 O `telinha doctor` mostra esses comandos com as suas portas quando encontra uma

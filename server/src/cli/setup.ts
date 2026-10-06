@@ -18,9 +18,9 @@ import { defaultSpawn, serviceManager } from '../service/index.ts';
 import { assertOneStdin, GLOBAL_FLAGS, parseArgs, readSecretSource, UsageError, type ArgSpec, type CliContext, type ParsedArgs } from './args.ts';
 import { createControlClient } from './control.ts';
 import { checkDiscord, askDiscord, askDiscordOffline, createDiscordSetup, SNOWFLAKE_RE, validCommand } from './setup/discord.ts';
-import { askIngress, extractTunnelToken, parseDuckDomain, validTunnelToken, type Target } from './setup/domain.ts';
+import { askAddress, DEFAULT_HOME_HTTPS_PORT, extractTunnelToken, homeChoice, parseDuckDomain, takenPort, validTunnelToken } from './setup/domain.ts';
 import { MANAGED_KEYS, type PreviousEnv } from './setup/envwrite.ts';
-import { defaultOsName, detectHost, guessTarget, routerLabel, type HostInfo } from './setup/host.ts';
+import { defaultOsName, detectHost, inferHosting, routerLabel, SSLIP_RE, type HostInfo, type Hosting } from './setup/host.ts';
 import {
   askMediaPorts, downloadBinaries, generateSecrets, nextSteps, review, routerStep, serviceStep, SetupAbort, startAndDoctor,
   validateValues, writeConfig, type SetupDeps, type SetupFs, type Values, type Wizard,
@@ -33,8 +33,10 @@ export type { SetupDeps } from './setup/steps.ts';
 
 export const SETUP_FLAGS = {
   docker: 'boolean',
+  host: 'string',
   'public-url': 'string',
   ingress: 'string',
+  advanced: 'boolean',
   'http-port': 'string',
   'https-port': 'string',
   'tunnel-token-file': 'string',
@@ -221,7 +223,6 @@ async function detect(ctx: CliContext, deps: SetupDeps, docker: boolean): Promis
 /** Where the file is, as its reader sees it: inside the image, the host's path (install-docker.sh passes it). */
 interface Loaded { file: string; shown: string; previous: PreviousEnv | null; values: Values }
 
-const SSLIP_RE = /\.sslip\.io(:\d+)?\/?$/;
 /** install-docker.sh's layout, for an image run without TELINHA_HOST_ENV. */
 const DOCKER_HOST_ENV = '/opt/telinha/config/telinha.env';
 
@@ -241,25 +242,13 @@ async function save(w: Wizard, l: Loaded, values: Values) {
   return config;
 }
 
-/** The re-run's (or the non-interactive run's) idea of where Telinha runs. */
-function inferTarget(values: Values, host: HostInfo): Target {
-  if (values.LIVEKIT_NODE_IP || SSLIP_RE.test(values.PUBLIC_URL ?? '')) return 'vps';
-  if (values.INGRESS === 'tunnel') return 'cloudflare';
-  return guessTarget(host);
-}
-
 /** Steps 8-11: everything after the file, natively. */
-async function afterWrite(w: Wizard, l: Loaded, values: Values, config: Pick<Config, 'media' | 'ingress'>, flags: Flags, target: Target): Promise<number> {
+async function afterWrite(w: Wizard, l: Loaded, values: Values, config: Pick<Config, 'media' | 'ingress'>, flags: Flags, hosting: Hosting): Promise<number> {
   await downloadBinaries(w, config);
   const wasRunning = await w.deps.control.available().catch(() => false);
   let installed = false;
-  if (!flags['no-service']) {
-    installed = await serviceStep(w, values, {
-      firewall: !flags['no-firewall'],
-      rewrite: async (v) => void (await save(w, l, v)),
-    });
-  }
-  if (!flags['no-upnp']) await routerStep(w, values, target);
+  if (!flags['no-service']) installed = await serviceStep(w, values, { firewall: !flags['no-firewall'] });
+  if (!flags['no-upnp']) await routerStep(w, values, hosting);
   const code = await startAndDoctor(w, { installed, wasRunning, doctor: !flags['no-doctor'], values });
   nextSteps(w, values, { file: l.shown });
   return code;
@@ -300,17 +289,17 @@ async function interactive(ctx: CliContext, deps: SetupDeps, flags: Flags): Prom
   term = w.term;
   const { s } = w;
   term.info(hostLine(w));
-  const guessed = inferTarget(values, host);
-  const targets: { value: Target; label: string; hint: string }[] = [
-    { value: 'home', label: s('targetHome'), hint: s('targetHomeHint') },
-    { value: 'vps', label: s('targetVps'), hint: s('targetVpsHint') },
-    { value: 'cloudflare', label: s('targetCloudflare'), hint: s('targetCloudflareHint') },
+  // 3. Home or a rented server: the machine only suggests, the file's answer wins.
+  const hostings: { value: Hosting; label: string; hint: string }[] = [
+    { value: 'home', label: s('hostingHome'), hint: s('hostingHomeHint') },
+    { value: 'vps', label: s('hostingVps'), hint: s('hostingVpsHint') },
   ];
-  term.step(s('targetTitle'));
-  const target = await term.select(s('targetQ'), targets, targets.findIndex((x) => x.value === guessed), { id: 'target' });
+  term.step(s('hostingTitle'));
+  const guessed = inferHosting(values, host);
+  const hosting = await term.select(s('hostingQ'), hostings, hostings.findIndex((x) => x.value === guessed), { id: 'hosting' });
 
-  // 3-5. Ingress, media ports, Discord.
-  await askIngress(w, values, target);
+  // 4-6. Address, media ports, Discord.
+  await askAddress(w, values, hosting, { httpsPort: flags['https-port'] });
   await askMediaPorts(w, values);
   if (flags['no-discord-check']) await askDiscordOffline(w, values);
   else await askDiscord(w, values, { publicUrl: values.PUBLIC_URL!, presetGuild: flags.guild, presetRole: flags.role, presetChannels: flags.channels?.split(',') });
@@ -330,13 +319,49 @@ async function interactive(ctx: CliContext, deps: SetupDeps, flags: Flags): Prom
     nextSteps(w, values, { file: l.shown });
     return 0;
   }
-  return afterWrite(w, l, values, config, flags, target);
+  return afterWrite(w, l, values, config, flags, hosting);
 }
 
-/** Answers from flags over the environment over the file; returns what is missing and what is wrong. */
-export async function collectNonInteractive(ctx: CliContext, flags: Flags, values: Values, o: { stdin?: () => Promise<string> } = {}): Promise<{ missing: string[]; errors: string[] }> {
+/** The hostname of a URL; '' when it does not parse. */
+function urlHost(url: string | undefined): string {
+  try {
+    return new URL(url ?? '').hostname;
+  } catch {
+    return '';
+  }
+}
+
+/** host:port of a URL for comparing; '' when it does not parse. */
+function urlOrigin(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname}:${u.port || '443'}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Answers from flags over the environment over the file; returns what is
+ * missing and what is wrong. `o.host`, the detected machine, comes with a
+ * non-interactive run: it settles home vs VPS and enforces the home rules
+ * (no 80/443 without --advanced). The interactive pre-pass passes none: there
+ * the flags are the questions' defaults and the questions decide.
+ */
+export async function collectNonInteractive(ctx: CliContext, flags: Flags, values: Values, o: { stdin?: () => Promise<string>; host?: HostInfo } = {}): Promise<{ missing: string[]; errors: string[] }> {
   const s = (key: SKey, params?: Params) => t(ctx.locale, key, params);
   const errors: string[] = [];
+  // The file as loaded, before any flag lands: a re-run on the same path keeps
+  // its ports and an advanced home file counts as confirmed; a switch starts
+  // from the new path's defaults.
+  const before: Values = { ...values };
+  const was = {
+    advanced: homeChoice(before) === 'advanced',
+    highPort: before.ACME_DNS === 'duckdns',
+    vps: before.HOSTING === 'vps',
+    vpsDirect: before.HOSTING === 'vps' && (before.INGRESS || 'direct') === 'direct',
+    ingress: before.INGRESS || 'direct',
+  };
   const set = (key: string, v: string | undefined) => {
     if (v !== undefined) values[key] = v.trim();
   };
@@ -350,6 +375,7 @@ export async function collectNonInteractive(ctx: CliContext, flags: Flags, value
     values[key] = v;
   };
 
+  set('HOSTING', oneOf('host', flags.host, ['home', 'vps']));
   set('PUBLIC_URL', flags['public-url']?.replace(/\/$/, ''));
   set('INGRESS', oneOf('ingress', flags.ingress, ['direct', 'tunnel', 'external']));
   port('http-port', 'HTTP_PORT', flags['http-port']);
@@ -373,6 +399,14 @@ export async function collectNonInteractive(ctx: CliContext, flags: Flags, value
       values.DDNS_PROVIDER = 'duckdns';
       values.DUCKDNS_DOMAIN = d;
       if (!flags['public-url']) values.PUBLIC_URL = `https://${d}.duckdns.org`;
+      // DuckDNS lives in direct mode only: a tunnel or proxy file switching to it becomes direct.
+      if (flags.ingress === undefined) values.INGRESS = 'direct';
+      else if (flags.ingress === 'tunnel' || flags.ingress === 'external') {
+        errors.push(s('badFlagValue', { flag: '--ingress', value: flags.ingress, allowed: 'direct (with --duckdns-domain)' }));
+      }
+      // At home the name means the high port unless --advanced says 80/443 (the
+      // interactive pre-pass reads this as the "no domain on Cloudflare" default).
+      if (!flags.advanced) values.ACME_DNS = 'duckdns';
     }
   }
 
@@ -383,6 +417,17 @@ export async function collectNonInteractive(ctx: CliContext, flags: Flags, value
   }
   // The dashboard's install command, pasted whole into the file, still works.
   if (values.TUNNEL_TOKEN) values.TUNNEL_TOKEN = extractTunnelToken(values.TUNNEL_TOKEN);
+  // A --public-url on another host leaves DuckDNS: its keys go, or the updater
+  // keeps writing the old name and the rules below take the file's name as given.
+  if (flags['public-url'] !== undefined && flags['duckdns-domain'] === undefined && values.DUCKDNS_DOMAIN && urlHost(values.PUBLIC_URL) !== `${values.DUCKDNS_DOMAIN}.duckdns.org`) {
+    values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.ACME_DNS = '';
+  }
+  // A switch to a tunnel or a proxy needs that path's own address: the old one
+  // (a DuckDNS name, an IP) is not what Cloudflare or the proxy serves.
+  if ((values.INGRESS === 'tunnel' || values.INGRESS === 'external') && values.INGRESS !== was.ingress && flags['public-url'] === undefined) values.PUBLIC_URL = '';
+  // Where it runs: --host or HOSTING, else the VPS-only keys (the file's or the
+  // flags', read before the node IP below may go), else the machine.
+  const hosting = o.host ? inferHosting(values, o.host) : null;
   // A pinned IP belongs to sslip.io: switching away (or to DuckDNS, which follows
   // the IP) without --node-ip drops it, or DuckDNS and LiveKit keep a stale one.
   const modeChanged = flags.ingress !== undefined || flags['duckdns-domain'] !== undefined || flags['public-url'] !== undefined;
@@ -390,10 +435,61 @@ export async function collectNonInteractive(ctx: CliContext, flags: Flags, value
     values.LIVEKIT_NODE_IP = '';
   }
 
-  // Keys the chosen mode does not use go away (a re-run may switch modes).
   const ingress = values.INGRESS || 'direct';
+  if (hosting) {
+    values.HOSTING = hosting;
+    values.INGRESS = ingress;
+    if (hosting === 'home') {
+      // A plain re-run of an advanced home file (--guild, a new token) is already
+      // confirmed; a run that changes the address or the ports must say so again.
+      const advanced = flags.advanced || (was.advanced && !modeChanged && flags['https-port'] === undefined && flags['http-port'] === undefined);
+      if (ingress === 'direct' && values.DUCKDNS_DOMAIN && !advanced) {
+        // Home connections block 80/443: HTTPS on a high port that the URL carries, the certificate through the DuckDNS API.
+        const https = flags['https-port'] ?? (was.highPort ? before.HTTPS_PORT || undefined : undefined) ?? DEFAULT_HOME_HTTPS_PORT;
+        const taken = takenPort(values, Number(https));
+        if (Number(https) < 1024 || (flags['http-port'] !== undefined && flags['http-port'] !== '0')) errors.push(s('homeNeedsAdvanced'));
+        else if (taken) errors.push(s('badFlagValue', { flag: '--https-port', value: https, allowed: `1024-65535, != ${taken}` }));
+        const url = `https://${values.DUCKDNS_DOMAIN}.duckdns.org:${https}`;
+        if (flags['public-url'] !== undefined && urlOrigin(values.PUBLIC_URL ?? '') !== urlOrigin(url)) {
+          errors.push(s('badFlagValue', { flag: '--public-url', value: flags['public-url'], allowed: url }));
+        }
+        values.HTTPS_PORT = https;
+        values.HTTP_PORT = '0';
+        values.ACME_DNS = 'duckdns';
+        values.DDNS_PROVIDER = 'duckdns';
+        values.PUBLIC_URL = url;
+      } else if (ingress !== 'tunnel' && !advanced) {
+        // Direct without DuckDNS or an own proxy: both lean on 80/443 or on the user's own setup.
+        errors.push(s('homeNeedsAdvanced'));
+      } else if (ingress === 'direct') {
+        // Confirmed: the certificate comes over 80/443 (or the ports given), as on a VPS.
+        values.HTTPS_PORT = flags['https-port'] ?? ((was.advanced && values.HTTPS_PORT) || '443');
+        values.HTTP_PORT = flags['http-port'] ?? ((was.advanced && values.HTTP_PORT) || '80');
+        values.ACME_DNS = '';
+        if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined) values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
+      }
+    } else if (ingress === 'direct') {
+      // A VPS has 80/443: the certificate comes over them, DuckDNS included.
+      values.HTTPS_PORT = flags['https-port'] ?? ((was.vpsDirect && values.HTTPS_PORT) || '443');
+      values.HTTP_PORT = flags['http-port'] ?? ((was.vpsDirect && values.HTTP_PORT) || '80');
+      values.ACME_DNS = '';
+      if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined) values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
+    }
+  }
+  if (flags.upnp === undefined) {
+    // A VPS has no router to ask; at home the media ports (and the HTTPS port) need it.
+    // The VPS path wrote off by itself, so a VPS file moving home starts from auto again
+    // (the interactive pre-pass too: --host home makes it the question's default).
+    const leftVps = was.vps && (hosting ?? values.HOSTING) === 'home' && ctx.env.UPNP === undefined;
+    if (hosting === 'vps') values.UPNP = 'off';
+    else if (leftVps) values.UPNP = 'auto';
+    else if (hosting) values.UPNP = values.UPNP || 'auto';
+  }
+
+  // Keys the chosen mode does not use go away (a re-run may switch modes).
   if (ingress !== 'tunnel') values.TUNNEL_TOKEN = '';
-  if (ingress !== 'direct') values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.HTTP_PORT = values.HTTPS_PORT = '';
+  if (ingress !== 'direct') values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.HTTP_PORT = values.HTTPS_PORT = values.ACME_DNS = '';
+  if (values.ACME_DNS !== 'duckdns') values.ACME_DNS = '';
   if (values.COMMAND_NAME && !validCommand(values.COMMAND_NAME)) errors.push(s('commandBad'));
   if (values.TUNNEL_TOKEN && !validTunnelToken(values.TUNNEL_TOKEN)) errors.push(s('tunnelTokenBad'));
   for (const [key, flag] of [['DISCORD_CLIENT_ID', 'client-id'], ['GUILD_ID', 'guild'], ['ROLE_ID', 'role']] as const) {
@@ -416,7 +512,8 @@ export async function collectNonInteractive(ctx: CliContext, flags: Flags, value
   need('ROLE_ID', '--role');
   need('CHANNEL_IDS', '--channels');
   if (ingress === 'tunnel') need('TUNNEL_TOKEN', secret('TUNNEL_TOKEN', 'tunnel-token-file'));
-  if (values.DDNS_PROVIDER === 'duckdns') need('DUCKDNS_TOKEN', secret('DUCKDNS_TOKEN', 'duckdns-token-file'));
+  // The same token serves the DNS record and the certificate.
+  if (values.DDNS_PROVIDER === 'duckdns' || values.ACME_DNS === 'duckdns') need('DUCKDNS_TOKEN', secret('DUCKDNS_TOKEN', 'duckdns-token-file'));
   return { missing, errors };
 }
 
@@ -424,13 +521,14 @@ async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o:
   const docker = !!flags.docker;
   const l = await load(ctx, deps, docker);
   const values = l.values;
-  const { missing, errors } = await collectNonInteractive(ctx, flags, values, o);
+  // The machine first: without --host it is what tells home from VPS.
+  const host = await detect(ctx, deps, docker);
+  const { missing, errors } = await collectNonInteractive(ctx, flags, values, { ...o, host });
   if (errors.length || missing.length) {
     for (const e of errors) ctx.stderr(e);
     if (missing.length) ctx.stderr(t(ctx.locale, 'missing', { list: missing.join(', ') }));
     return 2;
   }
-  const host = await detect(ctx, deps, docker);
   const w = makeWizard(ctx, deps, ctx.locale, host, { interactive: false, docker });
   const { term, s } = w;
   term.info(hostLine(w));
@@ -465,7 +563,7 @@ async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o:
     nextSteps(w, values, { file: l.shown });
     return 0;
   }
-  return afterWrite(w, l, values, config, flags, inferTarget(values, host));
+  return afterWrite(w, l, values, config, flags, inferHosting(values, host));
 }
 
 export async function run(_args: ParsedArgs, ctx: CliContext, deps: Partial<SetupDeps> = {}, o: { stdin?: () => Promise<string> } = {}): Promise<number> {

@@ -29,10 +29,11 @@ room at `/r/<code>` and posts a live card in the allowed channels. The video
 goes through a LiveKit SFU running next to it. It exists because Discord Go
 Live is blocked in Brazil.
 
-You need a Discord server you administer, a machine that stays on, an HTTPS
-address (your own domain, or one of the no-domain options: DuckDNS, sslip.io
-or a Cloudflare Tunnel) and either two forwarded ports on your router or a
-VPS.
+You need a Discord server you administer, a machine that stays on, and an
+HTTPS address: at home a domain on Cloudflare (Cloudflare Tunnel) or a free
+DuckDNS name on port 8443; on a VPS your own domain, DuckDNS or sslip.io. At
+home you also forward the two media ports (and 8443 with DuckDNS) on your
+router, or let UPnP do it.
 
 Everything is one program configured by one file, `telinha.env`. The setup
 wizard writes it for you, downloads the helper programs Telinha needs and sets

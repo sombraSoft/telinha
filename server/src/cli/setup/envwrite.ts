@@ -44,20 +44,24 @@ COOKIE_SECRET=''
 
 # --- Public URL and HTTP ingress -----------------------------------------------------------------
 
-# What people open, https://host[:port]
+# What people open, https://host[:port]. At home with DuckDNS the port is part of it: https://name.duckdns.org:8443
 PUBLIC_URL=
-# direct = bundled Caddy gets a certificate and binds HTTP_PORT/HTTPS_PORT; tunnel = Cloudflare Tunnel
+# home | vps: where Telinha runs, as answered in telinha setup (a re-run starts from it; the doctor adapts its advice)
+#HOSTING=
+# direct = bundled Caddy gets a certificate and binds HTTPS_PORT (and HTTP_PORT); tunnel = Cloudflare Tunnel
 # (no open ports); external = your own reverse proxy forwards to LISTEN
 #INGRESS=direct
 # Telinha's own listener; Caddy, cloudflared or your proxy forward here
 #LISTEN=127.0.0.1:8081
-# direct: HTTP->HTTPS redirect port; 0 turns the redirect listener off
+# direct: HTTP->HTTPS redirect and Let's Encrypt HTTP challenge port; 0 turns that listener off (always 0 at home)
 #HTTP_PORT=80
-# direct: the port Caddy binds for TLS. Normally the PUBLIC_URL port; if the router translates
-# (public 443 -> this host's 8443) set the internal one here, telinha only logs a warning
+# direct: the port Caddy binds for TLS: 443 on a VPS; at home a high port (8443) that PUBLIC_URL also carries
 #HTTPS_PORT=443
 # direct, optional: Let's Encrypt account email
 #ACME_EMAIL=
+# direct: how Caddy proves the name to Let's Encrypt. none = over public ports 80/443 (a VPS); duckdns = through the
+# DuckDNS API with DUCKDNS_TOKEN (a home connection: nothing to open on 80/443, HTTPS on HTTPS_PORT)
+#ACME_DNS=none
 # tunnel only, uncomment it: Cloudflare Zero Trust -> Networks -> Tunnels -> your tunnel's token;
 # its public hostname points at http://localhost:<LISTEN port>
 #TUNNEL_TOKEN=''
@@ -80,8 +84,8 @@ LIVEKIT_API_SECRET=''
 # ICE over TCP and UDP: forward both on the router
 #MEDIA_TCP_PORT=7881
 #MEDIA_UDP_PORT=7882
-# auto = ask the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and HTTP_PORT/HTTPS_PORT
-# in direct mode, while telinha runs; off = forward them by hand
+# auto = ask the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and HTTPS_PORT in direct
+# mode when PUBLIC_URL's port is not 443, while telinha runs; off = forward them by hand
 #UPNP=auto
 # Static public IPv4: skips STUN and turns the IP watch off
 #LIVEKIT_NODE_IP=
@@ -145,7 +149,7 @@ LIVEKIT_API_SECRET=''
 export const MANAGED_KEYS: readonly string[] = [
   'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'GUILD_ID', 'ROLE_ID', 'CHANNEL_IDS',
   'COMMAND_NAME', 'GROUP_NAME', 'COOKIE_SECRET',
-  'PUBLIC_URL', 'INGRESS', 'HTTP_PORT', 'HTTPS_PORT', 'TUNNEL_TOKEN', 'DDNS_PROVIDER', 'DUCKDNS_DOMAIN', 'DUCKDNS_TOKEN',
+  'PUBLIC_URL', 'HOSTING', 'INGRESS', 'ACME_DNS', 'HTTP_PORT', 'HTTPS_PORT', 'TUNNEL_TOKEN', 'DDNS_PROVIDER', 'DUCKDNS_DOMAIN', 'DUCKDNS_TOKEN',
   'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'UPNP', 'LIVEKIT_NODE_IP',
   'AUTO_UPDATE', 'LOCALE',
 ];

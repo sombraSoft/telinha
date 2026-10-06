@@ -41,7 +41,8 @@ export interface Generated {
     help: Record<Locale, Record<HelpKey, string>>;
   };
   doctor: { checks: { id: string; title: Record<Locale, string> }[] };
-  versions: { livekit: string; caddy: string; cloudflared: string };
+  /** caddy is a build recipe (versions.json): Caddy plus the modules compiled into it. */
+  versions: { livekit: string; caddy: { version: string; xcaddy: string; modules: Record<string, string> }; cloudflared: string };
   /** Default layouts with LOCALAPPDATA / HOME left as placeholders. */
   paths: { windows: Paths; linuxRoot: Paths; linuxUser: Paths };
   firewallRules: string[];
@@ -110,7 +111,11 @@ export function generate(): Generated {
     doctor: {
       checks: CHECKS.map((c) => ({ id: c.id, title: { en: checkTitle(c.id, 'en'), 'pt-BR': checkTitle(c.id, 'pt-BR') } })),
     },
-    versions: { livekit: versions.livekit.version, caddy: versions.caddy.version, cloudflared: versions.cloudflared.version },
+    versions: {
+      livekit: versions.livekit.version,
+      caddy: { version: versions.caddy.version, xcaddy: versions.caddy.xcaddy, modules: { ...versions.caddy.modules } },
+      cloudflared: versions.cloudflared.version,
+    },
     paths: {
       windows: resolvePaths({ LOCALAPPDATA: '%LOCALAPPDATA%' }, 'win32', false),
       linuxRoot: resolvePaths({}, 'linux', true),

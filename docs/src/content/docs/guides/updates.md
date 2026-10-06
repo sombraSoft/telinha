@@ -40,7 +40,9 @@ Telinha downloads the archive for this machine (`telinha-<target>.tar.gz` or
 matches. The running executable is renamed to `telinha.old-<version>` and the
 new one takes its place; the service loop starts it at once. When the new
 release pins newer helper programs, that first start downloads them and logs
-`binaries updated: livekit` (or whichever changed).
+`binaries updated: livekit` (or whichever changed). With `INGRESS=direct` it
+also fetches the Caddy build of the new release, verified against that
+release's `SHA256SUMS`, since every release ships its own.
 
 Run in a console, Telinha installs the update but does not restart itself; it
 logs "update to vX installed; restart telinha to apply it". The service loop

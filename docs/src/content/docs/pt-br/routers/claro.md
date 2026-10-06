@@ -31,11 +31,12 @@ Fonte: [Escolha um tipo de aparelho: Modem Wi-Fi](https://configuraraparelhos.cl
 | --- | --- | --- |
 | TCP | 7881 | sempre |
 | UDP | 7882 | sempre |
-| TCP | 443 | só no modo `direct` |
-| TCP | 80 | só no modo `direct`, a não ser que `HTTP_PORT=0` |
+| TCP | 8443 | endereço do DuckDNS em casa; a sua porta, se você mudou |
 
-Se você mudou `MEDIA_TCP_PORT`, `MEDIA_UDP_PORT`, `HTTP_PORT` ou `HTTPS_PORT`
-no `telinha.env`, use os seus valores.
+Com um Cloudflare Tunnel, só as duas portas de mídia. Nada além disso, nem a 80
+nem a 443: a internet de casa em geral não deixa as portas web 80 e 443
+entrarem, então a Telinha não usa essas portas. Se você mudou `MEDIA_TCP_PORT`,
+`MEDIA_UDP_PORT` ou `HTTPS_PORT` no `telinha.env`, use os seus valores.
 
 ## É CGNAT?
 

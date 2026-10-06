@@ -8,7 +8,8 @@ sidebar:
 import { Steps } from '@astrojs/starlight/components';
 
 Um contêiner roda tudo: a imagem `ghcr.io/sombrasoft/telinha` (`linux/amd64` e
-`linux/arm64`) já traz o `livekit-server`, o `caddy` e o `cloudflared`. O host
+`linux/arm64`) já traz o `livekit-server`, o build do `caddy` da própria
+Telinha e o `cloudflared`. O host
 guarda o arquivo do compose e a configuração em `/opt/telinha`, e um timer
 opcional, o `telinha-update`, mantém tudo na versão estável mais nova.
 
@@ -20,8 +21,9 @@ opcional, o `telinha-update`, mantém tudo na versão estável mais nova.
 - Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
   Dá para criar o aplicativo antes do assistente ou durante ele: veja
   [Aplicativo do Discord](/telinha/pt-br/start/discord/).
-- Uma ideia do endereço que o pessoal vai usar: um domínio seu, um nome
-  gratuito do DuckDNS, o sslip.io numa VPS ou um Cloudflare Tunnel.
+- Para o endereço que o pessoal abre: em casa, um domínio na Cloudflare, ou
+  nada (o assistente te dá um endereço grátis do DuckDNS); numa VPS, um
+  domínio seu, DuckDNS ou sslip.io.
   [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
   compara as opções.
 - Em casa, acesso à página de administração do roteador, a não ser que ele faça
@@ -37,8 +39,8 @@ No Windows a [instalação nativa](/telinha/pt-br/start/windows/) é o caminho m
 simples. O Docker Desktop também funciona: o arquivo do compose usa a rede do
 host, o que exige o Docker Desktop 4.34 ou mais novo com **Settings → Resources
 → Network → Enable host networking** ligado. O vídeo por UDP nesse caminho não
-foi verificado, então use um Cloudflare Tunnel lá (`INGRESS=tunnel`, nada para
-ocupar as portas 80/443). O `install-docker.sh` e o `telinha-update` são só
+foi verificado, então use um Cloudflare Tunnel ou a opção do DuckDNS lá (nada
+para ocupar as portas 80/443). O `install-docker.sh` e o `telinha-update` são só
 para Linux.
 :::
 
@@ -96,14 +98,19 @@ ou duas linhas; servidores, cargos e canais aparecem em listas.
 
 <Steps>
 
-1. **Onde a Telinha roda.** Em casa atrás de um roteador, numa VPS ou só atrás
-   da Cloudflare.
+1. **Onde a Telinha roda.** *Onde a Telinha vai rodar?* Responda pela máquina
+   onde o contêiner roda: *Um computador em casa (um PC ou um servidor
+   caseiro)* ou *Um servidor alugado (VPS)*.
 
-2. **Endereço.** Um domínio seu, DuckDNS, sslip.io (só para VPS), um Cloudflare
-   Tunnel ou o seu próprio proxy reverso. Com o Caddy que vem junto ele
-   pergunta se as portas 80 e 443 da internet chegam na máquina; em casa, se a
-   Telinha pode abrir as portas no roteador por UPnP (funciona de dentro do
-   contêiner, graças à rede do host).
+2. **Endereço.** Em casa, onde a internet em geral não deixa as portas web 80
+   e 443 entrarem, ele pergunta *Você tem um domínio na Cloudflare?*: sim dá
+   um Cloudflare Tunnel, não dá um endereço grátis do DuckDNS com HTTPS na
+   porta 8443 (`https://my-group.duckdns.org:8443`, o certificado vem pelo
+   DuckDNS). Numa VPS ele pergunta *Como o pessoal vai chegar na Telinha?*: um
+   domínio seu, DuckDNS ou sslip.io na 80 e na 443, um Cloudflare Tunnel ou o
+   seu próprio proxy reverso. Em casa ele pergunta depois se a Telinha pode
+   abrir as portas no roteador por UPnP (funciona de dentro do contêiner,
+   graças à rede do host).
 
 3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
    não ser que outro programa do host já use alguma.
@@ -141,11 +148,13 @@ O contêiner usa a rede do host, então as portas são as do host:
 | --- | --- | --- |
 | TCP 7881 | sempre | Vídeo por TCP, para redes que bloqueiam UDP |
 | UDP 7882 | sempre | Vídeo por UDP, o caminho normal |
-| TCP 443 | domínio próprio, DuckDNS ou sslip.io | As páginas, por HTTPS |
-| TCP 80 | idem, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
+| TCP 8443 | em casa, endereço do DuckDNS (a sua porta, se você mudou) | As páginas, por HTTPS |
+| TCP 443 | numa VPS, domínio próprio, DuckDNS ou sslip.io | As páginas, por HTTPS |
+| TCP 80 | numa VPS, idem | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
 
-Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
-levam WebRTC. Se você mudou alguma porta no assistente, use o seu valor.
+Em casa é só isso: nunca a 80 nem a 443. Com um Cloudflare Tunnel só as duas
+portas de mídia são necessárias (túneis não levam WebRTC). Se você mudou
+alguma porta no assistente, use o seu valor.
 
 **Em casa**, primeiro o UPnP: quando ele está ligado (`UPNP=auto`) e o roteador
 aceita, a Telinha mapeia essas portas enquanto roda. Se não, faça o
@@ -156,8 +165,15 @@ dos roteadores da [Vivo](/telinha/pt-br/routers/vivo/), da
 da [Oi](/telinha/pt-br/routers/oi/). **Numa VPS**, libere as portas no firewall
 do provedor (veja [VPS](/telinha/pt-br/start/vps/)).
 
-Se o ufw ou o firewalld estiver ativo no host, libere as mesmas portas nele; com
-as portas padrão:
+Se o ufw ou o firewalld estiver ativo no host, libere as mesmas portas nele. Em
+casa com um endereço do DuckDNS (tire o `8443/tcp` com um túnel):
+
+```sh
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 8443/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=8443/tcp && sudo firewall-cmd --reload
+```
+
+Numa VPS com o Caddy que vem junto:
 
 ```sh
 sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
@@ -182,7 +198,7 @@ linha e o que uma falha quer dizer.
 
 O contêiner também tem um healthcheck: o `docker compose ps` mostra ele como
 unhealthy enquanto um dos programas que vêm junto está fora do ar, por exemplo
-um Caddy que não consegue usar as portas 80/443 ou um token de túnel errado.
+um Caddy que não consegue usar a porta dele ou um token de túnel errado.
 
 ## Use
 

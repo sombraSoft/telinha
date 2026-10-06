@@ -23,22 +23,25 @@ o `telinha doctor`.
 | --- | --- | --- |
 | TCP `MEDIA_TCP_PORT` (7881) | sempre | Mídia WebRTC por TCP, para redes que bloqueiam UDP |
 | UDP `MEDIA_UDP_PORT` (7882) | sempre | Mídia WebRTC por UDP, o caminho normal |
-| TCP `HTTPS_PORT` (443) | `INGRESS=direct` | Caddy, HTTPS; o lado público é a porta do `PUBLIC_URL` |
-| TCP `HTTP_PORT` (80) | `INGRESS=direct`, a não ser com `HTTP_PORT=0` | Desafio HTTP do Let's Encrypt, redirecionamento para HTTPS |
+| TCP `HTTPS_PORT` (8443 em casa, 443 numa VPS) | `INGRESS=direct` | Caddy, HTTPS; a porta do `PUBLIC_URL` |
+| TCP `HTTP_PORT` (80) | `INGRESS=direct` numa VPS (`0` em casa) | Desafio HTTP do Let's Encrypt, redirecionamento para HTTPS |
 
 Ou seja, por [modo de entrada](/telinha/pt-br/guides/domains/):
 
 | Modo | Encaminhe para a máquina |
 | --- | --- |
-| `direct` | TCP 7881, UDP 7882, TCP 443, TCP 80 |
+| `direct` em casa (DuckDNS) | TCP 7881, UDP 7882, TCP 8443 |
+| `direct` numa VPS | TCP 7881, UDP 7882, TCP 443, TCP 80 (no firewall do provedor) |
 | `tunnel` | TCP 7881, UDP 7882 |
 | `external` | TCP 7881, UDP 7882, mais o que o seu próprio proxy precisar |
+
+Em casa a Telinha nunca depende da 80 nem da 443: a internet de casa em geral
+não deixa as portas web 80 e 443 entrarem.
 
 As portas de mídia valem para todos os modos porque o navegador manda o vídeo
 direto para o LiveKit; um Cloudflare Tunnel leva as páginas, não o WebRTC. Se
 você mudou alguma porta no `telinha.env`, encaminhe o seu valor. Use o mesmo
-número dos dois lados da regra; a única exceção é a
-[tradução de portas](/telinha/pt-br/guides/domains/#tradução-de-portas) do HTTPS.
+número dos dois lados da regra.
 
 Duas portas nunca são encaminhadas. O `LISTEN` (`127.0.0.1:8081`) é a porta da
 própria Telinha, que o Caddy, o `cloudflared` ou o seu proxy acessam na mesma
@@ -118,8 +121,8 @@ Depois faça esse endereço ficar fixo, de um destes dois jeitos:
 
 Com `UPNP=auto` (o padrão), a Telinha pede ao roteador para encaminhar as
 portas acima para esta máquina enquanto ela roda, por UPnP IGD (v1 ou v2), PCP
-ou NAT-PMP, o que o roteador responder. No modo `direct` isso inclui a 443
-pública para o `HTTPS_PORT` e a 80 para o `HTTP_PORT`.
+ou NAT-PMP, o que o roteador responder: as portas de mídia e, em casa com
+DuckDNS, a TCP 8443. Nunca a 80 nem a 443.
 
 - Cada mapeamento dura uma hora e é renovado bem antes de vencer.
 - Eles são refeitos depois de uma troca de IP, porque o roteador costuma
@@ -134,7 +137,7 @@ O log:
 ```
 upnp: mapped TCP 7881 -> 192.168.0.10:7881 (lease 3600s)
 upnp: mapped UDP 7882 -> 192.168.0.10:7882 via NAT-PMP (lease 3600s)
-upnp: could not map TCP 443: port 443 is mapped to another device 192.168.0.20
+upnp: could not map TCP 8443: port 8443 is mapped to another device 192.168.0.20
 upnp: no UPnP/NAT-PMP gateway found; forward the ports on the router by hand
 ```
 
@@ -175,20 +178,20 @@ Todo roteador faz isso do mesmo jeito; só os nomes dos menus mudam.
 
 </Steps>
 
-Com os valores padrão no modo `direct` e a máquina em `192.168.0.10`:
+Com os valores padrão, um endereço do DuckDNS e a máquina em `192.168.0.10`:
 
 | Nome | Protocolo | Porta externa | IP interno | Porta interna |
 | --- | --- | --- | --- | --- |
 | telinha-media-tcp | TCP | 7881 | 192.168.0.10 | 7881 |
 | telinha-media-udp | UDP | 7882 | 192.168.0.10 | 7882 |
-| telinha-https | TCP | 443 | 192.168.0.10 | 443 |
-| telinha-http | TCP | 80 | 192.168.0.10 | 80 |
+| telinha-https | TCP | 8443 | 192.168.0.10 | 8443 |
+
+Com um Cloudflare Tunnel, só as duas primeiras.
 
 O `telinha doctor` diz o que está faltando. A verificação `gateway` avisa
 quando nenhum roteador responde UPnP e lista as portas para encaminhar na mão;
 a verificação `mappings` lista as portas que o roteador não aceitou, com o
-endereço para onde mandar (uma porta traduzida aparece como `TCP 443 → 8443`);
-com `UPNP=off` ela é pulada e mostra a lista.
+endereço para onde mandar; com `UPNP=off` ela é pulada e mostra a lista.
 
 ## É CGNAT?
 
@@ -235,7 +238,7 @@ para esses programas, e bloquear ganha de permitir.
 | `Telinha LiveKit TCP` | `livekit-server.exe` | TCP `MEDIA_TCP_PORT` |
 | `Telinha LiveKit UDP` | `livekit-server.exe` | UDP `MEDIA_UDP_PORT` |
 | `Telinha HTTPS` (direct) | `caddy.exe` | TCP `HTTPS_PORT` |
-| `Telinha HTTP` (direct, `HTTP_PORT` diferente de 0) | `caddy.exe` | TCP `HTTP_PORT` |
+| `Telinha HTTP` (direct, `HTTP_PORT` diferente de 0, então não nas instalações de casa) | `caddy.exe` | TCP `HTTP_PORT` |
 
 Depois de mudar uma porta, rode o assistente de novo (ou o comando de
 instalação num terminal de administrador). O
@@ -245,7 +248,15 @@ instalação num terminal de administrador). O
   <TabItem label="Linux">
 
 No Linux a Telinha não cria regras de firewall. Com ufw ou firewalld ativo,
-libere as portas você mesmo. Com os valores padrão no modo `direct`:
+libere as portas você mesmo. Em casa, com os valores padrão e um endereço do
+DuckDNS (tire o `8443/tcp` com um túnel):
+
+```
+sudo ufw allow 8443/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp
+sudo firewall-cmd --permanent --add-port=8443/tcp --add-port=7881/tcp --add-port=7882/udp && sudo firewall-cmd --reload
+```
+
+Numa VPS no modo `direct`:
 
 ```
 sudo ufw allow 443/tcp && sudo ufw allow 80/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp

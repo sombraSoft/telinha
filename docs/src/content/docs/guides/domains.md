@@ -14,12 +14,27 @@ setup again, or edit `telinha.env` and restart. Every key is described in
 
 ## Which one
 
+The wizard asks *Where will Telinha run?* first, and the options depend on
+the answer. `HOSTING` in `telinha.env` records it (`home` or `vps`).
+
+**At home** it asks *Do you have a domain on Cloudflare?* Home internet
+connections usually do not let the web ports 80 and 443 in, so Telinha never
+counts on them there:
+
+| Answer | Option | `INGRESS` | Ports to forward for the pages |
+| --- | --- | --- | --- |
+| Yes | [Cloudflare Tunnel](#cloudflare-tunnel) | `tunnel` | none |
+| No | [DuckDNS on port 8443](#duckdns-on-port-8443) | `direct` | TCP 8443 |
+
+**On a VPS** it asks *How will people reach Telinha?* A VPS has 80 and 443 of
+its own:
+
 | Option | `INGRESS` | Good for | Inbound web ports |
 | --- | --- | --- | --- |
 | [Your own domain](#your-own-domain) | `direct` | You own a domain | TCP 443 and 80 |
-| [DuckDNS](#duckdns) | `direct` | No domain, home line with a changing IP | TCP 443 and 80 |
-| [sslip.io](#sslipio) | `direct` | No domain, a VPS with a fixed IP | TCP 443 and 80 |
-| [Cloudflare Tunnel](#cloudflare-tunnel) | `tunnel` | Networks that cannot open 80/443; needs a domain on Cloudflare | none |
+| [DuckDNS](#duckdns) | `direct` | No domain, a free name | TCP 443 and 80 |
+| [sslip.io](#sslipio) | `direct` | No domain and no account | TCP 443 and 80 |
+| [Cloudflare Tunnel](#cloudflare-tunnel) | `tunnel` | A domain on Cloudflare, no open web ports | none |
 | [Your own reverse proxy](#your-own-reverse-proxy) | `external` | You already run nginx, Caddy, Traefik... | your proxy's |
 
 In `direct` mode the bundled Caddy gets a Let's Encrypt certificate for the
@@ -32,73 +47,15 @@ on TCP `MEDIA_TCP_PORT` (7881) and UDP `MEDIA_UDP_PORT` (7882), so those two
 ports must reach the machine in every mode, a tunnel included: see
 [Which ports](/telinha/guides/port-forwarding/#which-ports).
 
-## Your own domain
+## At home
 
-Create an A record for a name you own pointing at the public IPv4 of the
-network Telinha runs on. In plain steps: in the DNS settings of the company
-you bought the domain from, add a record of type `A`, name `telinha` (giving
-`telinha.yourdomain.com`), value your public IP (the setup and
-`telinha doctor` show it). Changes can take a few minutes to reach everyone.
-Then:
+### Cloudflare Tunnel
 
-```
-PUBLIC_URL=https://telinha.example.com
-INGRESS=direct
-```
-
-Caddy gets the certificate by itself once TCP 80 and 443 reach the machine.
-`ACME_EMAIL` optionally gives Let's Encrypt an address for expiry notices.
-The setup and `telinha doctor` (the `dns` check) compare the record with the
-public IP and tell you when they differ.
-
-On a home line whose IP changes, use your DNS provider's dynamic DNS, or
-DuckDNS below.
-
-## DuckDNS
-
-Free, follows a changing IP, works on any host. On duckdns.org: sign in, add a
-subdomain, and copy the token shown at the top of the page.
-
-```
-PUBLIC_URL=https://my-group.duckdns.org
-DDNS_PROVIDER=duckdns
-DUCKDNS_DOMAIN=my-group
-DUCKDNS_TOKEN='...'
-```
-
-`DUCKDNS_DOMAIN` is the subdomain alone (`a-z`, `0-9`, `-`); a pasted
-`.duckdns.org` is stripped with a warning. A `PUBLIC_URL` on another host is a
-warning too.
-
-Telinha updates the record at start, then looks up the public IP every 5
-minutes and updates the record when the IP changed or the last update failed,
-at least once a day, and right away when the [IP watch](#dynamic-ip) sees a
-change. The log shows `ddns: my-group.duckdns.org -> 203.0.113.9`; the token
-is never logged. With `LIVEKIT_NODE_IP` set it sends that IP instead of
-looking one up.
-
-## sslip.io
-
-No domain and a fixed public IPv4, which in practice means a VPS:
-`https://203-0-113-9.sslip.io` resolves to `203.0.113.9` with no account and no
-setup. Set the IP as `LIVEKIT_NODE_IP` too:
-
-```
-PUBLIC_URL=https://203-0-113-9.sslip.io
-LIVEKIT_NODE_IP=203.0.113.9
-```
-
-The setup writes both, and offers this option only for a VPS. sslip.io is a
-shared domain, and Let's Encrypt limits how many certificates it issues per
-domain each week, so a certificate can be refused when too many were issued
-for sslip.io recently. Your own domain or DuckDNS is more reliable.
-
-## Cloudflare Tunnel
-
-No inbound web ports: `cloudflared` opens an outgoing connection to
-Cloudflare, which serves your hostname through it. It suits networks that
-cannot forward 80/443, and it works on every build (Windows on ARM included).
-It needs a domain whose DNS is on Cloudflare.
+The home choice when you have a domain on Cloudflare, and an option on a VPS
+too. No inbound web ports: `cloudflared` opens an outgoing connection to
+Cloudflare, which serves your hostname through it. The address has no port
+in it, so it opens from any network, and it works on every build (Windows on
+ARM included). It needs a domain whose DNS is on Cloudflare.
 
 In the Cloudflare dashboard: Zero Trust → Networks → Tunnels → create a tunnel
 (type cloudflared), copy its token, and give the tunnel a public hostname whose
@@ -115,7 +72,117 @@ The media ports still need forwarding: a tunnel does not carry WebRTC. If the
 reason you chose a tunnel is that nothing at all reaches your network, read
 [CGNAT and double NAT](#cgnat-and-double-nat) first.
 
-## Your own reverse proxy
+### DuckDNS on port 8443
+
+The home choice without a domain. DuckDNS gives you a free
+`<name>.duckdns.org` that follows your changing IP. On duckdns.org: sign in,
+add a subdomain, and copy the token shown at the top of the page. The wizard
+tries the token at once and writes:
+
+```
+PUBLIC_URL=https://my-group.duckdns.org:8443
+INGRESS=direct
+HTTPS_PORT=8443
+HTTP_PORT=0
+ACME_DNS=duckdns
+DDNS_PROVIDER=duckdns
+DUCKDNS_DOMAIN=my-group
+DUCKDNS_TOKEN='...'
+```
+
+Telinha serves HTTPS on a port of its own, 8443 unless you pick another
+(1024-65535), and the address carries it. Let's Encrypt asks for proof that
+you control the name; with `ACME_DNS=duckdns` Caddy gives it through the
+DuckDNS API, by setting a TXT record with your token (the DNS challenge), so
+no connection from Let's Encrypt has to reach your network and nothing
+listens on 80 or 443. The router forwards only TCP 8443, next to the media
+ports, and UPnP can do that.
+
+Links carry the port, like `https://my-group.duckdns.org:8443/r/...`. Some
+strict networks (offices, schools) only let browsers reach port 443, so people
+there cannot open them; a domain on Cloudflare
+([Cloudflare Tunnel](#cloudflare-tunnel)) has no such limit.
+
+The first certificate usually takes 1-3 minutes: Caddy sets the record, waits
+until public DNS shows it, then Let's Encrypt checks it. In the log the Caddy
+lines start with `[caddy]`; look for `trying to solve challenge` with
+`dns-01`, then `certificate obtained successfully`. The token never shows up
+there: Caddy gets it through its environment, the rendered `Caddyfile` holds
+only a placeholder for it, and Telinha blanks it out of Caddy's output. The certificate needs
+the Caddy that Telinha downloads or bundles, which has the DuckDNS module;
+`telinha doctor` checks that (the `binaries` row) and shows the method in the
+`certificate` row.
+
+Telinha also keeps the name pointed at your network. It updates the record at
+start, then looks up the public IP every 5 minutes and updates the record when
+the IP changed or the last update failed, at least once a day, and right away
+when the [IP watch](#dynamic-ip) sees a change. The log shows
+`ddns: my-group.duckdns.org -> 203.0.113.9`.
+
+`DUCKDNS_DOMAIN` is the subdomain alone (`a-z`, `0-9`, `-`); a pasted
+`.duckdns.org` is stripped with a warning. With `ACME_DNS=duckdns` the
+`PUBLIC_URL` host must be under `duckdns.org`: DuckDNS can only set records
+for its own names.
+
+## On a VPS
+
+A VPS has its own public IP and nothing in front of it but the provider's
+firewall, so with the first three options below Caddy gets the certificate
+the usual way, over ports 80 and 443, which you open in that firewall. The
+[Cloudflare Tunnel](#cloudflare-tunnel) works on a VPS exactly as at home.
+
+### Your own domain
+
+Create an A record for a name you own pointing at the public IPv4 of the
+server. In plain steps: in the DNS settings of the company you bought the
+domain from, add a record of type `A`, name `telinha` (giving
+`telinha.yourdomain.com`), value the server's public IP (the setup and
+`telinha doctor` show it). Changes can take a few minutes to reach everyone.
+Then:
+
+```
+PUBLIC_URL=https://telinha.example.com
+INGRESS=direct
+```
+
+Caddy gets the certificate by itself once TCP 80 and 443 reach the server.
+`ACME_EMAIL` optionally gives Let's Encrypt an address for expiry notices.
+The setup and `telinha doctor` (the `dns` check) compare the record with the
+public IP and tell you when they differ.
+
+### DuckDNS
+
+A free name instead of a domain, on 443 like your own domain, with no port in
+the address:
+
+```
+PUBLIC_URL=https://my-group.duckdns.org
+DDNS_PROVIDER=duckdns
+DUCKDNS_DOMAIN=my-group
+DUCKDNS_TOKEN='...'
+```
+
+Telinha keeps the record pointed at the server as described in
+[DuckDNS on port 8443](#duckdns-on-port-8443). With `LIVEKIT_NODE_IP` set it
+sends that IP instead of looking one up.
+
+### sslip.io
+
+No domain and a fixed public IPv4:
+`https://203-0-113-9.sslip.io` resolves to `203.0.113.9` with no account and no
+setup. Set the IP as `LIVEKIT_NODE_IP` too:
+
+```
+PUBLIC_URL=https://203-0-113-9.sslip.io
+LIVEKIT_NODE_IP=203.0.113.9
+```
+
+The setup writes both, and offers this option only for a VPS. sslip.io is a
+shared domain, and Let's Encrypt limits how many certificates it issues per
+domain each week, so a certificate can be refused when too many were issued
+for sslip.io recently. Your own domain or DuckDNS is more reliable.
+
+### Your own reverse proxy
 
 `INGRESS=external`: your proxy terminates TLS and forwards to `LISTEN`
 (`127.0.0.1:8081` by default; when the proxy runs on another machine, set
@@ -139,28 +206,26 @@ telinha.example.com {
 
 Forward the media ports as in every other mode.
 
-## Port translation
+## Advanced: ports 80 and 443 at home
 
-When 443 on the machine is taken, or a Linux user install cannot bind ports
-below 1024, the router can translate: public 443 goes to, say, 8443 on the
-machine.
+The wizard's home question has a third answer, *Advanced*, for two cases it
+never picks on its own: you opened ports 80 and 443 on your router to this
+machine yourself, or you run your own reverse proxy. With the first, Telinha
+writes the VPS values (`HTTP_PORT=80`, `HTTPS_PORT=443`, no `ACME_DNS`) for
+your own domain or DuckDNS and gets the certificate over those ports, but it
+never asks the router for them: keep them forwarded yourself. A
+non-interactive `telinha setup` at home needs `--advanced` to write either
+setup, and `telinha doctor` reports it in the `certificate` row as a note,
+not a warning.
 
-```
-PUBLIC_URL=https://telinha.example.com
-HTTPS_PORT=8443
-HTTP_PORT=0
-```
-
-The router forwards public TCP 443 to the machine's 8443. A `PUBLIC_URL` port
-that differs from `HTTPS_PORT` is only a warning:
+If the router translates instead (public 443 to another port on the
+machine), set that port as `HTTPS_PORT` and keep `PUBLIC_URL` without it. A
+`PUBLIC_URL` port that differs from `HTTPS_PORT` is only a warning:
 `config: PUBLIC_URL port 443 differs from HTTPS_PORT 8443; assuming the router translates 443 -> 8443`.
-With UPnP on, Telinha asks the router for exactly that translation.
-
-`HTTP_PORT=0` turns the HTTP listener (the redirect to HTTPS) off. Let's
-Encrypt can then validate over TLS on 443 (the TLS-ALPN challenge), so port 80
-does not need to be open. The setup writes these values when you decline the
-low-port step on a Linux user install; see
-[Running as a service](/telinha/guides/service/#linux-as-a-user).
+With `HTTP_PORT=0` Let's Encrypt then validates over TLS on public 443 (the
+TLS-ALPN challenge). A `PUBLIC_URL` on a port other than 443 without
+`ACME_DNS=duckdns` is refused when `HTTP_PORT=0`, because Let's Encrypt only
+ever connects to public 80 or 443.
 
 ## CGNAT and double NAT
 

@@ -130,15 +130,22 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   PUBLIC_URL: {
     section: 'ingress', required: yes,
     notes: {
-      en: 'What people open: `https://host[:port]`. `http://localhost[:port]` only with `DEV_USER`.',
-      'pt-BR': 'O que as pessoas abrem: `https://host[:porta]`. `http://localhost[:porta]` só com `DEV_USER`.',
+      en: 'What people open: `https://host[:port]`. At home with DuckDNS the port is part of it (`https://my-group.duckdns.org:8443`). `http://localhost[:port]` only with `DEV_USER`.',
+      'pt-BR': 'O que as pessoas abrem: `https://host[:porta]`. Em casa com DuckDNS a porta faz parte dele (`https://meu-grupo.duckdns.org:8443`). `http://localhost[:porta]` só com `DEV_USER`.',
+    },
+  },
+  HOSTING: {
+    section: 'ingress', required: no, default: { en: 'unset', 'pt-BR': 'vazio' },
+    notes: {
+      en: '`home` or `vps`: where Telinha runs, as answered in `telinha setup`. A re-run of the wizard starts from it and the doctor words its advice by it; `telinha run` behaves the same either way.',
+      'pt-BR': '`home` ou `vps`: onde a Telinha roda, como respondido no `telinha setup`. Uma nova rodada do assistente parte dele e o doctor ajusta os conselhos por ele; o `telinha run` se comporta igual nos dois casos.',
     },
   },
   INGRESS: {
     section: 'ingress', required: no, probe: (c) => c.ingress, default: 'direct',
     notes: {
-      en: '`direct`: the bundled Caddy gets a certificate and binds `HTTP_PORT`/`HTTPS_PORT`; `tunnel`: Cloudflare Tunnel, no open HTTP ports; `external`: your own reverse proxy forwards to `LISTEN`. With `DEV_USER` the default is `external`.',
-      'pt-BR': '`direct`: o Caddy embutido obtém o certificado e escuta em `HTTP_PORT`/`HTTPS_PORT`; `tunnel`: Cloudflare Tunnel, sem portas HTTP abertas; `external`: seu próprio proxy reverso encaminha para `LISTEN`. Com `DEV_USER` o padrão é `external`.',
+      en: '`direct`: the bundled Caddy gets a certificate (see `ACME_DNS`) and binds `HTTPS_PORT` (and `HTTP_PORT` unless it is `0`): 443 on a VPS, 8443 at home with DuckDNS. `tunnel`: Cloudflare Tunnel, no open HTTP ports; the home choice with a domain on Cloudflare. `external`: your own reverse proxy forwards to `LISTEN`. With `DEV_USER` the default is `external`.',
+      'pt-BR': '`direct`: o Caddy embutido obtém o certificado (veja `ACME_DNS`) e escuta na `HTTPS_PORT` (e na `HTTP_PORT`, a menos que seja `0`): 443 numa VPS, 8443 em casa com DuckDNS. `tunnel`: Cloudflare Tunnel, sem portas HTTP abertas; a escolha em casa com um domínio na Cloudflare. `external`: seu próprio proxy reverso encaminha para `LISTEN`. Com `DEV_USER` o padrão é `external`.',
     },
   },
   LISTEN: {
@@ -151,15 +158,15 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   HTTP_PORT: {
     section: 'ingress', required: no, probe: (c) => c.httpPort, default: '80',
     notes: {
-      en: 'direct: the HTTP→HTTPS redirect and ACME challenge port; `0` turns that listener off (the certificate then comes through TLS-ALPN on `HTTPS_PORT`).',
-      'pt-BR': 'direct: a porta do redirecionamento HTTP→HTTPS e do desafio ACME; `0` desliga esse listener (o certificado então vem por TLS-ALPN em `HTTPS_PORT`).',
+      en: 'direct: the HTTP→HTTPS redirect and Let’s Encrypt HTTP challenge port (a VPS); `0` turns that listener off. Always `0` at home, where the certificate comes through DuckDNS (`ACME_DNS=duckdns`).',
+      'pt-BR': 'direct: a porta do redirecionamento HTTP→HTTPS e do desafio HTTP do Let’s Encrypt (uma VPS); `0` desliga esse listener. Sempre `0` em casa, onde o certificado vem pelo DuckDNS (`ACME_DNS=duckdns`).',
     },
   },
   HTTPS_PORT: {
     section: 'ingress', required: no, probe: (c) => c.httpsPort, default: '443',
     notes: {
-      en: 'direct: the port Caddy binds for TLS. Normally the `PUBLIC_URL` port; when the router translates (public 443 → this host’s 8443) set the internal one here; a difference is only a warning.',
-      'pt-BR': 'direct: a porta em que o Caddy escuta com TLS. Normalmente a porta da `PUBLIC_URL`; se o roteador traduz (443 pública → 8443 nesta máquina), coloque aqui a interna; a diferença gera só um aviso.',
+      en: 'direct: the port Caddy binds for TLS: 443 on a VPS; at home a high port (8443) that `PUBLIC_URL` also carries. A `PUBLIC_URL` port that differs from it is only a warning.',
+      'pt-BR': 'direct: a porta em que o Caddy escuta com TLS: 443 numa VPS; em casa uma porta alta (8443) que a `PUBLIC_URL` também leva. Uma porta da `PUBLIC_URL` diferente dela gera só um aviso.',
     },
   },
   ACME_EMAIL: {
@@ -167,6 +174,13 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
     notes: {
       en: "direct, optional: the Let's Encrypt account email.",
       'pt-BR': "direct, opcional: o e-mail da conta no Let's Encrypt.",
+    },
+  },
+  ACME_DNS: {
+    section: 'ingress', required: no, probe: (c) => c.acmeDns?.provider ?? 'none', default: 'none',
+    notes: {
+      en: 'direct only: how Caddy proves the name to Let’s Encrypt. `duckdns` = DNS challenge through the DuckDNS API with `DUCKDNS_TOKEN`, the home default: nothing on 80 or 443, HTTPS on `HTTPS_PORT`, and the `PUBLIC_URL` host must be under `duckdns.org`. `none` = HTTP challenge over public port 80 (a VPS), or TLS-ALPN over 443 when `HTTP_PORT=0`.',
+      'pt-BR': 'Só direct: como o Caddy prova o nome para o Let’s Encrypt. `duckdns` = desafio DNS pela API do DuckDNS com o `DUCKDNS_TOKEN`, o padrão em casa: nada na 80 nem na 443, HTTPS na `HTTPS_PORT`, e o host da `PUBLIC_URL` precisa estar sob `duckdns.org`. `none` = desafio HTTP pela porta pública 80 (uma VPS), ou TLS-ALPN pela 443 quando `HTTP_PORT=0`.',
     },
   },
   TUNNEL_TOKEN: {
@@ -191,10 +205,10 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
     },
   },
   DUCKDNS_TOKEN: {
-    section: 'ingress', required: { en: 'with `DDNS_PROVIDER=duckdns`', 'pt-BR': 'com `DDNS_PROVIDER=duckdns`' },
+    section: 'ingress', required: { en: 'with `DDNS_PROVIDER=duckdns` or `ACME_DNS=duckdns`', 'pt-BR': 'com `DDNS_PROVIDER=duckdns` ou `ACME_DNS=duckdns`' },
     notes: {
-      en: 'The token shown on duckdns.org after signing in.',
-      'pt-BR': 'O token mostrado no duckdns.org depois de entrar.',
+      en: 'The token shown on duckdns.org after signing in. It keeps the name pointed at this network and, with `ACME_DNS=duckdns`, answers the certificate’s DNS challenge. Caddy gets it only through its environment: never in the rendered `Caddyfile`, and blanked out of its log lines.',
+      'pt-BR': 'O token mostrado no duckdns.org depois de entrar. Ele mantém o nome apontando para esta rede e, com `ACME_DNS=duckdns`, responde o desafio DNS do certificado. O Caddy recebe ele só pelo ambiente: nunca no `Caddyfile` renderizado, e apagado das linhas de log dele.',
     },
   },
 
@@ -244,8 +258,8 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   UPNP: {
     section: 'media', required: no, probe: (c) => (c.upnp ? 'auto' : 'off'), default: 'auto',
     notes: {
-      en: '`auto` asks the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and `HTTPS_PORT`/`HTTP_PORT` in direct mode, while Telinha runs; `off` when you forward by hand.',
-      'pt-BR': '`auto` pede ao roteador (UPnP IGD, NAT-PMP ou PCP) para encaminhar as portas de mídia, e `HTTPS_PORT`/`HTTP_PORT` no modo direct, enquanto a Telinha roda; `off` quando você encaminha à mão.',
+      en: '`auto` asks the router (UPnP IGD, NAT-PMP or PCP) to forward the media ports, and in direct mode `HTTPS_PORT` when the `PUBLIC_URL` port is not 443 (8443 at home), while Telinha runs; never 80 or 443. `off` when you forward by hand; the wizard sets `off` on a VPS.',
+      'pt-BR': '`auto` pede ao roteador (UPnP IGD, NAT-PMP ou PCP) para encaminhar as portas de mídia, e no modo direct a `HTTPS_PORT` quando a porta da `PUBLIC_URL` não é 443 (8443 em casa), enquanto a Telinha roda; nunca a 80 nem a 443. `off` quando você encaminha à mão; o assistente põe `off` numa VPS.',
     },
   },
   LIVEKIT_NODE_IP: {
@@ -413,10 +427,19 @@ export const SETUP_FLAG_DOCS: Record<string, FlagDoc> = {
     en: 'Inside the image: ask the questions (except updates), write `telinha.env` and stop; no binaries, service, firewall, router probe or doctor.',
     'pt-BR': 'Dentro da imagem: faz as perguntas (menos a de atualizações), escreve o `telinha.env` e para; sem binários, serviço, firewall, teste do roteador nem doctor.',
   },
+  host: {
+    value: 'home|vps', sets: 'HOSTING',
+    en: 'Where Telinha runs; picks the defaults. Without it the existing file decides, else a guess from this machine (`home` unless it clearly is a VPS).',
+    'pt-BR': 'Onde a Telinha roda; escolhe os padrões. Sem ela, vale o arquivo existente, senão um palpite a partir desta máquina (`home`, a menos que seja claramente uma VPS).',
+  },
   'public-url': { value: 'URL', sets: 'PUBLIC_URL', en: 'The address people open.', 'pt-BR': 'O endereço que as pessoas abrem.' },
   ingress: { value: 'direct|tunnel|external', sets: 'INGRESS', en: 'How HTTP reaches Telinha.', 'pt-BR': 'Como o HTTP chega à Telinha.' },
-  'http-port': { value: 'N', sets: 'HTTP_PORT', en: 'direct: the redirect/ACME port; `0` turns it off.', 'pt-BR': 'direct: a porta do redirecionamento/ACME; `0` desliga.' },
-  'https-port': { value: 'N', sets: 'HTTPS_PORT', en: 'direct: the TLS port Caddy binds.', 'pt-BR': 'direct: a porta TLS em que o Caddy escuta.' },
+  advanced: {
+    en: 'At home: confirm you opened 80 and 443 on the router yourself, or run your own reverse proxy. Without it a home run refuses what relies on them (direct without `--duckdns-domain`, a port below 1024, `--http-port` other than `0`, `--ingress external`); a re-run of a file that already is such a setup counts as confirmed unless it changes the address or the ports. Ignored on a VPS.',
+    'pt-BR': 'Em casa: confirma que você mesmo abriu a 80 e a 443 no roteador, ou que tem seu próprio proxy reverso. Sem ela, uma rodada em casa recusa o que depende disso (direct sem `--duckdns-domain`, uma porta abaixo de 1024, `--http-port` diferente de `0`, `--ingress external`); uma nova rodada de um arquivo que já é uma configuração assim conta como confirmada, a menos que mude o endereço ou as portas. Ignorada numa VPS.',
+  },
+  'http-port': { value: 'N', sets: 'HTTP_PORT', en: 'direct on a VPS: the redirect and HTTP challenge port; `0` turns it off. At home only `0` (anything else needs `--advanced`).', 'pt-BR': 'direct numa VPS: a porta do redirecionamento e do desafio HTTP; `0` desliga. Em casa só `0` (qualquer outra precisa de `--advanced`).' },
+  'https-port': { value: 'N', sets: 'HTTPS_PORT', en: 'direct: the TLS port Caddy binds; at home the high port in the address (8443 by default, 1024-65535).', 'pt-BR': 'direct: a porta TLS em que o Caddy escuta; em casa a porta alta do endereço (8443 por padrão, 1024-65535).' },
   'tunnel-token-file': {
     value: 'PATH|-', sets: 'TUNNEL_TOKEN',
     en: 'File holding the Cloudflare tunnel token; `-` reads stdin. The token never goes on the command line.',
@@ -424,10 +447,10 @@ export const SETUP_FLAG_DOCS: Record<string, FlagDoc> = {
   },
   'duckdns-domain': {
     value: 'NAME', sets: 'DDNS_PROVIDER=duckdns, DUCKDNS_DOMAIN',
-    en: 'The DuckDNS subdomain; also sets `PUBLIC_URL=https://NAME.duckdns.org` unless `--public-url` is given.',
-    'pt-BR': 'O subdomínio do DuckDNS; também define `PUBLIC_URL=https://NAME.duckdns.org` a menos que `--public-url` seja dado.',
+    en: 'The DuckDNS subdomain. At home: HTTPS on `--https-port` (8443) with a DNS certificate (`ACME_DNS=duckdns`, `HTTP_PORT=0`), and `PUBLIC_URL=https://NAME.duckdns.org:8443` carries the port. On a VPS: direct on 443, `PUBLIC_URL=https://NAME.duckdns.org`. A `--public-url` given with it must match.',
+    'pt-BR': 'O subdomínio do DuckDNS. Em casa: HTTPS na `--https-port` (8443) com certificado por DNS (`ACME_DNS=duckdns`, `HTTP_PORT=0`), e a `PUBLIC_URL=https://NAME.duckdns.org:8443` leva a porta. Numa VPS: direct na 443, `PUBLIC_URL=https://NAME.duckdns.org`. Uma `--public-url` dada junto precisa bater.',
   },
-  'duckdns-token-file': { value: 'PATH|-', sets: 'DUCKDNS_TOKEN', en: 'File holding the DuckDNS token; `-` reads stdin.', 'pt-BR': 'Arquivo com o token do DuckDNS; `-` lê do stdin.' },
+  'duckdns-token-file': { value: 'PATH|-', sets: 'DUCKDNS_TOKEN', en: 'File holding the DuckDNS token (it also answers the DNS challenge at home); `-` reads stdin.', 'pt-BR': 'Arquivo com o token do DuckDNS (em casa ele também responde o desafio DNS); `-` lê do stdin.' },
   'media-tcp': { value: 'N', sets: 'MEDIA_TCP_PORT', en: 'WebRTC TCP port.', 'pt-BR': 'Porta TCP do WebRTC.' },
   'media-udp': { value: 'N', sets: 'MEDIA_UDP_PORT', en: 'WebRTC UDP port.', 'pt-BR': 'Porta UDP do WebRTC.' },
   'node-ip': { value: 'IP', sets: 'LIVEKIT_NODE_IP', en: 'Static public IPv4 (a VPS).', 'pt-BR': 'IPv4 público fixo (uma VPS).' },
@@ -443,7 +466,7 @@ export const SETUP_FLAG_DOCS: Record<string, FlagDoc> = {
   channels: { value: 'ID,ID', sets: 'CHANNEL_IDS', en: 'The command channels.', 'pt-BR': 'Os canais do comando.' },
   command: { value: 'NAME', sets: 'COMMAND_NAME', en: 'The slash command name.', 'pt-BR': 'O nome do comando de barra.' },
   group: { value: 'NAME', sets: 'GROUP_NAME', en: 'The group name shown in pages.', 'pt-BR': 'O nome do grupo mostrado nas páginas.' },
-  upnp: { value: 'auto|off', sets: 'UPNP', en: 'Let Telinha ask the router to forward the ports.', 'pt-BR': 'Deixar a Telinha pedir ao roteador para encaminhar as portas.' },
+  upnp: { value: 'auto|off', sets: 'UPNP', en: 'Let Telinha ask the router to forward the ports. Defaults to `off` on a VPS.', 'pt-BR': 'Deixar a Telinha pedir ao roteador para encaminhar as portas. O padrão é `off` numa VPS.' },
   'auto-update': { value: 'on|off', sets: 'AUTO_UPDATE', en: 'Native binary: install new stable releases by itself.', 'pt-BR': 'Binário nativo: instalar novas versões estáveis sozinho.' },
   'no-service': { en: 'Skip the service install.', 'pt-BR': 'Pula a instalação do serviço.' },
   'no-firewall': { en: 'Skip the Windows Firewall rules.', 'pt-BR': 'Pula as regras do Firewall do Windows.' },
@@ -527,12 +550,12 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
   },
   binaries: {
     looksAt: {
-      en: 'The helper programs this configuration needs (`livekit-server`; `caddy` or `cloudflared`) are in `bin/` at the pinned versions, or on `PATH`.',
-      'pt-BR': 'Os programas auxiliares que esta configuração precisa (`livekit-server`; `caddy` ou `cloudflared`) estão em `bin/` nas versões fixadas, ou no `PATH`.',
+      en: 'The helper programs this configuration needs (`livekit-server`; `caddy` or `cloudflared`) are in `bin/` at the pinned versions (`caddy`: the build of this release), or on `PATH`. With `ACME_DNS=duckdns` it reads the `caddy` file (never runs it) and fails when the DuckDNS module is missing (an upstream or distro Caddy).',
+      'pt-BR': 'Os programas auxiliares que esta configuração precisa (`livekit-server`; `caddy` ou `cloudflared`) estão em `bin/` nas versões fixadas (`caddy`: o build desta versão), ou no `PATH`. Com `ACME_DNS=duckdns` ela lê o arquivo do `caddy` (sem nunca rodar ele) e falha quando falta o módulo do DuckDNS (um Caddy oficial ou de distribuição).',
     },
     fixes: {
-      en: 'Start Telinha (the native binary downloads what is missing) or run `telinha setup`. From source: `bun scripts/bins.ts`.',
-      'pt-BR': 'Inicie a Telinha (o binário nativo baixa o que falta) ou rode o `telinha setup`. A partir do código-fonte: `bun scripts/bins.ts`.',
+      en: 'Start Telinha (the native binary downloads what is missing) or run `telinha setup`. A `caddy` in `bin/` without the DuckDNS module: delete it and run `telinha setup` again, which fetches Telinha’s own build; one on `PATH` (used only when that download failed) stays as it is, and `telinha setup` run again while online puts Telinha’s build in `bin/`. From source: `bun scripts/bins.ts --out <bin>` (or `bun run caddy --out <bin>` to build `caddy`), with the `bin/` folder the check names.',
+      'pt-BR': 'Inicie a Telinha (o binário nativo baixa o que falta) ou rode o `telinha setup`. Um `caddy` em `bin/` sem o módulo do DuckDNS: apague ele e rode o `telinha setup` de novo, que baixa o build da própria Telinha; um no `PATH` (usado só quando esse download falhou) fica como está, e o `telinha setup` rodado de novo com internet põe o build da Telinha em `bin/`. A partir do código-fonte: `bun scripts/bins.ts --out <bin>` (ou `bun run caddy --out <bin>` para compilar o `caddy`), com a pasta `bin/` que a verificação indica.',
     },
   },
   'discord-token': {
@@ -571,12 +594,22 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
   },
   dns: {
     looksAt: {
-      en: 'The A record of the `PUBLIC_URL` host (asked of 1.1.1.1 and 8.8.8.8) against the public IP (or `LIVEKIT_NODE_IP`); for a tunnel, only that it resolves.',
-      'pt-BR': 'O registro A do host da `PUBLIC_URL` (perguntado a 1.1.1.1 e 8.8.8.8) comparado ao IP público (ou a `LIVEKIT_NODE_IP`); para um túnel, só que ele resolve.',
+      en: 'The A record of the `PUBLIC_URL` host (asked of 1.1.1.1 and 8.8.8.8) against the public IP (or `LIVEKIT_NODE_IP`); for a tunnel, only that it resolves. A DuckDNS name also has its token checked: DuckDNS is sent the IP the record already holds, so nothing changes.',
+      'pt-BR': 'O registro A do host da `PUBLIC_URL` (perguntado a 1.1.1.1 e 8.8.8.8) comparado ao IP público (ou a `LIVEKIT_NODE_IP`); para um túnel, só que ele resolve. Um nome do DuckDNS também tem o token conferido: o DuckDNS recebe o IP que o registro já tem, então nada muda.',
     },
     fixes: {
-      en: 'Create or change the A record. DuckDNS: the running service updates it by itself.',
-      'pt-BR': 'Crie ou altere o registro A. DuckDNS: o serviço rodando atualiza sozinho.',
+      en: 'Create or change the A record. DuckDNS: the running service updates it by itself; a token DuckDNS rejects is entered again with `telinha setup`.',
+      'pt-BR': 'Crie ou altere o registro A. DuckDNS: o serviço rodando atualiza sozinho; um token que o DuckDNS recusa é digitado de novo no `telinha setup`.',
+    },
+  },
+  certificate: {
+    looksAt: {
+      en: 'How the certificate is obtained, from the configuration: Cloudflare (tunnel), your proxy (external), Let’s Encrypt through DuckDNS (DNS challenge, nothing on 80/443), or Let’s Encrypt over ports 80 and 443 (HTTP or TLS-ALPN challenge, a VPS). Informational: it never warns. On the advanced home setup it adds a note that 80 and 443 must be forwarded by hand.',
+      'pt-BR': 'Como o certificado é obtido, pela configuração: a Cloudflare (tunnel), o seu proxy (external), o Let’s Encrypt pelo DuckDNS (desafio DNS, nada na 80/443), ou o Let’s Encrypt pelas portas 80 e 443 (desafio HTTP ou TLS-ALPN, uma VPS). Informativa: nunca dá aviso. Na configuração avançada em casa ela acrescenta uma nota de que a 80 e a 443 precisam ser encaminhadas à mão.',
+    },
+    fixes: {
+      en: 'Nothing to fix here; `tls` says whether the certificate actually came.',
+      'pt-BR': 'Nada para resolver aqui; a `tls` diz se o certificado chegou de fato.',
     },
   },
   tls: {
@@ -585,8 +618,8 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
       'pt-BR': 'O certificado é válido para o host (aviso com menos de 14 dias restantes) e `<PUBLIC_URL>/healthz` responde pela internet.',
     },
     fixes: {
-      en: 'direct: Caddy gets the certificate by itself once ports 80 and 443 reach the machine (see `dns`, `listeners`, `mappings`). tunnel/external: check the proxy or tunnel in front.',
-      'pt-BR': 'direct: o Caddy obtém o certificado sozinho quando as portas 80 e 443 chegam à máquina (veja `dns`, `listeners`, `mappings`). tunnel/external: confira o proxy ou o túnel na frente.',
+      en: 'direct with DuckDNS (home): check the DuckDNS token (`dns`), that `HTTPS_PORT` is free for Caddy (`listeners`) and the `[caddy]` lines in the log; a fresh install takes a few minutes. direct on a VPS: Caddy gets the certificate by itself once ports 80 and 443 reach the machine (see `dns`, `listeners`). tunnel/external: check the proxy or tunnel in front.',
+      'pt-BR': 'direct com DuckDNS (em casa): confira o token do DuckDNS (`dns`), se a `HTTPS_PORT` está livre para o Caddy (`listeners`) e as linhas `[caddy]` do log; uma instalação nova leva alguns minutos. direct numa VPS: o Caddy obtém o certificado sozinho quando as portas 80 e 443 chegam à máquina (veja `dns`, `listeners`). tunnel/external: confira o proxy ou o túnel na frente.',
     },
   },
   listeners: {
@@ -595,8 +628,8 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
       'pt-BR': 'A Telinha responde em `LISTEN`, todos os filhos estão de pé, o LiveKit e a porta TCP de mídia escutam, e no modo direct a `HTTPS_PORT` escuta. Imprime os comandos do ufw/firewalld e a dica de portas baixas para usuários Linux.',
     },
     fixes: {
-      en: '`telinha service start` (or `telinha run`). Linux user install on 80/443: the one-time sysctl it prints, or `HTTPS_PORT=8443` with `HTTP_PORT=0` and the router forwarding 443 → 8443. Open the firewall with the printed commands.',
-      'pt-BR': '`telinha service start` (ou `telinha run`). Instalação Linux de usuário em 80/443: o sysctl único que ele imprime, ou `HTTPS_PORT=8443` com `HTTP_PORT=0` e o roteador encaminhando 443 → 8443. Abra o firewall com os comandos impressos.',
+      en: '`telinha service start` (or `telinha run`). Linux user install on 80/443 (a VPS): the one-time sysctl it prints; the standard home setups need no low port. Open the firewall with the printed commands.',
+      'pt-BR': '`telinha service start` (ou `telinha run`). Instalação Linux de usuário em 80/443 (uma VPS): o sysctl único que ele imprime; as configurações padrão em casa não precisam de porta baixa. Abra o firewall com os comandos impressos.',
     },
   },
   service: {
@@ -628,8 +661,8 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
   },
   mappings: {
     looksAt: {
-      en: 'Every needed port is mapped by the router (with `UPNP=auto` and the service running); otherwise the list to forward by hand.',
-      'pt-BR': 'Cada porta necessária está mapeada pelo roteador (com `UPNP=auto` e o serviço rodando); senão, a lista para encaminhar à mão.',
+      en: 'The ports Telinha asks the router for (the media ports, and 8443 at home with DuckDNS) are mapped (with `UPNP=auto` and the service running); otherwise the list to forward by hand. Ports it never asks for, such as 80 and 443 on the advanced home setup, show up as a detail line, not a problem.',
+      'pt-BR': 'As portas que a Telinha pede ao roteador (as de mídia, e a 8443 em casa com DuckDNS) estão mapeadas (com `UPNP=auto` e o serviço rodando); senão, a lista para encaminhar à mão. Portas que ela nunca pede, como a 80 e a 443 na configuração avançada em casa, aparecem numa linha de detalhe, não como problema.',
     },
     fixes: { en: 'Forward the listed ports on the router to this machine’s LAN IP.', 'pt-BR': 'Encaminhe as portas listadas no roteador para o IP desta máquina na rede local.' },
   },
@@ -662,6 +695,7 @@ export const UI: Record<string, L> = {
   fixes: { en: 'What fixes it', 'pt-BR': 'O que resolve' },
   pins: { en: 'This release pins', 'pt-BR': 'Esta versão fixa' },
   and: { en: 'and', 'pt-BR': 'e' },
+  pinsCaddy: { en: 'built by Telinha with', 'pt-BR': 'compilado pela Telinha com' },
   linux: { en: 'Linux', 'pt-BR': 'Linux' },
   windows: { en: 'Windows', 'pt-BR': 'Windows' },
   none: { en: 'none', 'pt-BR': 'nenhum' },

@@ -22,11 +22,14 @@ wizard asks a few questions, and systemd keeps it running.
 - A Discord server where you can create an application and add a bot. You can
   create the app before the setup or while it runs: see
   [Discord app](/telinha/start/discord/).
-- An idea of the address people will use: your own domain, a free DuckDNS
-  name or a Cloudflare Tunnel. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
-  compares them.
+- For the address people open: a domain on Cloudflare, or nothing, in which
+  case the wizard gives you a free DuckDNS address.
+  [Address, HTTPS and ingress modes](/telinha/guides/domains/) compares the
+  two.
 - Access to your router's admin page, unless it does UPnP (many routers ship
-  with it off, and ISP routers often hide the switch).
+  with it off, and ISP routers often hide the switch). Telinha never needs
+  ports 80 or 443 at home: only the two media ports, plus 8443 with a DuckDNS
+  address.
   No access and no UPnP, for example a locked ISP router or a shared building
   network? Then this machine cannot open the ports itself: ask the ISP or
   whoever runs the network to forward them, or use a [VPS](/telinha/start/vps/).
@@ -43,7 +46,6 @@ the same one-liner; `sudo` makes the difference.
 | --- | --- | --- |
 | Home folder | `/opt/telinha` | `~/.local/share/telinha` (`$XDG_DATA_HOME` respected) |
 | Service | System unit `/etc/systemd/system/telinha.service`, running as a `telinha` system user | User unit `~/.config/systemd/user/telinha.service` |
-| Ports 80 and 443 | Allowed through a capability of the unit | Need one `sudo` command, or port 8443 |
 | Keeps running after you log out | Yes | Only with lingering (the setup turns it on) |
 | Commands | `sudo telinha ...` | `telinha ...` |
 
@@ -83,7 +85,9 @@ export PATH="$HOME/.local/share/telinha/bin:$PATH"
 ```
 
 The script downloads nothing else: `livekit-server` and `caddy` or
-`cloudflared` come later, each checked against a pinned sha256. To skip the
+`cloudflared` come later, `livekit-server` and `cloudflared` from upstream
+checked against a pinned sha256, `caddy` from the same Telinha release checked
+against its `SHA256SUMS`. To skip the
 question, add `-s -- --native` after `sh` (`--no-setup` installs without
 starting the setup), or set `TELINHA_INSTALL=native`. `TELINHA_VERSION`
 installs a given release tag and `TELINHA_HOME` another home folder.
@@ -98,17 +102,27 @@ Linux box at home it goes like this:
 <Steps>
 
 1. **Where Telinha runs.** It shows the public IP and the router if one
-   answers UPnP, NAT-PMP or PCP. Choose *at home*, or *behind Cloudflare
-   only* if you will use a Cloudflare Tunnel.
+   answers UPnP, NAT-PMP or PCP, then asks *Where will Telinha run?* Choose
+   *A computer at home (a PC or a home server)*.
 
-2. **Address.** Your own domain (its
-   [A record](/telinha/guides/domains/#your-own-domain) is compared with the
-   public IP), DuckDNS (the token is tried at once), a Cloudflare Tunnel or your own
-   reverse proxy. With your own domain or DuckDNS, Telinha gets the HTTPS
-   certificate itself, so it asks whether ports 80 and 443 from the internet
-   can reach the machine: yes; only 443, to another port on the machine; or
-   neither, and then it recommends the tunnel. Last, it asks whether Telinha
-   may open the ports on the router through UPnP.
+2. **Address.** Home internet connections usually do not let the web ports
+   80 and 443 in, so Telinha does not count on them. It asks *Do you have a
+   domain on Cloudflare?*
+
+   - *Yes: use a Cloudflare Tunnel.* Your own address, and nothing to open
+     for the pages. You paste the tunnel's token and its public hostname; see
+     [Cloudflare Tunnel](/telinha/guides/domains/#cloudflare-tunnel).
+   - *No: use a free DuckDNS address.* You sign in on duckdns.org, add a name
+     and paste the token, which is tried at once. Telinha serves HTTPS on port
+     8443 (you can pick another) and gets the certificate through DuckDNS, so
+     the address looks like `https://my-group.duckdns.org:8443` and the links
+     carry the port. Some strict networks (offices, schools) only let browsers
+     reach port 443, so people there cannot open them; a domain on Cloudflare
+     has no such limit. See
+     [DuckDNS on port 8443](/telinha/guides/domains/#duckdns-on-port-8443).
+
+   Last, it asks whether Telinha may open the ports on the router through
+   UPnP.
 
 3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
    something else on the machine uses them.
@@ -137,23 +151,16 @@ Linux box at home it goes like this:
 </Steps>
 
 :::note[Forwarding the ports by hand?]
-When no router answered UPnP (or you did not allow it), the wizard only lists the ports to forward and carries on, so the
-certificate wait and the phone test fail at the end. That is expected: forward
-the ports as in [Open the ports](#open-the-ports) below, then run
-`telinha doctor` again (the certificate can take a few minutes once the ports
-reach the machine).
+When no router answered UPnP (or you did not allow it), the wizard only lists
+the ports to forward and carries on, so the phone test fails at the end. That
+is expected: forward the ports as in [Open the ports](#open-the-ports) below,
+then run `telinha doctor` again. The certificate does not wait for them: with
+a DuckDNS address it comes through DuckDNS (usually 1-3 minutes), and with a
+tunnel Cloudflare holds it.
 :::
 
-**User install with ports 80 and 443.** Linux lets only root bind ports below
-1024, so the setup offers one `sudo` command that allows them from 80 up for
-every user. It survives every update:
-
-```sh
-sudo sh -c 'printf "net.ipv4.ip_unprivileged_port_start=80\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system'
-```
-
-If you decline, it offers the alternative: Telinha listens on 8443
-(`HTTPS_PORT=8443`, `HTTP_PORT=0`) and the router forwards public 443 to 8443.
+A user install binds no port below 1024 at home (8443 and the media ports are
+all above it), so nothing needs root.
 
 ## Open the ports
 
@@ -163,12 +170,11 @@ The internet has to reach the machine on these ports:
 | --- | --- | --- |
 | TCP 7881 | always | Video over TCP, for networks that block UDP |
 | UDP 7882 | always | Video over UDP, the normal path |
-| TCP 443 | your own domain or DuckDNS | The pages, over HTTPS |
-| TCP 80 | your own domain or DuckDNS, unless `HTTP_PORT=0` | The Let's Encrypt challenge and the redirect to HTTPS |
+| TCP 8443 | DuckDNS address (your port if you changed it) | The pages, over HTTPS |
 
-With a Cloudflare Tunnel only the two media ports are needed: tunnels do not
-carry WebRTC. If you changed a port in the setup, use your value (with
-`HTTPS_PORT=8443` the router forwards public 443 to 8443).
+Nothing more: not 80, not 443. With a Cloudflare Tunnel only the two media
+ports are needed (tunnels do not carry WebRTC). If you changed a port in the
+setup, use your value.
 
 **UPnP first.** When the router answered and you allowed it, Telinha asks the
 router for these ports while it runs and you have nothing to do. Otherwise
@@ -180,11 +186,11 @@ are pages for [Vivo](/telinha/routers/vivo/), [Claro](/telinha/routers/claro/),
 
 **The machine's own firewall.** Telinha adds no firewall rules on Linux. If
 ufw or firewalld is active, open the same ports there. With the default ports
-and your own domain:
+and a DuckDNS address (drop `8443/tcp` with a tunnel):
 
 ```sh
-sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 443/tcp && sudo ufw allow 80/tcp
-sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=443/tcp --add-port=80/tcp && sudo firewall-cmd --reload
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp && sudo ufw allow 8443/tcp
+sudo firewall-cmd --permanent --add-port=7881/tcp --add-port=7882/udp --add-port=8443/tcp && sudo firewall-cmd --reload
 ```
 
 `telinha doctor` prints these commands with your own ports when it finds

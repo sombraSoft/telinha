@@ -31,9 +31,10 @@ LiveKit que roda junto. Ela existe porque o Go Live do Discord é bloqueado no
 Brasil.
 
 Você precisa de um servidor do Discord que você administra, uma máquina que
-fique ligada, um endereço HTTPS (o seu próprio domínio ou uma das opções sem
-domínio: DuckDNS, sslip.io ou um Cloudflare Tunnel) e duas portas encaminhadas no
-roteador ou uma VPS.
+fique ligada e um endereço HTTPS: em casa, um domínio na Cloudflare (Cloudflare
+Tunnel) ou um nome grátis do DuckDNS na porta 8443; numa VPS, o seu próprio
+domínio, DuckDNS ou sslip.io. Em casa você também encaminha as duas portas de
+mídia (e a 8443 com DuckDNS) no roteador, ou deixa o UPnP fazer isso.
 
 Tudo é um único programa configurado por um único arquivo, o `telinha.env`. O
 assistente de configuração escreve esse arquivo para você, baixa os programas

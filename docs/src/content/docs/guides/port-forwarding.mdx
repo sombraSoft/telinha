@@ -23,22 +23,25 @@ does not let it, you add them by hand. Either way, check the result with
 | --- | --- | --- |
 | TCP `MEDIA_TCP_PORT` (7881) | always | WebRTC media over TCP, for networks that block UDP |
 | UDP `MEDIA_UDP_PORT` (7882) | always | WebRTC media over UDP, the normal path |
-| TCP `HTTPS_PORT` (443) | `INGRESS=direct` | Caddy, HTTPS; the public side is the `PUBLIC_URL` port |
-| TCP `HTTP_PORT` (80) | `INGRESS=direct`, unless `HTTP_PORT=0` | Let's Encrypt's HTTP challenge, the redirect to HTTPS |
+| TCP `HTTPS_PORT` (8443 at home, 443 on a VPS) | `INGRESS=direct` | Caddy, HTTPS; the port in `PUBLIC_URL` |
+| TCP `HTTP_PORT` (80) | `INGRESS=direct` on a VPS (`0` at home) | Let's Encrypt's HTTP challenge, the redirect to HTTPS |
 
 So, by [ingress mode](/telinha/guides/domains/):
 
 | Mode | Forward to the machine |
 | --- | --- |
-| `direct` | TCP 7881, UDP 7882, TCP 443, TCP 80 |
+| `direct` at home (DuckDNS) | TCP 7881, UDP 7882, TCP 8443 |
+| `direct` on a VPS | TCP 7881, UDP 7882, TCP 443, TCP 80 (in the provider's firewall) |
 | `tunnel` | TCP 7881, UDP 7882 |
 | `external` | TCP 7881, UDP 7882, plus whatever your own proxy needs |
+
+At home Telinha never relies on 80 or 443: home connections usually do not
+let them in.
 
 The media ports are needed in every mode because browsers send video straight
 to LiveKit; a Cloudflare Tunnel carries the pages, not WebRTC. If you changed
 a port in `telinha.env`, forward your value. Use the same number on both sides
-of a rule; the one exception is the HTTPS
-[port translation](/telinha/guides/domains/#port-translation).
+of a rule.
 
 Two ports are never forwarded. `LISTEN` (`127.0.0.1:8081`) is Telinha's own
 listener, reached by Caddy, `cloudflared` or your proxy on the same machine.
@@ -116,8 +119,8 @@ Then make it stay, one of two ways:
 
 With `UPNP=auto` (the default) Telinha asks the router to forward the ports
 above to this machine while it runs, through UPnP IGD (v1 or v2), PCP or
-NAT-PMP, whichever the router answers. In `direct` mode that includes public
-443 to `HTTPS_PORT` and 80 to `HTTP_PORT`.
+NAT-PMP, whichever the router answers: the media ports and, at home with
+DuckDNS, TCP 8443. Never 80 or 443.
 
 - Leases last an hour and are renewed well before they run out.
 - They are added again after an IP change, because routers often drop them on
@@ -132,7 +135,7 @@ The log:
 ```
 upnp: mapped TCP 7881 -> 192.168.0.10:7881 (lease 3600s)
 upnp: mapped UDP 7882 -> 192.168.0.10:7882 via NAT-PMP (lease 3600s)
-upnp: could not map TCP 443: port 443 is mapped to another device 192.168.0.20
+upnp: could not map TCP 8443: port 8443 is mapped to another device 192.168.0.20
 upnp: no UPnP/NAT-PMP gateway found; forward the ports on the router by hand
 ```
 
@@ -171,20 +174,20 @@ Every router does this the same way; only the menu names change.
 
 </Steps>
 
-With the defaults in `direct` mode and the machine at `192.168.0.10`:
+With the defaults, a DuckDNS address and the machine at `192.168.0.10`:
 
 | Name | Protocol | External port | Internal IP | Internal port |
 | --- | --- | --- | --- | --- |
 | telinha-media-tcp | TCP | 7881 | 192.168.0.10 | 7881 |
 | telinha-media-udp | UDP | 7882 | 192.168.0.10 | 7882 |
-| telinha-https | TCP | 443 | 192.168.0.10 | 443 |
-| telinha-http | TCP | 80 | 192.168.0.10 | 80 |
+| telinha-https | TCP | 8443 | 192.168.0.10 | 8443 |
+
+With a Cloudflare Tunnel, only the first two.
 
 `telinha doctor` tells you what is missing. The `gateway` check warns when no
 router answers UPnP and lists the ports to forward by hand; the `mappings`
 check lists the ports the router did not agree to, with the address to send
-them to (a translated port shows as `TCP 443 → 8443`); with `UPNP=off` it is
-skipped and prints the list.
+them to; with `UPNP=off` it is skipped and prints the list.
 
 ## Is it CGNAT?
 
@@ -230,7 +233,7 @@ rules for those programs, and Block wins over Allow.
 | `Telinha LiveKit TCP` | `livekit-server.exe` | TCP `MEDIA_TCP_PORT` |
 | `Telinha LiveKit UDP` | `livekit-server.exe` | UDP `MEDIA_UDP_PORT` |
 | `Telinha HTTPS` (direct) | `caddy.exe` | TCP `HTTPS_PORT` |
-| `Telinha HTTP` (direct, `HTTP_PORT` not 0) | `caddy.exe` | TCP `HTTP_PORT` |
+| `Telinha HTTP` (direct, `HTTP_PORT` not 0, so not in the home setups) | `caddy.exe` | TCP `HTTP_PORT` |
 
 After changing a port, run the setup again (or the install command from an
 administrator terminal). `telinha service uninstall --firewall` removes the
@@ -240,7 +243,15 @@ rules.
   <TabItem label="Linux">
 
 Telinha adds no firewall rules on Linux. With ufw or firewalld active, open
-the ports yourself. With the defaults in `direct` mode:
+the ports yourself. At home with the defaults and a DuckDNS address (drop
+`8443/tcp` with a tunnel):
+
+```
+sudo ufw allow 8443/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp
+sudo firewall-cmd --permanent --add-port=8443/tcp --add-port=7881/tcp --add-port=7882/udp && sudo firewall-cmd --reload
+```
+
+On a VPS in `direct` mode:
 
 ```
 sudo ufw allow 443/tcp && sudo ufw allow 80/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp

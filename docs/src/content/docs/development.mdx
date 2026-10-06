@@ -29,6 +29,7 @@ bun run build
 bun run e2e
 bun run image
 bun run bins
+bun run caddy
 bun run versions check
 bun run compile --smoke
 bun run docs:dev
@@ -42,9 +43,10 @@ bun run docs:build
 | `bun run test` | `bun test` over the server, the web page and the docs |
 | `bun run build` | Builds the room page into `web/dist` |
 | `bun run e2e` | Playwright; run `bun run build` first, and install a Chromium with `bunx playwright install chromium` |
-| `bun run image` | Builds `telinha:dev` with docker or podman, then runs the smoke test |
-| `bun run bins` | Downloads the three helper binaries for this host into `.cache/telinha/bin` |
-| `bun run versions check` | Validates `versions.json` (`refresh` recomputes every hash) |
+| `bun run image` | Builds `telinha:dev` with docker or podman (Caddy is compiled in a Go stage of the `Dockerfile`), then runs the smoke test, which also checks the Caddy version and modules and has Caddy validate the DuckDNS `Caddyfile` |
+| `bun run bins` | Downloads the three helper binaries for this host into `.cache/telinha/bin`: `livekit-server` and `cloudflared` from upstream, `caddy` from the newest Telinha release (`bun scripts/bins.ts --release vX.Y.Z caddy` takes another release's). A release without a `caddy` asset is a warning, not a failure, when caddy was not named; build it with `bun run caddy` instead |
+| `bun run caddy` | Builds Telinha's Caddy (upstream Caddy plus the modules in `versions.json`) with xcaddy into `.cache/telinha/bin` (or `BIN_DIR`, or `--out DIR`), next to what `bun run bins` downloads; needs Go on `PATH`. On the host's own platform it also checks the version and the modules |
+| `bun run versions check` | Validates `versions.json` (`refresh` recomputes the livekit and cloudflared hashes) |
 | `bun run compile --smoke` | Builds the native binaries for this OS into `dist-bin/` (run `bun run build` first) |
 | `bun run docs:dev` | Serves this site at `http://localhost:4321/telinha/` |
 | `bun run docs:build` | Builds this site into `docs/dist/` |
@@ -66,7 +68,7 @@ The server runs with `DEV_USER` set (default `1:Dev`, that is `<id>:<name>`), a 
 | `--out DIR` | Output directory |
 | `--smoke` | Runs the host binary's `--version` |
 
-`bun run compile sums` rewrites `SHA256SUMS` for whatever archives are in `dist-bin/`. Linux targets cross-compile from any host. Windows targets build only on Windows, where Bun can write their version resource. The x64 targets are Bun's baseline builds. The binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
+`bun run compile sums` rewrites `SHA256SUMS` for whatever archives are in `dist-bin/`, the `caddy-<target>` ones included. `bun run compile pack-caddy --target <t> --from DIR` packs a built `caddy` as the release archive for that target; the release workflow builds each one through the `Dockerfile`'s `caddy-export` stage. Linux targets cross-compile from any host. Windows targets build only on Windows, where Bun can write their version resource. The x64 targets are Bun's baseline builds. The binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
 
 ## This site
 
@@ -93,11 +95,11 @@ The site is [Starlight](https://starlight.astro.build) in the `docs/` workspace,
 - web/ Svelte 5 room page and the doctor page, built with Vite into `web/dist`
 - docs/ This site (Starlight, English and Portuguese) and its generator and tests
 - deploy/ The installers, the Docker host files and `telinha-update`
-- scripts/ Dev stack, helper-binary download, native build, image build and smoke test
+- scripts/ Dev stack, helper-binary download, the Caddy build, native build, image build and smoke test
 - e2e/ Playwright specs
 - .github/ CI and release workflows
-- Dockerfile Multi-stage, multi-arch image build
-- versions.json Pinned `livekit-server`, `caddy` and `cloudflared` with their hashes
+- Dockerfile Multi-stage, multi-arch image build, with a Go stage that builds Caddy
+- versions.json Pinned `livekit-server` and `cloudflared` with their hashes, and the `caddy` build recipe: version, xcaddy, modules
 - package.json Workspaces and the scripts above
 - bun.lock
 - bunfig.toml

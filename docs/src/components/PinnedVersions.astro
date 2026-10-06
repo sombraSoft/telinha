@@ -1,15 +1,23 @@
 ---
 // One sentence with the helper versions this release pins (versions.json), so
-// no page ever types a version number into prose.
+// no page ever types a version number into prose. caddy is Telinha's own
+// build, so its modules are named too.
 import generated from '../data/generated.json';
 import { UI, type Locale } from '../data/reference.ts';
 
 interface Props { locale: Locale }
 const { locale } = Astro.props;
-const v = generated.versions as { livekit: string; caddy: string; cloudflared: string };
+const v = generated.versions as {
+  livekit: string; caddy: { version: string; xcaddy: string; modules: Record<string, string> }; cloudflared: string;
+};
 const t = (k: string) => UI[k]![locale];
+// github.com/caddy-dns/duckdns -> caddy-dns/duckdns; the host adds nothing.
+const modules = Object.entries(v.caddy.modules).map(([path, tag]) => ({ name: path.replace(/^github\.com\//, ''), tag }));
 ---
 
 <p>
-  {t('pins')} <code>livekit-server</code> {v.livekit}, <code>caddy</code> {v.caddy} {t('and')} <code>cloudflared</code> {v.cloudflared}.
+  {t('pins')} <code>livekit-server</code> {v.livekit}, <code>caddy</code> {v.caddy.version} {t('pinsCaddy')}{' '}
+  {modules.map((m, i) => (
+    <>{i > 0 && (i === modules.length - 1 ? ` ${t('and')} ` : ', ')}<code>{m.name}</code> {m.tag}</>
+  ))}, {t('and')} <code>cloudflared</code> {v.cloudflared}.
 </p>

@@ -20,13 +20,28 @@
       "extractVersionTemplate": "^v(?<version>.*)$"
     },
     {
-      "description": "Caddy binary pinned in versions.json (run `bun scripts/versions.ts refresh` after a bump)",
+      "description": "Caddy version our xcaddy build compiles (versions.json); the image job builds and checks it",
       "customType": "regex",
       "managerFilePatterns": ["/^versions\\.json$/"],
       "matchStrings": ["\"caddy\":\\s*\\{\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "caddyserver/caddy",
       "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "xcaddy, which builds our Caddy (versions.json); its tags carry the v",
+      "customType": "regex",
+      "managerFilePatterns": ["/^versions\\.json$/"],
+      "matchStrings": ["\"xcaddy\":\\s*\"(?<currentValue>v[^\"]+)\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "caddyserver/xcaddy"
+    },
+    {
+      "description": "Caddy modules compiled into our build (versions.json caddy.modules, the only github.com/... keys in the file)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^versions\\.json$/"],
+      "matchStrings": ["\"(?<depName>github\\.com/[^\"]+)\":\\s*\"(?<currentValue>v[^\"]+)\""],
+      "datasourceTemplate": "go"
     },
     {
       "description": "cloudflared binary pinned in versions.json (run `bun scripts/versions.ts refresh` after a bump); its tags have no v prefix",
@@ -57,8 +72,11 @@
       "automerge": false
     },
     {
-      "description": "Bumps in versions.json stay red until someone runs `bun scripts/versions.ts refresh`, so they never automerge or block the allNonMajor group",
-      "matchDepNames": ["caddyserver/caddy", "cloudflare/cloudflared"],
+      "description": "Bumps in versions.json: the downloaded ones stay red until `bun scripts/versions.ts refresh`, the Caddy recipe needs the image job green; neither automerges or blocks the allNonMajor group",
+      "matchDepNames": [
+        "caddyserver/caddy", "caddyserver/xcaddy", "github.com/caddy-dns/duckdns", "github.com/mholt/caddy-l4",
+        "cloudflare/cloudflared"
+      ],
       "groupName": "child-binaries",
       "automerge": false
     },
@@ -68,7 +86,7 @@
       "automerge": false
     },
     {
-      "description": "The Dockerfile and compose.yml ship in the image or the release tag, so their bumps must cut a release",
+      "description": "The Dockerfile (its golang and bun images too) and compose.yml ship in the image or the release tag, so their bumps must cut a release",
       "matchManagers": ["dockerfile", "docker-compose"],
       "semanticCommitType": "fix"
     },

@@ -106,6 +106,12 @@ export interface SysLike {
   /** Full path of a command on PATH, or null. */
   which(name: string): string | null;
   exists(path: string): boolean;
+  /**
+   * A file's bytes, or null when it cannot be read or is larger than maxBytes.
+   * Checks read helper binaries instead of running them: doctor may run as root
+   * (setup ends with it) while bin/ belongs to the service user.
+   */
+  readBytes?(path: string, maxBytes: number): Promise<Uint8Array | null>;
 }
 
 export interface CheckContext {

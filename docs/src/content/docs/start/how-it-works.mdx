@@ -22,7 +22,7 @@ into `data/run/` and starts them as its own children:
 | Child | When | What it does |
 | --- | --- | --- |
 | `livekit-server` | always | Receives the shared screen and sends it to every viewer |
-| `caddy` | `INGRESS=direct` | Gets a Let's Encrypt certificate for your address and terminates HTTPS |
+| `caddy` | `INGRESS=direct` | Gets a Let's Encrypt certificate for your address (through DuckDNS's API at home, over ports 80/443 on a VPS) and terminates HTTPS |
 | `cloudflared` | `INGRESS=tunnel` | Carries the web traffic from Cloudflare to Telinha, with no inbound web ports |
 
 With `INGRESS=external` neither `caddy` nor `cloudflared` runs: your own
@@ -36,6 +36,17 @@ in the release, and downloads them again when a release pins a newer
 version. The Docker image carries all three.
 
 <PinnedVersions locale="en" />
+
+### Our own Caddy build
+
+The `caddy` Telinha runs is not the upstream download: it is upstream Caddy
+plus two modules, the DuckDNS DNS provider (`caddy-dns/duckdns`, which gets a
+home certificate without ports 80 and 443) and layer4 (`caddy-l4`), built
+with xcaddy from the versions pinned in `versions.json`. Every release ships
+it for each platform next to the Telinha binaries, and the Docker image builds
+it into itself. The native program fetches the Caddy of its own release and
+checks it against that release's `SHA256SUMS`, so a Telinha update brings
+its matching Caddy along.
 
 ## The login gate
 
@@ -78,7 +89,8 @@ router (or opened on a VPS).
 ### Direct
 
 `INGRESS=direct`: the bundled Caddy gets the certificate and forwards
-everything to Telinha.
+everything to Telinha. On a VPS it listens on 443 and gets the certificate
+over 80 and 443:
 
 ```
 browser --> caddy :443 (TLS; :80 redirects)           child of telinha
@@ -93,7 +105,18 @@ browser --> caddy :443 (TLS; :80 redirects)           child of telinha
                       /r/<code>     --> room page
                       /             --> redirect to /r/
 
-media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP)
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (opened in the provider's firewall)
+```
+
+At home with DuckDNS it listens on a high port that the address carries, and
+the certificate comes through the DuckDNS API (the DNS challenge), so nothing
+listens on 80 or 443:
+
+```
+browser --> caddy :8443 (TLS via DNS-01; no :80)      child of telinha
+              --> telinha 127.0.0.1:8081 --> (same routes as above)
+
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP, like 8443)
 ```
 
 ### Tunnel
@@ -131,9 +154,10 @@ turns the watch off. With DuckDNS, Telinha also keeps your
 
 ## UPnP
 
-With `UPNP=auto` (the default) Telinha asks the router to forward its ports
-to this machine while it runs, through UPnP, NAT-PMP or PCP, whichever the
-router answers. The mappings are renewed while Telinha runs and removed when
+With `UPNP=auto` (the default at home) Telinha asks the router to forward
+its ports to this machine while it runs, through UPnP, NAT-PMP or PCP,
+whichever the router answers: the media ports, and 8443 with DuckDNS. It never
+asks for 80 or 443. The mappings are renewed while Telinha runs and removed when
 it stops. Many routers ship with UPnP off; then you either turn it on in the
 router or forward the ports by hand and set `UPNP=off`. See
 [Port forwarding](/telinha/guides/port-forwarding/).
@@ -177,16 +201,18 @@ and points to the Docker install or a 64-bit OS. The Docker image is
 - **A public IPv4 that reaches the machine.** At home that means a router
   you can forward ports on and a line without CGNAT; a VPS has one already.
   See [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
-- **An HTTPS address**: your own domain, or a no-domain option (DuckDNS,
-  sslip.io on a VPS, or a Cloudflare Tunnel with a domain on Cloudflare).
-- **These ports** from the internet to the machine:
+- **An HTTPS address**: at home a domain on Cloudflare (Cloudflare Tunnel) or
+  a free DuckDNS name on port 8443; on a VPS your own domain, DuckDNS or
+  sslip.io.
+- **These ports** from the internet to the machine. At home that is the media
+  ports, plus 8443 with DuckDNS, and never 80 or 443:
 
 | Port (default) | Protocol | When |
 | --- | --- | --- |
 | `MEDIA_TCP_PORT` (7881) | TCP | always |
 | `MEDIA_UDP_PORT` (7882) | UDP | always |
-| `HTTPS_PORT` (443) | TCP | `INGRESS=direct` |
-| `HTTP_PORT` (80) | TCP | `INGRESS=direct`, unless `HTTP_PORT=0` |
+| `HTTPS_PORT` | TCP | `INGRESS=direct`: 443 on a VPS, 8443 at home (the port in `PUBLIC_URL`) |
+| `HTTP_PORT` (80) | TCP | `INGRESS=direct` on a VPS only (`0` at home) |
 
 `LISTEN` (8081) and `LIVEKIT_PORT` (7880) are loopback only and never
 forwarded. More in [Port forwarding](/telinha/guides/port-forwarding/#which-ports).
