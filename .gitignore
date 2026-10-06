@@ -1,6 +1,7 @@
 node_modules/
 dist/
 web/dist/
+dist-bin/
 .cache/
 data/
 test-results/
@@ -11,3 +12,5 @@ playwright-report/
 deploy/.env
 .tunnel_id.local
 *.log
+# Release CI drops the image digest here for the deploy bundle.
+deploy/telinha-image.digest

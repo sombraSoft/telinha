@@ -1,10 +1,14 @@
 // Environment -> typed config. Pure (env passed in) so the guards are unit tested.
 import { fileURLToPath } from 'node:url';
+import { embeddedWebDir } from './embedded.ts';
+import { resolveLocale, type Locale } from './i18n.ts';
+import type { Mapping } from './nat/index.ts';
 import { resolvePaths, type Paths } from './paths.ts';
 
 export interface DevUser { id: string; name: string }
 export type Ingress = 'direct' | 'tunnel' | 'external';
 export type Media = 'self' | 'cloud';
+export interface DuckDnsConfig { provider: 'duckdns'; /** Bare subdomain, without .duckdns.org. */ domain: string; token: string }
 
 export interface Config {
   /** Fake login for local dev/E2E; null in production. */
@@ -41,7 +45,7 @@ export interface Config {
   ingress: Ingress;
   /** Bare hostname of PUBLIC_URL (Caddy site address; https_port picks the bind port). */
   publicHost: string;
-  /** Non-fatal validation findings; index.ts logs them. */
+  /** Non-fatal validation findings; run.ts logs them. */
   warnings: string[];
   /** direct: Caddy's HTTP->HTTPS redirect port, 0 = no redirect listener. */
   httpPort: number;
@@ -57,10 +61,21 @@ export interface Config {
   livekitNodeIp?: string;
   /** 0 = off; forced 0 when livekitNodeIp is set. */
   ipWatchSeconds: number;
+  /** Ask the router (UPnP IGD / NAT-PMP / PCP) to forward the media (and direct-mode HTTP) ports. */
+  upnp: boolean;
+  ddns: DuckDnsConfig | null;
+  /** Native binary only: install new releases by itself. Always false from source/Docker. */
+  autoUpdate: boolean;
+  /** Install exactly this tag (prereleases allowed) and stay on it. */
+  updatePin?: string;
+  updateCheckHours: number;
+  updateMaxDeferHours: number;
+  /** CLI and wizard language; the pages follow the browser. */
+  locale?: Locale;
   paths: Paths;
 }
 
-/** Every key telinha.env may hold, incl. reserved ones of later phases (no "unknown key" warning). */
+/** Every key telinha.env may hold, incl. reserved ones (no "unknown key" warning). */
 export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'GUILD_ID', 'ROLE_ID', 'CHANNEL_IDS',
   'COMMAND_NAME', 'GROUP_NAME', 'COOKIE_SECRET', 'SESSION_DAYS', 'ROLE_CACHE_SECONDS',
@@ -70,9 +85,9 @@ export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'CLOSE_EMPTY_SECONDS', 'POLL_SECONDS',
   'TELINHA_HOME', 'TELINHA_ENV', 'DATA_DIR', 'BIN_DIR', 'WEB_DIR',
   'DEV_USER', 'DEV_LOCALE',
-  // reserved: phase 2
-  'DDNS_PROVIDER', 'DUCKDNS_TOKEN', 'DUCKDNS_DOMAIN', 'UPNP', 'AUTO_UPDATE', 'LOCALE',
-  // reserved: phase 5
+  'UPNP', 'DDNS_PROVIDER', 'DUCKDNS_DOMAIN', 'DUCKDNS_TOKEN',
+  'AUTO_UPDATE', 'UPDATE_PIN', 'UPDATE_CHECK_HOURS', 'UPDATE_MAX_DEFER_HOURS', 'LOCALE',
+  // reserved for LiveKit Cloud / TURN
   'LIVEKIT_CLOUD_URL', 'TURN_TLS_PORT',
 ]);
 
@@ -83,7 +98,13 @@ const DEV_URL_RE = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const INGRESSES: readonly Ingress[] = ['direct', 'tunnel', 'external'];
 const MEDIAS: readonly Media[] = ['self', 'cloud'];
 // Discord's chat-input name rule (lowercase is checked separately, it is locale-aware).
-const COMMAND_RE = /^[-_\p{L}\p{N}]{1,32}$/u;
+export const COMMAND_RE = /^[-_\p{L}\p{N}]{1,32}$/u;
+// The duckdns.org subdomain alone.
+const DUCKDNS_RE = /^[a-z0-9-]{1,63}$/;
+// A release tag, prereleases included (a pin may name one).
+const TAG_RE = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+// en, pt-BR, also pt / pt_BR / en-US as people write them (same rule as --lang).
+const LOCALE_RE = /^(en|pt)([-_][A-Za-z]+)?$/i;
 // Dotted-quad IPv4 (LiveKit advertises IPv4 only; ipwatch reuses this).
 export const IPV4_RE = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 
@@ -96,7 +117,9 @@ export function parseListen(v: string): { host: string; port: number } {
   return { host: m[1]!, port };
 }
 
-export function loadConfig(env: Env): Config {
+/** compiled: the native binary (version.ts isCompiled()); decides AUTO_UPDATE's default and the embedded page. */
+export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
+  const compiled = o.compiled ?? false;
   const get = (k: string, d?: string) => {
     const v = env[k] === undefined || env[k] === '' ? d : env[k];
     if (v === undefined || v === '') throw new Error(`missing env ${k}`);
@@ -145,7 +168,7 @@ export function loadConfig(env: Env): Config {
   const ingress = oneOf<Ingress>('INGRESS', dev ? 'external' : 'direct', INGRESSES);
   if (dev && ingress !== 'external') throw new Error('DEV_USER requires INGRESS=external');
   const media = oneOf<Media>('MEDIA', 'self', MEDIAS);
-  if (media === 'cloud') throw new Error('MEDIA=cloud is not supported yet (phase 5)');
+  if (media === 'cloud') throw new Error('MEDIA=cloud is not supported yet');
 
   const warnings: string[] = [];
   const httpPort = int('HTTP_PORT', '80', 0, 65535);
@@ -200,6 +223,31 @@ export function loadConfig(env: Env): Config {
   }
   const paths = resolvePaths(env);
 
+  const upnp = oneOf('UPNP', 'auto', ['auto', 'off'] as const) === 'auto';
+  let ddns: DuckDnsConfig | null = null;
+  if (oneOf('DDNS_PROVIDER', 'none', ['none', 'duckdns'] as const) === 'duckdns') {
+    let domain = get('DUCKDNS_DOMAIN').trim().toLowerCase();
+    if (domain.endsWith('.duckdns.org')) {
+      domain = domain.slice(0, -'.duckdns.org'.length);
+      warnings.push(`config: DUCKDNS_DOMAIN is the subdomain alone; using ${domain}`);
+    }
+    if (!DUCKDNS_RE.test(domain)) throw new Error(`bad DUCKDNS_DOMAIN ${domain} (want the subdomain: a-z, 0-9, -)`);
+    ddns = { provider: 'duckdns', domain, token: get('DUCKDNS_TOKEN') };
+    if (url.hostname !== `${domain}.duckdns.org`) {
+      warnings.push(`config: DuckDNS updates ${domain}.duckdns.org but PUBLIC_URL's host is ${url.hostname}`);
+    }
+  }
+  // Only the native binary can replace itself; Docker and source runs update their own way.
+  let autoUpdate = oneOf('AUTO_UPDATE', compiled ? 'on' : 'off', ['on', 'off'] as const) === 'on';
+  if (autoUpdate && !compiled) {
+    warnings.push('config: AUTO_UPDATE=on applies to the native binary only; off here (Docker: telinha-update, source: git pull)');
+    autoUpdate = false;
+  }
+  const updatePin = opt('UPDATE_PIN');
+  if (updatePin && !TAG_RE.test(updatePin)) throw new Error(`bad UPDATE_PIN ${updatePin} (want a release tag like v1.2.3)`);
+  const localeRaw = opt('LOCALE');
+  if (localeRaw && !LOCALE_RE.test(localeRaw)) throw new Error(`bad LOCALE ${localeRaw} (want en | pt-BR)`);
+
   return {
     dev,
     devLocale: dev ? opt('DEV_LOCALE') : undefined,
@@ -224,7 +272,7 @@ export function loadConfig(env: Env): Config {
     closeEmptySeconds: num('CLOSE_EMPTY_SECONDS', '300'),
     pollSeconds: num('POLL_SECONDS', '5'),
     groupName: opt('GROUP_NAME'),
-    webDir: opt('WEB_DIR') ?? fileURLToPath(new URL('../../web/dist/', import.meta.url)),
+    webDir: opt('WEB_DIR') ?? embeddedWebDir({ compiled }) ?? fileURLToPath(new URL('../../web/dist/', import.meta.url)),
     secureCookies: !publicUrl.startsWith('http://'),
     commandName,
     ingress,
@@ -241,6 +289,33 @@ export function loadConfig(env: Env): Config {
     livekitNodeIp,
     // A static IP never changes, so there is nothing to watch.
     ipWatchSeconds: livekitNodeIp ? 0 : ipWatchSeconds,
+    upnp,
+    ddns,
+    autoUpdate,
+    updatePin,
+    updateCheckHours: int('UPDATE_CHECK_HOURS', '6', 1, 168),
+    updateMaxDeferHours: int('UPDATE_MAX_DEFER_HOURS', '12', 0, 720),
+    locale: localeRaw ? resolveLocale(localeRaw) : undefined,
     paths,
   };
+}
+
+/**
+ * What UPNP=auto asks the router to forward: the media ports, plus in direct
+ * mode Caddy's HTTPS (public PUBLIC_URL port -> HTTPS_PORT) and HTTP (80 ->
+ * HTTP_PORT) listeners.
+ */
+export function upnpMappings(c: Pick<Config, 'media' | 'ingress' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort' | 'httpPort' | 'httpsPort'>): Mapping[] {
+  const out: Mapping[] = [];
+  if (c.media === 'self') {
+    out.push(
+      { protocol: 'tcp', externalPort: c.mediaTcpPort, internalPort: c.mediaTcpPort, description: 'telinha media (tcp)' },
+      { protocol: 'udp', externalPort: c.mediaUdpPort, internalPort: c.mediaUdpPort, description: 'telinha media (udp)' },
+    );
+  }
+  if (c.ingress === 'direct') {
+    out.push({ protocol: 'tcp', externalPort: Number(new URL(c.publicUrl).port || 443), internalPort: c.httpsPort, description: 'telinha https' });
+    if (c.httpPort !== 0) out.push({ protocol: 'tcp', externalPort: 80, internalPort: c.httpPort, description: 'telinha http' });
+  }
+  return out;
 }

@@ -33,7 +33,8 @@ try {
   step(`${engine} build -t ${TAG} .`);
   await $`${bin} build -t ${TAG} .`;
   step('smoke test');
-  await $`${bin} run --rm ${TAG} sh scripts/smoke.sh`;
+  // The image's entrypoint is the program; the smoke script needs a shell.
+  await $`${bin} run --rm --entrypoint sh ${TAG} scripts/smoke.sh`;
   step('ok');
 } catch (e) {
   console.error(`\nfailed: ${e instanceof Error ? e.message : e}`);

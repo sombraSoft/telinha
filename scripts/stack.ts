@@ -5,7 +5,7 @@
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureBinaries, type Arch, type Os } from './bins.ts';
+import { ensureBinaries, hostArch, hostOs } from '../server/src/bins.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SERVER_PORT = 8081;
@@ -40,11 +40,12 @@ export interface Stack {
   stop(): void;
 }
 
-function host(): { os: Os; arch: Arch } {
-  const os = process.platform === 'win32' ? 'windows' : process.platform === 'linux' ? 'linux' : null;
-  const arch = process.arch === 'x64' ? 'amd64' : process.arch === 'arm64' ? 'arm64' : null;
-  if (!os || !arch) throw new Error(`no LiveKit binary for ${process.platform}/${process.arch}; put livekit-server in ${BIN_DIR}`);
-  return { os, arch };
+function host() {
+  try {
+    return { os: hostOs(), arch: hostArch() };
+  } catch {
+    throw new Error(`no LiveKit binary for ${process.platform}/${process.arch}; put livekit-server in ${BIN_DIR}`);
+  }
 }
 
 // A child's own children (the server's livekit-server, bun run -> vite) must
@@ -165,6 +166,9 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
       MEDIA_TCP_PORT: String(ports.tcp),
       MEDIA_UDP_PORT: String(ports.udp),
       IP_WATCH_SECONDS: '0',
+      // No router port mapping or self-update from a dev checkout.
+      UPNP: 'off',
+      AUTO_UPDATE: 'off',
       DEV_USER: opts.devUser ?? '1:Dev',
       PUBLIC_URL: opts.publicUrl,
       LISTEN: `127.0.0.1:${SERVER_PORT}`,

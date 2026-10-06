@@ -1,10 +1,14 @@
-// HTTP handler: the login gate in front of everything but /auth/* and /healthz,
-// Discord OAuth, LiveKit tokens for open rooms, the member list (/auth/members),
-// the LiveKit signaling relay (/livekit/*), the room page (/r/<code>) and /healthz.
+// HTTP handler: the login gate in front of everything but /auth/*, /healthz,
+// the page's hashed assets, the doctor page (its own one-time cookie) and the
+// local control endpoint (its own token); Discord OAuth, LiveKit tokens for
+// open rooms, the member list (/auth/members), the LiveKit signaling relay
+// (/livekit/*), the room page (/r/<code>) and /healthz.
 // Everything external is injected so tests drive it with plain Request objects.
 import { randomBytes } from 'node:crypto';
 import { cookie, parseCookies, safeNext, SESSION, sign, STATE, verify, type Session } from './auth.ts';
 import type { Config } from './config.ts';
+import type { Control } from './control.ts';
+import { DOCTOR_COOKIE } from './doctor/session.ts';
 import { fromAcceptLanguage, resolveLocale, type Locale } from './i18n.ts';
 import { ROOM_RE } from './codes.ts';
 import { createToken, newIdentity, type RoomService } from './livekit.ts';
@@ -14,6 +18,7 @@ import type { LivekitProxy, ProxyData } from './proxy.ts';
 import type { IsMember } from './roles.ts';
 import type { Registry } from './rooms.ts';
 import type { StaticFiles } from './static.ts';
+import { version as programVersion } from './version.ts';
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -33,7 +38,7 @@ export interface Deps {
   now?: () => number;
   random?: (n: number) => Uint8Array;
   log?: (...a: unknown[]) => void;
-  /** index.ts: (req, data) => server.upgrade(req, { data }). */
+  /** run.ts: (req, data) => server.upgrade(req, { data }). */
   upgrade?: (req: Request, data: ProxyData) => boolean;
   /** The /livekit/* relay (proxy.ts); unset = /livekit/* is 404. */
   proxy?: Pick<LivekitProxy, 'allows' | 'fetch' | 'upgradeData'>;
@@ -41,6 +46,20 @@ export interface Deps {
   openRooms?: () => number;
   /** /healthz: child process states (supervisor), e.g. { livekit: 'up' }. */
   children?: () => Record<string, string>;
+  /** /healthz; default version.ts. */
+  version?: string;
+  /** /internal/*: the local control endpoint; unset = 404. */
+  control?: Pick<Control, 'handle'> & Partial<Pick<Control, 'authorized'>>;
+  /**
+   * run.ts: (req, s) => server.timeout(req, s). Bun closes a request that has
+   * sent nothing for 10 s; the control routes long-poll (doctor sessions) or
+   * run for minutes (an update), so an authorized one gets no idle timeout.
+   */
+  timeout?: (req: Request, seconds: number) => void;
+  /** /doctor and /doctor/*: the phone test (doctor/routes.ts); null = not ours, 404. */
+  doctor?: (req: Request, url: URL) => Promise<Response | null>;
+  /** A valid telinha_doctor cookie opens the /livekit relay (and nothing else) for the phone test. */
+  doctorCookie?: (value: string | undefined, now: number) => { id: string } | null;
 }
 
 interface OAuthState { s: string; next: string; exp: number }
@@ -64,8 +83,9 @@ const redirect = (status: number, location: string, headers: HeadersInit = {}) =
 // Dev mode answers only to loopback names: a reverse proxy forwarding a public
 // host, or a DNS-rebound page, must not get the fake login.
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
-// Set by Caddy, cloudflared and any mainstream proxy: such a /healthz caller is not local.
-const FORWARDED = ['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'cf-connecting-ip'];
+// Set by Caddy, cloudflared and any mainstream proxy: such a caller is not local
+// (/healthz detail, the control endpoint).
+export const FORWARDED = ['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'cf-connecting-ip'];
 const isWebSocket = (req: Request) => req.headers.get('upgrade')?.toLowerCase() === 'websocket';
 
 /** Coarse browser family for login logs (enough to spot in-app browsers). */
@@ -85,6 +105,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
   const members = deps.members ?? (() => null);
   const openRooms = deps.openRooms ?? (() => registry.open().length);
   const children = deps.children ?? (() => ({}));
+  const version = deps.version ?? programVersion();
   const doFetch: Fetch = deps.fetch ?? ((input, init) => fetch(input, init));
   const now = deps.now ?? Date.now;
   const random = deps.random ?? ((n: number) => randomBytes(n));
@@ -109,7 +130,23 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
     // hit LISTEN directly, without a proxy's forwarding headers.
     if (path === '/healthz') {
       if (FORWARDED.some((h) => req.headers.has(h))) return json(200, { ok: true });
-      return json(200, { ok: true, discord: discordReady(), dev: Boolean(c.dev), rooms: openRooms(), children: children() });
+      return json(200, { ok: true, version, discord: discordReady(), dev: Boolean(c.dev), rooms: openRooms(), children: children() });
+    }
+
+    if (path === '/internal' || path.startsWith('/internal/')) {
+      if (!deps.control) return new Response('Not found', { status: 404 });
+      if (deps.control.authorized?.(req)) deps.timeout?.(req, 0);
+      return deps.control.handle(req, url);
+    }
+
+    // Content-hashed and public anyway (they ship in the image and the binary);
+    // the doctor page loads them before any login.
+    if ((req.method === 'GET' || req.method === 'HEAD') && path.startsWith('/r/assets/')) {
+      return serveFile(req, path) ?? new Response('Not found', { status: 404 });
+    }
+
+    if (path === '/doctor' || path.startsWith('/doctor/')) {
+      return (await deps.doctor?.(req, url)) ?? new Response('Not found', { status: 404 });
     }
 
     // Telinha gates by itself now; kept (cheap) for an external proxy's forward_auth.
@@ -266,15 +303,16 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
 
     if (path.startsWith('/auth/')) return new Response('Not found', { status: 404 });
 
-    // The gate: everything below is for members only.
+    // The gate: everything below is for members only (the phone test may use the relay).
     const livekit = path === '/livekit' || path.startsWith('/livekit/');
-    const s = session();
-    if (!s) {
+    const doctor = livekit && Boolean(deps.doctorCookie?.(cookies[DOCTOR_COOKIE], now()));
+    const s = doctor ? null : session();
+    if (!doctor && !s) {
       // The LiveKit client and WebSocket upgrades can't follow a redirect to the login.
       if (livekit || req.headers.get('upgrade')) return json(401, { error: 'login' });
       return redirect(302, `/auth/login?next=${encodeURIComponent(safeNext(path + url.search))}`);
     }
-    if (!(await isMember(s.id))) return html(403, pages.denied(localeOf(s), s.name, group(localeOf(s))));
+    if (s && !(await isMember(s.id))) return html(403, pages.denied(localeOf(s), s.name, group(localeOf(s))));
 
     if (livekit) {
       // /livekit/rtc -> /rtc, /livekit -> / (as Caddy's handle_path did).
@@ -293,14 +331,18 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       // An exact file wins over a room code. Codes have no dots and Vite's top-level
       // files do, so only an extensionless file named like a code could shadow a room.
       const code = path.slice('/r/'.length);
-      const f = files.get(path) ?? (ROOM_RE.test(code) ? files.get('/r/') : undefined);
-      if (f) {
-        return new Response(req.method === 'HEAD' ? null : f.body, {
-          headers: { 'Content-Type': f.type, 'Cache-Control': f.cache, 'X-Content-Type-Options': 'nosniff' },
-        });
-      }
+      const served = serveFile(req, files.get(path) ? path : ROOM_RE.test(code) ? '/r/' : path);
+      if (served) return served;
     }
     return new Response('Not found', { status: 404 });
+  }
+
+  function serveFile(req: Request, path: string): Response | null {
+    const f = files.get(path);
+    if (!f) return null;
+    return new Response(req.method === 'HEAD' ? null : f.body, {
+      headers: { 'Content-Type': f.type, 'Cache-Control': f.cache, 'X-Content-Type-Options': 'nosniff' },
+    });
   }
 
   return async (req) => {

@@ -13,10 +13,12 @@ export interface Paths {
   config: string;
   /** Registry, rendered files (run/), Caddy storage (caddy/). */
   data: string;
-  /** Rendered livekit.yaml / Caddyfile, pidfile. */
+  /** Rendered livekit.yaml / Caddyfile, pidfiles, the control token, update and UPnP state. */
   run: string;
-  /** Reserved; phase 1 writes nothing there. */
+  /** The service log on Windows (Linux uses the journal). */
   logs: string;
+  /** logs/telinha.log, rotated to .1 ... .5 */
+  logFile: string;
 }
 
 export function resolvePaths(env: Env, platform: NodeJS.Platform = process.platform, isRoot = process.getuid?.() === 0): Paths {
@@ -37,7 +39,24 @@ export function resolvePaths(env: Env, platform: NodeJS.Platform = process.platf
     data,
     run: p.join(data, 'run'),
     logs: p.join(home, 'logs'),
+    logFile: p.join(home, 'logs', 'telinha.log'),
   };
+}
+
+/**
+ * The home an installed binary lives in: <home>/bin/telinha[.exe] -> <home>,
+ * when <home> is named telinha (the default homes, and any sensible custom
+ * one) or already holds config/telinha.env. Anything else (a download folder,
+ * ~/bin) is no home: null, and the defaults apply.
+ */
+export function homeOfExe(exe: string, platform: NodeJS.Platform = process.platform, exists: (p: string) => boolean = existsSync): string | null {
+  const p = platform === 'win32' ? win32 : posix;
+  const dir = p.dirname(exe);
+  if (p.basename(dir).toLowerCase() !== 'bin') return null;
+  const home = p.dirname(dir);
+  if (home === dir) return null;
+  if (p.basename(home).toLowerCase() === 'telinha' || exists(p.join(home, 'config', 'telinha.env'))) return home;
+  return null;
 }
 
 /** `<bin>/<name>[.exe]`, else the first `name` on PATH, else null. */

@@ -5,7 +5,8 @@
     "sha256": {
       "linux-amd64": "6634aeeb2fb1366b6723708ae4320b9d5408106a4c63457c5e845ae3979c90e2",
       "linux-arm64": "5d167fdf52cf43c0c72972f25325364479f41f854bfef651056eab2504da5de9",
-      "windows-amd64": "e539e7d2f75807b9c9202cd2a0bf2cb3d52fc4c52978a6953e0f47bc339fe77f"
+      "windows-amd64": "e539e7d2f75807b9c9202cd2a0bf2cb3d52fc4c52978a6953e0f47bc339fe77f",
+      "windows-arm64": "8379c89b9973dc52577710b293f6190644bd6fad0c415df4279a24ea54df2363"
     }
   },
   "caddy": {
@@ -13,7 +14,8 @@
     "sha256": {
       "linux-amd64": "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9",
       "linux-arm64": "52d42ae12b3462097e9868da6dfed3c9648ae12edd3b3638102312af84cb6904",
-      "windows-amd64": "1708333f79e274c7697285afe6d592ab39314e0b131e9ec6bea08ad27df62ebf"
+      "windows-amd64": "1708333f79e274c7697285afe6d592ab39314e0b131e9ec6bea08ad27df62ebf",
+      "windows-arm64": "c7f16da93728f61455f77c04eac1ff4de06a38da281ed6d3dcbfae795be2a936"
     }
   },
   "cloudflared": {

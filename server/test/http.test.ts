@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { verify, type Session } from '../src/auth.ts';
 import { uaFamily, type Deps, type Fetch } from '../src/http.ts';
 import type { ProxyData } from '../src/proxy.ts';
-import { DEV_ENV, jwtPayload, NOW, PROD_ENV, setup } from './helpers.ts';
+import { DEV_ENV, jwtPayload, NOW, PROD_ENV, setup, VERSION } from './helpers.ts';
 
 const setCookies = (r: Response) => r.headers.getSetCookie();
 const cookieValue = (r: Response, name: string) => {
@@ -17,13 +17,13 @@ describe('/healthz', () => {
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toContain('application/json');
     expect(r.headers.get('cache-control')).toBe('no-store');
-    expect(await r.json()).toEqual({ ok: true, discord: true, dev: false, rooms: 3, children: { livekit: 'up', caddy: 'restarting' } });
+    expect(await r.json()).toEqual({ ok: true, version: VERSION, discord: true, dev: false, rooms: 3, children: { livekit: 'up', caddy: 'restarting' } });
   });
 
   test('defaults: the registry\'s open rooms, no children', async () => {
     const s = setup();
     s.registry.close('bafo-kiru', NOW);
-    expect(await (await s.get('/healthz')).json()).toEqual({ ok: true, discord: true, dev: false, rooms: 1, children: {} });
+    expect(await (await s.get('/healthz')).json()).toEqual({ ok: true, version: VERSION, discord: true, dev: false, rooms: 1, children: {} });
   });
 
   test('through a proxy: only ok, room count and children stay private', async () => {
@@ -535,4 +535,83 @@ test('uaFamily spots in-app and mobile browsers', () => {
   expect(uaFamily('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1')).toBe('safari-mobile');
   expect(uaFamily('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/154.0 Safari/537.36 Edg/154.0')).toBe('edge');
   expect(uaFamily('Mozilla/5.0 (Linux; Android 14) Discord/250.0')).toBe('discord-app');
+});
+
+describe('/r/assets/* (no login)', () => {
+  test('hashed assets are served without a cookie; HEAD too; missing ones 404, never a redirect', async () => {
+    const s = setup();
+    const js = await s.get('/r/assets/index-abc123.js');
+    expect(js.status).toBe(200);
+    expect(await js.text()).toBe('console.log(1)');
+    expect(js.headers.get('x-content-type-options')).toBe('nosniff');
+    const head = await s.call(new Request('https://telinha.example.com/r/assets/index-abc123.css', { method: 'HEAD' }));
+    expect([head.status, await head.text()]).toEqual([200, '']);
+    expect((await s.get('/r/assets/nope.js')).status).toBe(404);
+    // Only GET/HEAD and only the assets: the room page stays behind the login.
+    expect((await s.call(new Request('https://telinha.example.com/r/assets/index-abc123.js', { method: 'POST' }))).status).toBe(302);
+    expect((await s.get('/r/')).status).toBe(302);
+    expect((await s.get('/r/favicon.svg')).status).toBe(302);
+  });
+});
+
+describe('/doctor', () => {
+  test('without the doctor routes, or when they pass, 404 and no login redirect', async () => {
+    expect((await setup().get('/doctor')).status).toBe(404);
+    const seen: string[] = [];
+    const s = setup({ doctor: async (_req, url) => (seen.push(url.pathname), null) });
+    for (const p of ['/doctor', '/doctor/api/ping', '/doctor?t=x']) expect((await s.get(p)).status).toBe(404);
+    expect(seen).toEqual(['/doctor', '/doctor/api/ping', '/doctor']);
+  });
+
+  test('the doctor routes answer for /doctor and /doctor/*, nothing else', async () => {
+    const s = setup({ doctor: async () => new Response('doctor page') });
+    expect(await (await s.get('/doctor')).text()).toBe('doctor page');
+    expect(await (await s.get('/doctor/api/token')).text()).toBe('doctor page');
+    expect((await s.get('/doctorx')).status).toBe(302);
+  });
+
+  test('the doctor cookie opens the /livekit relay only', async () => {
+    const calls: string[] = [];
+    const proxy: NonNullable<Deps['proxy']> = {
+      allows: (rest) => rest === '/rtc',
+      fetch: async (_req, rest) => (calls.push(rest), new Response('lk')),
+      upgradeData: (rest) => ({ upstream: `ws://lk${rest}` }),
+    };
+    const s = setup({
+      proxy, members: [],
+      doctorCookie: (value, now) => (value === 'good' && now === NOW ? { id: 'a'.repeat(32) } : null),
+    });
+    const doctor = { cookie: 'telinha_doctor=good' };
+    expect((await s.get('/livekit/rtc', doctor)).status).toBe(200);
+    expect(calls).toEqual(['/rtc']);
+    expect((await s.get('/livekit/rtc', { cookie: 'telinha_doctor=bad' })).status).toBe(401);
+    // Not the room page, not the token or member APIs.
+    expect((await s.get('/r/bafo-kiru', doctor)).status).toBe(302);
+    expect((await s.get('/auth/token?room=bafo-kiru', doctor)).status).toBe(401);
+    expect((await s.get('/auth/members', doctor)).status).toBe(401);
+  });
+});
+
+describe('/internal/* (control endpoint)', () => {
+  test('handed to the control endpoint before the gate; 404 without one', async () => {
+    expect((await setup().get('/internal/status')).status).toBe(404);
+    const seen: string[] = [];
+    const s = setup({ control: { handle: async (_req, url) => (seen.push(url.pathname), new Response('ctl')) } });
+    expect(await (await s.get('/internal/status')).text()).toBe('ctl');
+    expect(await (await s.get('/internal')).text()).toBe('ctl');
+    expect(seen).toEqual(['/internal/status', '/internal']);
+  });
+
+  test("an authorized request loses Bun's idle timeout (long polls, updates); others keep it", async () => {
+    const lifted: [string, number][] = [];
+    const s = setup({
+      control: { handle: async () => new Response('ctl'), authorized: (req) => req.headers.get('authorization') === 'Bearer ok' },
+      timeout: (req, seconds) => void lifted.push([new URL(req.url).pathname, seconds]),
+    });
+    await s.get('/internal/status');
+    await s.get('/internal/update', { authorization: 'Bearer nope' });
+    expect(lifted).toEqual([]);
+    await s.get('/internal/doctor/sessions/x', { authorization: 'Bearer ok' });
+    expect(lifted).toEqual([['/internal/doctor/sessions/x', 0]]);
+  });
 });

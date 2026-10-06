@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { KNOWN_KEYS, loadConfig, parseListen } from '../src/config.ts';
+import { KNOWN_KEYS, loadConfig, parseListen, upnpMappings } from '../src/config.ts';
+import { ENV_TEMPLATE, renderEnvFile } from '../src/cli/setup/envwrite.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import { resolvePaths } from '../src/paths.ts';
 
@@ -51,6 +52,12 @@ describe('loadConfig', () => {
     expect(c.warnings).toEqual([]);
     expect(c.paths).toEqual(resolvePaths(PROD_ENV));
     expect(c.dataDir).toBe(c.paths.data);
+    expect(c.upnp).toBe(true);
+    expect(c.ddns).toBeNull();
+    expect(c.autoUpdate).toBe(false);
+    expect(c.updatePin).toBeUndefined();
+    expect([c.updateCheckHours, c.updateMaxDeferHours]).toEqual([6, 12]);
+    expect(c.locale).toBeUndefined();
   });
 
   test('optional overrides', () => {
@@ -118,14 +125,11 @@ describe('loadConfig', () => {
   test('INGRESS and MEDIA values', () => {
     expect(() => loadConfig({ ...PROD_ENV, INGRESS: 'caddy' })).toThrow('bad INGRESS caddy');
     expect(() => loadConfig({ ...PROD_ENV, MEDIA: 'sfu' })).toThrow('bad MEDIA sfu');
-    expect(() => loadConfig({ ...PROD_ENV, MEDIA: 'cloud' })).toThrow('MEDIA=cloud is not supported yet (phase 5)');
+    expect(() => loadConfig({ ...PROD_ENV, MEDIA: 'cloud' })).toThrow('MEDIA=cloud is not supported yet');
   });
 
   test('reserved keys are accepted silently', () => {
-    const c = loadConfig({
-      ...PROD_ENV, DDNS_PROVIDER: 'duckdns', DUCKDNS_TOKEN: 't', DUCKDNS_DOMAIN: 'd', UPNP: 'on', AUTO_UPDATE: 'yes',
-      LOCALE: 'pt-BR', LIVEKIT_CLOUD_URL: 'wss://x.livekit.cloud', TURN_TLS_PORT: '5349',
-    });
+    const c = loadConfig({ ...PROD_ENV, LIVEKIT_CLOUD_URL: 'wss://x.livekit.cloud', TURN_TLS_PORT: '5349' });
     expect(c.warnings).toEqual([]);
   });
 
@@ -143,6 +147,83 @@ describe('loadConfig', () => {
     expect(new Set(listed)).toEqual(new Set(KNOWN_KEYS));
     expect(listed.length).toBe(KNOWN_KEYS.size);
     expect(parseEnvFile(text).warnings).toEqual([]);
+  });
+
+  test('the wizard writes the documented layout: same sections and keys as telinha.env.example', () => {
+    const example = readFileSync(new URL('../../deploy/telinha.env.example', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    expect(ENV_TEMPLATE).toBe(example);
+    const rendered = renderEnvFile({}, null);
+    const sections = (t: string) => [...t.matchAll(/^# --- (.+?) -+$/gm)].map((m) => m[1]);
+    const keys = (t: string) => [...t.matchAll(/^#?([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]);
+    expect(sections(rendered)).toEqual(sections(example));
+    expect(keys(rendered)).toEqual(keys(example));
+  });
+});
+
+describe('UPnP, DuckDNS, updates, LOCALE', () => {
+  test('UPNP auto | off', () => {
+    expect(loadConfig({ ...PROD_ENV, UPNP: 'auto' }).upnp).toBe(true);
+    expect(loadConfig({ ...PROD_ENV, UPNP: 'off' }).upnp).toBe(false);
+    expect(() => loadConfig({ ...PROD_ENV, UPNP: 'on' })).toThrow('bad UPNP on');
+  });
+
+  test('DDNS_PROVIDER=duckdns needs both DUCKDNS keys; none ignores them', () => {
+    const duck = { ...PROD_ENV, PUBLIC_URL: 'https://gang.duckdns.org', DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'gang', DUCKDNS_TOKEN: 'tk' };
+    const c = loadConfig(duck);
+    expect(c.ddns).toEqual({ provider: 'duckdns', domain: 'gang', token: 'tk' });
+    expect(c.warnings).toEqual([]);
+    expect(() => loadConfig({ ...duck, DUCKDNS_TOKEN: '' })).toThrow('missing env DUCKDNS_TOKEN');
+    expect(() => loadConfig({ ...duck, DUCKDNS_DOMAIN: '' })).toThrow('missing env DUCKDNS_DOMAIN');
+    expect(loadConfig({ ...PROD_ENV, DUCKDNS_DOMAIN: 'gang', DUCKDNS_TOKEN: 'tk' }).ddns).toBeNull();
+    expect(() => loadConfig({ ...PROD_ENV, DDNS_PROVIDER: 'noip' })).toThrow('bad DDNS_PROVIDER noip');
+  });
+
+  test('DUCKDNS_DOMAIN: suffix stripped with a warning, bad names refused, host mismatch warned', () => {
+    const duck = { ...PROD_ENV, PUBLIC_URL: 'https://gang.duckdns.org', DDNS_PROVIDER: 'duckdns', DUCKDNS_TOKEN: 'tk' };
+    const c = loadConfig({ ...duck, DUCKDNS_DOMAIN: 'Gang.duckdns.org' });
+    expect(c.ddns?.domain).toBe('gang');
+    expect(c.warnings).toEqual(['config: DUCKDNS_DOMAIN is the subdomain alone; using gang']);
+    for (const bad of ['a.b', 'with space', 'x'.repeat(64), 'ü']) {
+      expect(() => loadConfig({ ...duck, DUCKDNS_DOMAIN: bad })).toThrow('bad DUCKDNS_DOMAIN');
+    }
+    expect(loadConfig({ ...duck, DUCKDNS_DOMAIN: 'other' }).warnings).toEqual([
+      "config: DuckDNS updates other.duckdns.org but PUBLIC_URL's host is gang.duckdns.org",
+    ]);
+  });
+
+  test('AUTO_UPDATE: on by default in the native binary, forced off from source with a warning', () => {
+    expect(loadConfig(PROD_ENV, { compiled: true }).autoUpdate).toBe(true);
+    expect(loadConfig({ ...PROD_ENV, AUTO_UPDATE: 'off' }, { compiled: true }).autoUpdate).toBe(false);
+    const dev = loadConfig({ ...PROD_ENV, AUTO_UPDATE: 'on' });
+    expect(dev.autoUpdate).toBe(false);
+    expect(dev.warnings[0]).toContain('AUTO_UPDATE=on applies to the native binary only');
+    expect(loadConfig({ ...PROD_ENV, AUTO_UPDATE: 'off' }).warnings).toEqual([]);
+    expect(() => loadConfig({ ...PROD_ENV, AUTO_UPDATE: 'yes' })).toThrow('bad AUTO_UPDATE yes');
+  });
+
+  test('UPDATE_PIN is a release tag; hours are bounded', () => {
+    expect(loadConfig({ ...PROD_ENV, UPDATE_PIN: 'v1.2.3' }).updatePin).toBe('v1.2.3');
+    expect(loadConfig({ ...PROD_ENV, UPDATE_PIN: 'v1.2.3-rc.1' }).updatePin).toBe('v1.2.3-rc.1');
+    for (const bad of ['1.2.3', 'v1.2', 'latest', 'v1.2.3 ']) {
+      expect(() => loadConfig({ ...PROD_ENV, UPDATE_PIN: bad })).toThrow('bad UPDATE_PIN');
+    }
+    const c = loadConfig({ ...PROD_ENV, UPDATE_CHECK_HOURS: '1', UPDATE_MAX_DEFER_HOURS: '0' });
+    expect([c.updateCheckHours, c.updateMaxDeferHours]).toEqual([1, 0]);
+    for (const v of ['0', '169', '1.5']) expect(() => loadConfig({ ...PROD_ENV, UPDATE_CHECK_HOURS: v })).toThrow('bad UPDATE_CHECK_HOURS');
+    for (const v of ['-1', '721']) expect(() => loadConfig({ ...PROD_ENV, UPDATE_MAX_DEFER_HOURS: v })).toThrow('bad UPDATE_MAX_DEFER_HOURS');
+  });
+
+  test('LOCALE: en or pt-BR, as people spell them', () => {
+    expect(loadConfig({ ...PROD_ENV, LOCALE: 'pt-BR' }).locale).toBe('pt-BR');
+    expect(loadConfig({ ...PROD_ENV, LOCALE: 'pt_BR' }).locale).toBe('pt-BR');
+    expect(loadConfig({ ...PROD_ENV, LOCALE: 'en' }).locale).toBe('en');
+    expect(() => loadConfig({ ...PROD_ENV, LOCALE: 'fr' })).toThrow('bad LOCALE fr');
+  });
+
+  test('WEB_DIR wins; the source tree is the fallback when no page is embedded', () => {
+    expect(loadConfig({ ...PROD_ENV, WEB_DIR: '/srv/web' }, { compiled: true }).webDir).toBe('/srv/web');
+    // A test run is not the binary: nothing embedded, so web/dist even with compiled set.
+    expect(loadConfig(PROD_ENV, { compiled: true }).webDir.replaceAll('\\', '/')).toEndWith('web/dist/');
   });
 });
 
@@ -316,4 +397,20 @@ test('parseListen', () => {
   expect(parseListen('0.0.0.0:80')).toEqual({ host: '0.0.0.0', port: 80 });
   expect(parseListen('[::1]:8081')).toEqual({ host: '::1', port: 8081 });
   for (const bad of ['::1:8081', 'host:', 'host:99999', ':8081']) expect(() => parseListen(bad)).toThrow();
+});
+
+describe('upnpMappings', () => {
+  const ports = (env: Record<string, string>) => upnpMappings(loadConfig(env)).map((m) => `${m.protocol} ${m.externalPort}->${m.internalPort}`);
+
+  test('direct: media ports, HTTPS from the PUBLIC_URL port, HTTP 80 unless off', () => {
+    expect(ports(PROD_ENV)).toEqual(['tcp 7881->7881', 'udp 7882->7882', 'tcp 443->443', 'tcp 80->80']);
+    expect(ports({ ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:8443', HTTPS_PORT: '9443', HTTP_PORT: '0' }))
+      .toEqual(['tcp 7881->7881', 'udp 7882->7882', 'tcp 8443->9443']);
+    expect(ports({ ...PROD_ENV, HTTP_PORT: '8080' })).toContain('tcp 80->8080');
+  });
+
+  test('tunnel and external: the media ports only', () => {
+    expect(ports(TUNNEL_ENV)).toEqual(['tcp 7881->7881', 'udp 7882->7882']);
+    expect(ports({ ...PROD_ENV, INGRESS: 'external', MEDIA_TCP_PORT: '7000', MEDIA_UDP_PORT: '7001' })).toEqual(['tcp 7000->7000', 'udp 7001->7001']);
+  });
 });

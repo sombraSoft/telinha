@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Telinha</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📺</text></svg>" />
+    <script>
+      // Paint the saved theme before the bundle loads (same rules as src/lib/theme.ts).
+      (function () {
+        var c = 'system';
+        try {
+          c = JSON.parse(localStorage.getItem('telinha.theme')) || 'system';
+        } catch (e) {}
+        if (['dark', 'ash', 'onyx', 'light'].indexOf(c) < 0) {
+          c = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', c);
+      })();
+    </script>
+    <style>
+      #app {
+        display: grid;
+        place-items: start center;
+        padding: 16px;
+        height: auto;
+        min-height: 100%;
+      }
+      .doctor {
+        width: 100%;
+        max-width: 480px;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        font-size: 15px;
+      }
+      .doctor h1 {
+        font-size: 1.25rem;
+        margin: 0 0 8px;
+      }
+      .doctor .muted {
+        color: var(--text-muted);
+        margin: 4px 0;
+      }
+      .steps {
+        list-style: none;
+        margin: 16px 0;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 1.5em auto 1fr;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .step .label {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .step .detail {
+        color: var(--text-muted);
+        overflow-wrap: anywhere;
+      }
+      .step[data-status='ok'] .icon {
+        color: var(--success);
+      }
+      .step[data-status='warn'] .icon {
+        color: var(--warn);
+      }
+      .step[data-status='fail'] .icon,
+      .step[data-status='fail'] .detail {
+        color: var(--danger);
+      }
+      .step[data-status='run'] .icon {
+        color: var(--accent);
+      }
+      .footer .hint {
+        margin: 8px 0;
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-3);
+      }
+      .footer .done {
+        margin: 12px 0 0;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/doctor/main.ts"></script>
+  </body>
+</html>
