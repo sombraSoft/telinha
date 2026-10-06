@@ -1,14 +1,16 @@
-// HTTP handler: login gate for Caddy forward_auth (/auth/check), Discord OAuth,
-// LiveKit tokens for open /telinha rooms, the member list (/auth/members), the
-// room page (/sala/) and /healthz.
+// HTTP handler: the login gate in front of everything but /auth/* and /healthz,
+// Discord OAuth, LiveKit tokens for open rooms, the member list (/auth/members),
+// the LiveKit signaling relay (/livekit/*), the room page (/r/<code>) and /healthz.
 // Everything external is injected so tests drive it with plain Request objects.
 import { randomBytes } from 'node:crypto';
 import { cookie, parseCookies, safeNext, SESSION, sign, STATE, verify, type Session } from './auth.ts';
 import type { Config } from './config.ts';
 import { fromAcceptLanguage, resolveLocale, type Locale } from './i18n.ts';
-import { createToken, newIdentity, ROOM_RE, type RoomService } from './livekit.ts';
+import { ROOM_RE } from './codes.ts';
+import { createToken, newIdentity, type RoomService } from './livekit.ts';
 import { devMembers, type DirMember } from './members.ts';
 import * as pages from './pages.ts';
+import type { LivekitProxy, ProxyData } from './proxy.ts';
 import type { IsMember } from './roles.ts';
 import type { Registry } from './rooms.ts';
 import type { StaticFiles } from './static.ts';
@@ -31,6 +33,14 @@ export interface Deps {
   now?: () => number;
   random?: (n: number) => Uint8Array;
   log?: (...a: unknown[]) => void;
+  /** index.ts: (req, data) => server.upgrade(req, { data }). */
+  upgrade?: (req: Request, data: ProxyData) => boolean;
+  /** The /livekit/* relay (proxy.ts); unset = /livekit/* is 404. */
+  proxy?: Pick<LivekitProxy, 'allows' | 'fetch' | 'upgradeData'>;
+  /** /healthz: open rooms; default: the registry's. */
+  openRooms?: () => number;
+  /** /healthz: child process states (supervisor), e.g. { livekit: 'up' }. */
+  children?: () => Record<string, string>;
 }
 
 interface OAuthState { s: string; next: string; exp: number }
@@ -54,6 +64,9 @@ const redirect = (status: number, location: string, headers: HeadersInit = {}) =
 // Dev mode answers only to loopback names: a reverse proxy forwarding a public
 // host, or a DNS-rebound page, must not get the fake login.
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+// Set by Caddy, cloudflared and any mainstream proxy: such a /healthz caller is not local.
+const FORWARDED = ['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'cf-connecting-ip'];
+const isWebSocket = (req: Request) => req.headers.get('upgrade')?.toLowerCase() === 'websocket';
 
 /** Coarse browser family for login logs (enough to spot in-app browsers). */
 export function uaFamily(ua: string | null): string {
@@ -65,10 +78,13 @@ export function uaFamily(ua: string | null): string {
   return name + mobile;
 }
 
-export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
-  const { config: c, isMember, files, group, registry, rooms } = deps;
+/** Resolves to undefined after a successful WebSocket upgrade (Bun owns the socket then). */
+export function createHandler(deps: Deps): (req: Request) => Promise<Response | undefined> {
+  const { config: c, isMember, files, group, registry, rooms, proxy } = deps;
   const discordReady = deps.discordReady ?? (() => false);
   const members = deps.members ?? (() => null);
+  const openRooms = deps.openRooms ?? (() => registry.open().length);
+  const children = deps.children ?? (() => ({}));
   const doFetch: Fetch = deps.fetch ?? ((input, init) => fetch(input, init));
   const now = deps.now ?? Date.now;
   const random = deps.random ?? ((n: number) => randomBytes(n));
@@ -79,7 +95,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
   const sessionCookie = (s: Session) => ck(SESSION, sign(c.cookieSecret, s), { maxAge: c.sessionSeconds });
   const clearState = () => ck(STATE, '', { maxAge: 0, path: '/auth' });
 
-  async function handle(req: Request, url: URL): Promise<Response> {
+  async function handle(req: Request, url: URL): Promise<Response | undefined> {
     const cookies = parseCookies(req.headers.get('cookie'));
     const acceptLocale = fromAcceptLanguage(req.headers.get('accept-language'));
     const session = () => verify<Session>(c.cookieSecret, cookies[SESSION], now());
@@ -87,9 +103,16 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
     const localeOf = (s: Session | null) => (s?.locale ? resolveLocale(s.locale) : acceptLocale);
     const path = url.pathname;
 
-    // Container healthcheck: up as long as HTTP answers; reports the gateway state.
-    if (path === '/healthz') return json(200, { ok: true, discord: discordReady(), dev: Boolean(c.dev) });
+    // Container healthcheck: up while HTTP answers and no child is "restarting"
+    // (compose.yml greps the body). The detail (open rooms, children) only for
+    // local callers: the healthcheck, updater and smoke test
+    // hit LISTEN directly, without a proxy's forwarding headers.
+    if (path === '/healthz') {
+      if (FORWARDED.some((h) => req.headers.has(h))) return json(200, { ok: true });
+      return json(200, { ok: true, discord: discordReady(), dev: Boolean(c.dev), rooms: openRooms(), children: children() });
+    }
 
+    // Telinha gates by itself now; kept (cheap) for an external proxy's forward_auth.
     if (path === '/auth/check') {
       const s = session();
       if (s && (await isMember(s.id))) return new Response(null, { status: 204 });
@@ -180,7 +203,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
     }
 
     // LiveKit token for the room page. Members only; may only publish screen
-    // share; only for rooms /telinha opened that have not closed yet.
+    // share; only for rooms the slash command opened that have not closed yet.
     if (path === '/auth/token') {
       const s = session();
       const room = url.searchParams.get('room') ?? '';
@@ -188,7 +211,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
       if (!(await isMember(s.id))) return json(403, { error: 'members' });
       if (!ROOM_RE.test(room)) return json(400, { error: 'room' });
       let rec = registry.get(room);
-      // Dev/E2E have no /telinha: any valid room name opens one (closed stays closed).
+      // Dev/E2E have no slash command: any valid room code opens one (closed stays closed).
       if (!rec && c.dev) {
         rec = registry.create({
           room, guildId: '', channelId: '', locale: localeOf(s), openerId: s.id, openerName: s.name, what: null, createdAt: now(),
@@ -227,9 +250,8 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
       });
     }
 
-    // Who else has the role, for the page's Online / Offline lists. Caddy lets
-    // /auth/* through without forward_auth, so the session and role are checked
-    // here, as for the token.
+    // Who else has the role, for the page's Online / Offline lists. /auth/* is
+    // outside the gate, so the session and role are checked here, as for the token.
     if (path === '/auth/members') {
       const s = session();
       if (!s) return json(401, { error: 'login' });
@@ -242,14 +264,41 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response> {
       return html(200, pages.loggedOut(localeOf(session())), { 'Set-Cookie': ck(SESSION, '', { maxAge: 0 }) });
     }
 
-    if (path === '/') return redirect(302, `/sala/${url.search}`);
-    if (path === '/sala') return redirect(301, `/sala/${url.search}`);
+    if (path.startsWith('/auth/')) return new Response('Not found', { status: 404 });
 
-    const f = files.get(path);
-    if (f && (req.method === 'GET' || req.method === 'HEAD')) {
-      return new Response(req.method === 'HEAD' ? null : f.body, {
-        headers: { 'Content-Type': f.type, 'Cache-Control': f.cache, 'X-Content-Type-Options': 'nosniff' },
-      });
+    // The gate: everything below is for members only.
+    const livekit = path === '/livekit' || path.startsWith('/livekit/');
+    const s = session();
+    if (!s) {
+      // The LiveKit client and WebSocket upgrades can't follow a redirect to the login.
+      if (livekit || req.headers.get('upgrade')) return json(401, { error: 'login' });
+      return redirect(302, `/auth/login?next=${encodeURIComponent(safeNext(path + url.search))}`);
+    }
+    if (!(await isMember(s.id))) return html(403, pages.denied(localeOf(s), s.name, group(localeOf(s))));
+
+    if (livekit) {
+      // /livekit/rtc -> /rtc, /livekit -> / (as Caddy's handle_path did).
+      const rest = path.slice('/livekit'.length) || '/';
+      if (!proxy?.allows(rest)) return json(404, { error: 'not found' });
+      if (!isWebSocket(req)) return proxy.fetch(req, rest, url.search);
+      // Upgraded: the socket is Bun's now and the response must be undefined.
+      if (deps.upgrade?.(req, proxy.upgradeData(rest, url.search))) return undefined;
+      return json(500, { error: 'upgrade' });
+    }
+
+    if (path === '/') return redirect(302, '/r/');
+    if (path === '/r') return redirect(301, '/r/');
+
+    if ((req.method === 'GET' || req.method === 'HEAD') && path.startsWith('/r/')) {
+      // An exact file wins over a room code. Codes have no dots and Vite's top-level
+      // files do, so only an extensionless file named like a code could shadow a room.
+      const code = path.slice('/r/'.length);
+      const f = files.get(path) ?? (ROOM_RE.test(code) ? files.get('/r/') : undefined);
+      if (f) {
+        return new Response(req.method === 'HEAD' ? null : f.body, {
+          headers: { 'Content-Type': f.type, 'Cache-Control': f.cache, 'X-Content-Type-Options': 'nosniff' },
+        });
+      }
     }
     return new Response('Not found', { status: 404 });
   }

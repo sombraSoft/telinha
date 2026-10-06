@@ -1,6 +1,0 @@
-[Unit]
-Description=Restart LiveKit when the public IP changes
-After=docker.service
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/tela-ipwatch

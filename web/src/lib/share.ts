@@ -241,7 +241,7 @@ export async function startShare(
     video = (
       await lp.publishTrack(sent, {
         source: Track.Source.ScreenShare,
-        name: 'tela',
+        name: 'screen',
         videoCodec: codec,
         backupCodec: codec === 'h264' ? false : { codec: 'h264' },
         screenShareEncoding: { maxBitrate: KBPS[res][fps] * 1000, maxFramerate: fps },
@@ -255,7 +255,7 @@ export async function startShare(
       ? ((
           await lp.publishTrack(a, {
             source: Track.Source.ScreenShareAudio,
-            name: 'tela-audio',
+            name: 'screen-audio',
             audioPreset: AudioPresets.musicHighQualityStereo,
             dtx: false,
             red: false,

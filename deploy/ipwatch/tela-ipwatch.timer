@@ -1,7 +1,0 @@
-[Unit]
-Description=Check public IP for LiveKit every 5 minutes
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=5min
-[Install]
-WantedBy=timers.target

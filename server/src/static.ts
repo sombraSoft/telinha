@@ -2,9 +2,14 @@
 // matched by exact key, so user input never reaches a filesystem path.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { esc } from './pages.ts';
 
 export interface StaticFile { body: Uint8Array; type: string; cache: string }
 export type StaticFiles = Map<string, StaticFile>;
+export interface StaticOptions {
+  /** Slash command name, written into index.html for the page's notices. */
+  command: string;
+}
 
 const TYPES: Record<string, string> = {
   html: 'text/html; charset=utf-8',
@@ -26,18 +31,28 @@ export const contentType = (name: string) => TYPES[name.split('.').pop()!.toLowe
 // Vite puts hashed files under assets/, so those can be cached forever.
 const cacheFor = (rel: string) => (rel.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
 
-/** rel path ("index.html", "assets/x.js") -> file; served at /sala/<rel>. */
-export function staticFromEntries(entries: Iterable<[string, Uint8Array]>): StaticFiles {
+// At load, not per request: the page reads it before its first paint, no API call.
+function withCommand(body: Uint8Array, command: string): Uint8Array {
+  const text = new TextDecoder().decode(body);
+  const i = text.search(/<\/head>/i);
+  if (i < 0) throw new Error('index.html has no </head>');
+  const meta = `<meta name="telinha-command" content="${esc(command)}">`;
+  return new TextEncoder().encode(text.slice(0, i) + meta + text.slice(i));
+}
+
+/** rel path ("index.html", "assets/x.js") -> file; served at /r/<rel>. */
+export function staticFromEntries(entries: Iterable<[string, Uint8Array]>, opts: StaticOptions): StaticFiles {
   const out: StaticFiles = new Map();
   for (const [rel, body] of entries) {
-    out.set(`/sala/${rel}`, { body, type: contentType(rel), cache: cacheFor(rel) });
+    const data = rel === 'index.html' ? withCommand(body, opts.command) : body;
+    out.set(`/r/${rel}`, { body: data, type: contentType(rel), cache: cacheFor(rel) });
   }
-  const index = out.get('/sala/index.html');
-  if (index) out.set('/sala/', index);
+  const index = out.get('/r/index.html');
+  if (index) out.set('/r/', index);
   return out;
 }
 
-export function loadStatic(dir: string): StaticFiles {
+export function loadStatic(dir: string, opts: StaticOptions): StaticFiles {
   let names: string[];
   try {
     if (!statSync(dir).isDirectory()) throw new Error('not a directory');
@@ -51,7 +66,12 @@ export function loadStatic(dir: string): StaticFiles {
     if (!statSync(full).isFile()) continue;
     entries.push([name.replaceAll('\\', '/'), readFileSync(full)]);
   }
-  const files = staticFromEntries(entries);
-  if (!files.has('/sala/')) throw new Error(`WEB_DIR ${dir} has no index.html`);
+  let files: StaticFiles;
+  try {
+    files = staticFromEntries(entries, opts);
+  } catch (e) {
+    throw new Error(`WEB_DIR ${dir}: ${(e as Error).message}`);
+  }
+  if (!files.has('/r/')) throw new Error(`WEB_DIR ${dir} has no index.html`);
   return files;
 }

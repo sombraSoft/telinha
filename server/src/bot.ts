@@ -1,4 +1,5 @@
-// /telinha: opens a room and posts its live status card in the allowed channels.
+// The slash command (COMMAND_NAME, /telinha by default): opens a room and
+// posts its live status card in the allowed channels.
 // Replies only the caller sees use their client locale; the card uses the
 // guild locale. Also keeps the member directory (members.ts) current.
 import {
@@ -7,15 +8,16 @@ import {
 } from 'discord.js';
 import { randomBytes } from 'node:crypto';
 import type { Card } from './card.ts';
+import { uniqueRoomCode } from './codes.ts';
 import type { Config } from './config.ts';
 import { dicts, resolveLocale, t, type Locale } from './i18n.ts';
 import { memberData, type Directory } from './members.ts';
 import type { RoomService } from './livekit.ts';
 import type { Registry, RoomRecord } from './rooms.ts';
 
-export function buildCommand() {
+export function buildCommand(name: string) {
   return new SlashCommandBuilder()
-    .setName('telinha')
+    .setName(name)
     .setDescription(dicts.en.cmdDescription)
     .setDescriptionLocalizations({ [DLocale.PortugueseBR]: dicts['pt-BR'].cmdDescription })
     .setContexts(InteractionContextType.Guild)
@@ -27,12 +29,14 @@ export function buildCommand() {
       .setMaxLength(80));
 }
 
-export interface TelaInput {
+export interface CommandInput {
   /** interaction.locale (the caller's client language) */
   locale: string | null | undefined;
   /** interaction.guildLocale */
   guildLocale: string | null | undefined;
   allowed: boolean;
+  /** The configured command name, for replies that mention it. */
+  command: string;
   guildId: string;
   channelId: string;
   channelIds: string[];
@@ -47,38 +51,38 @@ export interface Ephemeral {
   allowedMentions: { parse: [] };
 }
 
-export type TelaPayload = (Card & { flags?: undefined }) | Ephemeral;
+export type CommandPayload = (Card & { flags?: undefined }) | Ephemeral;
 
 const ephemeral = (content: string): Ephemeral => ({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
 
 /** The ephemeral refusal, or null when this caller may open a room here. */
-export function telaDenied(
-  i: Pick<TelaInput, 'locale' | 'allowed' | 'channelId' | 'channelIds'>, group: (l: Locale) => string,
+export function commandDenied(
+  i: Pick<CommandInput, 'locale' | 'allowed' | 'command' | 'channelId' | 'channelIds'>, group: (l: Locale) => string,
 ): Ephemeral | null {
   const me = resolveLocale(i.locale);
   if (!i.allowed) return ephemeral(t(me, 'onlyGroup', { group: group(me) }));
   if (!i.channelIds.includes(i.channelId)) {
     const where = i.channelIds.map((c) => `<#${c}>`).join(t(me, 'or'));
-    return ephemeral(t(me, 'wrongChannel', { where }));
+    return ephemeral(t(me, 'wrongChannel', { cmd: i.command, where }));
   }
   return null;
 }
 
-export interface TelaDeps {
+export interface CommandDeps {
   registry: Registry;
   rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>;
   /** The open card with nobody in it yet. */
   render: (rec: RoomRecord) => Card;
   /** Sends the interaction reply; returns where the public card landed. */
-  reply: (p: TelaPayload) => Promise<{ channelId: string; messageId: string } | null>;
+  reply: (p: CommandPayload) => Promise<{ channelId: string; messageId: string } | null>;
   newRoom: () => string;
   now: () => number;
   group: (l: Locale) => string;
   log: (...a: unknown[]) => void;
 }
 
-export async function handleTela(i: TelaInput, d: TelaDeps): Promise<void> {
-  const denied = telaDenied(i, d.group);
+export async function handleCommand(i: CommandInput, d: CommandDeps): Promise<void> {
+  const denied = commandDenied(i, d.group);
   if (denied) {
     await d.reply(denied);
     return;
@@ -93,13 +97,13 @@ export async function handleTela(i: TelaInput, d: TelaDeps): Promise<void> {
     const posted = await d.reply(d.render(rec));
     if (!posted) throw new Error('no message in the interaction response');
     d.registry.setMessage(room, posted.channelId, posted.messageId);
-    d.log('telinha', i.userId, room);
+    d.log(i.command, i.userId, room);
   } catch (e) {
     // A room without its card would be a link nobody can see the state of.
-    d.log('telinha failed', room, (e as Error).message);
+    d.log(`${i.command} failed`, room, (e as Error).message);
     d.registry.close(room, d.now());
     await d.rooms.deleteRoom(room).catch(() => {});
-    await d.reply(ephemeral(t(resolveLocale(i.locale), 'telaFailed')));
+    await d.reply(ephemeral(t(resolveLocale(i.locale), 'openFailed')));
   }
 }
 
@@ -133,14 +137,14 @@ export function startBot(o: {
       },
     }),
   });
-  const command = buildCommand().toJSON();
+  const command = buildCommand(c.commandName).toJSON();
 
   async function registerCommand() {
     try {
       await rest.put(Routes.applicationGuildCommands(client.application!.id, c.guildId), { body: [command] });
-      log('/telinha registered');
+      log(`/${c.commandName} registered`);
     } catch (e) {
-      log('/telinha not registered yet (bot not in guild?)', (e as Error).message);
+      log(`/${c.commandName} not registered yet (bot not in guild?)`, (e as Error).message);
     }
   }
 
@@ -210,15 +214,16 @@ export function startBot(o: {
   });
 
   client.on('interactionCreate', async (i) => {
-    if (!i.isChatInputCommand() || i.commandName !== 'telinha') return;
+    if (!i.isChatInputCommand() || i.commandName !== c.commandName) return;
     try {
       const roles = i.member?.roles;
       const hasRole = Array.isArray(roles) ? roles.includes(c.roleId) : Boolean(roles?.cache.has(c.roleId));
       const member = i.member && 'displayName' in i.member ? i.member.displayName : null;
-      await handleTela({
+      await handleCommand({
         locale: i.locale,
         guildLocale: i.guildLocale,
         allowed: i.guildId === c.guildId && hasRole,
+        command: c.commandName,
         guildId: i.guildId ?? '',
         channelId: i.channelId,
         channelIds: c.channelIds,
@@ -239,13 +244,13 @@ export function startBot(o: {
           const m = res.resource?.message;
           return m ? { channelId: m.channelId, messageId: m.id } : null;
         },
-        newRoom: () => randomBytes(9).toString('base64url'),
+        newRoom: () => uniqueRoomCode((code) => o.registry.get(code) !== null, randomBytes),
         now: Date.now,
         group,
         log,
       });
     } catch (e) {
-      log('tela error', (e as Error).message);
+      log('command error', (e as Error).message);
     }
   });
 

@@ -9,6 +9,13 @@ export type Params = Record<string, string | number>;
 export const LOCALES: readonly Locale[] = ['pt-BR', 'en'];
 export const dictionaries: Record<Locale, Messages> = { en, 'pt-BR': ptBR };
 
+// The slash command's configured name, from the meta telinha adds to index.html
+// (COMMAND_NAME). Vite dev and non-DOM test runs have none: the default.
+export const commandName =
+  (typeof document === 'undefined'
+    ? null
+    : document.querySelector('meta[name="telinha-command"]')?.getAttribute('content')) || 'telinha';
+
 /** Same rule as the server: any Portuguese tag -> pt-BR, everything else -> en. */
 export function resolveLocale(tag: string | null | undefined): Locale {
   return tag && tag.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';

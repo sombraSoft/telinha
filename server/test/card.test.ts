@@ -3,7 +3,7 @@ import { formatDuration, MAX_CONTENT, renderCard, type Live } from '../src/card.
 import type { RoomRecord } from '../src/rooms.ts';
 
 const REC: RoomRecord = {
-  room: 'abcdefghijkl', guildId: '100', channelId: '300', messageId: '999', locale: 'pt-BR',
+  room: 'lamo-futi', guildId: '100', channelId: '300', messageId: '999', locale: 'pt-BR',
   openerId: '7', openerName: 'Zé', what: 'Elden Ring', createdAt: 1_700_000_000_123,
   firstJoinAt: null, lastSeenAt: null, lastTokenAt: null, closedAt: null, cardDone: false, seen: [], streamed: [],
 };
@@ -23,7 +23,7 @@ describe('open card', () => {
     ].join('\n'));
     expect(c.allowedMentions).toEqual({ parse: [] });
     const [b] = buttons(c);
-    expect(b).toMatchObject({ type: 2, style: 5, label: 'Abrir telinha', url: 'https://tela.example.com/sala/?room=abcdefghijkl' });
+    expect(b).toMatchObject({ type: 2, style: 5, label: 'Abrir telinha', url: 'https://tela.example.com/r/lamo-futi' });
     expect(b!.emoji).toEqual({ name: '📺' });
   });
 

@@ -96,7 +96,7 @@ export function codecCaps(): CodecCaps[] {
 }
 
 /**
- * What the streamer's page reports to the server for the /telinha card, e.g.
+ * What the streamer's page reports to the server for the bot's room card, e.g.
  * "1080p60 · H265". fps snaps to a multiple of 5 so the jitter of a live
  * encoder (59, 60, 58) doesn't edit the Discord message every few seconds.
  */

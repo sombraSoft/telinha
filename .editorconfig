@@ -11,6 +11,6 @@ indent_size = 2
 [*.md]
 trim_trailing_whitespace = false
 
-# Shell scripts and the Caddyfile are tab-indented.
-[{deploy/**.sh,deploy/ipwatch/tela-ipwatch,deploy/updater/tela-update,deploy/Caddyfile}]
+# Shell scripts are tab-indented.
+[{deploy/**.sh,deploy/telinha-update,scripts/**.sh}]
 indent_style = tab

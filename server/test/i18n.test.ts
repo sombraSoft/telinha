@@ -27,3 +27,8 @@ test('t interpolates once (params are not re-expanded)', () => {
   expect(t('en', 'denied', { name: '{group}', group: 'Crew' })).toBe('{group}, Telinha is only for Crew.');
   expect(t('en', 'onlyGroup')).toBe('Telinha is only for {group}.');
 });
+
+test('wrongChannel names the configured command in both locales', () => {
+  expect(t('en', 'wrongChannel', { cmd: 'tela', where: '<#1>' })).toBe('Use /tela in <#1>.');
+  expect(t('pt-BR', 'wrongChannel', { cmd: 'tela', where: '<#1>' })).toBe('Usa o /tela no <#1>.');
+});

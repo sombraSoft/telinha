@@ -11,13 +11,30 @@
   },
   "customManagers": [
     {
-      "description": "LiveKit server binary that dev and E2E download (scripts/livekit.ts)",
+      "description": "LiveKit server binary pinned in versions.json (run `bun scripts/versions.ts refresh` after a bump)",
       "customType": "regex",
-      "managerFilePatterns": ["/^scripts/livekit\\.ts$/"],
-      "matchStrings": ["export const LIVEKIT_VERSION = '(?<currentValue>[^']+)'"],
+      "managerFilePatterns": ["/^versions\\.json$/"],
+      "matchStrings": ["\"livekit\":\\s*\\{\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "livekit/livekit",
       "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "Caddy binary pinned in versions.json (run `bun scripts/versions.ts refresh` after a bump)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^versions\\.json$/"],
+      "matchStrings": ["\"caddy\":\\s*\\{\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "caddyserver/caddy",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "cloudflared binary pinned in versions.json (run `bun scripts/versions.ts refresh` after a bump); its tags have no v prefix",
+      "customType": "regex",
+      "managerFilePatterns": ["/^versions\\.json$/"],
+      "matchStrings": ["\"cloudflared\":\\s*\\{\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "cloudflare/cloudflared"
     }
   ],
   "packageRules": [
@@ -29,8 +46,14 @@
     },
     {
       "description": "LiveKit (client, server SDK, SFU) must move together and be tested by hand: own group, never automerged",
-      "matchPackageNames": ["livekit-client", "livekit-server-sdk", "livekit/livekit-server", "livekit/livekit"],
+      "matchPackageNames": ["livekit-client", "livekit-server-sdk", "livekit/livekit"],
       "groupName": "livekit",
+      "automerge": false
+    },
+    {
+      "description": "Bumps in versions.json stay red until someone runs `bun scripts/versions.ts refresh`, so they never automerge or block the allNonMajor group",
+      "matchDepNames": ["caddyserver/caddy", "cloudflare/cloudflared"],
+      "groupName": "child-binaries",
       "automerge": false
     },
     {
@@ -41,6 +64,11 @@
     {
       "description": "The Dockerfile and compose.yml ship in the image or the release tag, so their bumps must cut a release",
       "matchManagers": ["dockerfile", "docker-compose"],
+      "semanticCommitType": "fix"
+    },
+    {
+      "description": "versions.json pins the binaries baked into the image, so its bumps must cut a release",
+      "matchFileNames": ["versions.json"],
       "semanticCommitType": "fix"
     }
   ]

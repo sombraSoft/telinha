@@ -8,7 +8,7 @@ import { openRegistry, type NewRoom } from '../src/rooms.ts';
 const T0 = 1_700_000_000_000;
 const MIN = 60_000;
 const NEW: NewRoom = {
-  room: 'abcdefghijkl', guildId: '100', channelId: '300', locale: 'en',
+  room: 'lamo-futi', guildId: '100', channelId: '300', locale: 'en',
   openerId: '7', openerName: 'Zé', what: null, createdAt: T0,
 };
 
@@ -154,7 +154,7 @@ describe('closing', () => {
 
   test('LiveKit errors skip the room (no close on a blind tick) and other rooms go on', async () => {
     const s = setup();
-    s.registry.create({ ...NEW, room: 'second-room' });
+    s.registry.create({ ...NEW, room: 'seku-dosa' });
     s.failList(new Error('connect ECONNREFUSED'));
     await s.tickAt(10 * MIN);
     expect(s.registry.open()).toHaveLength(2);

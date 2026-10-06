@@ -1,8 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { loadConfig, parseListen } from '../src/config.ts';
-import { PROD_ENV } from './helpers.ts';
+import { readFileSync } from 'node:fs';
+import { KNOWN_KEYS, loadConfig, parseListen } from '../src/config.ts';
+import { parseEnvFile } from '../src/envfile.ts';
+import { resolvePaths } from '../src/paths.ts';
 
+// Own fixtures (not helpers.ts) so this suite pins exactly what loadConfig sees.
+const PROD_ENV = {
+  DISCORD_TOKEN: 'tok', DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'csecret',
+  GUILD_ID: '100', ROLE_ID: '200', CHANNEL_IDS: '300, 301,,',
+  PUBLIC_URL: 'https://tela.example.com/', COOKIE_SECRET: 'secret',
+  LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'lksecret',
+};
 const DEV_ENV = { DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:5173', COOKIE_SECRET: 'x', LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'secret' };
+const TUNNEL_ENV = { ...PROD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' };
 
 describe('loadConfig', () => {
   test('production defaults', () => {
@@ -19,9 +29,28 @@ describe('loadConfig', () => {
     expect(c.groupName).toBeUndefined();
     expect(c.webDir.replaceAll('\\', '/')).toEndWith('web/dist/');
     expect(c.livekitApiUrl).toBe('http://127.0.0.1:7880');
-    expect(c.dataDir.replaceAll('\\', '/')).toEndWith('.cache/data/');
     expect(c.closeEmptySeconds).toBe(300);
     expect(c.pollSeconds).toBe(5);
+  });
+
+  test('defaults of the deploy-anywhere keys', () => {
+    const c = loadConfig(PROD_ENV);
+    expect(c.commandName).toBe('telinha');
+    expect(c.ingress).toBe('direct');
+    expect(c.media).toBe('self');
+    expect(c.publicHost).toBe('tela.example.com');
+    expect(c.httpPort).toBe(80);
+    expect(c.httpsPort).toBe(443);
+    expect(c.acmeEmail).toBeUndefined();
+    expect(c.tunnelToken).toBeUndefined();
+    expect(c.livekitPort).toBe(7880);
+    expect(c.mediaTcpPort).toBe(7881);
+    expect(c.mediaUdpPort).toBe(7882);
+    expect(c.livekitNodeIp).toBeUndefined();
+    expect(c.ipWatchSeconds).toBe(300);
+    expect(c.warnings).toEqual([]);
+    expect(c.paths).toEqual(resolvePaths(PROD_ENV));
+    expect(c.dataDir).toBe(c.paths.data);
   });
 
   test('optional overrides', () => {
@@ -29,9 +58,12 @@ describe('loadConfig', () => {
       ...PROD_ENV, GROUP_NAME: 'Crew', LIVEKIT_PUBLIC_URL: 'wss://lk.example.com', WEB_DIR: '/srv/web',
       LISTEN: '[::1]:9000', SESSION_DAYS: '1', ROLE_CACHE_SECONDS: '10',
       LIVEKIT_API_URL: 'http://10.0.0.5:7880/', DATA_DIR: '/data', CLOSE_EMPTY_SECONDS: '4', POLL_SECONDS: '1',
+      COMMAND_NAME: 'tela', HTTP_PORT: '8080', HTTPS_PORT: '443', ACME_EMAIL: 'a@b.c',
+      LIVEKIT_PORT: '7990', MEDIA_TCP_PORT: '7891', MEDIA_UDP_PORT: '7892', IP_WATCH_SECONDS: '60',
     });
     expect(c.livekitApiUrl).toBe('http://10.0.0.5:7880');
     expect(c.dataDir).toBe('/data');
+    expect(c.paths.data).toBe('/data');
     expect(c.closeEmptySeconds).toBe(4);
     expect(c.pollSeconds).toBe(1);
     expect(c.groupName).toBe('Crew');
@@ -40,6 +72,22 @@ describe('loadConfig', () => {
     expect([c.host, c.port]).toEqual(['::1', 9000]);
     expect(c.sessionSeconds).toBe(86400);
     expect(c.roleTtlMs).toBe(10_000);
+    expect(c.commandName).toBe('tela');
+    expect([c.httpPort, c.httpsPort]).toEqual([8080, 443]);
+    expect(c.acmeEmail).toBe('a@b.c');
+    expect([c.livekitPort, c.mediaTcpPort, c.mediaUdpPort]).toEqual([7990, 7891, 7892]);
+    expect(c.ipWatchSeconds).toBe(60);
+  });
+
+  test('LIVEKIT_API_URL follows LIVEKIT_PORT', () => {
+    expect(loadConfig({ ...PROD_ENV, LIVEKIT_PORT: '7990' }).livekitApiUrl).toBe('http://127.0.0.1:7990');
+  });
+
+  test('bad LIVEKIT_API_URL fails at startup, not per join', () => {
+    for (const bad of ['ftp://x', 'http://bad host', '127.0.0.1:7880', 'wss://lk.example.com']) {
+      expect(() => loadConfig({ ...PROD_ENV, LIVEKIT_API_URL: bad })).toThrow('bad LIVEKIT_API_URL');
+    }
+    expect(loadConfig({ ...PROD_ENV, LIVEKIT_API_URL: 'https://lk.example.com' }).livekitApiUrl).toBe('https://lk.example.com');
   });
 
   test('missing required env', () => {
@@ -56,6 +104,164 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...PROD_ENV, CLOSE_EMPTY_SECONDS: '0' })).toThrow('bad CLOSE_EMPTY_SECONDS');
     expect(() => loadConfig({ ...PROD_ENV, POLL_SECONDS: '-1' })).toThrow('bad POLL_SECONDS');
     expect(() => loadConfig({ ...PROD_ENV, LISTEN: '8081' })).toThrow('bad LISTEN');
+    expect(() => loadConfig({ ...PROD_ENV, PUBLIC_URL: 'tela.example.com' })).toThrow('bad PUBLIC_URL');
+    expect(() => loadConfig({ ...PROD_ENV, PUBLIC_URL: 'ftp://tela.example.com' })).toThrow('bad PUBLIC_URL');
+  });
+
+  test('bad ports', () => {
+    for (const k of ['LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'HTTPS_PORT']) {
+      for (const v of ['0', '65536', '1.5', 'x', '-1']) expect(() => loadConfig({ ...PROD_ENV, [k]: v })).toThrow(`bad ${k}`);
+    }
+    for (const v of ['65536', '1.5', 'x', '-1']) expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: v })).toThrow('bad HTTP_PORT');
+  });
+
+  test('INGRESS and MEDIA values', () => {
+    expect(() => loadConfig({ ...PROD_ENV, INGRESS: 'caddy' })).toThrow('bad INGRESS caddy');
+    expect(() => loadConfig({ ...PROD_ENV, MEDIA: 'sfu' })).toThrow('bad MEDIA sfu');
+    expect(() => loadConfig({ ...PROD_ENV, MEDIA: 'cloud' })).toThrow('MEDIA=cloud is not supported yet (phase 5)');
+  });
+
+  test('reserved keys are accepted silently', () => {
+    const c = loadConfig({
+      ...PROD_ENV, DDNS_PROVIDER: 'duckdns', DUCKDNS_TOKEN: 't', DUCKDNS_DOMAIN: 'd', UPNP: 'on', AUTO_UPDATE: 'yes',
+      LOCALE: 'pt-BR', LIVEKIT_CLOUD_URL: 'wss://x.livekit.cloud', TURN_TLS_PORT: '5349',
+    });
+    expect(c.warnings).toEqual([]);
+  });
+
+  test('KNOWN_KEYS covers the schema incl. reserved keys, not the removed LIVEKIT_KEYS', () => {
+    for (const k of [...Object.keys(PROD_ENV), 'INGRESS', 'MEDIA', 'TUNNEL_TOKEN', 'TELINHA_ENV', 'BIN_DIR', 'DEV_USER', 'DUCKDNS_TOKEN', 'TURN_TLS_PORT']) {
+      expect(KNOWN_KEYS.has(k)).toBe(true);
+    }
+    expect(KNOWN_KEYS.has('LIVEKIT_KEYS')).toBe(false);
+    expect(KNOWN_KEYS.has('PATH')).toBe(false);
+  });
+
+  test('telinha.env.example lists exactly KNOWN_KEYS and parses without warnings', () => {
+    const text = readFileSync(new URL('../../deploy/telinha.env.example', import.meta.url), 'utf8');
+    const listed = [...text.matchAll(/^#?([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]);
+    expect(new Set(listed)).toEqual(new Set(KNOWN_KEYS));
+    expect(listed.length).toBe(KNOWN_KEYS.size);
+    expect(parseEnvFile(text).warnings).toEqual([]);
+  });
+});
+
+describe('INGRESS=direct', () => {
+  test('requires an https PUBLIC_URL', () => {
+    expect(() => loadConfig({ ...PROD_ENV, PUBLIC_URL: 'http://tela.example.com' })).toThrow('INGRESS=direct requires an https:// PUBLIC_URL');
+  });
+
+  test('publicHost is the bare hostname, with or without a URL port', () => {
+    expect(loadConfig(PROD_ENV).publicHost).toBe('tela.example.com');
+    const c = loadConfig({ ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:8443', HTTPS_PORT: '8443' });
+    expect(c.publicHost).toBe('tela.example.com');
+    expect(c.warnings).toEqual([]);
+  });
+
+  test('URL port != HTTPS_PORT is a warning, not an error', () => {
+    const c = loadConfig({ ...PROD_ENV, HTTPS_PORT: '8443' });
+    expect(c.httpsPort).toBe(8443);
+    expect(c.warnings).toEqual(['config: PUBLIC_URL port 443 differs from HTTPS_PORT 8443; assuming the router translates 443 -> 8443']);
+    expect(loadConfig({ ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:9443' }).warnings)
+      .toEqual(['config: PUBLIC_URL port 9443 differs from HTTPS_PORT 443; assuming the router translates 9443 -> 443']);
+  });
+
+  test('ACME_EMAIL only in direct mode', () => {
+    expect(loadConfig({ ...PROD_ENV, ACME_EMAIL: 'a@b.c' }).acmeEmail).toBe('a@b.c');
+    expect(loadConfig({ ...TUNNEL_ENV, ACME_EMAIL: 'a@b.c' }).acmeEmail).toBeUndefined();
+  });
+
+  test('HTTP_PORT=0 disables the redirect listener', () => {
+    expect(loadConfig({ ...PROD_ENV, HTTP_PORT: '0' }).httpPort).toBe(0);
+  });
+});
+
+describe('INGRESS=tunnel', () => {
+  test('requires TUNNEL_TOKEN and an https PUBLIC_URL', () => {
+    const c = loadConfig(TUNNEL_ENV);
+    expect(c.ingress).toBe('tunnel');
+    expect(c.tunnelToken).toBe('tt');
+    expect(c.warnings).toEqual([]);
+    expect(() => loadConfig({ ...TUNNEL_ENV, TUNNEL_TOKEN: '' })).toThrow('missing env TUNNEL_TOKEN');
+    expect(() => loadConfig({ ...TUNNEL_ENV, PUBLIC_URL: 'http://tela.example.com' })).toThrow('INGRESS=tunnel requires an https:// PUBLIC_URL');
+  });
+
+  test('HTTPS_PORT is not compared with the URL port', () => {
+    expect(loadConfig({ ...TUNNEL_ENV, HTTPS_PORT: '8443' }).warnings).toEqual([]);
+  });
+
+  test('TUNNEL_TOKEN is ignored outside tunnel mode', () => {
+    expect(loadConfig({ ...PROD_ENV, TUNNEL_TOKEN: 'tt' }).tunnelToken).toBeUndefined();
+  });
+});
+
+describe('INGRESS=external', () => {
+  test('no extra rule: plain http and any HTTPS_PORT are fine', () => {
+    const c = loadConfig({ ...PROD_ENV, INGRESS: 'external', PUBLIC_URL: 'http://tela.lan:8000', HTTPS_PORT: '8443' });
+    expect(c.ingress).toBe('external');
+    expect(c.publicHost).toBe('tela.lan');
+    expect(c.secureCookies).toBe(false);
+    expect(c.warnings).toEqual([]);
+  });
+});
+
+describe('port collisions', () => {
+  test('media, LiveKit and LISTEN ports in every mode', () => {
+    for (const env of [PROD_ENV, TUNNEL_ENV, { ...PROD_ENV, INGRESS: 'external' }, DEV_ENV]) {
+      expect(() => loadConfig({ ...env, MEDIA_UDP_PORT: '7881' })).toThrow('ports collide: MEDIA_TCP_PORT=7881, MEDIA_UDP_PORT=7881');
+      expect(() => loadConfig({ ...env, LIVEKIT_PORT: '7882' })).toThrow('ports collide: MEDIA_UDP_PORT=7882, LIVEKIT_PORT=7882');
+      expect(() => loadConfig({ ...env, LISTEN: '127.0.0.1:7880' })).toThrow('ports collide: LIVEKIT_PORT=7880, LISTEN=7880');
+    }
+  });
+
+  test('HTTPS_PORT and HTTP_PORT join the set in direct mode', () => {
+    expect(() => loadConfig({ ...PROD_ENV, HTTPS_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTPS_PORT=8081');
+    expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTP_PORT=8081');
+    expect(() => loadConfig({ ...PROD_ENV, HTTPS_PORT: '7880' })).toThrow('ports collide: LIVEKIT_PORT=7880, HTTPS_PORT=7880');
+    expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: '7881' })).toThrow('ports collide: MEDIA_TCP_PORT=7881, HTTP_PORT=7881');
+    expect(() => loadConfig({ ...PROD_ENV, MEDIA_UDP_PORT: '443' })).toThrow('ports collide: MEDIA_UDP_PORT=443, HTTPS_PORT=443');
+    expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: '443' })).toThrow('ports collide: HTTPS_PORT=443, HTTP_PORT=443');
+  });
+
+  test('HTTP_PORT=0 is not a port', () => {
+    expect(loadConfig({ ...PROD_ENV, HTTP_PORT: '0', LISTEN: '127.0.0.1:8081' }).httpPort).toBe(0);
+  });
+
+  test('HTTPS_PORT and HTTP_PORT are free outside direct mode', () => {
+    expect(loadConfig({ ...TUNNEL_ENV, HTTPS_PORT: '8081', HTTP_PORT: '7880' }).httpsPort).toBe(8081);
+    expect(loadConfig({ ...PROD_ENV, INGRESS: 'external', HTTPS_PORT: '7881', HTTP_PORT: '7882' }).ingress).toBe('external');
+  });
+});
+
+describe('COMMAND_NAME', () => {
+  test('lowercase unicode letters, digits, - and _', () => {
+    for (const n of ['tela', 'tela-2', 'tela_x', 'ção', 'a', 'x'.repeat(32)]) expect(loadConfig({ ...PROD_ENV, COMMAND_NAME: n }).commandName).toBe(n);
+  });
+
+  test('rejects uppercase, spaces, symbols and 33 chars', () => {
+    for (const n of ['Tela', 'TELA', 'tela x', 'tela!', 'x'.repeat(33), 'Ção']) {
+      expect(() => loadConfig({ ...PROD_ENV, COMMAND_NAME: n })).toThrow('bad COMMAND_NAME (Discord: lowercase, 1-32 chars)');
+    }
+  });
+});
+
+describe('IP watch and LIVEKIT_NODE_IP', () => {
+  test('IP_WATCH_SECONDS=0 turns the watch off', () => {
+    expect(loadConfig({ ...PROD_ENV, IP_WATCH_SECONDS: '0' }).ipWatchSeconds).toBe(0);
+    for (const v of ['-1', '1.5', 'x']) expect(() => loadConfig({ ...PROD_ENV, IP_WATCH_SECONDS: v })).toThrow('bad IP_WATCH_SECONDS');
+  });
+
+  test('a static node IP forces the watch off', () => {
+    const c = loadConfig({ ...PROD_ENV, LIVEKIT_NODE_IP: '203.0.113.7', IP_WATCH_SECONDS: '60' });
+    expect(c.livekitNodeIp).toBe('203.0.113.7');
+    expect(c.ipWatchSeconds).toBe(0);
+  });
+
+  test('LIVEKIT_NODE_IP must be an IPv4 dotted quad', () => {
+    expect(loadConfig({ ...PROD_ENV, LIVEKIT_NODE_IP: '127.0.0.1' }).livekitNodeIp).toBe('127.0.0.1');
+    for (const ip of ['::1', '256.1.1.1', '1.2.3', '1.2.3.4.5', 'example.com', '01.2.3.4']) {
+      expect(() => loadConfig({ ...PROD_ENV, LIVEKIT_NODE_IP: ip })).toThrow('bad LIVEKIT_NODE_IP');
+    }
   });
 });
 
@@ -66,6 +272,16 @@ describe('DEV_USER guard', () => {
     expect(c.secureCookies).toBe(false);
     expect(c.channelIds).toEqual([]);
     expect(c.livekitUrl).toBe('ws://localhost:5173/livekit');
+    expect(c.publicHost).toBe('localhost');
+    expect(c.warnings).toEqual([]);
+  });
+
+  test('INGRESS defaults to external and must stay external', () => {
+    expect(loadConfig(DEV_ENV).ingress).toBe('external');
+    expect(loadConfig({ ...DEV_ENV, INGRESS: 'external' }).ingress).toBe('external');
+    for (const i of ['direct', 'tunnel']) {
+      expect(() => loadConfig({ ...DEV_ENV, INGRESS: i, TUNNEL_TOKEN: 'tt' })).toThrow('DEV_USER requires INGRESS=external');
+    }
   });
 
   test('accepts 127.0.0.1 and ::1 / localhost listen hosts', () => {
