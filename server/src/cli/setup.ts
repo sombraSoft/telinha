@@ -16,6 +16,7 @@ import { mergeEnv, parseEnvFile } from '../envfile.ts';
 import { probe } from '../nat/index.ts';
 import { lookupPublicIp, resolveA, tlsInfo } from '../netinfo.ts';
 import { defaultSpawn, serviceManager } from '../service/index.ts';
+import { defaultTrayLauncher } from '../service/tray.ts';
 import { assertOneStdin, GLOBAL_FLAGS, parseArgs, readSecretSource, UsageError, type ArgSpec, type CliContext, type ParsedArgs } from './args.ts';
 import { createControlClient } from './control.ts';
 import { at } from './setup/apply-strings.ts';
@@ -25,7 +26,7 @@ import { MANAGED_KEYS } from './setup/envwrite.ts';
 import { defaultOsName, detectHost, routerLabel, type HostInfo } from './setup/host.ts';
 import type { ModelEnv, Text } from './setup/model.ts';
 import { q } from './setup/qstrings.ts';
-import { answersFromFlags, resolveValues, type ResolveBase } from './setup/resolve.ts';
+import { answersFromFlags, resolveValues, trayFromFlags, type ResolveBase } from './setup/resolve.ts';
 import { SetupSession } from './setup/session.ts';
 import { nextSteps, SetupAbort, UNPRIVILEGED_PORT_START, validateValues, type SetupDeps, type SetupFs, type Values, type Wizard } from './setup/steps.ts';
 import { t, type SKey } from './setup/strings.ts';
@@ -60,6 +61,8 @@ export const SETUP_FLAGS = {
   upnp: 'string',
   'auto-update': 'string',
   'no-service': 'boolean',
+  'no-tray': 'boolean',
+  'tray-autostart': 'boolean',
   'no-firewall': 'boolean',
   'no-upnp': 'boolean',
   'no-doctor': 'boolean',
@@ -185,6 +188,7 @@ export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
     execPath: process.execPath,
     which: (cmd) => Bun.which(cmd),
     certReady: async (host, port) => (await tlsInfo(host, port, 5000, '127.0.0.1')).authorized,
+    tray: defaultTrayLauncher,
   };
 }
 
@@ -257,7 +261,7 @@ function modelEnv(ctx: CliContext, deps: SetupDeps, flags: Flags, file: Values, 
   };
 }
 
-function applyOptions(ctx: CliContext, flags: Flags, docker: boolean, o: Pick<ApplyOptions, 'sysctl' | 'rotateCookie' | 'doctorMode' | 'secrets'>): ApplyOptions {
+function applyOptions(ctx: CliContext, flags: Flags, docker: boolean, o: Pick<ApplyOptions, 'sysctl' | 'rotateCookie' | 'doctorMode' | 'secrets' | 'tray'>): ApplyOptions {
   return {
     docker, compiled: ctx.compiled,
     flags: { noService: !!flags['no-service'], noFirewall: !!flags['no-firewall'], noUpnp: !!flags['no-upnp'], noDoctor: !!flags['no-doctor'], offline: !!flags['no-discord-check'] },
@@ -304,7 +308,7 @@ async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o:
   const values = resolveValues(r.answers, env, { file: l.values, host, locale: ctx.locale, langFlag: !!flags.lang, docker, compiled: ctx.compiled });
   const w = makeWizard(ctx, deps, ctx.locale, host, { docker, out: deps.term(ctx.locale) });
   w.out.info(hostLine(w));
-  const opts = applyOptions(ctx, flags, docker, { sysctl: 'auto', rotateCookie: false, doctorMode: 'cli' });
+  const opts = applyOptions(ctx, flags, docker, { sysctl: 'auto', rotateCookie: false, doctorMode: 'cli', tray: trayFromFlags(flags, env) });
   const result = await runApply(w, l, values, planTasks(values, opts), opts, plainHooks(w));
   if (result.kind !== 'done') return 1;
   nextSteps(w, values, { file: l.shown });
@@ -418,7 +422,9 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
   const apply = async (a: { rotateCookie: boolean }, hooks: ApplyHooks): Promise<ApplyResult> => {
     const h = await host;
     const values = session.values();
-    const opts = applyOptions(ctx, flags, docker, { sysctl: session.applyOptions().sysctl ?? 'auto', rotateCookie: a.rotateCookie, doctorMode: 'data', secrets: memo });
+    const opts = applyOptions(ctx, flags, docker, {
+      sysctl: session.applyOptions().sysctl ?? 'auto', rotateCookie: a.rotateCookie, doctorMode: 'data', secrets: memo, tray: trayFromFlags(flags, envBase),
+    });
     const plan = planTasks(values, opts);
     const record = track(plan);
     applied = values;

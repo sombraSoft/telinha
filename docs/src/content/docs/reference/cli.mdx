@@ -112,6 +112,16 @@ unit (`~/.config/systemd/user/telinha.service`, `systemctl --user`) instead of
 the system one; on Windows it takes the account the Task Scheduler task runs
 as, which the elevated install passes along with `--sid`.
 
+## telinha tray
+
+<HelpText locale="en" topic="helpTray" />
+
+<FlagTable locale="en" command="tray" actions />
+
+Windows only: on Linux and macOS every action exits 1 with
+`the tray exists on Windows only`. It takes only the global flags. The icon
+itself is described in [Tray icon](/telinha/guides/tray/).
+
 ## Keys
 
 The setup screens and the doctor checklist read these keys. The key help in the
@@ -169,7 +179,7 @@ NO_COLOR=1 telinha doctor
 | Code | Meaning |
 | --- | --- |
 | `0` | ok |
-| `1` | error; also `doctor` with a failed check, and `service status` when the service is not installed or not running |
+| `1` | error; also `doctor` with a failed check, `service status` when the service is not installed or not running, and `tray status` when the icon is not running |
 | `2` | usage: a bad flag, an unknown command, a missing non-interactive answer |
 | `3` | restart requested: `run` asking the service loop to start it again, after an update |
 

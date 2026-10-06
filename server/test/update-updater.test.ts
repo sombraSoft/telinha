@@ -75,10 +75,11 @@ function memFs() {
 interface Release { sums?: string; assets: Record<string, Uint8Array> }
 
 /** A tar.gz (or zip for Windows targets) holding one executable, plus its SHA256SUMS line. */
-function release(tag: string, o: { asset?: string; content?: string; badSum?: boolean; noLine?: boolean; member?: string } = {}): Release {
+function release(tag: string, o: { asset?: string; content?: string; badSum?: boolean; noLine?: boolean; member?: string; tray?: string } = {}): Release {
   const asset = o.asset ?? 'telinha-linux-x64.tar.gz';
   const member = o.member ?? (asset.endsWith('.zip') ? 'telinha.exe' : 'telinha');
   const entries = [{ path: member, mode: 0o755, data: enc.encode(o.content ?? `binary ${tag}`) }];
+  if (o.tray) entries.push({ path: 'telinha-tray.exe', mode: 0o755, data: enc.encode(o.tray) });
   const bytes = asset.endsWith('.zip') ? writeZip(entries) : writeTarGz(entries);
   const sum = o.badSum ? 'f'.repeat(64) : sha256(bytes);
   return { sums: o.noLine ? `${'a'.repeat(64)}  other.zip\n` : `${sum}  ${asset}\n`, assets: { [asset]: bytes } };
@@ -174,6 +175,35 @@ describe('createUpdater', () => {
     expect((await s.updater.update('now')).action).toBe('staged');
     expect(s.m.text(`${PATHS.bin}/telinha.exe`)).toBe('binary v0.8.0');
     expect(s.m.names(PATHS.bin)).toEqual(['telinha.exe', 'telinha.old-0.7.0.exe']);
+  });
+
+  test('Windows target with the tray in the release: an installed tray is replaced and recorded', async () => {
+    const s = setup({
+      target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
+      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { asset: 'telinha-windows-x64.zip', tray: 'tray v0.8.0' }) },
+    });
+    s.m.put(`${PATHS.bin}/telinha-tray.exe`, 'tray v0.7.0');
+    expect((await s.updater.update('now')).action).toBe('staged');
+    expect(s.m.text(`${PATHS.bin}/telinha-tray.exe`)).toBe('tray v0.8.0');
+    expect(s.updater.status().staged?.trayPreviousFile).toBe('telinha-tray.old-0.7.0.exe');
+    expect((s.m.state().staged as Record<string, unknown>).trayPreviousFile).toBe('telinha-tray.old-0.7.0.exe');
+  });
+
+  test('a failed install removes both staged .new files', async () => {
+    const s = setup({
+      target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
+      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { asset: 'telinha-windows-x64.zip', tray: 'tray v0.8.0' }) },
+    });
+    s.m.put(`${PATHS.bin}/telinha-tray.exe`, 'tray v0.7.0');
+    // The main swap fails after the download wrote both .new files.
+    const rename = s.m.fs.rename;
+    s.m.fs.rename = async (from, to) => {
+      if (basename(from) === 'telinha.new.exe') throw Object.assign(new Error('EBUSY: locked'), { code: 'EBUSY' });
+      return rename(from, to);
+    };
+    expect((await s.updater.update('now')).action).toBe('pending');
+    expect(s.m.names(PATHS.bin)).toEqual(['telinha-tray.exe', 'telinha.exe']);
+    expect(s.m.text(`${PATHS.bin}/telinha-tray.exe`)).toBe('tray v0.7.0');
   });
 
   test('up to date, or latest older than current: nothing happens (no downgrade without a pin)', async () => {
@@ -355,6 +385,24 @@ describe('createUpdater', () => {
     expect(s.m.state().staged).toBeUndefined();
     expect(s.m.names(PATHS.bin)).toEqual(['telinha']);
     expect(s.updater.status().staged).toBeNull();
+  });
+
+  test('finish records the applied update; status exposes it, null before any', async () => {
+    const s = setup({ latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0') } });
+    await s.updater.update('now');
+    expect(s.updater.status().applied).toBeNull();
+    s.clock.t = T0 + 5_000;
+    await s.updater.finish();
+    const applied = { tag: 'v0.8.0', previous: '0.7.0', at: T0 + 5_000 };
+    expect(s.m.state().applied).toEqual(applied);
+    expect(s.updater.status().applied).toEqual(applied);
+    // A later start with nothing staged keeps it.
+    s.clock.t += 60_000;
+    await s.updater.finish();
+    expect(s.updater.status().applied).toEqual(applied);
+    // Writes that follow (a check) keep it too.
+    await s.updater.check();
+    expect(s.m.state().applied).toEqual(applied);
   });
 
   test('start(): first check after startDelayMs, then every checkMs, every minute while deferred; stop aborts', async () => {

@@ -87,6 +87,12 @@
       "automerge": false
     },
     {
+      "description": "The SignPath action holds the signing token and returns the files that ship: pinned to a commit, every bump reviewed by hand",
+      "matchPackageNames": ["signpath/github-action-submit-signing-request"],
+      "groupName": "signpath",
+      "automerge": false
+    },
+    {
       "description": "Majors are reviewed by hand",
       "matchUpdateTypes": ["major"],
       "automerge": false

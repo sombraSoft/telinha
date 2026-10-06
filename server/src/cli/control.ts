@@ -28,7 +28,17 @@ export interface MapperStatusLike {
 }
 
 /** An update installed but not yet confirmed by a successful start. */
-export interface UpdateStaged { tag: string; previous: string; previousFile: string; at: number; failedStarts: number }
+export interface UpdateStaged {
+  tag: string;
+  previous: string;
+  previousFile: string;
+  /** The tray file stage() renamed aside, when it replaced the tray. */
+  trayPreviousFile?: string;
+  at: number;
+  failedStarts: number;
+}
+/** The last staged update that proved itself (its version started fine). */
+export interface UpdateApplied { tag: string; previous: string; at: number }
 export interface UpdateFailed { tag: string; at: number; reason: string }
 /** Seen as latest but its assets were not downloadable yet (404/network): retried, never failed. */
 export interface UpdatePending { tag: string; since: number }
@@ -41,6 +51,8 @@ export interface UpdateStatus {
   latest: string | null;
   pin: string | null;
   staged: UpdateStaged | null;
+  /** The last update that started fine; null before the first one. */
+  applied: UpdateApplied | null;
   failed: UpdateFailed | null;
   pending: UpdatePending | null;
   /** Rooms were open when an update was due: deferring since then. */
@@ -69,6 +81,18 @@ export interface UpdateResult extends UpdateCheck {
 /** check never writes; scheduled applies unless rooms defer it; now applies. */
 export type UpdateMode = 'check' | 'scheduled' | 'now';
 
+/** One supervised child, as the supervisor's status() reports it. */
+export interface ChildStatus {
+  state: 'starting' | 'up' | 'restarting' | 'stopped';
+  pid: number | null;
+  /** Successful crash respawns since start (restart() does not count). */
+  restarts: number;
+  /** Respawn attempts within the last 10 minutes, failed attempts included: the crash-loop signal. */
+  recentRestarts: number;
+  /** When `state` was last set (epoch ms). */
+  since: number;
+}
+
 export interface ControlStatus {
   version: string;
   startedAt: number;
@@ -79,6 +103,8 @@ export interface ControlStatus {
   rooms: number;
   /** Child process states, e.g. { livekit: 'up' }. */
   children: Record<string, string>;
+  /** Per-child detail; `children` stays for /healthz and older clients. */
+  childStatus: Record<string, ChildStatus>;
   publicIp: string | null;
   upnp: MapperStatusLike | null;
   ddns: { ip: string | null; at: number; ok: boolean } | null;

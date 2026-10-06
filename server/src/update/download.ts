@@ -1,6 +1,7 @@
 // Fetch, verify and unpack one release: the archive streams to
 // bin/.telinha-<tag>.download, its sha256 must match the tag's SHA256SUMS line,
-// and the single executable inside lands as bin/telinha.new[.exe]. Anything
+// and the single executable inside lands as bin/telinha.new[.exe] (plus
+// bin/telinha-tray.new.exe when a Windows archive carries the tray). Anything
 // that smells like "not published yet" is a PendingError; anything verified
 // wrong is a FailedError.
 import { basename, join } from 'node:path';
@@ -14,6 +15,16 @@ export const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
 
 export const newExeName = (target: Target): string => (target.startsWith('windows') ? 'telinha.new.exe' : 'telinha.new');
 const exeInArchive = (target: Target) => (target.startsWith('windows') ? 'telinha.exe' : 'telinha');
+/** Where a Windows archive's tray lands; swap.stage() installs it only over an installed tray. */
+export const trayNewExeName = (_target: Target): string => 'telinha-tray.new.exe';
+const TRAY_IN_ARCHIVE = 'telinha-tray.exe';
+
+export interface Downloaded {
+  /** bin/telinha.new[.exe]. */
+  exe: string;
+  /** bin/telinha-tray.new.exe, or null: not a Windows target, or a release without the tray. */
+  tray: string | null;
+}
 
 export interface DownloadOptions {
   github: GitHubReleases;
@@ -49,14 +60,23 @@ async function streamTo(fs: UpdateFs, res: Response, path: string, maxBytes: num
   return total;
 }
 
+const named = (entries: Entry[], name: string) => entries.filter((e) => basename(e.path.replace(/\\/g, '/')) === name);
+
 function findExecutable(entries: Entry[], name: string): Entry {
-  const hits = entries.filter((e) => basename(e.path.replace(/\\/g, '/')) === name);
+  const hits = named(entries, name);
   if (hits.length !== 1) throw new FailedError(hits.length ? `archive has ${hits.length} entries named ${name}` : `archive has no ${name}`);
   return hits[0]!;
 }
 
-/** Downloads and verifies `tag`; returns the path of the extracted telinha.new[.exe]. */
-export async function downloadRelease(o: DownloadOptions): Promise<string> {
+/** Optional (older releases have no tray), but two of them is a bad archive. */
+function findTray(entries: Entry[]): Entry | null {
+  const hits = named(entries, TRAY_IN_ARCHIVE);
+  if (hits.length > 1) throw new FailedError(`archive has ${hits.length} entries named ${TRAY_IN_ARCHIVE}`);
+  return hits[0] ?? null;
+}
+
+/** Downloads and verifies `tag`; returns the paths of what it extracted. */
+export async function downloadRelease(o: DownloadOptions): Promise<Downloaded> {
   const log = o.log ?? (() => {});
   const maxBytes = o.maxBytes ?? MAX_DOWNLOAD_BYTES;
   const name = assetName(o.target);
@@ -84,8 +104,19 @@ export async function downloadRelease(o: DownloadOptions): Promise<string> {
       throw new FailedError(`bad archive ${name}: ${errorMessage(e)}`);
     }
     const exe = findExecutable(entries, exeInArchive(o.target));
+    // Linux archives never carry the tray: do not even look.
+    const windows = o.target.startsWith('windows');
+    const trayEntry = windows ? findTray(entries) : null;
     await o.fs.writeBytes(output, exe.data, 0o755);
-    return output;
+    if (!windows) return { exe: output, tray: null };
+    const tray = join(o.bin, trayNewExeName(o.target));
+    if (!trayEntry) {
+      // A stale one from an interrupted run must not be installed with a release that has no tray.
+      await o.fs.rm(tray);
+      return { exe: output, tray: null };
+    }
+    await o.fs.writeBytes(tray, trayEntry.data, 0o755);
+    return { exe: output, tray };
   } finally {
     await o.fs.rm(download).catch(() => {});
   }

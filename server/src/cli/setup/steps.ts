@@ -15,7 +15,9 @@ import { isCgnatIpv4, isPrivateIpv4 } from '../../netinfo.ts';
 import type { Paths } from '../../paths.ts';
 import { must, ServiceInstallError, type InstallResult, type ServiceManager, type SpawnFn } from '../../service/index.ts';
 import { SERVICE_USER, SYSCTL_SCRIPT } from '../../service/systemd.ts';
+import type { TrayLauncher } from '../../service/tray.ts';
 import { parseWhoami, whoamiExe } from '../../service/windows.ts';
+import type { ProcessInfo } from '../../supervisor.ts';
 import { exeName } from '../../update/swap.ts';
 import type { CliContext } from '../args.ts';
 import type { ControlClient } from '../control.ts';
@@ -93,6 +95,10 @@ export interface SetupDeps {
   certReady: (host: string, port: number) => Promise<boolean>;
   /** The setup screens; without them a terminal gets the plain run. */
   ui?: SetupUi;
+  /** Windows: starts the tray icon (detached, with the given environment). */
+  tray?: TrayLauncher;
+  /** Windows: is the pid tray.json names still the tray. Default: tasklist. */
+  processInfo?: ProcessInfo;
 }
 
 export interface Wizard {

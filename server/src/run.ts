@@ -304,6 +304,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   const doctorStore = createDoctorStore({ cookieSecret: config.cookieSecret });
   const doctor = createDoctorRoutes({ store: doctorStore, config, files, rooms, log });
   const children = () => Object.fromEntries(sup.status().map((s) => [s.name, s.state]));
+  const childStatus = () => Object.fromEntries(sup.status().map((s) => [s.name, { state: s.state, pid: s.pid, restarts: s.restarts, recentRestarts: s.recentRestarts, since: s.since }]));
   const status = (): ControlStatus => ({
     version: ctx.version,
     startedAt,
@@ -312,6 +313,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     media: config.media,
     rooms: reg.open().length,
     children: children(),
+    childStatus: childStatus(),
     publicIp: ipWatch?.current() ?? config.livekitNodeIp ?? ddns?.last()?.ip ?? null,
     upnp: mapper?.status() ?? null,
     ddns: ddns?.last() ?? null,

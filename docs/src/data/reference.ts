@@ -472,6 +472,14 @@ export const SETUP_FLAG_DOCS: Record<string, FlagDoc> = {
   upnp: { value: 'auto|off', sets: 'UPNP', en: 'Let Telinha ask the router to forward the ports. Defaults to `off` on a VPS.', 'pt-BR': 'Deixar a Telinha pedir ao roteador para encaminhar as portas. O padrão é `off` numa VPS.' },
   'auto-update': { value: 'on|off', sets: 'AUTO_UPDATE', en: 'Native binary: install new stable releases by itself.', 'pt-BR': 'Binário nativo: instalar novas versões estáveis sozinho.' },
   'no-service': { en: 'Skip the service install.', 'pt-BR': 'Pula a instalação do serviço.' },
+  'no-tray': {
+    en: 'Windows: do not install the tray icon; removes an installed one and turns its logon autostart off.',
+    'pt-BR': 'Windows: não instala o ícone na bandeja; remove um já instalado e desliga o início junto com o Windows.',
+  },
+  'tray-autostart': {
+    en: 'Windows: start the tray icon when you sign in (off by default).',
+    'pt-BR': 'Windows: inicia o ícone na bandeja quando você entra no Windows (desligado por padrão).',
+  },
   'no-firewall': { en: 'Skip the Windows Firewall rules.', 'pt-BR': 'Pula as regras do Firewall do Windows.' },
   'no-upnp': { en: 'Skip the router probe.', 'pt-BR': 'Pula o teste do roteador.' },
   'no-doctor': { en: 'Skip the doctor run at the end.', 'pt-BR': 'Pula o doctor no final.' },
@@ -537,6 +545,22 @@ export const SERVICE_ACTION_DOCS: Record<string, L & { internal?: boolean }> = {
     internal: true,
     en: 'The supervising loop the service manager starts: runs `telinha run`, restarts it after an update or a crash (with backoff) and rolls back an update that fails to start. Not for hand use.',
     'pt-BR': 'O laço supervisor que o gerenciador de serviços inicia: roda o `telinha run`, reinicia depois de uma atualização ou de uma queda (com espera crescente) e desfaz uma atualização que não sobe. Não é para uso manual.',
+  },
+};
+
+export const TRAY_ACTION_DOCS: Record<string, L> = {
+  start: {
+    en: 'Start the tray icon. Refused from an administrator terminal (every command its menu runs would run elevated too), and when `telinha-tray.exe` is not in `bin`.',
+    'pt-BR': 'Inicia o ícone na bandeja. Recusado num terminal de administrador (todo comando que o menu dele roda rodaria elevado também), e quando o `telinha-tray.exe` não está em `bin`.',
+  },
+  stop: { en: 'Close the tray icon; the service keeps running.', 'pt-BR': 'Fecha o ícone na bandeja; o serviço continua rodando.' },
+  status: {
+    en: 'Running (with its pid and version), not running or not installed, and whether it starts with Windows. Exit 1 when it is not running.',
+    'pt-BR': 'Rodando (com o pid e a versão), parado ou não instalado, e se inicia com o Windows. Sai com 1 quando não está rodando.',
+  },
+  autostart: {
+    en: '`on` or `off`: start the tray icon when you sign in to Windows (the `Telinha` value of your user’s `Run` registry key). Off by default.',
+    'pt-BR': '`on` ou `off`: inicia o ícone na bandeja quando você entra no Windows (o valor `Telinha` da chave `Run` do registro do seu usuário). Desligado por padrão.',
   },
 };
 
@@ -640,6 +664,16 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
     fixes: {
       en: '`telinha service install` or `telinha service start`; Windows: `telinha setup` again (one administrator prompt). Skipped for Docker and source runs.',
       'pt-BR': '`telinha service install` ou `telinha service start`; Windows: `telinha setup` de novo (um pedido de administrador). Pulado no Docker e rodando do código-fonte.',
+    },
+  },
+  tray: {
+    looksAt: {
+      en: 'Native Windows installs only: whether `telinha-tray.exe` is in `bin` (not installed is fine), whether it runs and at the same version as Telinha, and a *Start with Windows* entry left pointing at a missing file. Detail lines say whether it starts with Windows and who signed it (an unsigned build is never a warning).',
+      'pt-BR': 'Só em instalações nativas no Windows: se o `telinha-tray.exe` está em `bin` (não instalado está ok), se ele roda e na mesma versão da Telinha, e uma entrada de *Iniciar com o Windows* apontando pra um arquivo que não existe. As linhas de detalhe dizem se ele inicia com o Windows e quem assinou (um build sem assinatura nunca é aviso).',
+    },
+    fixes: {
+      en: 'Not running: `telinha tray start`. A different version: `telinha tray stop`, then `telinha tray start`. A leftover autostart: `telinha tray autostart off`. To install it: `telinha setup` without `--no-tray`.',
+      'pt-BR': 'Parado: `telinha tray start`. Outra versão: `telinha tray stop`, depois `telinha tray start`. Um início automático que sobrou: `telinha tray autostart off`. Pra instalar: `telinha setup` sem `--no-tray`.',
     },
   },
   gateway: {

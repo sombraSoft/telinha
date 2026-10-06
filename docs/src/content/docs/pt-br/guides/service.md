@@ -46,6 +46,14 @@ Get-Content "$env:LOCALAPPDATA\Telinha\logs\telinha.log" -Tail 50 -Wait
 As regras de firewall estão descritas em
 [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/#firewalls).
 
+O [ícone na bandeja](/telinha/pt-br/guides/tray/), ao lado do relógio, é uma
+frente para a mesma tarefa: o *Iniciar* e o *Parar* dele rodam o
+`telinha service start` e o `telinha service stop`, e o *Reiniciar* pede para
+a Telinha sair, e o loop inicia ela de novo. Enquanto o loop sobe a Telinha de
+novo (depois de um reinício, de uma atualização ou de um travamento), o ícone
+mostra `Telinha: iniciando…`, não *parada*. O `telinha service uninstall`
+também fecha o ícone e remove a entrada de *Iniciar com o Windows* dele.
+
 Rodar num console também funciona: `telinha run` num terminal, ou um clique
 duplo no `telinha.exe`; Ctrl+C para. Só um `telinha run` por pasta da Telinha:
 um segundo (rodar num console com o serviço no ar, um segundo clique duplo)

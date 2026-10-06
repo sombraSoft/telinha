@@ -28,7 +28,7 @@ function harness(o: Partial<MainDeps> & { tty?: boolean; homeDir?: string } = {}
     stdoutTty: o.tty ?? false,
     stdout: (l) => out.push(l),
     stderr: (l) => err.push(l),
-    commands: { setup: runner('setup'), doctor: runner('doctor'), update: runner('update'), service: runner('service') },
+    commands: { setup: runner('setup'), doctor: runner('doctor'), update: runner('update'), service: runner('service'), tray: runner('tray') },
     run: async (ctx, r) => void calls.push({ cmd: 'run', ctx, pause: r.pauseOnError }),
     offerSetup: async (ctx) => (calls.push({ cmd: 'offer', ctx }), 5),
     waitForEnter: async () => void calls.push({ cmd: 'enter', ctx: undefined as never }),
@@ -71,6 +71,9 @@ describe('main', () => {
     expect(await h.main(['service', '--help'])).toBe(0);
     expect(h.out[0]).toStartWith('Usage: telinha service');
     h = harness();
+    expect(await h.main(['help', 'tray'])).toBe(0);
+    expect(h.out[0]).toStartWith('Usage: telinha tray start | stop | status | autostart on|off');
+    h = harness();
     expect(await h.main(['--lang', 'pt-BR', 'help'])).toBe(0);
     expect(h.out[0]).toContain('Uso: telinha');
     h = harness();
@@ -85,7 +88,7 @@ describe('main', () => {
   });
 
   test('subcommands get the full argv in the context and their exit code is returned', async () => {
-    for (const cmd of ['setup', 'doctor', 'update', 'service']) {
+    for (const cmd of ['setup', 'doctor', 'update', 'service', 'tray']) {
       const h = harness();
       expect(await h.main([cmd, '--yes', 'x'])).toBe(7);
       expect(h.calls.map((c) => c.cmd)).toEqual([cmd]);

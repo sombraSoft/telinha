@@ -10,10 +10,11 @@ import { SETUP_FLAGS } from '../../server/src/cli/setup.ts';
 import { DOCTOR_FLAGS } from '../../server/src/cli/doctor.ts';
 import { UPDATE_FLAGS } from '../../server/src/cli/update.ts';
 import { ACTIONS, serviceSpec } from '../../server/src/cli/service.ts';
+import { TRAY_ACTIONS } from '../../server/src/cli/tray.ts';
 import { CHECKS } from '../../server/src/doctor/checks.ts';
 import {
   CONFIG_KEYS, DOCTOR_CHECK_DOCS, DOCTOR_FLAG_DOCS, GLOBAL_FLAG_DOCS, SECTION_TITLES, SERVICE_ACTION_DOCS, SERVICE_FLAG_DOCS,
-  SETUP_FLAG_DOCS, UPDATE_FLAG_DOCS,
+  SETUP_FLAG_DOCS, TRAY_ACTION_DOCS, UPDATE_FLAG_DOCS,
 } from '../src/data/reference.ts';
 import { BASE_ENV, derivedCommands, generate } from './generate.ts';
 
@@ -88,6 +89,7 @@ describe('reference tables match the code', () => {
     for (const g of Object.keys(GLOBAL_FLAGS)) service.delete(g);
     same(Object.keys(SERVICE_FLAG_DOCS), service);
     same(Object.keys(SERVICE_ACTION_DOCS), ACTIONS);
+    same(Object.keys(TRAY_ACTION_DOCS), TRAY_ACTIONS);
   });
 
   test('doctor check docs are the checks, in order', () => {
@@ -100,6 +102,8 @@ describe('reference tables match the code', () => {
     expect(g.doctor.checks.map((c) => c.id)).toEqual(CHECKS.map((c) => c.id));
     expect(g.cli.commands).toEqual(derivedCommands());
     expect(sortedKeys(g.cli.service.linux)).toEqual(sortedKeys(SERVICE_FLAG_DOCS));
+    expect(g.cli.tray.actions).toEqual([...TRAY_ACTIONS]);
+    for (const locale of ['en', 'pt-BR'] as const) expect(g.cli.help[locale].helpTray).toStartWith(locale === 'en' ? 'Usage: telinha tray' : 'Uso: telinha tray');
     expect(g.versions.livekit).toMatch(/^\d+\.\d+\.\d+$/);
     expect(g.versions.caddy.version).toMatch(/^\d+\.\d+\.\d+$/);
     // PinnedVersions names the modules; the home certificate needs this one.

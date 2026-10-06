@@ -46,6 +46,15 @@ registra `binaries updated: livekit` (ou o que tiver mudado). Com
 `INGRESS=direct` ela também baixa o build do Caddy da versão nova, conferido
 com o `SHA256SUMS` dessa versão, já que cada versão traz o seu.
 
+No Windows o zip também traz o [ícone na bandeja](/telinha/pt-br/guides/tray/),
+o `telinha-tray.exe`. Quando o ícone está instalado ele é trocado do mesmo
+jeito (o arquivo antigo fica como `telinha-tray.old-<version>.exe`), e o ícone
+rodando percebe o arquivo novo e reinicia sozinho nele. Um ícone que você
+dispensou com `telinha setup --no-tray` continua de fora: a atualização só
+instala ele onde o `bin\telinha-tray.exe` já existe. Senão ela só atualiza a
+cópia guardada como `bin\telinha-tray.dist.exe`, de onde um `telinha setup`
+depois instala o ícone.
+
 Rodando num console, a Telinha instala a atualização mas não reinicia
 sozinha; ela registra "update to vX installed; restart telinha to apply it".
 O executável do próprio loop do serviço é trocado no próximo
@@ -244,5 +253,6 @@ gh attestation verify oci://ghcr.io/sombrasoft/telinha@sha256:... --repo sombraS
 ```
 
 O atualizador nativo confere o sha256 de cada atualização com o `SHA256SUMS`
-da versão; ele não confere a atestação. Os binários do Windows não têm
-assinatura de código.
+da versão; ele não confere a atestação. Os programas para Windows de uma
+versão assinada também trazem uma assinatura Authenticode; veja
+[Assinatura de código](/telinha/pt-br/guides/code-signing/).

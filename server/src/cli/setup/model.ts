@@ -262,6 +262,8 @@ const sameGuild = (a: Answers, env: ModelEnv) => !env.file.GUILD_ID || a.guild =
 
 const select = (value: string, label: Text, more: Omit<OptionDef, 'value' | 'label'> = {}): OptionDef => ({ value, label, ...more });
 const isHome = (a: Answers) => a.hosting === 'home';
+/** The tray icon exists for the native Windows binary only. */
+export const trayHere = (env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>): boolean => env.platform === 'win32' && env.compiled && !env.docker;
 const choiceIs = (...c: AddressChoice[]) => (a: Answers) => c.includes(addressChoice(a)!);
 
 export const QUESTIONS: readonly QuestionDef[] = [

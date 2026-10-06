@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { loadConfig, type Config } from '../src/config.ts';
 import { broadAclEntries, CHECKS, compareVersions, inviteUrl, neededPorts, runChecks } from '../src/doctor/checks.ts';
 import type {
-  Check, CheckContext, CheckResult, ControlStatusLike, NatProbeLike, NetLike, ServiceStatusLike, SysLike, UpdateStateLike,
+  Check, CheckContext, CheckResult, ControlStatusLike, NatProbeLike, NetLike, ServiceStatusLike, SysLike, TrayStateLike, UpdateStateLike,
 } from '../src/doctor/types.ts';
 import type { Locale } from '../src/i18n.ts';
 import { SYSCTL_SCRIPT } from '../src/service/systemd.ts';
@@ -62,6 +62,8 @@ interface Opts {
   version?: string;
   latest?: string | null;
   updateState?: UpdateStateLike | null;
+  trayState?: TrayStateLike | null;
+  bin?: string;
   local?: boolean;
   locale?: Locale;
 }
@@ -97,7 +99,7 @@ function ctxFor(o: Opts = {}) {
   };
   let latestCalls = 0;
   const ctx: CheckContext = {
-    env, envFile: ENV_FILE, paths: config?.paths ?? { home: '', bin: '/srv/telinha/bin', config: '', data: '', run: '/srv/telinha/data/run', logs: '', logFile: '' },
+    env, envFile: ENV_FILE, paths: { ...(config?.paths ?? { home: '', bin: '/srv/telinha/bin', config: '', data: '', run: '/srv/telinha/data/run', logs: '', logFile: '' }), ...(o.bin ? { bin: o.bin } : {}) },
     config, configError, fetch: f.fetch, locale: o.locale ?? 'en', local: o.local ?? false,
     nat: o.nat === null ? null : { probe: async () => o.nat ?? { gateway: { kind: 'igd', gatewayIp: '192.168.0.1', localIp: '192.168.0.10' }, externalIp: PUBLIC, localIp: '192.168.0.10', errors: [] } },
     service: o.service === null ? null : async () => o.service ?? { installed: true, running: true, enabled: true, detail: '' },
@@ -106,6 +108,7 @@ function ctxFor(o: Opts = {}) {
     version: o.version ?? '0.7.0',
     latestTag: async () => { latestCalls++; return o.latest === undefined ? 'v0.7.0' : o.latest; },
     updateState: o.updateState ?? null,
+    trayState: o.trayState ?? null,
     net, sys, versions: { livekit: { version: '1.13.7' }, caddy: { version: '2.11.4' }, cloudflared: { version: '2026.9.3' } },
   };
   return { ctx, calls: f.calls, latestCalls: () => latestCalls };
@@ -136,7 +139,7 @@ const DUCK = {
 test('checks run in the documented order', () => {
   expect(CHECKS.map((c) => c.id)).toEqual([
     'config', 'binaries', 'discord-token', 'discord-intents', 'discord-guild', 'discord-role', 'discord-channels', 'discord-redirect',
-    'public-ip', 'dns', 'certificate', 'tls', 'listeners', 'service', 'gateway', 'cgnat', 'mappings', 'update',
+    'public-ip', 'dns', 'certificate', 'tls', 'listeners', 'service', 'tray', 'gateway', 'cgnat', 'mappings', 'update',
   ]);
 });
 
@@ -144,6 +147,7 @@ test('a healthy setup is all ok', async () => {
   const { ctx } = ctxFor({ files: BIN_FILES });
   const rs = await runChecks(CHECKS, ctx);
   expect(rs.filter((r) => r.status !== 'ok').map((r) => `${r.id}: ${r.summary}`)).toEqual([
+    'tray: The tray icon exists on native Windows installs only.',
     // No upnp.json and no running service to ask.
     'mappings: Skipped: the running service opens the ports; start it to see them.',
   ]);
@@ -517,6 +521,115 @@ describe('listeners and service', () => {
     const root = { sys: { platform: 'linux' as const, isRoot: true } };
     expect((await one('service', { ...root, service: missing })).fix).toBe('Run: sudo telinha service install');
     expect((await one('service', { ...root, service: disabled })).fix).toBe('Run: sudo telinha service install (again)');
+  });
+});
+
+describe('tray', () => {
+  const BIN = 'C:\\Users\\ana\\AppData\\Local\\Telinha\\bin';
+  const EXE = `${BIN}\\telinha-tray.exe`;
+  const RUN_VALUE = `"${EXE}"`;
+  const win = { platform: 'win32' as const };
+  const installed = { [norm(EXE)]: '' };
+  const state = (version: string, pid = 4242): TrayStateLike => ({ version, pid, startedAt: 1_700_000_000_000, exe: EXE });
+  const alive = (exe = 'telinha-tray.exe') => ({ processInfo: () => ({ alive: true, exe }) });
+  const gone = { processInfo: () => ({ alive: false, exe: null }) };
+  const reg = (v: string | null) => ({ registryValue: async () => v });
+  // No real PowerShell: the signature defaults to unanswered.
+  const o = (sys: Partial<SysLike>, extra: Opts = {}): Opts => ({ bin: BIN, sys: { ...win, signature: async () => null, ...sys }, ...extra });
+
+  test('skips off Windows and outside the native binary', async () => {
+    const linux = await one('tray', { bin: BIN });
+    expect(linux.status).toBe('skip');
+    expect(linux.summary).toBe('The tray icon exists on native Windows installs only.');
+    expect(linux.title).toBe('Tray icon');
+    expect((await one('tray', o({ ...reg(null) }, { compiled: false }))).status).toBe('skip');
+    const pt = await one('tray', { bin: BIN, locale: 'pt-BR' });
+    expect(pt.summary).toBe('O ícone na bandeja só existe em instalações nativas no Windows.');
+    expect(pt.title).toBe('Ícone na bandeja');
+  });
+
+  test('not installed and no Run key: ok, with the install hint', async () => {
+    const r = await one('tray', o({ ...reg(null) }));
+    expect(r.status).toBe('ok');
+    expect(r.summary).toBe('Tray icon not installed.');
+    expect(r.detail).toEqual(['Install it: telinha setup (without --no-tray)']);
+    const pt = await one('tray', o({ ...reg(null) }, { locale: 'pt-BR' }));
+    expect(pt.summary).toBe('Ícone na bandeja não instalado.');
+    expect(pt.detail).toEqual(['Pra instalar: telinha setup (sem --no-tray)']);
+  });
+
+  test('not installed but the Run key still points at it: warn', async () => {
+    const r = await one('tray', o({ ...reg(RUN_VALUE) }));
+    expect(r.status).toBe('warn');
+    expect(r.summary).toBe('Start with Windows points at a missing telinha-tray.exe.');
+    expect(r.fix).toBe('telinha tray autostart off');
+    const pt = await one('tray', o({ ...reg(RUN_VALUE) }, { locale: 'pt-BR' }));
+    expect(pt.summary).toBe('O início com o Windows aponta pra um telinha-tray.exe que não existe.');
+    expect(pt.fix).toBe('telinha tray autostart off');
+  });
+
+  test('running with the same version: ok, whatever the v prefix', async () => {
+    for (const have of ['0.7.0', 'v0.7.0']) {
+      const r = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state(have), version: '0.7.0' }));
+      expect(r.status).toBe('ok');
+      expect(r.summary).toBe(`Tray icon running (${have}).`);
+    }
+    const pt = await one('tray', o({ ...alive('TELINHA-TRAY.EXE'), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0'), locale: 'pt-BR' }));
+    expect(pt.summary).toBe('Ícone na bandeja rodando (0.7.0).');
+  });
+
+  test('running with another version: warn, prereleases compare by their own tag', async () => {
+    const r = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.6.0'), version: '0.7.0' }));
+    expect(r.status).toBe('warn');
+    expect(r.summary).toBe('Tray icon 0.6.0 does not match Telinha 0.7.0.');
+    expect(r.fix).toBe('telinha tray stop, then telinha tray start.');
+    const rc = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0-rc.1'), version: '0.7.0-rc.2' }));
+    expect(rc.status).toBe('warn');
+    expect(rc.summary).toBe('Tray icon 0.7.0-rc.1 does not match Telinha 0.7.0-rc.2.');
+    const same = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0-rc.2'), version: '0.7.0-rc.2' }));
+    expect(same.status).toBe('ok');
+    const pt = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.6.0'), locale: 'pt-BR' }));
+    expect(pt.summary).toBe('O ícone na bandeja 0.6.0 não bate com a Telinha 0.7.0.');
+    expect(pt.fix).toBe('telinha tray stop, depois telinha tray start.');
+  });
+
+  test('installed but not running: no tray.json, a dead pid, or another program on the pid', async () => {
+    const cases: [Partial<SysLike>, TrayStateLike | null][] = [
+      [alive(), null], [gone, state('0.7.0')], [alive('chrome.exe'), state('0.7.0')],
+    ];
+    for (const [s, st] of cases) {
+      const r = await one('tray', o({ ...s, ...reg(null) }, { files: installed, trayState: st }));
+      expect(r.status).toBe('ok');
+      expect(r.summary).toBe('Tray icon installed, not running.');
+      expect(r.detail).toEqual(['starts with Windows: no', 'Start it: telinha tray start']);
+    }
+    const pt = await one('tray', o({ ...gone, ...reg(null) }, { files: installed, trayState: state('0.7.0'), locale: 'pt-BR' }));
+    expect(pt.summary).toBe('Ícone na bandeja instalado, parado.');
+    expect(pt.detail).toEqual(['inicia com o Windows: não', 'Pra iniciar: telinha tray start']);
+  });
+
+  test('starts-with-Windows line: the Run value is the quoted exe, compared without case', async () => {
+    const at = async (v: string | null, locale: Locale = 'en') =>
+      (await one('tray', o({ ...alive(), ...reg(v) }, { files: installed, trayState: state('0.7.0'), locale }))).detail;
+    expect(await at(RUN_VALUE)).toEqual(['starts with Windows: yes']);
+    expect(await at(RUN_VALUE.toUpperCase())).toEqual(['starts with Windows: yes']);
+    expect(await at('"C:\\Elsewhere\\telinha-tray.exe"')).toEqual(['starts with Windows: no']);
+    expect(await at(null)).toEqual(['starts with Windows: no']);
+    expect(await at(RUN_VALUE, 'pt-BR')).toEqual(['inicia com o Windows: sim']);
+  });
+
+  test('signature line: signed, unsigned, or absent when it cannot be asked; never a warning', async () => {
+    const at = async (signature: SysLike['signature'], locale: Locale = 'en') =>
+      one('tray', o({ ...alive(), ...reg(RUN_VALUE), signature }, { files: installed, trayState: state('0.7.0'), locale }));
+    const signed = await at(async () => ({ status: 'Valid', signer: 'SignPath Foundation' }));
+    expect(signed.status).toBe('ok');
+    expect(signed.detail).toEqual(['starts with Windows: yes', 'signed by SignPath Foundation']);
+    expect((await at(async () => ({ status: 'Valid', signer: 'SignPath Foundation' }), 'pt-BR')).detail).toEqual(['inicia com o Windows: sim', 'assinado por SignPath Foundation']);
+    const unsigned = await at(async () => ({ status: 'NotSigned', signer: null }));
+    expect(unsigned.status).toBe('ok');
+    expect(unsigned.detail).toEqual(['starts with Windows: yes', 'not code-signed']);
+    expect((await at(async () => ({ status: 'NotSigned', signer: null }), 'pt-BR')).detail).toEqual(['inicia com o Windows: sim', 'sem assinatura de código']);
+    expect((await at(async () => null)).detail).toEqual(['starts with Windows: yes']);
   });
 });
 

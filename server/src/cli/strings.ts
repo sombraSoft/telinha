@@ -1,4 +1,4 @@
-// CLI strings (help, setup, doctor, service, update) in EN and pt-BR. Same
+// CLI strings (help, setup, doctor, service, update, tray) in EN and pt-BR. Same
 // pattern as i18n.ts: en is the source of keys, the Dict type forces pt-BR to
 // define every key, `{param}` is substituted. Kept apart from i18n.ts because
 // only the CLI needs them; a command with many strings keeps its own dictionary
@@ -30,6 +30,7 @@ Commands:
   doctor                   check the configuration, Discord, network and the service
   update                   install the newest version (--check: only look)
   service <action>         install | uninstall | start | stop | restart | status
+  tray <action>            start | stop | status | autostart on|off (Windows tray icon)
   help [command]           this help, or a command's
 
 Flags:
@@ -49,6 +50,7 @@ Comandos:
   doctor                   verifica a configuração, o Discord, a rede e o serviço
   update                   instala a versão mais nova (--check: só verifica)
   service <ação>           install | uninstall | start | stop | restart | status
+  tray <ação>              start | stop | status | autostart on|off (ícone na bandeja do Windows)
   help [comando]           esta ajuda, ou a de um comando
 
 Opções:
@@ -66,6 +68,7 @@ const en = {
   helpDoctor: 'Usage: telinha doctor [--json] [--no-phone] [--local]\n\nChecks the configuration, Discord, DNS, TLS, the router and the service. On a terminal the results are an interactive checklist: Enter shows how to fix a row, r runs the checks again. --local skips internet checks, --no-phone skips the phone test.',
   helpUpdate: 'Usage: telinha update [--check | --now]\n\n--check only shows what would be installed; --now installs even with rooms open.',
   helpService: 'Usage: telinha service install [--firewall] [--user] | uninstall | start | stop | restart | status',
+  helpTray: 'Usage: telinha tray start | stop | status | autostart on|off\n\nThe Windows tray icon next to the clock: start or stop it, see whether it runs and whether it starts when you sign in. Windows only.',
   unknownCommand: 'unknown command {cmd}',
   noConfig: 'No configuration yet ({path}).',
   offerSetup: 'Set Telinha up now?',
@@ -92,6 +95,7 @@ const ptBR: Dict = {
   helpDoctor: 'Uso: telinha doctor [--json] [--no-phone] [--local]\n\nVerifica a configuração, o Discord, o DNS, o TLS, o roteador e o serviço. Num terminal o resultado é uma lista interativa: Enter mostra como corrigir uma linha, r roda as verificações de novo. --local pula as verificações pela internet, --no-phone pula o teste no celular.',
   helpUpdate: 'Uso: telinha update [--check | --now]\n\n--check só mostra o que seria instalado; --now instala mesmo com salas abertas.',
   helpService: 'Uso: telinha service install [--firewall] [--user] | uninstall | start | stop | restart | status',
+  helpTray: 'Uso: telinha tray start | stop | status | autostart on|off\n\nO ícone da Telinha na bandeja, ao lado do relógio: inicia ou para ele, mostra se está rodando e se inicia quando você entra no Windows. Só no Windows.',
   unknownCommand: 'comando desconhecido {cmd}',
   noConfig: 'Ainda não tem configuração ({path}).',
   offerSetup: 'Configurar a Telinha agora?',

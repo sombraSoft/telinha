@@ -982,6 +982,30 @@ describe('non-interactive', () => {
     expect(out).toContain("  Start-Process -FilePath 'C:\\T\\bin\\telinha.exe' -ArgumentList 'service install --home C:\\T --lang en --user pc\\me --sid S-1-5-21-9' -Verb RunAs");
   });
 
+  test('Windows: --tray-autostart and --no-tray reach the tray step, which runs even with --no-service', async () => {
+    const home = 'C:\\T';
+    const whoami = (cmd: string[]) => (cmd[0]!.endsWith('whoami.exe') ? { code: 0, stdout: '"User Name","SID"\r\n"pc\\me","S-1-5-21-9"\r\n', stderr: '' } : { code: 0, stdout: 'False', stderr: '' });
+    let term = new FakeTerm();
+    let { ctx } = ctxFor([...ARGS, '--no-upnp', '--no-doctor', '--no-service', '--tray-autostart'], { platform: 'win32', home, compiled: true, env: SECRETS });
+    let fake = fakeDeps(term, { platform: 'win32', isRoot: false, execPath: 'C:\\dl\\telinha.exe', files: { 'C:\\dl\\telinha-tray.exe': 'MZ' }, spawn: whoami });
+    const launches: { exe: string; env: Record<string, string> }[] = [];
+    const deps: SetupDeps = { ...fake.deps, tray: { launch: (exe, env) => void launches.push({ exe, env }) }, processInfo: () => ({ alive: false, exe: null }) };
+    expect(await go(ctx, deps)).toBe(0);
+    expect(fake.rec.fsCalls).toContain('copy C:\\dl\\telinha-tray.exe C:\\T\\bin\\telinha-tray.exe');
+    expect(fake.rec.spawn).toContainEqual(['reg', 'add', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'Telinha', '/t', 'REG_SZ', '/d', '"C:\\T\\bin\\telinha-tray.exe"', '/f']);
+    expect(launches.map((l) => [l.exe, l.env.TELINHA_HOME])).toEqual([['C:\\T\\bin\\telinha-tray.exe', home]]);
+    expect(term.text_()).toContain('ok Tray icon started (next to the clock).');
+
+    term = new FakeTerm();
+    ({ ctx } = ctxFor([...ARGS, '--no-upnp', '--no-doctor', '--no-service', '--no-tray'], { platform: 'win32', home, compiled: true, env: SECRETS }));
+    fake = fakeDeps(term, { platform: 'win32', isRoot: false, execPath: 'C:\\T\\bin\\telinha.exe', files: { 'C:\\T\\bin\\telinha-tray.exe': 'MZ' }, spawn: whoami });
+    expect(await go(ctx, { ...fake.deps, tray: { launch: () => launches.push({ exe: 'again', env: {} }) } })).toBe(0);
+    expect(fake.files.has('C:\\T\\bin\\telinha-tray.exe')).toBe(false);
+    expect(fake.rec.spawn).toContainEqual(['reg', 'delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'Telinha', '/f']);
+    expect(launches.length).toBe(1);
+    expect(term.text_()).toContain('Tray icon not installed.');
+  });
+
   test('Linux user, VPS on 443: the sysctl step runs with sudo -n; a failure prints the command, the file stays on 443', async () => {
     const home = '/home/me/.local/share/telinha';
     const term = new FakeTerm();

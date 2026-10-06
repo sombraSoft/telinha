@@ -2,7 +2,7 @@
 // Discord, the public address, the local service, the router, updates. Every
 // outside call goes through the CheckContext so tests run offline.
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import versionsJson from '../../../versions.json' with { type: 'json' };
 import { KNOWN_KEYS, upnpMappings, type Config } from '../config.ts';
 import { createDuckDns, DUCKDNS_REJECTED } from '../ddns.ts';
@@ -10,6 +10,8 @@ import { parseEnvFile } from '../envfile.ts';
 import type { Locale } from '../i18n.ts';
 import * as netinfo from '../netinfo.ts';
 import { SYSCTL_SCRIPT } from '../service/systemd.ts';
+import { defaultProcessInfo, sameExe } from '../supervisor.ts';
+import { compareVersions as compareSemver } from '../update/updater.ts';
 import type {
   Check, CheckContext, CheckResult, CheckStatus, MapperStatusLike, MappingLike, NatProbeLike, NetLike, SysLike,
   UpdateStatusLike,
@@ -17,6 +19,8 @@ import type {
 
 const DISCORD_API = 'https://discord.com/api/v10';
 const DAY_MS = 86_400_000;
+const SIGNATURE_TIMEOUT_MS = 5_000;
+const RUN_KEY = String.raw`Software\Microsoft\Windows\CurrentVersion\Run`;
 // VIEW_CHANNEL + SEND_MESSAGES + READ_MESSAGE_HISTORY
 const BOT_PERMISSIONS = 68608;
 // Either the limited (unverified app) or the full intent bit counts.
@@ -40,6 +44,7 @@ const en = {
   'title.tls': 'HTTPS certificate',
   'title.listeners': 'Local listeners',
   'title.service': 'Background service',
+  'title.tray': 'Tray icon',
   'title.gateway': 'Router',
   'title.cgnat': 'Carrier NAT',
   'title.mappings': 'Port forwarding',
@@ -178,6 +183,21 @@ const en = {
   serviceDisabledFixRoot: 'Run: sudo telinha service install (again)',
   serviceOk: 'The service is installed, enabled and running.',
 
+  traySkip: 'The tray icon exists on native Windows installs only.',
+  trayNotInstalled: 'Tray icon not installed.',
+  trayNotInstalledDetail: 'Install it: telinha setup (without --no-tray)',
+  trayStaleRun: 'Start with Windows points at a missing telinha-tray.exe.',
+  trayStaleRunFix: 'telinha tray autostart off',
+  trayOk: 'Tray icon running ({version}).',
+  trayMismatch: 'Tray icon {have} does not match Telinha {want}.',
+  trayMismatchFix: 'telinha tray stop, then telinha tray start.',
+  trayStopped: 'Tray icon installed, not running.',
+  trayStoppedDetail: 'Start it: telinha tray start',
+  trayAutostartYes: 'starts with Windows: yes',
+  trayAutostartNo: 'starts with Windows: no',
+  traySigned: 'signed by {signer}',
+  trayUnsigned: 'not code-signed',
+
   natNone: 'Skipped: the router probe is not available here.',
   natPublicHost: 'This computer has a public address ({ip}); no router in the way.',
   gatewayOk: 'Router at {gw} speaks {kind}; it reports external IP {ip}.',
@@ -232,6 +252,7 @@ const ptBR: Dict = {
   'title.tls': 'Certificado HTTPS',
   'title.listeners': 'Portas locais',
   'title.service': 'Serviço em segundo plano',
+  'title.tray': 'Ícone na bandeja',
   'title.gateway': 'Roteador',
   'title.cgnat': 'NAT da operadora',
   'title.mappings': 'Redirecionamento de portas',
@@ -370,6 +391,21 @@ const ptBR: Dict = {
   serviceDisabledFixRoot: 'Roda: sudo telinha service install (de novo)',
   serviceOk: 'O serviço está instalado, habilitado e rodando.',
 
+  traySkip: 'O ícone na bandeja só existe em instalações nativas no Windows.',
+  trayNotInstalled: 'Ícone na bandeja não instalado.',
+  trayNotInstalledDetail: 'Pra instalar: telinha setup (sem --no-tray)',
+  trayStaleRun: 'O início com o Windows aponta pra um telinha-tray.exe que não existe.',
+  trayStaleRunFix: 'telinha tray autostart off',
+  trayOk: 'Ícone na bandeja rodando ({version}).',
+  trayMismatch: 'O ícone na bandeja {have} não bate com a Telinha {want}.',
+  trayMismatchFix: 'telinha tray stop, depois telinha tray start.',
+  trayStopped: 'Ícone na bandeja instalado, parado.',
+  trayStoppedDetail: 'Pra iniciar: telinha tray start',
+  trayAutostartYes: 'inicia com o Windows: sim',
+  trayAutostartNo: 'inicia com o Windows: não',
+  traySigned: 'assinado por {signer}',
+  trayUnsigned: 'sem assinatura de código',
+
   natNone: 'Pulado: o teste do roteador não está disponível aqui.',
   natPublicHost: 'Este computador tem endereço público ({ip}); nenhum roteador no meio.',
   gatewayOk: 'O roteador em {gw} fala {kind}; ele informa o IP externo {ip}.',
@@ -496,6 +532,40 @@ const realSys: SysLike = {
   },
   which: (name) => Bun.which(name),
   exists: (path) => existsSync(path),
+  processInfo: defaultProcessInfo('win32'),
+  async registryValue(key, name) {
+    try {
+      const p = Bun.spawn(['reg', 'query', `HKCU\\${key}`, '/v', name], { stdout: 'pipe', stderr: 'ignore' });
+      const out = await new Response(p.stdout).text();
+      if ((await p.exited) !== 0) return null;
+      // "    Telinha    REG_SZ    "C:\...\telinha-tray.exe""
+      const m = new RegExp('^\\s*' + name + '\\s+REG_SZ\\s+(.*?)\\s*$', 'im').exec(out);
+      return m?.[1] || null;
+    } catch {
+      return null;
+    }
+  },
+  async signature(path) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // The path travels in the environment, never spliced into the script.
+      const script = '$s = Get-AuthenticodeSignature -LiteralPath $env:TELINHA_SIG_PATH; '
+        + '$n = if ($s.SignerCertificate) { $s.SignerCertificate.GetNameInfo("SimpleName", $false) } else { $null }; '
+        + '@{ status = [string]$s.Status; signer = $n } | ConvertTo-Json -Compress';
+      const p = Bun.spawn(['powershell', '-NoProfile', '-NonInteractive', '-Command', script], {
+        stdout: 'pipe', stderr: 'ignore', env: { ...process.env, TELINHA_SIG_PATH: path },
+      });
+      timer = setTimeout(() => p.kill(), SIGNATURE_TIMEOUT_MS);
+      const out = await new Response(p.stdout).text();
+      if ((await p.exited) !== 0) return null;
+      const j = JSON.parse(out) as { status?: unknown; signer?: unknown };
+      return typeof j.status === 'string' ? { status: j.status, signer: typeof j.signer === 'string' && j.signer ? j.signer : null } : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  },
 };
 
 const sys = (ctx: CheckContext): SysLike => ({ ...realSys, ...ctx.sys });
@@ -1067,6 +1137,38 @@ const service: Check = {
   },
 };
 
+const TRAY_EXE = 'telinha-tray.exe';
+
+const tray: Check = {
+  id: 'tray',
+  async run(ctx) {
+    const L = ctx.locale;
+    const s = sys(ctx);
+    if (s.platform !== 'win32' || !ctx.compiled) return make(ctx, 'tray', 'skip', tr(L, 'traySkip'));
+    const exe = win32.join(ctx.paths.bin, TRAY_EXE);
+    const runValue = await once(ctx, 'trayRun', async () => (await s.registryValue?.(RUN_KEY, 'Telinha')) ?? null);
+    if (!s.exists(exe)) {
+      // A Run entry left behind starts nothing and shows an error at every login.
+      if (runValue) return make(ctx, 'tray', 'warn', tr(L, 'trayStaleRun'), { fix: tr(L, 'trayStaleRunFix') });
+      return make(ctx, 'tray', 'ok', tr(L, 'trayNotInstalled'), { detail: [tr(L, 'trayNotInstalledDetail')] });
+    }
+    const autostart = runValue?.trim().toLowerCase() === `"${exe}"`.toLowerCase();
+    const detail = [tr(L, autostart ? 'trayAutostartYes' : 'trayAutostartNo')];
+    // Never a warning: unsigned builds are legitimate.
+    const sig = await once(ctx, 'traySignature', async () => (await s.signature?.(exe)) ?? null);
+    if (sig) detail.push(sig.status === 'Valid' && sig.signer ? tr(L, 'traySigned', { signer: sig.signer }) : tr(L, 'trayUnsigned'));
+    const st = ctx.trayState;
+    const info = st ? s.processInfo?.(st.pid) : undefined;
+    if (!st || !info?.alive || !sameExe(TRAY_EXE, info.exe, 'win32')) {
+      return make(ctx, 'tray', 'ok', tr(L, 'trayStopped'), { detail: [...detail, tr(L, 'trayStoppedDetail')] });
+    }
+    if (compareSemver(st.version, ctx.version) !== 0) {
+      return make(ctx, 'tray', 'warn', tr(L, 'trayMismatch', { have: st.version, want: ctx.version }), { detail, fix: tr(L, 'trayMismatchFix') });
+    }
+    return make(ctx, 'tray', 'ok', tr(L, 'trayOk', { version: st.version }), { detail });
+  },
+};
+
 const KIND: Record<string, string> = { igd: 'UPnP', pcp: 'PCP', natpmp: 'NAT-PMP' };
 
 /** A host whose own address is public (a VPS) has no router to ask. */
@@ -1189,7 +1291,7 @@ export const CHECKS: readonly Check[] = [
   config, binaries,
   discordToken, discordIntents, discordGuild, discordRole, discordChannels, discordRedirect,
   publicIpCheck, dnsCheck, certificate, tlsCheck,
-  listeners, service,
+  listeners, service, tray,
   gateway, cgnat, mappings,
   update,
 ];

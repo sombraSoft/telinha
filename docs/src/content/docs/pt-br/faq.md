@@ -60,12 +60,14 @@ Dentro dela (`TELINHA_HOME`, ou `--home DIR` em qualquer comando, aponta para ou
 | --- | --- |
 | `bin/telinha[.exe]` | O programa (os instaladores e o atualizador escrevem nele) |
 | `bin/telinha.old-<version>[.exe]`, `bin/telinha.failed-<tag>[.exe]` | O executável que uma atualização substituiu, ou um que foi revertido; apagado depois da próxima partida bem-sucedida (no Windows, um que o serviço ainda usa fica até o serviço reiniciar) |
+| `bin/telinha-tray.exe` | Windows: o [ícone da bandeja](/telinha/pt-br/guides/tray/); as atualizações o substituem como o `telinha.exe` (com as mesmas sobras `.old-` e `.failed-`) |
 | `bin/livekit-server`, `caddy`, `cloudflared` (`.exe` no Windows) e `<tool>.version` | Os binários auxiliares de que esta configuração precisa, conferidos por sha256 quando baixados (pelo setup, ou num início que não os encontra ou os encontra numa versão fixada mais antiga); o `PATH` é consultado depois do `bin/`. O `caddy` é o build do Caddy da própria Telinha (com o módulo DNS do DuckDNS e o layer4), baixado da versão da Telinha e conferido com o `SHA256SUMS` dela |
 | `config/telinha.env` | A configuração, só do dono: Linux, instalação de usuário, modo 0600; Linux, instalação como root, `root:telinha` 0640 numa `config/` `root:telinha` 0750 (o serviço lê pelo grupo); no Windows uma ACL só com você, SYSTEM e Administradores |
 | `data/telinha.sqlite` | O registro das salas. Se ele se perder, só os links das salas abertas naquele momento deixam de funcionar |
-| `data/run/` | O `livekit.yaml` e o `Caddyfile` gerados (reescritos antes de cada início: edite o `telinha.env`, nunca estes) e o estado da execução: `children.json`, `public-ip`, `telinha.pid` (um `run` por pasta), `service.pid`, `control.token`, `update.json`, `upnp.json` |
+| `data/run/` | O `livekit.yaml` e o `Caddyfile` gerados (reescritos antes de cada início: edite o `telinha.env`, nunca estes) e o estado da execução: `children.json`, `public-ip`, `telinha.pid` (um `run` por pasta), `service.pid`, `control.token`, `update.json`, `upnp.json` e, no Windows, `tray.json` (escrito pelo ícone da bandeja enquanto ele roda) |
 | `data/caddy/` | Os certificados e a conta ACME do Caddy (modo direto) |
 | `logs/telinha.log` (`.1` a `.5`) | O log do serviço no Windows, rotacionado a cada 10 MB (no Linux o log vai para o journal) |
+| `logs/telinha-tray.log` | Windows: o log do próprio ícone da bandeja |
 | `service/telinha-task.xml`, `install-result.json` | Windows: a tarefa registrada e o que a instalação elevada fez |
 
 ## É seguro deixar exposto?
@@ -80,7 +82,7 @@ Instalação nativa: remova o serviço e depois apague a pasta da Telinha.
 telinha service uninstall --firewall
 ```
 
-No Windows, rode em um terminal de administrador. O `uninstall` mantém os arquivos, então apague a pasta você mesmo depois (veja a tabela acima). Uma instalação Linux como root também tem `/usr/local/lib/telinha` e `/usr/local/bin/telinha`.
+No Windows, rode em um terminal de administrador; lá ele também fecha o ícone da bandeja e desliga o *Iniciar com o Windows* dele. O `uninstall` mantém os arquivos, então apague a pasta você mesmo depois (veja a tabela acima). Uma instalação Linux como root também tem `/usr/local/lib/telinha` e `/usr/local/bin/telinha`.
 
 Docker:
 
@@ -95,7 +97,6 @@ O `down -v` também remove o volume `telinha-data` (o registro das salas e os ce
 
 ## O que está planejado?
 
-- Windows: um app de bandeja e binários assinados.
 - Mídia: LiveKit Cloud (`MEDIA=cloud`) para quem não consegue abrir portas, e TURN sobre TLS na 443 (o módulo layer4 de que isso precisa já está no build do Caddy da Telinha).
 
 Nada disso tem data.

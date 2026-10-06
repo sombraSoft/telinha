@@ -7,11 +7,12 @@ import { inferHosting, SSLIP_RE, type HostInfo, type Hosting } from './host.ts';
 import { SNOWFLAKE_RE, validCommand } from './discord.ts';
 import { currentChoice, DEFAULT_HOME_HTTPS_PORT, extractTunnelToken, homeChoice, parseDuckDomain, parseHost, takenPort, validTunnelToken } from './domain.ts';
 import {
-  addressChoice, addressValues, ALWAYS_COUNTED, directLow, fileHosting, flowIds, mediaPorts, QUESTIONS, txt,
+  addressChoice, addressValues, ALWAYS_COUNTED, directLow, fileHosting, flowIds, mediaPorts, QUESTIONS, trayHere, txt,
   type AddressChoice, type AnswerId, type Answers, type ModelEnv, type QuestionId, type Text,
 } from './model.ts';
 import { q } from './qstrings.ts';
 import type { Values } from './steps.ts';
+import type { TrayChoice } from './tray.ts';
 import type { Locale } from '../strings.ts';
 
 export interface ResolveBase { file: Values; host: HostInfo | null; locale: Locale; langFlag: boolean; docker: boolean; compiled: boolean }
@@ -112,7 +113,17 @@ export interface SetupFlagValues {
   'media-tcp'?: string; 'media-udp'?: string; 'node-ip'?: string;
   'client-id'?: string; guild?: string; role?: string; channels?: string; command?: string; group?: string;
   upnp?: string; 'auto-update'?: string; lang?: string;
-  'no-discord-check'?: boolean;
+  'no-discord-check'?: boolean; 'no-tray'?: boolean; 'tray-autostart'?: boolean;
+}
+
+/**
+ * The tray icon from the flags; null where there is none. Without --tray-autostart
+ * the sign-in value stays as it is; --no-tray removes it with the icon.
+ */
+export function trayFromFlags(flags: SetupFlagValues, env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>): TrayChoice | null {
+  if (!trayHere(env)) return null;
+  if (flags['no-tray']) return { install: false, autostart: false };
+  return { install: true, autostart: flags['tray-autostart'] ? true : null };
 }
 
 type SecretKey = 'DISCORD_TOKEN' | 'DISCORD_CLIENT_SECRET' | 'TUNNEL_TOKEN' | 'DUCKDNS_TOKEN';

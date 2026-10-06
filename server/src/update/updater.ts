@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import type { Paths } from '../paths.ts';
 import type { Target } from '../version.ts';
 import { isCompiled } from '../version.ts';
-import { downloadRelease, newExeName } from './download.ts';
+import { downloadRelease, newExeName, trayNewExeName } from './download.ts';
 import { isStableTag } from './github.ts';
 import { readState, statePath as defaultStatePath, writeState } from './state.ts';
 import { finish as finishSwap, stage } from './swap.ts';
@@ -217,7 +217,7 @@ export function createUpdater(o: UpdaterOptions): Updater {
       o.onApplied(tag);
       return result(check, 'staged', `${tag} installed; restarting to apply it`);
     } catch (e) {
-      await fs.rm(join(o.paths.bin, newExeName(o.target))).catch(() => {});
+      for (const name of [newExeName(o.target), trayNewExeName(o.target)]) await fs.rm(join(o.paths.bin, name)).catch(() => {});
       if (e instanceof FailedError) {
         state.failed = { tag, at: now(), reason: e.message };
         await save();
@@ -268,6 +268,7 @@ export function createUpdater(o: UpdaterOptions): Updater {
         latest: latestRaw?.tag && (isStableTag(latestRaw.tag) || (pin && sameVersion(latestRaw.tag, pin))) ? latestRaw.tag : null,
         pin,
         staged: state.staged ?? null,
+        applied: state.applied ?? null,
         failed: state.failed ?? null,
         pending: state.pending ?? null,
         deferredSince: state.deferredSince ?? null,
@@ -277,7 +278,7 @@ export function createUpdater(o: UpdaterOptions): Updater {
     finish: () => serialize(async () => {
       try {
         await init();
-        await finishSwap({ fs, bin: o.paths.bin, statePath, log });
+        await finishSwap({ fs, bin: o.paths.bin, statePath, now, log });
         state = await readState(fs, statePath);
       } catch (e) {
         log(`update: finish failed: ${errorMessage(e)}`);

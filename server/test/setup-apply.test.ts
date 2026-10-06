@@ -169,7 +169,7 @@ const VALUES = (more: Values = {}): Values => ({
 });
 
 const OPTS = (more: Partial<ApplyOptions> = {}): ApplyOptions => ({
-  docker: false, compiled: true, sysctl: 'auto', rotateCookie: false, doctorMode: 'data',
+  docker: false, compiled: true, sysctl: 'auto', rotateCookie: false, doctorMode: 'data', tray: null,
   flags: { noService: false, noFirewall: false, noUpnp: false, noDoctor: false, offline: false }, ...more,
 });
 
@@ -214,6 +214,13 @@ describe('planTasks', () => {
     expect(planTasks(VALUES(), flags({ noService: true }))).not.toContain('service');
     expect(planTasks(VALUES(), flags({ noUpnp: true }))).not.toContain('router');
     expect(planTasks(VALUES(), flags({ noDoctor: true }))).toEqual(['discord', 'config', 'binaries', 'service', 'router', 'start']);
+  });
+  test('the tray icon right after the service, when there is one (native Windows)', () => {
+    const tray = { install: true, autostart: null };
+    expect(planTasks(VALUES(), OPTS({ tray }))).toEqual(['discord', 'config', 'binaries', 'service', 'tray', 'router', 'start', 'cert', 'doctor']);
+    // --no-service keeps the icon: it shows Telinha started by hand too.
+    expect(planTasks(VALUES(), OPTS({ tray, flags: { ...OPTS().flags, noService: true } })).slice(2, 4)).toEqual(['binaries', 'tray']);
+    expect(planTasks(VALUES(), OPTS({ tray, docker: true }))).not.toContain('tray');
   });
   test('a tunnel or an own proxy has no certificate of its own to wait for', () => {
     expect(planTasks(VALUES({ INGRESS: 'tunnel' }), OPTS())).not.toContain('cert');

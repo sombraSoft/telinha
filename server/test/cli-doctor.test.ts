@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CliContext } from '../src/cli/args.ts';
@@ -138,6 +138,21 @@ describe('telinha doctor', () => {
     expect(typeof got.nat?.probe).toBe('function');
     // --local: no phone test either.
     expect(ctl.calls).toEqual([]);
+  });
+
+  test('tray.json is read from data/run: absent, corrupt or incomplete is null', async () => {
+    const c = ctx({ argv: ['doctor'] });
+    const build = () => buildCheckContext(c.ctx, { local: true, control: control().client });
+    expect((await build()).trayState).toBeNull();
+    mkdirSync(c.ctx.paths.run, { recursive: true });
+    const file = join(c.ctx.paths.run, 'tray.json');
+    writeFileSync(file, '{not json');
+    expect((await build()).trayState).toBeNull();
+    writeFileSync(file, JSON.stringify({ version: '0.7.0' }));
+    expect((await build()).trayState).toBeNull();
+    const state = { version: '0.7.0', pid: 1234, startedAt: 1_700_000_000_000, exe: 'C:\\Users\\ana\\AppData\\Local\\Telinha\\bin\\telinha-tray.exe' };
+    writeFileSync(file, JSON.stringify(state));
+    expect((await build()).trayState).toEqual(state);
   });
 
   test('--json: only JSON on stdout', async () => {

@@ -1,8 +1,10 @@
 // Native binaries: Bun.build with `compile` per target (the Solid JSX plugin
-// and the built page embedded), then the release archives and SHA256SUMS. Also
-// packs our Caddy build (the Dockerfile's caddy-export output) as a release archive.
+// and the built page embedded), then the release archives and SHA256SUMS. The
+// Windows zips also carry the tray icon (telinha-tray.exe, built by dotnet).
+// Also packs our Caddy build (the Dockerfile's caddy-export output) as a release archive.
 //
-//   bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out dist-bin] [--smoke]
+//   bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out dist-bin] [--smoke] [--tray PATH] [--no-pack]
+//   bun scripts/build-binary.ts pack --target <t>... --from DIR [--tray PATH] [--out dist-bin]
 //   bun scripts/build-binary.ts sums [--out dist-bin]
 //   bun scripts/build-binary.ts pack-caddy --target <one target> --from DIR [--out dist-bin]
 //
@@ -10,12 +12,16 @@
 // Default: this OS's targets. Windows targets need a Windows host: the version
 // resource (ProductName etc.) is only written there. Cross builds need every
 // OpenTUI native package: `bun install --os='*' --cpu='*'` first.
+// --no-pack compiles only (no archives, no sums). `pack` archives binaries built
+// earlier (the release signs them in between): DIR/<target>/telinha[.exe] and,
+// for Windows, --tray else DIR/tray/telinha-tray.exe.
 import solidPlugin from '@opentui/solid/bun-plugin';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { writeTarGz, writeZip, type Entry } from '../server/src/archive.ts';
 import { caddyAssetName } from '../server/src/releasetag.ts';
+import { TRAY_EXE } from '../server/src/service/tray.ts';
 import { TARGETS, hostTarget, type Target } from '../server/src/version.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -41,7 +47,7 @@ const SIZE_MARGIN = 20_000_000;
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
 
 const isWindows = (t: Target) => t.startsWith('windows-');
-const exeName = (t: Target) => (isWindows(t) ? 'telinha.exe' : 'telinha');
+export const exeName = (t: Target) => (isWindows(t) ? 'telinha.exe' : 'telinha');
 // Linux gets tar.gz: minimal Debian/Alpine have tar but no unzip.
 export const assetName = (t: Target) => `telinha-${t}.${isWindows(t) ? 'zip' : 'tar.gz'}`;
 /** Our Caddy for a target, named by releasetag.ts so the fetcher and this packer agree. */
@@ -55,13 +61,17 @@ const EXTRA_SUMMED = ['telinha-deploy.tar.gz', 'telinha-image.digest'];
 
 const step = (s: string) => console.log(`\n==> ${s}`);
 
-interface Options {
-  mode: 'compile' | 'sums' | 'pack-caddy';
+export interface Options {
+  mode: 'compile' | 'pack' | 'sums' | 'pack-caddy';
   targets: Target[];
   version: string;
   out: string;
   smoke: boolean;
-  /** pack-caddy: the directory holding caddy[.exe]. */
+  /** compile: write the archives and SHA256SUMS (off with --no-pack). */
+  pack: boolean;
+  /** compile, pack: the telinha-tray.exe for the Windows zips. */
+  tray?: string;
+  /** pack: the compile output (DIR/<target>/...); pack-caddy: the directory holding caddy[.exe]. */
   from?: string;
 }
 
@@ -74,14 +84,17 @@ function expand(t: string, platform: string): Target[] {
 }
 
 export function parseArgs(argv: string[], platform: string = process.platform): Options {
-  const usage = 'usage: bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out DIR] [--smoke]\n'
+  const usage = 'usage: bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out DIR] [--smoke] [--tray PATH] [--no-pack]\n'
+    + '       bun scripts/build-binary.ts pack --target <t>... --from DIR [--tray PATH] [--out DIR]\n'
     + '       bun scripts/build-binary.ts sums [--out DIR]\n'
     + '       bun scripts/build-binary.ts pack-caddy --target <t> --from DIR [--out DIR]';
   let mode: Options['mode'] = 'compile';
   let from: string | undefined;
+  let tray: string | undefined;
   let version: string | undefined;
   let out = 'dist-bin';
   let smoke = false;
+  let pack = true;
   const wanted: Target[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -90,20 +103,29 @@ export function parseArgs(argv: string[], platform: string = process.platform): 
       if (!v) throw new Error(`${a} needs a value\n${usage}`);
       return v;
     };
-    if ((a === 'sums' || a === 'pack-caddy') && i === 0) mode = a;
+    if ((a === 'pack' || a === 'sums' || a === 'pack-caddy') && i === 0) mode = a;
     else if (a === '--target' && mode !== 'sums') wanted.push(...expand(value(), platform));
     else if (a === '--version' && mode === 'compile') version = value();
     else if (a === '--out') out = value();
     else if (a === '--smoke' && mode === 'compile') smoke = true;
-    else if (a === '--from' && mode === 'pack-caddy') from = value();
+    else if (a === '--no-pack' && mode === 'compile') pack = false;
+    else if (a === '--tray' && (mode === 'compile' || mode === 'pack')) tray = resolve(value());
+    else if (a === '--from' && (mode === 'pack' || mode === 'pack-caddy')) from = value();
     else throw new Error(`unknown argument ${a}\n${usage}`);
   }
   if (mode === 'pack-caddy') {
     // Packing only copies bytes, so any host packs any target.
     const targets = [...new Set(wanted)];
     if (targets.length !== 1 || !from) throw new Error(`pack-caddy needs one --target and --from\n${usage}`);
-    return { mode, targets, version: '', out: resolve(ROOT, out), smoke: false, from: resolve(from) };
+    return { mode, targets, version: '', out: resolve(ROOT, out), smoke: false, pack: true, from: resolve(from) };
   }
+  if (mode === 'pack') {
+    // Same here: the release packs exes compiled (and signed) by other jobs.
+    const targets = TARGETS.filter((t) => wanted.includes(t));
+    if (!targets.length || !from) throw new Error(`pack needs --target and --from\n${usage}`);
+    return { mode, targets, version: '', out: resolve(ROOT, out), smoke: false, pack: true, tray, from: resolve(from) };
+  }
+  if (tray && !pack) throw new Error(`--tray goes into the zips, and --no-pack writes none\n${usage}`);
   // Other hosts (macOS included) can still cross-compile the Linux targets.
   const targets = TARGETS.filter((t) => (wanted.length ? wanted.includes(t) : isWindows(t) === (platform === 'win32')));
   if (platform !== 'win32' && targets.some(isWindows)) {
@@ -111,7 +133,21 @@ export function parseArgs(argv: string[], platform: string = process.platform): 
   }
   version ??= (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string }).version;
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`--version must look like 1.2.3 or 1.2.3-rc.1, got ${version}`);
-  return { mode, targets, version, out: resolve(ROOT, out), smoke };
+  return { mode, targets, version, out: resolve(ROOT, out), smoke, pack, tray };
+}
+
+/** Where `pack` reads a target's binaries: compile's layout under DIR, the tray in DIR/tray unless given. */
+export function packSources(t: Target, from: string, tray?: string): { exe: string; tray?: string } {
+  const exe = join(from, t, exeName(t));
+  return isWindows(t) ? { exe, tray: tray ?? join(from, 'tray', TRAY_EXE) } : { exe };
+}
+
+/** A target's archive contents (name inside, mode, file on disk); only Windows zips carry the tray. */
+export function archiveFiles(t: Target, files: { exe: string; tray?: string; license: string }): { path: string; mode: number; source: string }[] {
+  const out = [{ path: exeName(t), mode: 0o755, source: files.exe }];
+  if (isWindows(t) && files.tray) out.push({ path: TRAY_EXE, mode: 0o755, source: files.tray });
+  out.push({ path: 'LICENSE', mode: 0o644, source: files.license });
+  return out;
 }
 
 function shortCommit(): string {
@@ -167,14 +203,15 @@ async function compile(t: Target, o: Options, commit: string): Promise<string> {
   return outfile;
 }
 
-async function pack(t: Target, exe: string, out: string): Promise<string> {
-  const entries: Entry[] = [
-    { path: exeName(t), mode: 0o755, data: await Bun.file(exe).bytes() },
-    { path: 'LICENSE', mode: 0o644, data: await Bun.file(join(ROOT, 'LICENSE')).bytes() },
-  ];
+async function pack(t: Target, files: { exe: string; tray?: string }, out: string): Promise<string> {
+  const entries: Entry[] = [];
+  for (const f of archiveFiles(t, { ...files, license: join(ROOT, 'LICENSE') })) {
+    if (!existsSync(f.source)) throw new Error(`no ${f.path} at ${f.source}`);
+    entries.push({ path: f.path, mode: f.mode, data: await Bun.file(f.source).bytes() });
+  }
   const file = join(out, assetName(t));
   await Bun.write(file, isWindows(t) ? writeZip(entries) : writeTarGz(entries));
-  console.log(`${file} (${mb(statSync(file).size)}; ${exeName(t)} ${mb(statSync(exe).size)})`);
+  console.log(`${file} (${mb(statSync(file).size)}; ${exeName(t)} ${mb(statSync(files.exe).size)})`);
   return file;
 }
 
@@ -244,6 +281,19 @@ async function main(argv: string[]): Promise<void> {
     await packCaddy(o.targets[0]!, o.from!, o.out);
     return;
   }
+  if (o.mode === 'pack') {
+    await mkdir(o.out, { recursive: true });
+    const assets: string[] = [];
+    for (const t of o.targets) {
+      step(`pack ${t}`);
+      await pack(t, packSources(t, o.from!, o.tray), o.out);
+      assets.push(assetName(t));
+    }
+    step('SHA256SUMS');
+    await writeSums(o.out, assets);
+    step('ok');
+    return;
+  }
   if (o.mode === 'sums') {
     const present = existsSync(o.out) ? readdirSync(o.out) : [];
     const names = present.filter((n) => ASSETS.has(n));
@@ -254,16 +304,21 @@ async function main(argv: string[]): Promise<void> {
   }
   // Whatever is in web/dist gets embedded; without the page the binary is useless.
   if (!existsSync(join(ROOT, 'web', 'dist', 'index.html'))) throw new Error('web/dist/index.html missing: run bun run build first');
+  if (o.tray && !existsSync(o.tray)) throw new Error(`no telinha-tray.exe at ${o.tray}`);
+  if (o.pack && !o.tray && o.targets.some(isWindows)) console.warn('warning: windows zips without telinha-tray.exe (no --tray)');
   await mkdir(o.out, { recursive: true });
   const commit = shortCommit();
   const assets: string[] = [];
   for (const t of o.targets) {
     const exe = await compile(t, o, commit);
-    await pack(t, exe, o.out);
+    if (!o.pack) continue;
+    await pack(t, { exe, tray: o.tray }, o.out);
     assets.push(assetName(t));
   }
-  step('SHA256SUMS');
-  await writeSums(o.out, assets);
+  if (o.pack) {
+    step('SHA256SUMS');
+    await writeSums(o.out, assets);
+  }
   if (o.smoke) await smoke(o);
   step('ok');
 }

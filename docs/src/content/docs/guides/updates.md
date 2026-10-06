@@ -44,6 +44,15 @@ release pins newer helper programs, that first start downloads them and logs
 also fetches the Caddy build of the new release, verified against that
 release's `SHA256SUMS`, since every release ships its own.
 
+On Windows the zip also carries the [tray icon](/telinha/guides/tray/),
+`telinha-tray.exe`. When the icon is installed it is replaced the same way
+(the old file kept as `telinha-tray.old-<version>.exe`), and the running icon
+notices the new file and restarts itself on it. An icon you opted out of with
+`telinha setup --no-tray` stays out: the update installs it only where
+`bin\telinha-tray.exe` already exists. Otherwise it only refreshes the copy
+kept as `bin\telinha-tray.dist.exe`, from which a later `telinha setup`
+installs the icon.
+
 Run in a console, Telinha installs the update but does not restart itself; it
 logs "update to vX installed; restart telinha to apply it". The service loop
 executable itself is replaced at the next `telinha service restart` or reboot.
@@ -236,5 +245,6 @@ gh attestation verify oci://ghcr.io/sombrasoft/telinha@sha256:... --repo sombraS
 ```
 
 The native updater checks the sha256 of every update against that release's
-`SHA256SUMS`; it does not check the attestation. The Windows binaries are not
-code-signed.
+`SHA256SUMS`; it does not check the attestation. A signed release's Windows
+programs also carry an Authenticode signature; see
+[Code signing](/telinha/guides/code-signing/).

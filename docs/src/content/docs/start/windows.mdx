@@ -53,9 +53,9 @@ from boot, whether or not anyone is logged on.
 
 3. The script downloads `telinha-windows-x64.zip` (or `telinha-windows-arm64.zip`)
    and `SHA256SUMS` from the newest stable release and stops if the sha256 does
-   not match. It puts `telinha.exe` into `%LOCALAPPDATA%\Telinha\bin`, adds
-   that folder to your user `PATH`, prints `telinha --version` and starts
-   `telinha setup`.
+   not match. It puts `telinha.exe` and the tray icon `telinha-tray.exe` into
+   `%LOCALAPPDATA%\Telinha\bin`, adds that folder to your user `PATH`, prints
+   `telinha --version` and starts `telinha setup`.
 
 </Steps>
 
@@ -77,9 +77,11 @@ $env:TELINHA_NO_SETUP = '1'
 terminals find it), and `TELINHA_NO_SETUP` installs without starting the
 setup. Downloading the zip from the releases page by hand works too: unpack it
 anywhere and double-click `telinha.exe`, which offers the setup when there is
-no configuration yet. Windows may stop it with SmartScreen's *Windows protected
-your PC*, because the build is not code-signed yet: click *More info*, then
-*Run anyway*.
+no configuration yet. A code-signed release names its publisher when Windows
+asks about it; an unsigned build may be stopped by SmartScreen's *Windows
+protected your PC*: click *More info*, then *Run anyway*.
+[Code signing](/telinha/guides/code-signing/) shows how to tell which one you
+have.
 
 :::note
 On Windows on ARM, Telinha runs the arm64 build. Cloudflare publishes no ARM
@@ -148,22 +150,29 @@ at home it goes like this:
 5. **Updates.** Say yes: new stable releases then install themselves when no
    room is open.
 
-6. **Review.** Every answer on one screen, grouped by step, with the web
+6. **Tray icon.** *Show a Telinha icon next to the clock?* Say yes: the
+   [tray icon](/telinha/guides/tray/) shows whether Telinha is running and
+   opens the room page, the logs and updates. When you say yes, *Start the
+   icon when you sign in to Windows?* decides whether it comes back by itself
+   after a restart (no by default; `telinha tray start` shows it any time).
+
+7. **Review.** Every answer on one screen, grouped by step, with the web
    address highlighted and secrets shown only as set, kept or generated. Page
    with PgUp and PgDn when the list is long. Choose *Apply* (or *Apply with a
    new cookie secret*, offered on a re-run, which logs everyone out of the
    pages), *Back to the questions* or *Quit without writing*. Nothing has
    changed on this PC until you apply.
 
-7. **Install.** A live list: the Discord app (checked, and its intents
+8. **Install.** A live list: the Discord app (checked, and its intents
    switched on), the DuckDNS address if you picked one, `telinha.env`, the
-   helper programs (with a bar for each download), the service, the router and
-   firewall, the start, the HTTPS certificate (with a DuckDNS address) and the
+   helper programs (with a bar for each download), the service, the tray icon,
+   the router and firewall, the start, the HTTPS certificate (with a DuckDNS address) and the
    final checks. The file goes to `%LOCALAPPDATA%\Telinha\config\telinha.env`,
    readable only by you, SYSTEM and Administrators. The service row is where
    Windows asks for administrator rights once (UAC), to register the
    background task and add the firewall rules; the row says it is waiting for
-   you. The router row looks at the router (warning about CGNAT or double NAT,
+   you. The tray icon appears next to the clock right after it (it starts only
+   when the setup runs from a normal terminal, not an administrator one). The router row looks at the router (warning about CGNAT or double NAT,
    listing the ports to forward by hand without UPnP), then Telinha starts and
    its certificate arrives. At the end the screen shows your web address, and
    *Show the doctor report* opens the checklist with the phone test.
@@ -184,10 +193,11 @@ lists it too. Going back is off while a task runs, and Ctrl+C asks for a second
 press, because stopping half way can leave a half install.
 
 :::note[The administrator prompt]
-Windows shows a User Account Control prompt for `telinha.exe` with
-*Publisher: Unknown*. That is expected: the build is not code-signed yet.
-Check that the program is the one in `%LOCALAPPDATA%\Telinha\bin` (*Show more
-details* shows the path) and click **Yes**.
+Windows shows a User Account Control prompt for `telinha.exe`. A code-signed
+release shows its publisher; an unsigned build shows *Publisher: Unknown*,
+which is expected for it (see [Code signing](/telinha/guides/code-signing/)).
+Either way, check that the program is the one in `%LOCALAPPDATA%\Telinha\bin`
+(*Show more details* shows the path) and click **Yes**.
 :::
 
 :::note[Forwarding the ports by hand?]
@@ -294,6 +304,12 @@ Get-Content "$env:LOCALAPPDATA\Telinha\logs\telinha.log" -Tail 50 -Wait
 one copy runs per home folder: with the service up, a console run says
 `Telinha is already running` and exits.
 
+**The tray icon** next to the clock shows whether Telinha is running and
+starts, stops and restarts it, checks for updates and opens the page and the
+log. It does not come back at sign-in unless you turn on *Start with Windows*
+in its menu (or run `telinha tray autostart on`); after *Quit*,
+`telinha tray start` brings it back. See [Tray icon](/telinha/guides/tray/).
+
 **Updates** happen on their own: Telinha checks a few minutes after it starts
 and then every few hours, waits while rooms are open, checks the sha256 and
 rolls back a version that fails to start. `telinha update --check` shows where
@@ -306,6 +322,7 @@ the new file. Editing `telinha.env` by hand works too, followed by
 `telinha service restart`.
 
 **Removing it**: `telinha service uninstall --firewall` removes the task and
-the firewall rules, then delete `%LOCALAPPDATA%\Telinha`.
+the firewall rules, closes the tray icon and removes its *Start with Windows*
+entry; then delete `%LOCALAPPDATA%\Telinha`.
 
 [Running as a service](/telinha/guides/service/) has the details.

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { assetName, buildConfig, parseArgs } from './build-binary.ts';
+import { archiveFiles, assetName, buildConfig, packSources, parseArgs } from './build-binary.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
 const opts = { version: '0.7.0-rc.1', commit: 'abc1234', outfile: '/tmp/out/telinha' };
@@ -112,5 +112,95 @@ describe('pty smoke filter (ci.yml)', () => {
 
   test.skipIf(!sh)('fails without the title', () => {
     expect(run(sample(`Where${right}will${right}it${right}run?`))).toBe(1);
+  });
+});
+
+describe('parseArgs: compile', () => {
+  test('defaults: this OS targets, archives on, no tray', () => {
+    const o = parseArgs([], 'linux');
+    expect(o).toMatchObject({ mode: 'compile', targets: ['linux-x64', 'linux-arm64'], pack: true, smoke: false, out: join(ROOT, 'dist-bin') });
+    expect(o.tray).toBeUndefined();
+    expect(parseArgs([], 'win32').targets).toEqual(['windows-x64', 'windows-arm64']);
+  });
+
+  test('--tray resolves the path, --no-pack turns the archives off', () => {
+    const o = parseArgs(['--target', 'windows', '--tray', 'tray/bin/Release/net48/telinha-tray.exe', '--smoke'], 'win32');
+    expect(o).toMatchObject({ targets: ['windows-x64', 'windows-arm64'], pack: true, smoke: true, tray: resolve('tray/bin/Release/net48/telinha-tray.exe') });
+    const n = parseArgs(['--target', 'windows-x64', '--no-pack', '--version', '1.2.3-rc.1'], 'win32');
+    expect(n).toMatchObject({ targets: ['windows-x64'], pack: false, version: '1.2.3-rc.1' });
+  });
+
+  test('--tray with --no-pack has nowhere to go', () => {
+    expect(() => parseArgs(['--no-pack', '--tray', 'x.exe'], 'win32')).toThrow('--no-pack writes none');
+  });
+
+  test('Windows targets only on Windows; values required', () => {
+    expect(() => parseArgs(['--target', 'windows'], 'linux')).toThrow('compile Windows targets on Windows');
+    expect(() => parseArgs(['--tray'], 'win32')).toThrow('--tray needs a value');
+    expect(() => parseArgs(['--version', '1.2'], 'linux')).toThrow('--version must look like');
+  });
+
+  test('pack-only flags are refused', () => {
+    expect(() => parseArgs(['--from', 'x'], 'linux')).toThrow('unknown argument --from');
+  });
+});
+
+describe('parseArgs: pack', () => {
+  test('any host packs any target', () => {
+    const o = parseArgs(['pack', '--target', 'windows', '--from', 'signed', '--out', 'out'], 'linux');
+    expect(o).toMatchObject({ mode: 'pack', targets: ['windows-x64', 'windows-arm64'], from: resolve('signed'), out: join(ROOT, 'out') });
+    expect(o.tray).toBeUndefined();
+    const t = parseArgs(['pack', '--target', 'linux-x64', '--from', 'd', '--tray', 'tray.exe'], 'win32');
+    expect(t).toMatchObject({ targets: ['linux-x64'], tray: resolve('tray.exe') });
+  });
+
+  test('needs --target and --from', () => {
+    expect(() => parseArgs(['pack', '--from', 'd'], 'linux')).toThrow('pack needs --target and --from');
+    expect(() => parseArgs(['pack', '--target', 'windows'], 'linux')).toThrow('pack needs --target and --from');
+  });
+
+  test('compile-only flags are refused', () => {
+    for (const a of ['--smoke', '--no-pack']) {
+      expect(() => parseArgs(['pack', '--target', 'linux', '--from', 'd', a], 'linux')).toThrow(`unknown argument ${a}`);
+    }
+    expect(() => parseArgs(['pack', '--version', '1.2.3'], 'linux')).toThrow('unknown argument --version');
+  });
+
+  test('the mode word only counts first', () => {
+    expect(() => parseArgs(['--target', 'linux', 'pack'], 'linux')).toThrow('unknown argument pack');
+  });
+
+  test('sums and pack-caddy take no tray', () => {
+    expect(() => parseArgs(['sums', '--tray', 'x'], 'linux')).toThrow('unknown argument --tray');
+    expect(() => parseArgs(['pack-caddy', '--target', 'linux-x64', '--from', 'd', '--tray', 'x'], 'linux')).toThrow('unknown argument --tray');
+  });
+});
+
+describe('packSources', () => {
+  test('compile layout under DIR; the tray from DIR/tray unless given', () => {
+    expect(packSources('windows-arm64', 'D')).toEqual({ exe: join('D', 'windows-arm64', 'telinha.exe'), tray: join('D', 'tray', 'telinha-tray.exe') });
+    expect(packSources('windows-x64', 'D', 'T.exe')).toEqual({ exe: join('D', 'windows-x64', 'telinha.exe'), tray: 'T.exe' });
+    expect(packSources('linux-x64', 'D', 'T.exe')).toEqual({ exe: join('D', 'linux-x64', 'telinha') });
+  });
+});
+
+describe('archiveFiles', () => {
+  const files = { exe: 'E', tray: 'T', license: 'L' };
+
+  test('Windows zips: telinha.exe, telinha-tray.exe, LICENSE', () => {
+    expect(assetName('windows-x64')).toBe('telinha-windows-x64.zip');
+    expect(archiveFiles('windows-x64', files)).toEqual([
+      { path: 'telinha.exe', mode: 0o755, source: 'E' },
+      { path: 'telinha-tray.exe', mode: 0o755, source: 'T' },
+      { path: 'LICENSE', mode: 0o644, source: 'L' },
+    ]);
+  });
+
+  test('a Windows zip without a tray, and Linux never carries one', () => {
+    expect(archiveFiles('windows-arm64', { exe: 'E', license: 'L' }).map((f) => f.path)).toEqual(['telinha.exe', 'LICENSE']);
+    expect(archiveFiles('linux-arm64', files)).toEqual([
+      { path: 'telinha', mode: 0o755, source: 'E' },
+      { path: 'LICENSE', mode: 0o644, source: 'L' },
+    ]);
   });
 });
