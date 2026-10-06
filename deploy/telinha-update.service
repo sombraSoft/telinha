@@ -1,0 +1,14 @@
+[Unit]
+Description=Deploy the newest (or pinned) Telinha release
+Wants=network-online.target
+After=network-online.target docker.service
+[Service]
+Type=oneshot
+Environment=TELINHA_DIR=/opt/telinha
+# Tunables: set them in a drop-in (systemctl edit telinha-update.service), which
+# install-docker.sh never overwrites, e.g.
+#Environment=MAX_DEFER_HOURS=12
+#Environment=VERIFY_ATTESTATION=1
+ExecStart=/usr/local/sbin/telinha-update
+# image pulls on a slow link plus compose --wait
+TimeoutStartSec=15min

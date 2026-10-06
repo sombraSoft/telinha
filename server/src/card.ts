@@ -1,4 +1,4 @@
-// The /telinha message as a live status card. Pure: the lifecycle compares the
+// The command's message as a live status card. Pure: the lifecycle compares the
 // rendered payloads and only edits Discord when they differ.
 import {
   ButtonStyle, ComponentType, escapeMarkdown, type APIActionRowComponent, type APIButtonComponentWithURL,
@@ -68,7 +68,7 @@ function fit(l: Locale, parts: (string | List)[]): string {
 const mention = (id: string) => `<@${id}>`;
 
 /**
- * Member-typed text (display name, /telinha's "what") as plain text: no
+ * Member-typed text (display name, the command's "what") as plain text: no
  * markdown, masked links or mention/channel/timestamp tags in a message the
  * bot authored (allowedMentions only stops the pings, not the rendering).
  */
@@ -106,7 +106,7 @@ export function renderCard(rec: RoomRecord, live: Live, o: CardOptions): Card {
       type: ComponentType.ActionRow,
       components: [{
         type: ComponentType.Button, style: ButtonStyle.Link, label: t(l, 'open'), emoji: { name: '📺' },
-        url: `${o.publicUrl}/sala/?room=${rec.room}`,
+        url: `${o.publicUrl}/r/${rec.room}`,
       }],
     }],
     allowedMentions,

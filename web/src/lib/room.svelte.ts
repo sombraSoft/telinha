@@ -14,7 +14,7 @@ import {
 } from 'livekit-client';
 import { avatarUrl, discordIdOf, parseMeta } from './avatar';
 import { setUserLocale, t } from './i18n/i18n.svelte';
-import type { Locale, MessageKey, Params } from './i18n';
+import { commandName, type Locale, type MessageKey, type Params } from './i18n';
 import { prefs } from './prefs.svelte';
 import { isValidRoom } from './room-name';
 import { applyLive, startShare, stopShare, type Share, type ShareSettings } from './share';
@@ -62,6 +62,9 @@ const ROOM_EVENTS = [
   RoomEvent.ParticipantMetadataChanged,
   RoomEvent.ParticipantNameChanged,
 ] as const;
+
+// The notices that tell people to open a room name the configured command.
+const CMD = { cmd: commandName };
 
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -113,7 +116,7 @@ export class RoomController {
   #room: Room | null = null;
   #pending = false;
   #lastWatching: string | null = null;
-  /** Last "stream" attribute sent (quality for the /telinha card) and when; null = that send failed. */
+  /** Last "stream" attribute sent (quality for the room's card) and when; null = that send failed. */
   #lastStream: string | null = '';
   #lastStreamAt = 0;
   /** When the page last rejoined after an unexpected disconnect. */
@@ -134,9 +137,9 @@ export class RoomController {
   }
 
   async #start() {
-    // Rooms only come from /telinha now; there is nothing to join without one.
-    const name = new URLSearchParams(location.search).get('room');
-    if (!isValidRoom(name)) return this.#fail({ key: 'notice.noRoom' }, false);
+    // Rooms only come from the slash command; there is nothing to join without one.
+    const name = /^\/r\/([^/]+)$/.exec(location.pathname)?.[1] ?? null;
+    if (!isValidRoom(name)) return this.#fail({ key: 'notice.noRoom', params: CMD }, false);
     this.roomName = name;
 
     const tok = await this.#token();
@@ -170,15 +173,15 @@ export class RoomController {
     }
     if (r.ok) return (await r.json()) as TokenResponse;
     if (r.status === 403) this.#fail({ key: 'fatal.members' }, false);
-    else if (r.status === 404) this.#fail({ key: 'notice.unknown' }, false);
-    else if (r.status === 410) this.#fail({ key: 'notice.closed' }, false);
+    else if (r.status === 404) this.#fail({ key: 'notice.unknown', params: CMD }, false);
+    else if (r.status === 410) this.#fail({ key: 'notice.closed', params: CMD }, false);
     else this.#fail({ key: 'fatal.join' }, true);
     return null;
   }
 
   async #disconnected(room: Room, reason?: DisconnectReason) {
     // The server deletes a room when it closes it.
-    if (reason === DisconnectReason.ROOM_DELETED) return this.#fail({ key: 'notice.closed' }, false);
+    if (reason === DisconnectReason.ROOM_DELETED) return this.#fail({ key: 'notice.closed', params: CMD }, false);
     // A LiveKit restart forgets every room, and with auto_create off the SDK's
     // own reconnect is refused. A fresh token makes the server bring the room
     // back (or says it has closed). Once a minute at most, so it can't loop.
@@ -357,7 +360,7 @@ export class RoomController {
     if (this.share && me) this.#publishStream(streamLabel(next[me.identity]));
   }
 
-  // Tell the server what this stream looks like (for the /telinha card): only
+  // Tell the server what this stream looks like (for the room's card): only
   // on change, at most every 5 s. setAttributes only touches the given key,
   // so "watching" is left alone.
   #publishStream(value: string, now = false) {

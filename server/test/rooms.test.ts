@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { openRegistry, type NewRoom } from '../src/rooms.ts';
 
 const NEW: NewRoom = {
-  room: 'abcdefghijkl', guildId: '100', channelId: '300', locale: 'pt-BR',
+  room: 'lamo-futi', guildId: '100', channelId: '300', locale: 'pt-BR',
   openerId: '7', openerName: 'Zé', what: 'Elden Ring', createdAt: 1000,
 };
 
@@ -13,9 +13,9 @@ test('create + get: a fresh room is open with nobody seen', () => {
     ...NEW, messageId: null, firstJoinAt: null, lastSeenAt: null, lastTokenAt: null, closedAt: null, cardDone: false,
     seen: [], streamed: [],
   });
-  expect(r.get('abcdefghijkl')).toEqual(rec);
+  expect(r.get('lamo-futi')).toEqual(rec);
   expect(r.get('nope')).toBeNull();
-  expect(r.open().map((x) => x.room)).toEqual(['abcdefghijkl']);
+  expect(r.open().map((x) => x.room)).toEqual(['lamo-futi']);
 });
 
 test('create refuses a duplicate room name', () => {
@@ -63,12 +63,12 @@ test('closeIfEmpty judges the stored row: last seen, last token, else creation',
 test('cardsDue: closed rooms with a message until their final card is done', () => {
   const r = openRegistry(':memory:');
   r.create(NEW);
-  r.create({ ...NEW, room: 'dev-room' }); // no message (dev): never due
-  r.create({ ...NEW, room: 'still-open' });
+  r.create({ ...NEW, room: 'deve-romo' }); // no message (dev): never due
+  r.create({ ...NEW, room: 'siti-lopa' });
   r.setMessage(NEW.room, '300', '999');
-  r.setMessage('still-open', '300', '998');
+  r.setMessage('siti-lopa', '300', '998');
   r.close(NEW.room, 7000);
-  r.close('dev-room', 7000);
+  r.close('deve-romo', 7000);
   expect(r.cardsDue().map((x) => x.room)).toEqual([NEW.room]);
   r.markCardDone(NEW.room);
   expect(r.cardsDue()).toEqual([]);
@@ -78,11 +78,11 @@ test('cardsDue: closed rooms with a message until their final card is done', () 
 test('close is final: once closed, not listed, later calls change nothing', () => {
   const r = openRegistry(':memory:');
   r.create(NEW);
-  r.create({ ...NEW, room: 'other-room' });
+  r.create({ ...NEW, room: 'mota-rumo' });
   expect(r.close(NEW.room, 7000)).toBe(true);
   expect(r.close(NEW.room, 8000)).toBe(false);
   expect(r.get(NEW.room)!.closedAt).toBe(7000);
-  expect(r.open().map((x) => x.room)).toEqual(['other-room']);
+  expect(r.open().map((x) => x.room)).toEqual(['mota-rumo']);
   // a stale poll or token fetch must not move a closed room
   r.markSeen(NEW.room, ['1'], [], 9000);
   expect(r.touch(NEW.room, 9000)).toBe(false);
@@ -122,7 +122,7 @@ test('adds the columns a database from before them lacks', async () => {
       first_join_at INTEGER, last_seen_at INTEGER, closed_at INTEGER, seen TEXT NOT NULL DEFAULT '[]',
       streamed TEXT NOT NULL DEFAULT '[]')`);
     old.exec(`INSERT INTO rooms (room, guild_id, channel_id, locale, opener_id, opener_name, created_at)
-      VALUES ('abcdefghijkl', '100', '300', 'en', '7', 'Zé', 1000)`);
+      VALUES ('lamo-futi', '100', '300', 'en', '7', 'Zé', 1000)`);
     old.close();
     const r = openRegistry(file);
     expect(r.get(NEW.room)).toMatchObject({ lastTokenAt: null, cardDone: false });

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { newRoom, openRoom } from './helpers.ts';
 
-test('/sala/ without a room: a notice, no token request', async ({ browser }) => {
+test('/r/ without a room: a notice, no token request', async ({ browser }) => {
   for (const [locale, text] of [
     ['en-US', 'Open a Telinha with /telinha on Discord.'],
     ['pt-BR', 'Abra uma telinha com /telinha no Discord.'],
@@ -13,7 +13,7 @@ test('/sala/ without a room: a notice, no token request', async ({ browser }) =>
       page.on('request', (r) => {
         if (r.url().includes('/auth/token')) tokens.push(r.url());
       });
-      await page.goto('/sala/');
+      await page.goto('/r/');
       await expect(page.getByTestId('notice')).toHaveText(text);
       await expect(page.getByTestId('fatal').getByRole('button')).toHaveCount(0);
       expect(tokens).toEqual([]);
@@ -38,7 +38,7 @@ test('a room closes for good once it sat empty', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'en-US' });
   try {
     const later = await ctx.newPage();
-    await later.goto('/auth/login?next=%2Fsala%2F'); // dev login: session cookie for ctx.request
+    await later.goto('/auth/login?next=%2Fr%2F'); // dev login: session cookie for ctx.request
     await expect(later.getByTestId('notice')).toBeVisible();
     // Poll the token endpoint, not the page: a page that joins counts as
     // someone in the room. A token fetch also keeps an open room alive for
@@ -47,7 +47,7 @@ test('a room closes for good once it sat empty', async ({ browser }) => {
       .poll(async () => (await ctx.request.get(`/auth/token?room=${room}`)).status(), { intervals: [6_000], timeout: 60_000 })
       .toBe(410);
 
-    await later.goto(`/sala/?room=${room}`);
+    await later.goto(`/r/${room}`);
     await expect(later.getByTestId('notice')).toHaveText('This Telinha has ended. Open another with /telinha on Discord.');
     await expect(later.getByTestId('me')).toHaveCount(0);
     await expect(later.getByTestId('fatal').getByRole('button')).toHaveCount(0);

@@ -1,18 +1,22 @@
-// Local stack: livekit-server --dev plus the Bun server with a fake DEV_USER
-// login. Used by `bun run dev` (scripts/dev.ts) and, as
-// `bun scripts/stack.ts --e2e`, by Playwright's webServer.
-import { mkdir, rm } from 'node:fs/promises';
+// Local stack: the Bun server with a fake DEV_USER login, which supervises
+// livekit-server itself as in production (INGRESS=external, MEDIA=self). Used
+// by `bun run dev` (scripts/dev.ts) and, as `bun scripts/stack.ts --e2e`, by
+// Playwright's webServer.
+import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureLivekit } from './livekit.ts';
+import { ensureBinaries, type Arch, type Os } from './bins.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SERVER_PORT = 8081;
+// Same tree the server uses natively (bin/, config/, data/), kept inside the repo.
+const HOME = join(ROOT, '.cache', 'telinha');
+const BIN_DIR = join(HOME, 'bin');
 
 export interface StackOptions {
   /** Origin the browser opens (PUBLIC_URL); must be http://localhost or 127.0.0.1. */
   publicUrl: string;
-  /** Signaling URL for the browser; unset = the server derives PUBLIC_URL + /livekit. */
+  /** Signaling URL for the browser; unset = the server derives PUBLIC_URL + /livekit (its gated relay). */
   livekitPublicUrl?: string;
   /** "<id>:<name>" fake login. */
   devUser?: string;
@@ -25,7 +29,7 @@ export interface StackOptions {
   /** Room lifecycle: close after this long empty, poll this often (server defaults 300 / 5). */
   closeEmptySeconds?: number;
   pollSeconds?: number;
-  /** Room registry directory; unset = the server default (.cache/data). */
+  /** Registry, rendered livekit.yaml and pidfile; unset = .cache/telinha/data. */
   dataDir?: string;
   livekitPorts?: { http: number; tcp: number; udp: number };
 }
@@ -36,8 +40,15 @@ export interface Stack {
   stop(): void;
 }
 
-// A child's own children (bun run -> vite, bun --watch) must go too: on
-// Windows proc.kill() only ends the direct process.
+function host(): { os: Os; arch: Arch } {
+  const os = process.platform === 'win32' ? 'windows' : process.platform === 'linux' ? 'linux' : null;
+  const arch = process.arch === 'x64' ? 'amd64' : process.arch === 'arm64' ? 'arm64' : null;
+  if (!os || !arch) throw new Error(`no LiveKit binary for ${process.platform}/${process.arch}; put livekit-server in ${BIN_DIR}`);
+  return { os, arch };
+}
+
+// A child's own children (the server's livekit-server, bun run -> vite) must
+// go too: on Windows proc.kill() only ends the direct process.
 function killTree(pid: number) {
   if (process.platform === 'win32') {
     try {
@@ -72,7 +83,10 @@ async function pipe(name: string, stream: ReadableStream<Uint8Array>, out: NodeJ
   if (rest) out.write(`[${name}] ${rest}\n`);
 }
 
-async function waitFor(what: string, url: string, children: Map<string, Bun.Subprocess>, timeoutMs = 60_000) {
+/** Polls `url` until it answers 2xx with a body `ok` accepts; a dead child fails fast. */
+async function waitFor(
+  what: string, url: string, children: Map<string, Bun.Subprocess>, ok: (body: unknown) => boolean, timeoutMs = 60_000,
+) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     for (const [name, proc] of children) {
@@ -80,7 +94,7 @@ async function waitFor(what: string, url: string, children: Map<string, Bun.Subp
     }
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return;
+      if (res.ok && ok(await res.json())) return;
     } catch {
       // not listening yet
     }
@@ -91,7 +105,8 @@ async function waitFor(what: string, url: string, children: Map<string, Bun.Subp
 
 export async function startStack(opts: StackOptions): Promise<Stack> {
   const ports = opts.livekitPorts ?? { http: 7880, tcp: 7881, udp: 7882 };
-  const livekit = await ensureLivekit();
+  // The server finds it in BIN_DIR, as a native install would.
+  await ensureBinaries(['livekit'], { ...host(), outDir: BIN_DIR, log: (m) => console.log(`[stack] ${m}`) });
   const children = new Map<string, Bun.Subprocess>();
   let stopped = false;
 
@@ -137,39 +152,40 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
   };
 
   try {
-    // Loopback only, and advertised as 127.0.0.1 so ICE never leaves the machine.
-    // --dev logs every packet event at debug; info keeps dev/CI output readable.
-    spawn('livekit', [
-      livekit,
-      '--dev',
-      '--bind', '127.0.0.1',
-      '--node-ip', '127.0.0.1',
-      '--keys', 'devkey: secret',
-      // auto_create off as in deploy/livekit.yaml: only the server opens rooms.
-      '--config-body', `port: ${ports.http}\nlogging:\n  level: info\nrtc:\n  tcp_port: ${ports.tcp}\n  udp_port: ${ports.udp}\nroom:\n  auto_create: false\n`,
-    ]);
-
     const env: Record<string, string> = {
+      TELINHA_HOME: HOME,
+      BIN_DIR,
+      DATA_DIR: opts.dataDir ?? join(HOME, 'data'),
+      INGRESS: 'external',
+      MEDIA: 'self',
+      // No STUN: LiveKit advertises 127.0.0.1 (rendered as node_ip), though it can still
+      // offer this host's own IPv6 addresses as ICE candidates.
+      LIVEKIT_NODE_IP: '127.0.0.1',
+      LIVEKIT_PORT: String(ports.http),
+      MEDIA_TCP_PORT: String(ports.tcp),
+      MEDIA_UDP_PORT: String(ports.udp),
+      IP_WATCH_SECONDS: '0',
       DEV_USER: opts.devUser ?? '1:Dev',
       PUBLIC_URL: opts.publicUrl,
       LISTEN: `127.0.0.1:${SERVER_PORT}`,
       COOKIE_SECRET: 'dev-only-secret',
       LIVEKIT_API_KEY: 'devkey',
-      LIVEKIT_API_SECRET: 'secret',
+      // 32+ chars, or livekit-server logs an error with a stack trace on every start.
+      // e2e/streaming.e2e.ts uses the same pair.
+      LIVEKIT_API_SECRET: 'dev-only-livekit-secret-0123456789',
       GROUP_NAME: 'Dev',
       WEB_DIR: opts.webDir ?? join(ROOT, 'web', 'dist'),
-      LIVEKIT_API_URL: `http://127.0.0.1:${ports.http}`,
       ...opts.env,
     };
     if (opts.closeEmptySeconds) env.CLOSE_EMPTY_SECONDS = String(opts.closeEmptySeconds);
     if (opts.pollSeconds) env.POLL_SECONDS = String(opts.pollSeconds);
-    if (opts.dataDir) env.DATA_DIR = opts.dataDir;
     if (opts.livekitPublicUrl) env.LIVEKIT_PUBLIC_URL = opts.livekitPublicUrl;
     const entry = join('server', 'src', 'index.ts');
     spawn('server', opts.watch ? [process.execPath, '--watch', entry] : [process.execPath, entry], ROOT, env);
 
-    await waitFor('livekit', `http://127.0.0.1:${ports.http}/`, children);
-    await waitFor('server', `http://127.0.0.1:${SERVER_PORT}/healthz`, children);
+    // The server listens only once LiveKit answered; the state check keeps that a contract.
+    await waitFor('server', `http://127.0.0.1:${SERVER_PORT}/healthz`, children,
+      (b) => (b as { children?: Record<string, string> }).children?.livekit === 'up');
   } catch (e) {
     stop();
     throw e;
@@ -180,12 +196,13 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
 
 /**
  * Stand-in page directory for a server whose real page is served by Vite: the
- * server refuses a WEB_DIR without index.html, and in dev only Vite serves /sala/.
+ * server refuses a WEB_DIR without index.html, and in dev only Vite serves /r/.
  */
 export async function placeholderWebDir(): Promise<string> {
   const dir = join(ROOT, '.cache', 'placeholder-web');
   await mkdir(dir, { recursive: true });
-  await Bun.write(join(dir, 'index.html'), '<!doctype html><p>dev: the page is served by Vite on http://localhost:5173/sala/</p>');
+  // </head> is required: the server writes the command name into it.
+  await Bun.write(join(dir, 'index.html'), '<!doctype html><head></head><p>dev: the page is served by Vite on http://localhost:5173/r/</p>');
   return dir;
 }
 
@@ -194,24 +211,26 @@ if (import.meta.main) {
     console.error('usage: bun scripts/stack.ts --e2e   (for local development use `bun run dev`)');
     process.exit(2);
   }
-  // Production-like: the server serves the built page at /sala/ and the
-  // browser talks to LiveKit directly.
+  // Production-like: the server serves the built page at /r/ and relays the
+  // browser's LiveKit signaling at /livekit, behind its login gate.
   if (!(await Bun.file(join(ROOT, 'web', 'dist', 'index.html')).exists())) {
     console.error('web/dist is missing: run bun run build first');
     process.exit(1);
   }
   // Fresh registry per run; a short lifecycle so the closing spec doesn't wait 5 min.
+  // Only the registry: run/children.json must survive so the server can kill a
+  // livekit-server left over from a run that was killed hard.
   const dataDir = join(ROOT, '.cache', 'e2e-data');
-  await rm(dataDir, { recursive: true, force: true });
+  const entries = await readdir(dataDir).catch(() => [] as string[]);
+  for (const name of entries.filter((n) => n.startsWith('telinha.sqlite'))) await rm(join(dataDir, name), { force: true });
   try {
     await startStack({
       publicUrl: 'http://localhost:8081',
-      livekitPublicUrl: 'ws://localhost:7880',
       closeEmptySeconds: Number(process.env.CLOSE_EMPTY_SECONDS) || 4,
       pollSeconds: Number(process.env.POLL_SECONDS) || 1,
       dataDir,
     });
-    console.log('[stack] ready on http://localhost:8081/sala/');
+    console.log('[stack] ready on http://localhost:8081/r/');
   } catch (e) {
     console.error(`[stack] ${e instanceof Error ? e.message : e}`);
     process.exit(1);

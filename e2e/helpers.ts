@@ -1,20 +1,23 @@
 // Shared E2E helpers. Not a *.e2e.ts file, so neither Playwright nor bun test
 // runs it on its own.
+import { randomBytes } from 'node:crypto';
 import { expect, type Page } from '@playwright/test';
+import { newRoomCode } from '../server/src/codes.ts';
 
-/** A fresh, valid room per test so runs never see each other's participants. */
-export function newRoom(prefix = 'e2e'): string {
-  return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+/** A fresh room code per test (6 syllables, 37 bits) so runs never see each other's participants. */
+export function newRoom(): string {
+  return newRoomCode(randomBytes, 6);
 }
 
 /**
- * Opens a room and waits until the DEV_USER login round-trip is done. In dev
- * mode the server opens an unknown valid room on first use (there is no /telinha).
+ * Opens a room and waits until the DEV_USER login round-trip (the server's gate)
+ * is done. In dev mode the server opens an unknown valid room code on first use
+ * (there is no slash command).
  */
 export async function openRoom(page: Page, room: string): Promise<string> {
-  await page.goto(`/sala/?room=${room}`);
+  await page.goto(`/r/${room}`);
   await expect(page.getByTestId('me')).toContainText('Dev');
-  const current = new URL(page.url()).searchParams.get('room');
+  const current = /^\/r\/([^/]+)$/.exec(new URL(page.url()).pathname)?.[1];
   expect(current).toBe(room);
   return current!;
 }

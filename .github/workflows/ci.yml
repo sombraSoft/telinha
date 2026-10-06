@@ -48,11 +48,11 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
-      # scripts/livekit.ts pins the LiveKit version, so its hash is the key.
+      # versions.json pins the child binaries (and their hashes), so it is the key.
       - uses: actions/cache@v6
         with:
-          path: .cache/livekit
-          key: livekit-${{ runner.os }}-${{ hashFiles('scripts/livekit.ts') }}
+          path: .cache/telinha/bin
+          key: livekit-${{ runner.os }}-${{ hashFiles('versions.json') }}
       - run: bunx playwright install --with-deps chromium
       - run: bun run build
       - run: bun run e2e
@@ -73,20 +73,25 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # Listed explicitly: tela-update and tela-ipwatch have no extension, and a
-      # missing file should fail the job rather than be silently skipped.
+      # Listed explicitly: telinha-update has no extension, and a missing file
+      # should fail the job rather than be silently skipped.
       - name: shellcheck
         run: >-
           shellcheck
-          deploy/install.sh
-          deploy/pin.sh
-          deploy/ipwatch/tela-ipwatch
-          deploy/updater/tela-update
+          deploy/install-docker.sh
+          deploy/telinha-update
+          scripts/smoke.sh
       # The image bundles shellcheck, so run: blocks are checked too.
       - name: actionlint
         uses: docker://rhysd/actionlint:1.7.12
         with:
           args: -color
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # Structure and every asset hash present; a stale hash fails the image job.
+      - name: versions.json
+        run: bun scripts/versions.ts check
 
   gitleaks:
     runs-on: ubuntu-latest
@@ -112,20 +117,25 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # arm64's final stage (apk, setcap) runs emulated; the heavy stages run natively.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v4
+      # Both release platforms build, so an arm64 break shows up before release.
+      - uses: docker/build-push-action@v7
+        with:
+          # Local checkout, not the default git context, so the PR's tree is built.
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+      # amd64 again (cache hit), loaded into the daemon for the smoke test.
       - id: build
         uses: docker/build-push-action@v7
         with:
-          # Local checkout, not the default git context, so the PR's tree is built.
           context: .
           platforms: linux/amd64
           push: false
           load: true
           tags: telinha:ci
-      # Keep in sync with SMOKE in scripts/image.ts: unit tests, built page
-      # assets, then the real entry point in DEV_USER mode serving /sala/.
+      # Same script as `bun run image`; it ships in the image.
       - name: smoke
-        env:
-          SMOKE: >-
-            bun test server/test && test -f web/dist/index.html && ls web/dist/assets/*.js >/dev/null && (DEV_USER=1:smoke PUBLIC_URL=http://localhost:18081 LISTEN=127.0.0.1:18081 DATA_DIR=/tmp/smoke COOKIE_SECRET=smoke LIVEKIT_API_KEY=k LIVEKIT_API_SECRET=s bun server/src/index.ts & for i in 1 2 3 4 5 6 7 8 9 10; do wget -qO- http://127.0.0.1:18081/healthz && break; sleep 1; done; wget -qO- http://127.0.0.1:18081/sala/ | grep -q '<div id="app"')
-        run: docker run --rm telinha:ci sh -c "$SMOKE"
+        run: docker run --rm telinha:ci sh scripts/smoke.sh

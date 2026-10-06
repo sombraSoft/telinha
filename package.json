@@ -14,7 +14,9 @@
     "test": "bun test ./server ./web",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p .",
     "e2e": "playwright test",
-    "image": "bun scripts/image.ts"
+    "image": "bun scripts/image.ts",
+    "bins": "bun scripts/bins.ts",
+    "versions": "bun scripts/versions.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

@@ -1,16 +1,15 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig, type Plugin } from 'vite';
 
-// Dev only: "/" goes to the room page, like Caddy's catch-all in production.
+// Dev only, like telinha in production: "/" goes to the room page's landing at /r/.
 function rootRedirect(): Plugin {
   return {
     name: 'telinha-root-redirect',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const url = req.url ?? '/';
-        if (url !== '/' && !url.startsWith('/?')) return next();
+        if (new URL(req.url ?? '/', 'http://dev').pathname !== '/') return next();
         res.statusCode = 302;
-        res.setHeader('Location', `/sala/${url.slice(1)}`);
+        res.setHeader('Location', '/r/');
         res.end();
       });
     },
@@ -18,7 +17,8 @@ function rootRedirect(): Plugin {
 }
 
 export default defineConfig({
-  base: '/sala/',
+  // Absolute /r/assets/... URLs, so they load from /r/<code> too.
+  base: '/r/',
   plugins: [svelte(), rootRedirect()],
   // livekit-client alone is ~450 kB minified; one chunk is fine for this page.
   build: { outDir: 'dist', emptyOutDir: true, chunkSizeWarningLimit: 800 },
@@ -27,12 +27,8 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/auth': 'http://127.0.0.1:8081',
-      // LiveKit signaling; the token's url points at this proxy in dev.
-      '/livekit': {
-        target: 'http://127.0.0.1:7880',
-        ws: true,
-        rewrite: (path) => path.replace(/^\/livekit/, '') || '/',
-      },
+      // LiveKit signaling goes through telinha, which strips the /livekit prefix itself.
+      '/livekit': { target: 'http://127.0.0.1:8081', ws: true },
     },
   },
 });

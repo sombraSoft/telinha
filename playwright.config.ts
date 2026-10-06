@@ -1,5 +1,6 @@
 // E2E against the production-like stack (`bun scripts/stack.ts --e2e`): the
-// built page served by the Bun server, LiveKit --dev, DEV_USER fake login.
+// built page served by the Bun server at /r/, the server's own livekit-server
+// child, LiveKit signaling through its gated /livekit relay, DEV_USER fake login.
 import { defineConfig, devices } from '@playwright/test';
 
 const CI = !!process.env.CI;
@@ -27,9 +28,10 @@ export default defineConfig({
           args: [
             '--use-fake-ui-for-media-stream',
             '--autoplay-policy=no-user-gesture-required',
-            // LiveKit --dev only offers 127.0.0.1 candidates. Linux Chromium gathers
-            // no loopback candidates and hides host IPs behind mDNS, so ICE never
-            // connects there without these (Windows got by without them).
+            // The stack's LiveKit (LIVEKIT_NODE_IP=127.0.0.1) only offers 127.0.0.1
+            // candidates. Linux Chromium gathers no loopback candidates and hides
+            // host IPs behind mDNS, so ICE never connects there without these
+            // (Windows got by without them).
             '--allow-loopback-in-peer-connection',
             '--disable-features=WebRtcHideLocalIpsWithMdns',
           ],
@@ -44,5 +46,9 @@ export default defineConfig({
     timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
+    // The default is SIGKILL, which the server's livekit-server (own session on
+    // Linux) survives, holding 7880-7882 for the next run. SIGTERM lets stack.ts
+    // and the server stop it. Ignored on Windows, where taskkill /T takes the tree.
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 15_000 },
   },
 });

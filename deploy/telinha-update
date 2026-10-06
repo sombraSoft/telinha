@@ -1,0 +1,330 @@
+#!/bin/sh
+# Pull-based CD for Telinha on a Linux Docker host: deploy the tag in $TELINHA_DIR/pin,
+# else the newest stable GitHub release. The tag is checked against the image digest
+# published with the release before compose runs it, and a deploy waits (at most
+# MAX_DEFER_HOURS) while rooms are open. No git: everything comes from the release.
+# A deploy that never turns healthy is rolled back to the previous version and that
+# tag is not retried by the timer (only by --now, pin or unpin) until a newer release.
+# Runs from telinha-update.timer or by hand; installed to /usr/local/sbin by deploy/install-docker.sh.
+#   telinha-update                  deploy the pinned tag, else the newest stable release
+#   telinha-update --now            same, but do not wait for open rooms
+#   telinha-update status           pin, deployed version + digest, newest stable, deferral
+#   telinha-update pin vX.Y.Z       hold at a tag (pre-releases allowed), deploy now
+#   telinha-update unpin            follow stable again, deploy now
+# pin/unpin take a trailing --now too. Tunables (environment): TELINHA_DIR (/opt/telinha),
+# MAX_DEFER_HOURS (12), VERIFY_ATTESTATION=1 (needs an authenticated gh),
+# ALLOW_UNVERIFIED=1 (skip the digest check; escape hatch only).
+set -eu
+
+dir=${TELINHA_DIR:-/opt/telinha}
+envfile=$dir/.env
+pinfile=$dir/pin
+deferfile=$dir/deferred
+failedfile=$dir/failed
+configfile=$dir/config/telinha.env
+repo=sombraSoft/telinha
+image=ghcr.io/sombrasoft/telinha
+tag_re='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+max_defer_hours=${MAX_DEFER_HOURS:-12}
+case $max_defer_hours in
+'' | *[!0-9]*)
+	echo "telinha-update: MAX_DEFER_HOURS must be a whole number of hours, got '$max_defer_hours'" >&2
+	exit 2
+	;;
+esac
+
+log() {
+	logger -t telinha-update -- "$*" 2>/dev/null || true
+	# also echo when run by hand; under systemd the journal already has it
+	if [ -t 2 ]; then echo "telinha-update: $*" >&2; fi
+}
+
+usage() {
+	echo "usage: telinha-update [--now | status | pin vX.Y.Z[-pre] [--now] | unpin [--now]]" >&2
+	exit 2
+}
+
+valid_tag() {
+	printf '%s\n' "$1" | grep -Eq "$tag_re"
+}
+
+# KEY's value in a KEY=value file (last one wins, like compose), quotes stripped.
+env_value() {
+	sed -n "s/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\{0,1\}$1[[:space:]]*=[[:space:]]*//p" "$2" 2>/dev/null |
+		tail -n 1 | tr -d '\r' | sed "s/[[:space:]]*\$//; s/^'\(.*\)'\$/\1/; s/^\"\(.*\)\"\$/\1/"
+}
+
+# GitHub's releases/latest already excludes pre-releases and drafts.
+newest_stable() {
+	json=$(curl -fsS --max-time 30 -H 'Accept: application/vnd.github+json' \
+		"https://api.github.com/repos/$repo/releases/latest") || return 1
+	printf '%s\n' "$json" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+# /healthz on the LISTEN loopback (no forwarded headers, so the body has "rooms").
+# Same host rule as the rendered Caddyfile: 0.0.0.0, :: or empty -> 127.0.0.1.
+healthz_url() {
+	listen=$(env_value LISTEN "$configfile")
+	port=${listen##*:}
+	host=${listen%:*}
+	if [ "$host" = "$listen" ]; then host=; fi
+	case $port in '' | *[!0-9]*) port=8081 ;; esac
+	case $host in '' | 0.0.0.0 | '[::]' | ::) host=127.0.0.1 ;; esac
+	printf 'http://%s:%s/healthz\n' "$host" "$port"
+}
+
+# Prints the open-room count; fails when telinha does not answer (nothing to protect).
+open_rooms() {
+	body=$(curl -fsS --max-time 5 --noproxy '*' "$(healthz_url)" 2>/dev/null) || return 1
+	rooms=$(printf '%s\n' "$body" | sed -n 's/.*"rooms": *\([0-9][0-9]*\).*/\1/p' | head -n 1)
+	[ -n "$rooms" ] || return 1
+	printf '%s\n' "$rooms"
+}
+
+write_atomic() { # file content
+	printf '%s\n' "$2" > "$1.tmp"
+	mv "$1.tmp" "$1"
+}
+
+need_root() {
+	if [ "$(id -u)" -ne 0 ]; then
+		echo "telinha-update: run as root" >&2
+		exit 1
+	fi
+}
+
+status() {
+	pin=$(tr -d '[:space:]' 2>/dev/null < "$pinfile" || true)
+	deployed=$(env_value TELINHA_VERSION "$envfile")
+	digest=$(env_value TELINHA_DIGEST "$envfile")
+	newest=$(newest_stable) || newest="unknown (GitHub API unreachable)"
+	failed=$(tr -d '[:space:]' 2>/dev/null < "$failedfile" || true)
+	deferred=none
+	if [ -s "$deferfile" ]; then
+		dtag='' dfirst=''
+		read -r dtag dfirst < "$deferfile" || true
+		case $dfirst in
+		'' | *[!0-9]*) deferred="$dtag (unreadable start time)" ;;
+		*)
+			ts=$(date +%s)
+			deferred="$dtag for $(((ts - dfirst) / 3600))h of ${max_defer_hours}h"
+			;;
+		esac
+	fi
+	echo "pin:       ${pin:-none (following newest stable)}"
+	echo "deployed:  ${deployed:+v}${deployed:-none}${digest:+ ($digest)}"
+	echo "newest:    ${newest:-none}"
+	echo "deferred:  $deferred"
+	echo "failed:    ${failed:-none}${failed:+ (rolled back; the timer skips it, telinha-update --now retries)}"
+}
+
+deploy() { # now (non-empty: do not wait for open rooms)
+	now=$1
+
+	# 1. One run at a time. Wait rather than skip, so a pin issued during a timer
+	# run is still applied right after it.
+	exec 9>/run/lock/telinha-update.lock
+	if ! flock -w 900 9; then
+		log "another run still holds the lock, giving up"
+		exit 1
+	fi
+	# compose picks up compose.yml + compose.override.yml and .env from here
+	cd "$dir"
+
+	# 2. Target. Offline is not fatal: the next tick retries.
+	if [ -s "$pinfile" ]; then
+		target=$(tr -d '[:space:]' < "$pinfile")
+	elif ! target=$(newest_stable); then
+		log "GitHub API unreachable, retrying next run"
+		exit 0
+	fi
+	if [ -z "$target" ]; then
+		log "no release found, retrying next run"
+		exit 0
+	fi
+
+	# 3. The pin file is free text: only accept something that is a valid image tag too.
+	if ! valid_tag "$target"; then
+		log "refusing target '$target' (check $pinfile)"
+		exit 1
+	fi
+	version=${target#v}
+	deployed=$(env_value TELINHA_VERSION "$envfile")
+	old_digest=$(env_value TELINHA_DIGEST "$envfile")
+	if [ "$deployed" = "$version" ]; then
+		rm -f "$deferfile" "$failedfile"
+		exit 0
+	fi
+	# A target that already failed and was rolled back would fail the same way every
+	# tick (and cut the service each time): wait for a newer release, --now or a pin.
+	if [ -z "$now" ] && [ -s "$failedfile" ] && [ "$(tr -d '[:space:]' < "$failedfile")" = "$target" ]; then
+		exit 0
+	fi
+
+	# 4. The digest published with the release is the trusted reference for the tag.
+	digest=
+	if [ "${ALLOW_UNVERIFIED:-}" = 1 ]; then
+		log "WARNING: ALLOW_UNVERIFIED=1, deploying $target WITHOUT checking it against its published image digest"
+	else
+		resp=$(curl -sSL --max-time 30 -w '\n%{http_code}' \
+			"https://github.com/$repo/releases/download/$target/telinha-image.digest" 2>/dev/null) || resp=
+		code=$(printf '%s\n' "$resp" | tail -n 1)
+		case $code in
+		200) ;;
+		404)
+			# the image job has not finished yet, or a pre-digest tag was pinned
+			log "no image digest published for $target yet, retrying next run"
+			exit 0
+			;;
+		*)
+			log "could not fetch the image digest for $target (HTTP ${code:-error}), retrying next run"
+			exit 0
+			;;
+		esac
+		digest=$(printf '%s\n' "$resp" | sed '$d' | tr -d '[:space:]')
+		if ! printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+			log "malformed image digest published for $target: '$digest'"
+			exit 1
+		fi
+	fi
+
+	# 5. Do not cut open rooms, but only for MAX_DEFER_HOURS per target: a room stuck
+	# open (lifecycle bug, LiveKit down) must not block the release that fixes it.
+	if [ -z "$now" ] && rooms=$(open_rooms) && [ "$rooms" -gt 0 ]; then
+		ts=$(date +%s)
+		dtag='' dfirst=''
+		if [ -s "$deferfile" ]; then
+			read -r dtag dfirst < "$deferfile" || true
+		fi
+		case $dfirst in '' | *[!0-9]*) dtag= ;; esac
+		if [ "$dtag" != "$target" ]; then
+			dfirst=$ts
+			write_atomic "$deferfile" "$target $dfirst"
+		fi
+		waited=$((ts - dfirst))
+		if [ "$waited" -lt $((max_defer_hours * 3600)) ]; then
+			log "$rooms room(s) open, deferring $target ($((waited / 3600))h of ${max_defer_hours}h)"
+			exit 0
+		fi
+		log "$rooms room(s) open but $target deferred for ${max_defer_hours}h, deploying anyway"
+	fi
+
+	# 6. A fresh tag whose image is still pushing is just retried next tick.
+	if ! docker pull --quiet "$image:$version" >/dev/null 2>&1; then
+		log "image $image:$version not pullable yet, retrying next run"
+		exit 0
+	fi
+
+	# 7. The tag must resolve to the published digest (pull by digest is cheap: same layers).
+	if [ -n "$digest" ]; then
+		if ! docker pull --quiet "$image@$digest" >/dev/null 2>&1; then
+			log "published digest $digest for $target is not pullable, refusing"
+			exit 1
+		fi
+		tag_id=$(docker image inspect --format '{{.Id}}' "$image:$version" 2>/dev/null || true)
+		digest_id=$(docker image inspect --format '{{.Id}}' "$image@$digest" 2>/dev/null || true)
+		if [ -z "$tag_id" ] || [ "$tag_id" != "$digest_id" ]; then
+			log "tag $target does not match the published digest $digest, refusing"
+			docker image rm "$image:$version" >/dev/null 2>&1 || true
+			exit 1
+		fi
+		if [ "${VERIFY_ATTESTATION:-}" = 1 ]; then
+			# Asked for explicitly, so a missing gh refuses instead of silently skipping.
+			if ! command -v gh >/dev/null 2>&1; then
+				log "VERIFY_ATTESTATION=1 but gh is not on PATH, refusing $target"
+				exit 1
+			fi
+			if ! out=$(gh attestation verify "oci://$image@$digest" --repo "$repo" 2>&1); then
+				log "attestation check failed for $image@$digest, refusing: $(printf '%s\n' "$out" | tail -n 1)"
+				exit 1
+			fi
+		fi
+	elif [ "${VERIFY_ATTESTATION:-}" = 1 ]; then
+		log "VERIFY_ATTESTATION=1 ignored: ALLOW_UNVERIFIED=1 left no digest to verify"
+	fi
+
+	# 8. No -f, so compose.override.yml (e.g. the journald logging) applies too.
+	# --wait: only record the deploy once telinha's healthcheck passes.
+	if ! TELINHA_VERSION=$version docker compose up -d --remove-orphans --wait --wait-timeout 180; then
+		# .env still names the old version and its image is still here (removed only
+		# after a successful deploy): go back to it rather than leave the broken one up.
+		write_atomic "$failedfile" "$target"
+		if [ -z "$deployed" ]; then
+			log "compose up failed for $target and there is no previous version to roll back to; fix it, then telinha-update --now"
+		elif TELINHA_VERSION=$deployed docker compose up -d --remove-orphans --wait --wait-timeout 180; then
+			log "compose up failed for $target, rolled back to v$deployed; the timer skips $target until a newer release (telinha-update --now retries)"
+		else
+			log "compose up failed for $target and the rollback to v$deployed failed too; check docker logs telinha"
+		fi
+		exit 1
+	fi
+
+	# 9. Record the deploy; compose reads TELINHA_VERSION from .env on by-hand runs.
+	printf 'TELINHA_VERSION=%s\nTELINHA_DIGEST=%s\n' "$version" "$digest" > "$envfile.tmp"
+	mv "$envfile.tmp" "$envfile"
+	rm -f "$deferfile" "$failedfile"
+	log "deployed $target (was ${deployed:+v}${deployed:-none})"
+
+	# Old app images pile up otherwise; a rollback just pulls again.
+	if [ -n "$deployed" ]; then
+		docker image rm "$image:$deployed" >/dev/null 2>&1 || true
+	fi
+	if [ -n "$old_digest" ] && [ "$old_digest" != "$digest" ]; then
+		docker image rm "$image@$old_digest" >/dev/null 2>&1 || true
+	fi
+}
+
+case "${1:-}" in
+"" | run)
+	[ $# -le 1 ] || usage
+	need_root
+	deploy ""
+	;;
+--now)
+	[ $# -eq 1 ] || usage
+	need_root
+	deploy 1
+	;;
+status)
+	[ $# -eq 1 ] || usage
+	need_root # $TELINHA_DIR is root-only (700)
+	status
+	;;
+pin)
+	case $# in 2 | 3) ;; *) usage ;; esac
+	[ "${3:---now}" = --now ] || usage
+	need_root
+	# Same pattern the run accepts, so a bad pin is never stored (it would block
+	# every later deploy until unpin).
+	if ! valid_tag "$2"; then
+		echo "telinha-update: not a release tag: $2" >&2
+		exit 1
+	fi
+	code=$(curl -sS -o /dev/null --max-time 30 -w '%{http_code}' \
+		"https://api.github.com/repos/$repo/releases/tags/$2" 2>/dev/null) || code=
+	case $code in
+	200) ;;
+	404)
+		echo "telinha-update: no such release: $2" >&2
+		exit 1
+		;;
+	*) echo "telinha-update: could not check that $2 exists (HTTP ${code:-error}), pinning anyway" >&2 ;;
+	esac
+	write_atomic "$pinfile" "$2"
+	# An explicit choice: retry even a tag that failed before.
+	rm -f "$failedfile"
+	echo "pinned to $2, deploying"
+	deploy "${3:-}"
+	;;
+unpin)
+	[ $# -le 2 ] || usage
+	[ "${2:---now}" = --now ] || usage
+	need_root
+	rm -f "$pinfile" "$failedfile"
+	echo "unpinned, deploying newest stable release"
+	deploy "${2:-}"
+	;;
+*)
+	usage
+	;;
+esac

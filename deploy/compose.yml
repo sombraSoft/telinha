@@ -1,62 +1,39 @@
-# Telinha: self-hosted screen share behind a Discord login gate.
-#   Cloudflare Tunnel -> caddy 127.0.0.1:8080 -> (telinha login check) -> /sala/ page + /livekit/* signaling
-#   Media: LiveKit SFU on tcp 7891 + udp 7892 (forwarded on the router)
-# Host networking everywhere; web listeners bind to 127.0.0.1.
-# Secrets live outside the clone in /etc/telinha/*.env (see env/*.env.example).
-# TELINHA_VERSION comes from deploy/.env, written by tela-update after each deploy;
-# lives next to this file so plain `docker compose restart <svc>` here keeps working.
-name: tela
+# Telinha: one container runs telinha + livekit-server (+ caddy in direct mode, + cloudflared in tunnel mode).
+# Host networking: Caddy binds 80/443, LiveKit the media ports from telinha.env, telinha LISTEN (127.0.0.1:8081).
+# Config: ./config/telinha.env (copy telinha.env.example there). TELINHA_VERSION: ./.env, written by telinha-update; else latest.
+# Values with $ \ or # must be single-quoted in telinha.env (compose interpolates otherwise).
+# Linux: copy compose.journald.yml to compose.override.yml to log to journald (journalctl -t telinha).
+# Windows Docker Desktop: needs 4.34+ with host networking enabled; prefer INGRESS=tunnel there.
+name: telinha
 
 services:
-  livekit:
-    image: livekit/livekit-server:v1.13.7
-    container_name: livekit
-    restart: unless-stopped
-    network_mode: host
-    command: --config /etc/livekit.yaml
-    env_file: /etc/telinha/livekit.env
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
-
   telinha:
-    image: ghcr.io/sombrasoft/telinha:${TELINHA_VERSION:?TELINHA_VERSION missing, run tela-update}
+    image: ghcr.io/sombrasoft/telinha:${TELINHA_VERSION:-latest}
     container_name: telinha
     restart: unless-stopped
     network_mode: host
-    env_file: /etc/telinha/app.env
-    mem_limit: 256m
-    # journald keeps the log across container recreation (every deploy), so a
-    # failed login can still be looked up later: journalctl -t telinha
-    logging:
-      driver: journald
-      options:
-        tag: telinha
+    # bun is PID 1 with children; tini reaps them and forwards signals.
+    init: true
+    env_file: config/telinha.env
     volumes:
-      # room registry (telinha.sqlite): closed rooms must stay closed across updates
-      - telinha-data:/data
+      # Room registry, rendered configs, Caddy certificates: must survive updates.
+      - telinha-data:/telinha/data
     healthcheck:
-      # busybox wget ships in oven/bun:alpine; port must match LISTEN in app.env
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/healthz"]
+      # busybox wget and sh ship in the image; port must match LISTEN in telinha.env.
+      # Unhealthy while a child (livekit, caddy, cloudflared) is down waiting to restart,
+      # e.g. Caddy cannot bind 80/443 or a bad tunnel token: then telinha-update's --wait
+      # fails and it rolls back. The retries absorb livekit's brief restart on an IP change.
+      test:
+        - CMD-SHELL
+        - >-
+          body=$$(wget -qO- http://127.0.0.1:8081/healthz) &&
+          case "$$body" in *'"restarting"'*) exit 1 ;; esac
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
-
-  caddy:
-    image: caddy:2.11.4-alpine
-    container_name: tela-caddy
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-
-  cloudflared:
-    image: cloudflare/cloudflared:2026.9.3
-    container_name: tela-tunnel
-    restart: unless-stopped
-    network_mode: host
-    command: tunnel --no-autoupdate run
-    env_file: /etc/telinha/tunnel.env
+      start_period: 30s
 
 volumes:
-  telinha-data: {}
+  # Explicit name: the volume outlives renames of the compose project.
+  telinha-data:
+    name: telinha-data

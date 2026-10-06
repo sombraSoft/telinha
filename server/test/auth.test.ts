@@ -36,8 +36,8 @@ test('parseCookies', () => {
 });
 
 test('safeNext blocks open redirects', () => {
-  expect(safeNext('/?room=abc&create=true')).toBe('/?room=abc&create=true');
-  expect(safeNext('/sala/?room=abcd#x')).toBe('/sala/?room=abcd#x');
+  expect(safeNext('/r/?x=1&y=2')).toBe('/r/?x=1&y=2');
+  expect(safeNext('/r/bafo-kiru#x')).toBe('/r/bafo-kiru#x');
   for (const bad of [
     '//evil.com',
     '/\\evil.com',

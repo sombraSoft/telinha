@@ -1,0 +1,27 @@
+{
+  "$comment": "Pinned child binaries. Renovate bumps `version`; run `bun scripts/versions.ts refresh` to recompute the sha256 of every asset. CI fails on a stale hash.",
+  "livekit": {
+    "version": "1.13.7",
+    "sha256": {
+      "linux-amd64": "6634aeeb2fb1366b6723708ae4320b9d5408106a4c63457c5e845ae3979c90e2",
+      "linux-arm64": "5d167fdf52cf43c0c72972f25325364479f41f854bfef651056eab2504da5de9",
+      "windows-amd64": "e539e7d2f75807b9c9202cd2a0bf2cb3d52fc4c52978a6953e0f47bc339fe77f"
+    }
+  },
+  "caddy": {
+    "version": "2.11.4",
+    "sha256": {
+      "linux-amd64": "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9",
+      "linux-arm64": "52d42ae12b3462097e9868da6dfed3c9648ae12edd3b3638102312af84cb6904",
+      "windows-amd64": "1708333f79e274c7697285afe6d592ab39314e0b131e9ec6bea08ad27df62ebf"
+    }
+  },
+  "cloudflared": {
+    "version": "2026.9.3",
+    "sha256": {
+      "linux-amd64": "77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2",
+      "linux-arm64": "aaeb2d7d0da3614634c7e03ab13487a1522c2e79165ed2929cfe23d5e95b326d",
+      "windows-amd64": "f096265ec2fcbe9bb6e2d64268db167ced3fcbb83d894bdb9e2fcdb26f2ea7e2"
+    }
+  }
+}

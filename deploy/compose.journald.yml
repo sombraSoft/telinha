@@ -1,0 +1,9 @@
+# Optional override (Linux): copy to compose.override.yml next to compose.yml.
+# journald keeps the log across container recreation (every deploy), so a
+# failed login can still be looked up later: journalctl -t telinha
+services:
+  telinha:
+    logging:
+      driver: journald
+      options:
+        tag: telinha

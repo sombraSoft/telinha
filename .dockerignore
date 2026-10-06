@@ -1,3 +1,5 @@
+# scripts/ and versions.json stay in the context: the bins stage and the
+# in-image smoke test need them.
 node_modules
 **/node_modules
 dist
@@ -7,6 +9,8 @@ dist
 *.env
 .env
 deploy/
+# server/test checks it against KNOWN_KEYS; the in-image unit tests need it.
+!deploy/telinha.env.example
 .github/
 e2e/
 test-results/

@@ -1,7 +1,10 @@
 // Environment -> typed config. Pure (env passed in) so the guards are unit tested.
 import { fileURLToPath } from 'node:url';
+import { resolvePaths, type Paths } from './paths.ts';
 
 export interface DevUser { id: string; name: string }
+export type Ingress = 'direct' | 'tunnel' | 'external';
+export type Media = 'self' | 'cloud';
 
 export interface Config {
   /** Fake login for local dev/E2E; null in production. */
@@ -24,7 +27,7 @@ export interface Config {
   livekitUrl: string;
   /** LiveKit HTTP API (RoomService) as the server reaches it. */
   livekitApiUrl: string;
-  /** Holds telinha.sqlite (the room registry). */
+  /** Holds telinha.sqlite (the room registry); equals paths.data. */
   dataDir: string;
   /** A room closes for good after this long with nobody in it. */
   closeEmptySeconds: number;
@@ -33,12 +36,56 @@ export interface Config {
   webDir: string;
   /** Secure cookie flag; off only for plain-http (dev) PUBLIC_URL. */
   secureCookies: boolean;
+  /** Slash command name, configurable so two deployments can share a guild. */
+  commandName: string;
+  ingress: Ingress;
+  /** Bare hostname of PUBLIC_URL (Caddy site address; https_port picks the bind port). */
+  publicHost: string;
+  /** Non-fatal validation findings; index.ts logs them. */
+  warnings: string[];
+  /** direct: Caddy's HTTP->HTTPS redirect port, 0 = no redirect listener. */
+  httpPort: number;
+  /** direct: the port Caddy binds for TLS. */
+  httpsPort: number;
+  acmeEmail?: string;
+  tunnelToken?: string;
+  media: Media;
+  livekitPort: number;
+  mediaTcpPort: number;
+  mediaUdpPort: number;
+  /** Static public IP: skips STUN and the IP watch. */
+  livekitNodeIp?: string;
+  /** 0 = off; forced 0 when livekitNodeIp is set. */
+  ipWatchSeconds: number;
+  paths: Paths;
 }
+
+/** Every key telinha.env may hold, incl. reserved ones of later phases (no "unknown key" warning). */
+export const KNOWN_KEYS: ReadonlySet<string> = new Set([
+  'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'GUILD_ID', 'ROLE_ID', 'CHANNEL_IDS',
+  'COMMAND_NAME', 'GROUP_NAME', 'COOKIE_SECRET', 'SESSION_DAYS', 'ROLE_CACHE_SECONDS',
+  'PUBLIC_URL', 'INGRESS', 'LISTEN', 'HTTP_PORT', 'HTTPS_PORT', 'ACME_EMAIL', 'TUNNEL_TOKEN',
+  'MEDIA', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT',
+  'LIVEKIT_NODE_IP', 'LIVEKIT_API_URL', 'LIVEKIT_PUBLIC_URL', 'IP_WATCH_SECONDS',
+  'CLOSE_EMPTY_SECONDS', 'POLL_SECONDS',
+  'TELINHA_HOME', 'TELINHA_ENV', 'DATA_DIR', 'BIN_DIR', 'WEB_DIR',
+  'DEV_USER', 'DEV_LOCALE',
+  // reserved: phase 2
+  'DDNS_PROVIDER', 'DUCKDNS_TOKEN', 'DUCKDNS_DOMAIN', 'UPNP', 'AUTO_UPDATE', 'LOCALE',
+  // reserved: phase 5
+  'LIVEKIT_CLOUD_URL', 'TURN_TLS_PORT',
+]);
 
 type Env = Record<string, string | undefined>;
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 const DEV_URL_RE = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const INGRESSES: readonly Ingress[] = ['direct', 'tunnel', 'external'];
+const MEDIAS: readonly Media[] = ['self', 'cloud'];
+// Discord's chat-input name rule (lowercase is checked separately, it is locale-aware).
+const COMMAND_RE = /^[-_\p{L}\p{N}]{1,32}$/u;
+// Dotted-quad IPv4 (LiveKit advertises IPv4 only; ipwatch reuses this).
+export const IPV4_RE = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 
 export function parseListen(v: string): { host: string; port: number } {
   const m = /^\[([^\]]+)\]:(\d+)$/.exec(v) ?? /^([^:[\]]+):(\d+)$/.exec(v);
@@ -61,9 +108,26 @@ export function loadConfig(env: Env): Config {
     if (!Number.isFinite(n) || n <= 0) throw new Error(`bad ${k}`);
     return n;
   };
+  const int = (k: string, d: string, min: number, max: number) => {
+    const n = Number(get(k, d));
+    if (!Number.isInteger(n) || n < min || n > max) throw new Error(`bad ${k}`);
+    return n;
+  };
+  const oneOf = <T extends string>(k: string, d: T, allowed: readonly T[]) => {
+    const v = get(k, d) as T;
+    if (!allowed.includes(v)) throw new Error(`bad ${k} ${v} (want ${allowed.join(' | ')})`);
+    return v;
+  };
 
   const publicUrl = get('PUBLIC_URL').replace(/\/$/, '');
   const { host, port } = parseListen(get('LISTEN', '127.0.0.1:8081'));
+  let url: URL;
+  try {
+    url = new URL(publicUrl);
+  } catch {
+    throw new Error(`bad PUBLIC_URL ${publicUrl}`);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error(`bad PUBLIC_URL ${publicUrl}`);
 
   let dev: DevUser | null = null;
   const devRaw = opt('DEV_USER');
@@ -77,6 +141,65 @@ export function loadConfig(env: Env): Config {
   }
   const discord = (k: string) => (dev ? (env[k] ?? '') : get(k));
 
+  // Dev has no Caddy and no tunnel: the stack (or Vite) talks to LISTEN directly.
+  const ingress = oneOf<Ingress>('INGRESS', dev ? 'external' : 'direct', INGRESSES);
+  if (dev && ingress !== 'external') throw new Error('DEV_USER requires INGRESS=external');
+  const media = oneOf<Media>('MEDIA', 'self', MEDIAS);
+  if (media === 'cloud') throw new Error('MEDIA=cloud is not supported yet (phase 5)');
+
+  const warnings: string[] = [];
+  const httpPort = int('HTTP_PORT', '80', 0, 65535);
+  const httpsPort = int('HTTPS_PORT', '443', 1, 65535);
+  if ((ingress === 'direct' || ingress === 'tunnel') && url.protocol !== 'https:') {
+    throw new Error(`INGRESS=${ingress} requires an https:// PUBLIC_URL`);
+  }
+  if (ingress === 'direct') {
+    const urlPort = Number(url.port || 443);
+    // Not an error: external 443 -> internal 8443 is common where 443 is taken.
+    if (urlPort !== httpsPort) {
+      warnings.push(`config: PUBLIC_URL port ${urlPort} differs from HTTPS_PORT ${httpsPort}; assuming the router translates ${urlPort} -> ${httpsPort}`);
+    }
+  }
+  const tunnelToken = ingress === 'tunnel' ? get('TUNNEL_TOKEN') : undefined;
+
+  const livekitPort = int('LIVEKIT_PORT', '7880', 1, 65535);
+  const mediaTcpPort = int('MEDIA_TCP_PORT', '7881', 1, 65535);
+  const mediaUdpPort = int('MEDIA_UDP_PORT', '7882', 1, 65535);
+  // One flat rule, TCP/UDP not told apart: nobody needs UDP 7882 to equal a TCP port.
+  const ports: [string, number][] = [
+    ['MEDIA_TCP_PORT', mediaTcpPort], ['MEDIA_UDP_PORT', mediaUdpPort], ['LIVEKIT_PORT', livekitPort], ['LISTEN', port],
+  ];
+  if (ingress === 'direct') {
+    ports.push(['HTTPS_PORT', httpsPort]);
+    if (httpPort !== 0) ports.push(['HTTP_PORT', httpPort]);
+  }
+  for (const [i, [a, n]] of ports.entries()) {
+    const clash = ports.slice(i + 1).find(([, m]) => m === n);
+    if (clash) throw new Error(`ports collide: ${a}=${n}, ${clash[0]}=${n}`);
+  }
+
+  const commandName = get('COMMAND_NAME', 'telinha');
+  if (!COMMAND_RE.test(commandName) || commandName !== commandName.toLocaleLowerCase()) {
+    throw new Error('bad COMMAND_NAME (Discord: lowercase, 1-32 chars)');
+  }
+  const livekitNodeIp = opt('LIVEKIT_NODE_IP');
+  if (livekitNodeIp && !IPV4_RE.test(livekitNodeIp)) throw new Error(`bad LIVEKIT_NODE_IP ${livekitNodeIp} (want an IPv4 address)`);
+  // Upper bound: setTimeout's 2^31 ms limit (a longer delay fires at once).
+  const ipWatchSeconds = int('IP_WATCH_SECONDS', '300', 0, 2_147_483);
+  // The proxy derives ws(s):// from it per request; a bad value must fail here,
+  // not as an error per join (Bun's WebSocket errors quote the URL, token included).
+  const livekitApiUrl = get('LIVEKIT_API_URL', `http://127.0.0.1:${livekitPort}`).replace(/\/$/, '');
+  let apiUrl: URL | null = null;
+  try {
+    apiUrl = new URL(livekitApiUrl);
+  } catch {
+    // reported below
+  }
+  if (!apiUrl || (apiUrl.protocol !== 'http:' && apiUrl.protocol !== 'https:') || !apiUrl.hostname) {
+    throw new Error(`bad LIVEKIT_API_URL ${livekitApiUrl} (want http(s)://host[:port])`);
+  }
+  const paths = resolvePaths(env);
+
   return {
     dev,
     devLocale: dev ? opt('DEV_LOCALE') : undefined,
@@ -85,7 +208,7 @@ export function loadConfig(env: Env): Config {
     clientSecret: discord('DISCORD_CLIENT_SECRET'),
     guildId: discord('GUILD_ID'),
     roleId: discord('ROLE_ID'),
-    // /telinha only works in these channels, e.g. a chat visitors can't see
+    // the slash command only works in these channels, e.g. a chat visitors can't see
     channelIds: discord('CHANNEL_IDS').split(',').map((c) => c.trim()).filter(Boolean),
     publicUrl,
     cookieSecret: get('COOKIE_SECRET'),
@@ -96,12 +219,28 @@ export function loadConfig(env: Env): Config {
     livekitKey: get('LIVEKIT_API_KEY'),
     livekitSecret: get('LIVEKIT_API_SECRET'),
     livekitUrl: opt('LIVEKIT_PUBLIC_URL') ?? `${publicUrl.replace(/^http/, 'ws')}/livekit`,
-    livekitApiUrl: get('LIVEKIT_API_URL', 'http://127.0.0.1:7880').replace(/\/$/, ''),
-    dataDir: opt('DATA_DIR') ?? fileURLToPath(new URL('../../.cache/data/', import.meta.url)),
+    livekitApiUrl,
+    dataDir: paths.data,
     closeEmptySeconds: num('CLOSE_EMPTY_SECONDS', '300'),
     pollSeconds: num('POLL_SECONDS', '5'),
     groupName: opt('GROUP_NAME'),
     webDir: opt('WEB_DIR') ?? fileURLToPath(new URL('../../web/dist/', import.meta.url)),
     secureCookies: !publicUrl.startsWith('http://'),
+    commandName,
+    ingress,
+    publicHost: url.hostname,
+    warnings,
+    httpPort,
+    httpsPort,
+    acmeEmail: ingress === 'direct' ? opt('ACME_EMAIL') : undefined,
+    tunnelToken,
+    media,
+    livekitPort,
+    mediaTcpPort,
+    mediaUdpPort,
+    livekitNodeIp,
+    // A static IP never changes, so there is nothing to watch.
+    ipWatchSeconds: livekitNodeIp ? 0 : ipWatchSeconds,
+    paths,
   };
 }

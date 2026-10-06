@@ -1,6 +1,7 @@
 # release-please keeps a Release PR open on main; merging it tags vX.Y.Z and
 # creates the GitHub release, then the image job publishes the matching image.
-# The CT (tela-update) waits for the tag and the image before deploying.
+# Hosts running telinha-update wait for the tag, the image and its published
+# digest (telinha-image.digest) before deploying.
 name: release
 
 on:
@@ -79,19 +80,21 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # arm64's final stage (apk, setcap) runs emulated; the heavy stages run natively.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v4
       - id: build
         uses: docker/build-push-action@v7
         with:
           # The checked-out tag, not the default git context (which is main).
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
-          # Provenance comes from actions/attest; skip buildx's own so the tag
-          # stays a plain single-platform manifest.
+          # Provenance comes from actions/attest; skip buildx's own so the index
+          # lists only the two platform images.
           provenance: false
       - uses: actions/attest@v4
         with:
@@ -100,3 +103,26 @@ jobs:
           push-to-registry: true
           # Storage records only exist for organization-owned repos.
           create-storage-record: false
+      # The index digest is the updater's trusted reference: it pulls by digest
+      # and refuses a tag that resolves elsewhere. The asset name is the contract.
+      - name: release assets
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "$DIGEST" > telinha-image.digest
+          tar czf telinha-deploy.tar.gz -C deploy compose.yml compose.journald.yml \
+            telinha.env.example install-docker.sh telinha-update \
+            telinha-update.service telinha-update.timer
+      # Its own token: release-please's is a masked job output (arrives empty),
+      # and GITHUB_TOKEN here is contents: read on purpose.
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: upload release assets
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "$TAG" telinha-image.digest telinha-deploy.tar.gz --clobber --repo "$GITHUB_REPOSITORY"

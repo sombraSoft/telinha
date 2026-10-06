@@ -1,9 +1,11 @@
-// `bun run dev`: LiveKit + the Bun server (DEV_USER login, restarts on change)
-// + Vite with hot reload. Vite proxies /auth to the server and /livekit to
-// LiveKit, so the browser only ever talks to localhost:5173.
+// `bun run dev`: the Bun server (DEV_USER login, restarts on change; it starts
+// livekit-server itself) + Vite with hot reload. Vite proxies /auth and
+// /livekit to the server, so the browser only ever talks to localhost:5173.
+import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { newRoomCode } from '../server/src/codes.ts';
 import { placeholderWebDir, startStack } from './stack.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -23,7 +25,8 @@ try {
     pollSeconds: Number(process.env.POLL_SECONDS) || undefined,
   });
   stack.spawn('vite', [process.execPath, 'run', '--filter', '@telinha/web', 'dev']);
-  console.log('\n  open http://localhost:5173/sala/\n');
+  // Dev has no slash command: any room code opens a room on first use.
+  console.log(`\n  open http://localhost:5173/r/${newRoomCode(randomBytes)}\n`);
 } catch (e) {
   console.error(`[dev] ${e instanceof Error ? e.message : e}`);
   process.exit(1);
