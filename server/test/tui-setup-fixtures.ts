@@ -299,6 +299,7 @@ export interface DriverOptions {
   doctor?: SetupUiContext['doctor'];
   /** Replaces the install and its task list: a test shows rows of its own. */
   apply?: SetupUiContext['apply'];
+  /** Replaces the task list the screens read their rows from (pair it with `apply`). */
   tasks?: SetupUiContext['tasks'];
 }
 
