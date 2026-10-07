@@ -1,0 +1,6 @@
+# Commits git blame skips: whole-repo reformats that change no behavior.
+# GitHub's blame view reads this file; for local blame run once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# build: lint and format with Biome (#62)
+9dc9c70ae158f502a3e23ea5e9b04340fea22e76
