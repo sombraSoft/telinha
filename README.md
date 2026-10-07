@@ -50,7 +50,7 @@ check its sha256 against the release's `SHA256SUMS` and start `telinha setup`.
 
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
-mise install && bun run build    # the toolchain mise.toml pins, then bun install
+mise install && bun run build    # the toolchain mise.toml pins, then bun install and the git hooks
 bun server/src/index.ts setup    # same setup screens; downloads the helper binaries into <home>/bin
 bun server/src/index.ts          # run in this console
 ```
@@ -269,7 +269,7 @@ your shell. Works on Windows and Linux. `mise install` installs the versions
 `bun install`; run it again after a pull.
 
 ```
-mise install               # the toolchain mise.toml pins, then bun install
+mise install               # the toolchain mise.toml pins, then bun install and the git hooks (lefthook.yml; LEFTHOOK=0 skips them)
 bun run dev                # http://localhost:5173/r/ (Vite HMR + Bun server, which runs LiveKit)
 bun run typecheck          # tsc and svelte-check in every workspace
 bun run lint               # Biome: formatting, lint rules and import order (bun run format fixes what it can)
