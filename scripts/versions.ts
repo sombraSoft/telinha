@@ -5,6 +5,7 @@ import { writeFile } from 'node:fs/promises';
 import {
   HELPERS, PLATFORMS, VERSIONS_FILE, assetSpec, download, isPinned, sha256, type Arch, type Helper, type Os, type Platform, type Versions,
 } from '../server/src/bins.ts';
+import { parseSums } from '../server/src/release.ts';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const SEMVER = /^\d+\.\d+\.\d+$/;
@@ -67,20 +68,12 @@ function validateBuild(helper: Helper, e: Record<string, any>): string[] {
   return errors;
 }
 
-// Upstream checksum files ("<hash>  <file>" lines); null when the helper publishes none (cloudflared) or is built by us (caddy).
+// Upstream checksum files, in the sha256sum format our own SHA256SUMS uses (parseSums
+// reads both); null when the helper publishes none (cloudflared) or is built by us (caddy).
 export function checksumsUrl(helper: Helper, version: string): string | null {
   const spec = assetSpec(helper, version, 'linux', 'amd64');
   if (helper === 'livekit') return spec.url.replace(spec.asset, 'checksums.txt');
   return null;
-}
-
-export function parseChecksums(text: string): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const line of text.split('\n')) {
-    const [hash, file] = line.trim().split(/\s+/);
-    if (hash && file) map.set(file.replace(/^\*/, ''), hash.toLowerCase());
-  }
-  return map;
 }
 
 /**
@@ -91,7 +84,7 @@ export function parseChecksums(text: string): Map<string, string> {
  */
 export async function upstreamChecksums(
   helper: Helper, version: string, get: (url: string) => Promise<Uint8Array> = download,
-): Promise<Map<string, string> | null> {
+): Promise<Record<string, string> | null> {
   const url = checksumsUrl(helper, version);
   if (!url) return null;
   let text: string;
@@ -100,9 +93,9 @@ export async function upstreamChecksums(
   } catch (e) {
     throw new Error(`${helper} ${version}: could not fetch upstream checksums, refusing to pin unchecked hashes (${e instanceof Error ? e.message : e})`);
   }
-  const map = parseChecksums(text);
-  if (!map.size) throw new Error(`${helper} ${version}: upstream checksums at ${url} list nothing`);
-  return map;
+  const sums = parseSums(text);
+  if (!Object.keys(sums).length) throw new Error(`${helper} ${version}: upstream checksums at ${url} list nothing`);
+  return sums;
 }
 
 async function refresh(): Promise<void> {
@@ -120,15 +113,11 @@ async function refresh(): Promise<void> {
       list.map(async ({ key, spec }) => {
         console.log(`[versions] ${spec.asset}`);
         const data = await download(spec.url);
-        const listed = upstream?.get(spec.asset);
+        const listed = upstream?.[spec.asset];
         if (upstream && !listed) throw new Error(`${spec.asset} not listed in upstream checksums`);
-        if (listed) {
-          // Upstream lists are sha256 or sha512: pick the digest by length.
-          const algo = listed.length === 128 ? 'sha512' : 'sha256';
-          const computed = new Bun.CryptoHasher(algo).update(data).digest('hex');
-          if (computed !== listed) throw new Error(`${spec.asset}: computed ${algo} ${computed}, upstream says ${listed}`);
-        }
-        hashes.set(key, sha256(data));
+        const computed = sha256(data);
+        if (listed && computed !== listed) throw new Error(`${spec.asset}: computed sha256 ${computed}, upstream says ${listed}`);
+        hashes.set(key, computed);
       }),
     );
     // Fixed platform order keeps the diff of versions.json stable.
