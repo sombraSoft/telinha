@@ -19,15 +19,24 @@ COPY server server
 COPY web web
 RUN bun run build
 
-# Runtime dependencies only (discord.js, livekit-server-sdk): every web
-# dependency is a devDependency, bundled into web/dist by Vite.
+# Runtime dependencies only (discord.js, livekit-server-sdk, OpenTUI + Solid):
+# every web dependency is a devDependency, bundled into web/dist by Vite.
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS prod-deps
+ARG TARGETARCH
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 COPY server/package.json server/
 COPY web/package.json web/
 COPY docs/package.json docs/
-RUN bun install --frozen-lockfile --production
+# OpenTUI's native library is per os/cpu: install the target's, not the build
+# platform's. Bun installs every libc variant of that os/cpu; the image needs
+# only musl (OPENTUI_LIBC below), so the glibc one goes. So does typescript,
+# which Bun installs as a required peer of bun-ffi-structs (an @opentui/core
+# dependency) and nothing loads at runtime.
+RUN cpu=$([ "$TARGETARCH" = amd64 ] && echo x64 || echo "$TARGETARCH") \
+	&& bun install --frozen-lockfile --production --os=linux --cpu="$cpu" \
+	&& test -d "node_modules/@opentui/core-linux-$cpu-musl" \
+	&& rm -rf node_modules/typescript "node_modules/@opentui/core-linux-$cpu"
 
 # Downloaded child binaries for the target arch, sha256-checked against
 # versions.json. Repo layout kept (versions.json, scripts/, server/src/):
@@ -71,7 +80,9 @@ COPY --from=caddy-build /out/ /
 
 # Same base as the build: busybox wget stays available for the compose healthcheck.
 FROM oven/bun:1.4.2-alpine
-ENV NODE_ENV=production TELINHA_HOME=/telinha
+# OPENTUI_LIBC: OpenTUI does not detect musl; unset, `setup --docker` would load
+# its glibc library, which Alpine cannot run.
+ENV NODE_ENV=production TELINHA_HOME=/telinha OPENTUI_LIBC=musl
 # libcap: caddy binds 80/443 on a VPS (direct mode) as the unprivileged bun user.
 # Data dir owned by bun so a fresh named volume mounted there inherits it.
 RUN apk add --no-cache libcap ca-certificates && mkdir -p /telinha/data && chown bun:bun /telinha/data
@@ -85,7 +96,8 @@ COPY package.json bunfig.toml versions.json ./
 COPY --from=prod-deps /app/node_modules node_modules
 COPY --from=build /app/server/package.json /app/server/tsconfig.json server/
 COPY --from=build /app/server/src server/src
-COPY --from=build /app/server/test server/test
+# bun test opens snapshot files for writing; the tests run as bun.
+COPY --from=build --chown=bun:bun /app/server/test server/test
 # server/test reads it (every key is a KNOWN_KEY); also a reference config for `docker run`.
 COPY deploy/telinha.env.example deploy/
 COPY --from=build /app/web/dist web/dist

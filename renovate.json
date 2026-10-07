@@ -72,6 +72,12 @@
       "automerge": false
     },
     {
+      "description": "solid-js follows OpenTUI's exact peer and is never bumped alone; OpenTUI is 0.x so a minor can break, and the terminal smokes are not part of the required test job, so the group is merged by hand",
+      "matchPackageNames": ["@opentui/core", "@opentui/solid", "solid-js"],
+      "groupName": "opentui",
+      "automerge": false
+    },
+    {
       "description": "Bumps in versions.json: the downloaded ones stay red until `bun scripts/versions.ts refresh`, the Caddy recipe needs the image job green; neither automerges or blocks the allNonMajor group",
       "matchDepNames": [
         "caddyserver/caddy", "caddyserver/xcaddy", "github.com/caddy-dns/duckdns", "github.com/mholt/caddy-l4",

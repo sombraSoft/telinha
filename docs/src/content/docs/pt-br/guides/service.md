@@ -16,7 +16,7 @@ opções estão em [Linha de comando](/telinha/pt-br/reference/cli/).
 ## Windows
 
 O `telinha service install` registra uma tarefa do Agendador de Tarefas
-chamada `Telinha`. O assistente roda ele com um pedido de administrador (UAC),
+chamada `Telinha`. O setup roda ele com um pedido de administrador (UAC),
 junto com as regras de firewall; para refazer, rode o `telinha setup` de novo.
 A tarefa:
 
@@ -55,7 +55,7 @@ Depois de um clique duplo ele espera um Enter, para a janela não sumir.
 
 ## Linux como root
 
-O `sudo telinha service install` (o assistente roda numa instalação como
+O `sudo telinha service install` (o setup roda numa instalação como
 root) cria um usuário de sistema `telinha` e a unit
 `/etc/systemd/system/telinha.service`, e depois ativa e inicia o serviço. A
 unit:
@@ -109,14 +109,14 @@ instalação de usuário funciona do jeito que está.
 
 Um serviço de usuário não consegue usar portas abaixo de 1024, a não ser que
 o kernel libere portas baixas sem privilégio, e o modo `direct` numa VPS
-precisa da 80 e da 443. O assistente oferece este passo único com `sudo`,
+precisa da 80 e da 443. O setup oferece este passo único com `sudo`,
 que continua valendo em todas as atualizações:
 
 ```
 sudo sh -c 'printf "net.ipv4.ip_unprivileged_port_start=80\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system'
 ```
 
-Apesar do nome, ele vale para IPv6 também. Quando você recusa, o assistente
+Apesar do nome, ele vale para IPv6 também. Quando você recusa, o setup
 mostra o comando pra depois e não muda mais nada; a verificação `listeners` do
 `telinha doctor` mostra o comando de novo enquanto nada escuta na porta HTTPS.
 Uma instalação como root não precisa de nada disso.

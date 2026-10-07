@@ -126,9 +126,12 @@ jobs:
         with:
           path: ${{ runner.temp }}/th/bin
           key: telinha-bin-${{ runner.os }}-${{ hashFiles('versions.json') }}
-      - run: bun install --frozen-lockfile
+      # Every OS/CPU's native packages (OpenTUI's per-target library): the
+      # cross builds embed the target's, not the runner's.
+      - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - run: bun run build
-      # --smoke runs the host binary's --version.
+      # --smoke runs the host binary's --version and its terminal UI smoke, and
+      # checks the binary sizes and that Babel was not bundled.
       - name: compile
         shell: bash
         run: bun scripts/build-binary.ts --target ${{ matrix.target }} --smoke
@@ -175,12 +178,41 @@ jobs:
           wait "$pid" || status=$?
           [ "$status" = 0 ] || fail "exit $status after SIGTERM"
           echo ok
-      # No arm64 runner: QEMU runs the arm64 binary's --version.
+      # The real setup screens in a pseudo-terminal. OpenTUI writes a diff stream
+      # (escapes everywhere, unchanged blanks skipped with cursor moves), so the
+      # escapes and all whitespace go before looking for the first question's title.
+      # '#' delimits so the CSI intermediates can be [ -/]: an escaped '\/' inside a
+      # bracket stays a backslash range in GNU sed and eats the letter after ESC[1C.
+      # scripts/build-binary.test.ts runs this filter on a sample; keep both copies identical.
+      # Then Ctrl+C must quit cleanly: exit 130 ("Nothing was written."), the
+      # alternate screen left (ESC[?1049l), not a stack trace with exit 1.
+      - name: setup screens (linux-x64)
+        if: runner.os == 'Linux'
+        timeout-minutes: 2
+        run: |
+          status=0
+          ( sleep 5; printf '\003' ) | script -qfec "stty cols 120 rows 34; dist-bin/linux-x64/telinha setup --home '$RUNNER_TEMP/tui' --lang en" /dev/null > tui.out || status=$?
+          sed -E 's#\x1b\][^\x07\x1b]*(\x07|\x1b\\)##g; s#\x1b\[[0-?]*[ -/]*[@-~]##g; s#\x1b[()][A-Za-z0-9]##g' tui.out \
+            | tr -d ' \t\r\n' > tui.txt
+          grep -qF 'WherewillTelinharun?' tui.txt || { cat -v tui.out | tail -c 4000; exit 1; }
+          [ "$status" = 130 ] || { echo "exit $status after Ctrl+C, want 130"; exit 1; }
+          grep -qF "$(printf '\033[?1049l')" tui.out || { echo 'alternate screen not left'; exit 1; }
+      # Without a terminal setup takes every answer from flags and exits 2 on
+      # what is missing; OpenTUI would wait forever for a terminal's replies.
+      # A hang ends as timeout's 124.
+      - name: setup without a terminal (linux-x64)
+        if: runner.os == 'Linux'
+        timeout-minutes: 1
+        run: |
+          rc=0
+          timeout 30 dist-bin/linux-x64/telinha setup --home "$RUNNER_TEMP/nt" --lang en </dev/null || rc=$?
+          [ "$rc" = 2 ] || { echo "non-TTY setup exit $rc, want 2"; exit 1; }
+      # No arm64 runner: QEMU runs the arm64 binary's --version and terminal UI smoke.
       - if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@v3
       - name: --version (linux-arm64)
         if: runner.os == 'Linux'
-        run: docker run --rm --platform linux/arm64 -v "$PWD/dist-bin:/b:ro" debian:bookworm-slim /b/linux-arm64/telinha --version
+        run: docker run --rm --platform linux/arm64 -e TELINHA_SMOKE_TUI=1 -v "$PWD/dist-bin:/b:ro" debian:bookworm-slim /b/linux-arm64/telinha --version
 
       - name: run (windows-x64)
         if: runner.os == 'Windows'
@@ -340,6 +372,26 @@ jobs:
       # entrypoint is the program itself.
       - name: smoke
         run: docker run --rm --entrypoint sh telinha:ci scripts/smoke.sh
+      # `setup --docker` in a pseudo-terminal: the target's musl native library
+      # is installed and OPENTUI_LIBC=musl selects it. Same filter and the same
+      # clean Ctrl+C checks as the binaries job.
+      - name: setup screens
+        timeout-minutes: 2
+        run: |
+          status=0
+          ( sleep 5; printf '\003' ) | script -qfec "stty cols 120 rows 34; docker run --rm -it -e TELINHA_HOME=/telinha telinha:ci setup --docker --lang en" /dev/null > tui.out || status=$?
+          sed -E 's#\x1b\][^\x07\x1b]*(\x07|\x1b\\)##g; s#\x1b\[[0-?]*[ -/]*[@-~]##g; s#\x1b[()][A-Za-z0-9]##g' tui.out \
+            | tr -d ' \t\r\n' > tui.txt
+          grep -qF 'WherewillTelinharun?' tui.txt || { cat -v tui.out | tail -c 4000; exit 1; }
+          [ "$status" = 130 ] || { echo "exit $status after Ctrl+C, want 130"; exit 1; }
+          grep -qF "$(printf '\033[?1049l')" tui.out || { echo 'alternate screen not left'; exit 1; }
+      # Without a terminal (no -it): exit 2 at once, as in the binaries job.
+      - name: setup without a terminal
+        timeout-minutes: 2
+        run: |
+          rc=0
+          timeout 60 docker run --rm telinha:ci setup --docker --lang en </dev/null || rc=$?
+          [ "$rc" = 2 ] || { echo "non-TTY setup exit $rc, want 2"; exit 1; }
 
   # Windows Caddy through the same Dockerfile stage the release uses, so a
   # Windows-only Go build break in a module bump shows up before release (the

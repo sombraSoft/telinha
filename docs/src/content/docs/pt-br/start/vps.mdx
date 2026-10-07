@@ -27,7 +27,7 @@ do IP.
 - Acesso às configurações de firewall do provedor (o nome muda: security
   group, security list ou firewall).
 - Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
-  Dá para criar o aplicativo antes do assistente ou durante ele: veja
+  Dá para criar o aplicativo antes do setup ou durante ele: veja
   [Aplicativo do Discord](/telinha/pt-br/start/discord/).
 - Um endereço: um domínio seu com um
   [registro A](/telinha/pt-br/guides/domains/#seu-próprio-domínio) apontando
@@ -39,7 +39,7 @@ do IP.
 
 ## Abra as portas primeiro
 
-Faça isto antes da instalação: o assistente testa as portas no final, e
+Faça isto antes da instalação: o setup testa as portas no final, e
 muitos provedores só liberam o SSH por padrão. Uma VPS tem dois firewalls, e
 os dois precisam deixar estas portas entrarem:
 
@@ -51,7 +51,7 @@ os dois precisam deixar estas portas entrarem:
 | TCP 80 | idem, a não ser com `HTTP_PORT=0` | O desafio do Let's Encrypt e o redirecionamento para HTTPS |
 
 Com um Cloudflare Tunnel só as duas portas de mídia são necessárias: túneis não
-levam WebRTC. Se você vai escolher outra porta no assistente, libere essa no
+levam WebRTC. Se você vai escolher outra porta no setup, libere essa no
 lugar.
 
 **O firewall do provedor.** Crie uma regra de entrada para cada linha da tabela
@@ -79,7 +79,7 @@ bloqueiam portas com regras do iptables puro, com o ufw desligado. Se
 para liberar as portas no servidor também.
 :::
 
-Numa VPS não há roteador, então o assistente desliga o UPnP (`UPNP=off`).
+Numa VPS não há roteador, então o setup desliga o UPnP (`UPNP=off`).
 [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/) fala mais
 sobre firewalls.
 
@@ -119,26 +119,42 @@ sai do SSH.
 </Steps>
 
 O programa vai para `/usr/local/lib/telinha/telinha`, chamado pelo comando
-`/usr/local/bin/telinha`; a pasta da instalação é `/opt/telinha`, e o assistente
+`/usr/local/bin/telinha`; a pasta da instalação é `/opt/telinha`, e o setup
 copia o programa para `/opt/telinha/bin/` para o serviço, que atualiza essa
 cópia sozinho. O script não baixa mais nada: o `livekit-server` e o `caddy` ou o
 `cloudflared` vêm depois, o `livekit-server` e o `cloudflared` dos projetos
 originais conferidos contra um sha256 fixo, o `caddy` da mesma versão da
 Telinha conferido com o `SHA256SUMS` dela. Para pular a
 pergunta, ponha `-s -- --native` depois do `sh` (`--no-setup` instala sem abrir
-o assistente). `TELINHA_VERSION` instala uma tag específica.
+o setup). `TELINHA_VERSION` instala uma tag específica.
 
-## Rode o assistente
+## Rode o setup
 
-O assistente fala português do Brasil ou inglês (ele pega o idioma do sistema e
-pergunta uma vez) e explica cada pergunta em uma ou duas linhas. Você nunca
-copia id na mão: servidores, cargos e canais aparecem em listas. Numa VPS, o
-caminho é este:
+O setup ocupa o terminal com telas próprias: os passos na lateral esquerda
+(Onde, Endereço, Discord, Portas, Atualizações, Revisão, Instalação), a
+pergunta atual num cartão à direita e, ao lado ou embaixo, uma dica que explica
+a escolha. Servidores, cargos e canais aparecem em listas, então você nunca
+copia id na mão. Na primeira vez ele começa pelo idioma, português do Brasil ou
+inglês, e todas as telas trocam na hora. Por SSH funciona igual, a partir de 80
+colunas por 24 linhas.
+
+- **Responda** com ↑ ↓ e Enter, ou aperte o número de uma opção. Numa resposta
+  de texto, digite e aperte Enter.
+- **Volte** com Esc ou ←. As respostas que você deu ficam.
+- **Pule para um passo** com Tab: ↑ ↓ e Enter vão para qualquer passo já
+  respondido, e Esc volta para o cartão.
+- **Segredos** (tokens) aparecem como bolinhas. Cole com o atalho de colar do
+  seu cliente SSH (Ctrl+V, muitas vezes Ctrl+Shift+V, ou o botão direito), e
+  aperte Ctrl+R para mostrar ou esconder o que você colou.
+- **Saia** com Ctrl+C. Nada é gravado até você aplicar na Revisão.
+
+[Linha de comando](/telinha/pt-br/reference/cli/#teclas) lista todas as
+teclas. Numa VPS, o caminho é este:
 
 <Steps>
 
-1. **Onde a Telinha roda.** Ele pergunta *Onde a Telinha vai rodar?* Escolha
-   *Um servidor alugado (VPS)*. Depois disso não tem pergunta sobre roteador.
+1. **Onde.** Para *Onde a Telinha vai rodar?* escolha *Um servidor alugado
+   (VPS)*. Depois disso não tem pergunta sobre roteador.
 
 2. **Endereço.** Ele pergunta *Como o pessoal vai chegar na Telinha?*: um
    domínio seu (o registro A é comparado com o IP público), DuckDNS, sslip.io,
@@ -152,28 +168,59 @@ caminho é este:
    LIVEKIT_NODE_IP=203.0.113.9
    ```
 
-3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
-   não ser que outro programa do servidor já use alguma.
+3. **Discord.** Cole o token do bot: a Telinha confere ele com o Discord na
+   hora e lê o seu app a partir dele. Depois o segredo do cliente (também
+   conferido), o servidor (uma lista dos que o bot já está; *Outro servidor*
+   mostra um link de convite e confere de novo quando você adicionar o bot), o
+   cargo que pode entrar, os canais (Espaço marca um, `a` marca todos) e o
+   nome do comando. O nome do grupo é opcional. Quando o app ainda não tem o
+   redirecionamento de login, um cartão mostra o endereço para adicionar em
+   OAuth2 → Redirects, a única coisa que você faz na mão no Portal do
+   Desenvolvedor: adicione, aperte Save Changes lá e escolha *Adicionei:
+   verificar de novo*. [Aplicativo do Discord](/telinha/pt-br/start/discord/)
+   mostra cada tela.
 
-4. **Discord.** O token do bot, o segredo do cliente, o redirecionamento de
-   login (a única coisa que você adiciona na mão no Portal do Desenvolvedor), o
-   servidor, o cargo que pode entrar, os canais e o nome do comando.
-   [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
+4. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
+   que outro programa do servidor já use alguma. A dica lista as portas que o
+   firewall do provedor precisa deixar entrar, com os comandos do ufw e do
+   firewalld.
 
 5. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
    sozinhas quando nenhuma sala está aberta.
 
-6. **Revisão.** Todos os valores numa tela só, com os segredos aparecendo
-   apenas como gerado, mantido ou definido. Confirme e o assistente grava
-   `/opt/telinha/config/telinha.env`, do root e legível pelo serviço.
+6. **Revisão.** Todas as respostas numa tela só, agrupadas por passo, com o
+   endereço web em destaque e os segredos aparecendo apenas como definido,
+   mantido ou gerado. Role com PgUp e PgDn quando a lista for longa. Escolha
+   *Aplicar* (ou *Aplicar com um novo segredo de cookie*, oferecido numa nova
+   rodada, que desconecta todo mundo das páginas), *Voltar pras perguntas* ou
+   *Sair sem gravar*. Nada mudou neste servidor até você aplicar.
 
-7. **Serviço e verificações.** Ele instala e inicia a unidade do systemd,
-   lista as portas que o firewall do provedor precisa deixar entrar (com o comando do ufw
-   ou do firewalld quando um deles está instalado), espera a Telinha subir e o
-   certificado HTTPS chegar, roda o `telinha doctor` com o teste pelo celular e
-   mostra os próximos passos.
+7. **Instalação.** Uma lista ao vivo: o app do Discord (conferido, com os
+   intents ligados), o endereço do DuckDNS se você escolheu um, o
+   `telinha.env` (`/opt/telinha/config/telinha.env`, do root e legível pelo
+   serviço), os programas auxiliares (com uma barra para cada download), o
+   serviço (a unidade do systemd), a linha de roteador e firewall, o início, o
+   certificado HTTPS e as verificações finais. A linha de roteador e firewall
+   lista as portas que o firewall do provedor precisa deixar entrar, com o
+   comando do ufw ou do firewalld quando um deles está instalado. No fim a tela
+   mostra o seu endereço web, e *Ver o diagnóstico* abre a lista de
+   verificações com o teste pelo celular.
 
 </Steps>
+
+Se uma tarefa falha, as linhas dela se abrem embaixo com uma dica e três
+escolhas: *Tentar de novo* roda ela outra vez, *Pular* deixa pra lá e segue com
+o resto (as verificações finais dizem o que ficou faltando), e *Voltar pras
+perguntas* leva à pergunta de que aquela tarefa depende (o token do bot para o
+app do Discord, o token do DuckDNS para o DuckDNS) ou à Revisão; aplique de novo
+de lá e os segredos gerados antes continuam os mesmos. Gravar o telinha.env não
+tem *Pular*: tudo depois dele precisa do arquivo; depois de gravado, a Revisão
+diz isso e a última escolha vira *Sair da configuração*. ↑ nas escolhas percorre
+as linhas já terminadas, e Enter mostra o que cada uma fez. O último cartão abre
+o que falta fazer à mão (as portas do roteador, o comando de um aviso), e o
+resumo que fica no terminal também lista isso. Voltar fica desligado enquanto
+uma tarefa roda, e Ctrl+C pede um segundo aperto, porque parar no meio pode
+deixar uma instalação pela metade.
 
 :::caution
 O sslip.io é um domínio compartilhado: o Let's Encrypt pode recusar um
@@ -181,19 +228,31 @@ certificado na semana em que muitos já foram emitidos para ele. Um domínio seu
 ou o DuckDNS, é mais confiável.
 :::
 
+Se você rodou o instalador como usuário em vez de root, o passo Portas também
+pergunta *Liberar elas com um comando sudo durante a instalação?*, porque um
+usuário não consegue usar a 80 e a 443 sem isso. Diga que sim e, na linha do
+serviço, as telas saem da frente enquanto o `sudo` pede a sua senha uma vez, e
+voltam na mesma tarefa.
+
+Sem terminal, ou com `--non-interactive`, o setup imprime linhas simples e tira
+cada resposta das opções, do ambiente e do arquivo existente: veja
+[Linha de comando](/telinha/pt-br/reference/cli/#telinha-setup).
+
 ## Verifique
 
 ```sh
 sudo telinha doctor
 ```
 
-O doctor roda todas as verificações e mostra uma linha para cada, com o que
-fazer em tudo que não estiver ok. Depois ele mostra um link e um QR code para o
+O doctor é uma lista de verificações: uma linha para cada, com um spinner até
+sair o resultado. Aperte Enter numa linha para ver os detalhes e, quando ela não
+está ok, como corrigir; `r` roda todas de novo depois que você consertar algo.
+Quando as verificações terminam, um painel mostra um link e um QR code para o
 teste pelo celular: abra no celular com o Wi-Fi desligado, para o teste passar
 pelos dados móveis, como a conexão de boa parte dos seus amigos. Ele diz se a
-página, a conexão com o LiveKit, o UDP e o TCP funcionam de lá; um primeiro
-caminho para um IP que não é o IP público da VPS quer dizer um
-`LIVEKIT_NODE_IP` errado.
+página, a conexão com o LiveKit, o UDP e o TCP funcionam de lá, e `p` começa um
+novo teste; um primeiro caminho para um IP que não é o IP público da VPS quer
+dizer um `LIVEKIT_NODE_IP` errado.
 [Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
 linha e o que uma falha quer dizer.
 
@@ -228,7 +287,7 @@ confere o sha256 e volta para a versão anterior se a nova não subir.
 instala na hora. Veja [Atualizações](/telinha/pt-br/guides/updates/).
 
 **Mudar as configurações** é rodar o `sudo telinha setup` de novo: cada pergunta
-já vem com o valor atual, os segredos podem ser mantidos e o serviço reinicia
+já vem com o valor atual, os segredos podem ser mantidos (Enter mantém) e o serviço reinicia
 com o arquivo novo. Editar o `/opt/telinha/config/telinha.env` na mão também
 funciona, seguido de `sudo telinha service restart`.
 

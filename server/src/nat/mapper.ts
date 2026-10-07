@@ -26,7 +26,13 @@ function bunUdp(): UdpFactory {
   return async (o) => {
     const s = await Bun.udpSocket({
       hostname: '0.0.0.0', port: 0, binaryType: 'uint8array',
-      socket: { data: (_s, data, port, address) => o.onMessage(data, port, address) },
+      socket: {
+        data: (_s, data, port, address) => o.onMessage(data, port, address),
+        // An ICMP "port unreachable" (a gateway without NAT-PMP/PCP) comes back as
+        // ECONNREFUSED on the next recv. Without a handler Bun throws it as an
+        // uncaught error and the process dies; the protocols already time out.
+        error: () => {},
+      },
     });
     if (o.multicastInterface !== undefined) {
       // Best effort: without them the M-SEARCH still leaves via the default interface.

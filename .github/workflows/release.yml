@@ -81,9 +81,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - run: bun install --frozen-lockfile
+      # Every OS/CPU's native packages: the cross builds embed the target's OpenTUI library.
+      - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - run: bun run build
-      # --smoke runs the host binary's --version against the release version.
+      # --smoke runs the host binary's --version against the release version,
+      # its terminal UI smoke and the size and no-Babel checks.
       - name: compile
         shell: bash
         env:

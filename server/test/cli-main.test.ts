@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CliContext, ParsedArgs } from '../src/cli/args.ts';
-import { main, scanGlobals, type MainDeps } from '../src/cli/main.ts';
+import { loadSetupUi, main, scanGlobals, type MainDeps } from '../src/cli/main.ts';
+import type { SetupDeps } from '../src/cli/setup/steps.ts';
+import type { SetupUi } from '../src/cli/setup/ui.ts';
 import { versionLine } from '../src/version.ts';
 
 const home = mkdtempSync(join(tmpdir(), 'telinha-main-'));
@@ -155,5 +157,38 @@ describe('main', () => {
     h = harness({ tty: true, env: { TELINHA_HOME: home, PUBLIC_URL: 'https://t.example.com' } });
     expect(await h.main([])).toBeNull();
     expect(h.calls.map((c) => c.cmd)).toEqual(['run']);
+  });
+
+  test('setup gets the setup screens only on a terminal; the screens load only then', async () => {
+    const ui: SetupUi = { run: async () => ({ kind: 'declined' }) };
+    const seen: { via: string; tty: boolean; ui: SetupUi | undefined }[] = [];
+    let loads = 0;
+    const setup = async () => ({
+      run: async (_args: ParsedArgs, ctx: CliContext, deps: Partial<SetupDeps> = {}) => (seen.push({ via: 'run', tty: ctx.tty, ui: deps.ui }), 0),
+      offerSetup: async (ctx: CliContext, deps: Partial<SetupDeps> = {}) => (seen.push({ via: 'offer', tty: ctx.tty, ui: deps.ui }), null),
+    });
+    const wired = (tty: boolean) => {
+      const h = harness({ tty, setup, loadSetupUi: async () => (loads++, ui), offerSetup: undefined });
+      delete h.deps.commands!.setup;
+      return h;
+    };
+    expect(await wired(true).main(['setup'])).toBe(0);
+    expect(await wired(false).main(['setup'])).toBe(0);
+    // --non-interactive next to a terminal: the plain run, no screens loaded.
+    expect(await wired(true).main(['setup', '--non-interactive'])).toBe(0);
+    // `telinha` alone, no telinha.env: the offer gets them too.
+    expect(await wired(true).main([])).toBe(0);
+    expect(seen).toEqual([
+      { via: 'run', tty: true, ui },
+      { via: 'run', tty: false, ui: undefined },
+      { via: 'run', tty: false, ui: undefined },
+      { via: 'offer', tty: true, ui },
+    ]);
+    expect(loads).toBe(2);
+  });
+
+  test('loadSetupUi: the setup screens behind a dynamic import', async () => {
+    const ui = await loadSetupUi();
+    expect(typeof ui.run).toBe('function');
   });
 });

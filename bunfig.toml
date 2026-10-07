@@ -2,3 +2,9 @@
 # Plain flat node_modules: the runtime is Bun now, but hoisted keeps one flat
 # node_modules that the image copies as-is to /app/node_modules.
 linker = "hoisted"
+
+[test]
+# Without this bun test loads Solid's server build: the first frame renders but
+# signals and useKeyboard never react. Not a top-level preload: `telinha run`
+# must not load Babel.
+preload = ["@opentui/solid/preload"]

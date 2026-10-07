@@ -9,13 +9,13 @@ As pessoas abrem a Telinha no navegador, e o navegador só compartilha a tela
 em páginas HTTPS. Por isso a Telinha precisa de um endereço HTTPS. Esse
 endereço é o `PUBLIC_URL` no `telinha.env`, e o `INGRESS` diz quem atende
 nele. O `telinha setup` pergunta qual das opções abaixo você quer e grava as
-chaves; para mudar depois, rode o assistente de novo, ou edite o
+chaves; para mudar depois, rode o setup de novo, ou edite o
 `telinha.env` e reinicie. Todas as chaves estão em
 [Configuração](/telinha/pt-br/reference/configuration/).
 
 ## Qual escolher
 
-O assistente pergunta primeiro *Onde a Telinha vai rodar?*, e as opções
+O setup pergunta primeiro *Onde a Telinha vai rodar?*, e as opções
 dependem da resposta. O `HOSTING` no `telinha.env` guarda isso (`home` ou
 `vps`).
 
@@ -77,7 +77,7 @@ leia antes [CGNAT e NAT duplo](#cgnat-e-nat-duplo).
 
 A escolha de casa sem domínio. O DuckDNS dá um `<name>.duckdns.org` grátis
 que acompanha o seu IP quando ele muda. No duckdns.org: entre, adicione um
-subdomínio e copie o token que aparece no topo da página. O assistente testa o
+subdomínio e copie o token que aparece no topo da página. O setup testa o
 token na hora e grava:
 
 ```
@@ -137,7 +137,7 @@ do jeito de sempre, pelas portas 80 e 443, que você abre nesse firewall. O
 Crie um registro A num nome que é seu, apontando para o IPv4 público do
 servidor. Passo a passo: nas configurações de DNS da empresa onde você comprou
 o domínio, adicione um registro do tipo `A`, nome `telinha` (o que dá
-`telinha.seudominio.com.br`), valor o IP público do servidor (o assistente e o
+`telinha.seudominio.com.br`), valor o IP público do servidor (o setup e o
 `telinha doctor` mostram qual é). A mudança pode levar alguns minutos para
 chegar a todo mundo. Depois:
 
@@ -148,7 +148,7 @@ INGRESS=direct
 
 O Caddy pega o certificado sozinho assim que as portas TCP 80 e 443 chegam no
 servidor. O `ACME_EMAIL` é opcional e dá ao Let's Encrypt um e-mail para avisos
-de vencimento. O assistente e o `telinha doctor` (a verificação `dns`)
+de vencimento. O setup e o `telinha doctor` (a verificação `dns`)
 comparam o registro com o IP público e avisam quando eles não batem.
 
 ### DuckDNS
@@ -178,7 +178,7 @@ PUBLIC_URL=https://203-0-113-9.sslip.io
 LIVEKIT_NODE_IP=203.0.113.9
 ```
 
-O assistente grava os dois e só oferece essa opção para VPS. O sslip.io é um
+O setup grava os dois e só oferece essa opção para VPS. O sslip.io é um
 domínio compartilhado, e o Let's Encrypt limita quantos certificados emite por
 domínio a cada semana; então um certificado pode ser recusado quando muitos já
 foram emitidos para o sslip.io nos últimos dias. Domínio próprio ou DuckDNS é
@@ -211,7 +211,7 @@ Encaminhe as portas de mídia como em qualquer outro modo.
 
 ## Avançado: portas 80 e 443 em casa
 
-A pergunta de casa do assistente tem uma terceira resposta, *Avançado*, para
+A pergunta de casa do setup tem uma terceira resposta, *Avançado*, para
 dois casos que ele nunca escolhe sozinho: você mesmo abriu as portas 80 e 443
 no roteador pra esta máquina, ou você tem o seu próprio proxy reverso. No
 primeiro caso, a Telinha grava os valores de VPS (`HTTP_PORT=80`,
@@ -238,7 +238,7 @@ clientes (o CGNAT, NAT da operadora): o endereço WAN do roteador fica em
 `100.64.0.0/10`, e nada da internet chega na sua rede, nem com encaminhamento
 de portas nem com UPnP. O `telinha doctor` detecta isso: a verificação `cgnat`
 compara o IP externo do roteador, lido por UPnP, NAT-PMP ou PCP, com o IP que a
-internet vê, e o assistente também avisa. Para testar na mão, veja
+internet vê, e o setup também avisa. Para testar na mão, veja
 [É CGNAT?](/telinha/pt-br/guides/port-forwarding/#é-cgnat).
 
 Um endereço WAN numa faixa privada (`10.x`, `172.16.x` a `172.31.x`,

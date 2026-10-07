@@ -2,15 +2,20 @@ import { describe, expect, test } from 'bun:test';
 import { posix, win32 } from 'node:path';
 import { loadConfig } from '../src/config.ts';
 import type { Ddns } from '../src/ddns.ts';
+import type { CheckResult } from '../src/doctor/types.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import type { NatProbe } from '../src/nat/index.ts';
 import { resolvePaths } from '../src/paths.ts';
 import type { InstallResult, ServiceManager, SpawnOutcome } from '../src/service/index.ts';
 import type { CliContext } from '../src/cli/args.ts';
-import type { Choice, Spinner, Term } from '../src/cli/term.ts';
+import type { Spinner, Term } from '../src/cli/term.ts';
 import { offerSetup, run } from '../src/cli/setup.ts';
+import type { ApplyHooks, TaskEvent, TaskId } from '../src/cli/setup/apply.ts';
 import { createDiscordSetup } from '../src/cli/setup/discord.ts';
+import type { QuestionId } from '../src/cli/setup/model.ts';
+import type { Notice, QuestionView, ReviewRow, SetupSession } from '../src/cli/setup/session.ts';
 import { elevationCommand, generateSecrets, publicPorts, SYSCTL_SCRIPT, type SetupDeps, type SetupFs } from '../src/cli/setup/steps.ts';
+import type { SetupUi, SetupUiContext, SetupUiResult } from '../src/cli/setup/ui.ts';
 
 const APP = '111111111111111111';
 const GUILD = '222222222222222222';
@@ -19,54 +24,19 @@ const CHANNEL = '444444444444444441';
 const URL_ = 'https://telinha.example.com';
 const DUCK_URL = 'https://my-group.duckdns.org:8443';
 const TUNNEL = Buffer.from(JSON.stringify({ a: 'acct', t: 'tunnel-id', s: 'c2VjcmV0' })).toString('base64');
+const HOME_NEEDS_ADVANCED = 'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps';
 
-/** Scripted answers by "<kind>:<id>"; a prompt without one takes its default. */
+/** What the plain run printed, one entry per line. */
 class FakeTerm implements Term {
   out: string[] = [];
-  asked: string[] = [];
   colors = false;
   style = { bold: (s: string) => s, dim: (s: string) => s, red: (s: string) => s, green: (s: string) => s, yellow: (s: string) => s, cyan: (s: string) => s };
-  constructor(private answers: Record<string, unknown[]> = {}) {}
-  private take<T>(key: string, fallback?: () => T): T {
-    this.asked.push(key);
-    const q = this.answers[key];
-    if (q?.length) return q.shift() as T;
-    if (fallback) return fallback();
-    throw new Error(`no answer for ${key}`);
-  }
   info = (m: string) => void this.out.push(m);
   ok = (m: string) => void this.out.push(`ok ${m}`);
   warn = (m: string) => void this.out.push(`warn ${m}`);
   fail = (m: string) => void this.out.push(`fail ${m}`);
   step = (m: string) => void this.out.push(`step ${m}`);
   line = (m = '') => void this.out.push(m);
-  async text(q: string, o: { default?: string; validate?: (v: string) => string | null; required?: boolean; id?: string } = {}) {
-    for (;;) {
-      const v = this.take<string>(`text:${o.id ?? q}`, o.default !== undefined ? () => o.default! : undefined);
-      const err = (!v && o.required ? 'required' : null) ?? o.validate?.(v) ?? null;
-      if (!err) return v;
-      this.out.push(`fail ${err}`);
-    }
-  }
-  async secret(q: string, o: { validate?: (v: string) => string | null; id?: string } = {}) {
-    for (;;) {
-      const v = this.take<string>(`secret:${o.id ?? q}`);
-      const err = o.validate?.(v) ?? (v ? null : 'required');
-      if (!err) return v;
-      this.out.push(`fail ${err}`);
-    }
-  }
-  async confirm(q: string, def?: boolean, o: { id?: string } = {}) {
-    return this.take<boolean>(`confirm:${o.id ?? q}`, def !== undefined ? () => def : undefined);
-  }
-  async select<T>(q: string, items: Choice<T>[], def?: number, o: { id?: string } = {}) {
-    const v = this.take<T>(`select:${o.id ?? q}`, () => items[def ?? 0]!.value);
-    if (!items.some((i) => i.value === v)) throw new Error(`select ${o.id}: ${String(v)} is not offered`);
-    return v;
-  }
-  async multiselect<T>(q: string, items: Choice<T>[], o: { min?: number; preselected?: T[]; id?: string } = {}) {
-    return this.take<T[]>(`multiselect:${o.id ?? q}`, o.preselected && o.preselected.length >= (o.min ?? 0) ? () => o.preselected! : undefined);
-  }
   spinner(label: string): Spinner {
     this.out.push(`spin ${label}`);
     return { update: (l) => void this.out.push(`spin ${l}`), stop: (l) => void this.out.push(`ok ${l ?? label}`), fail: (l) => void this.out.push(`fail ${l ?? label}`) };
@@ -75,6 +45,95 @@ class FakeTerm implements Term {
   link = (u: string) => u;
   text_(): string {
     return this.out.join('\n');
+  }
+}
+
+/** Lets the session's lookups (and the background list reads) finish. */
+async function settle(s: SetupSession): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    await Bun.sleep(1);
+    if (s.screen() !== 'question' || s.current().lookup.state !== 'running') return;
+  }
+}
+
+type Answer = string | string[];
+interface UiScript {
+  /** Answers per question in order (asked again: the next one); an unscripted question takes what the card shows. */
+  answers?: Partial<Record<QuestionId, Answer[]>>;
+  review?: 'apply' | 'rotate' | 'quit';
+  /** Leave on the first card: decline the welcome card, or Ctrl+C. */
+  start?: 'decline' | 'ctrl-c';
+  decide?: (id: TaskId, error: string) => 'retry' | 'skip' | 'back' | 'abort';
+}
+
+/** The setup screens, scripted: answers through the session, then apply with recording hooks. */
+class FakeUi implements SetupUi {
+  context: SetupUiContext | null = null;
+  first: QuestionView | null = null;
+  notice: Notice | null = null;
+  asked: QuestionId[] = [];
+  views = new Map<QuestionId, QuestionView>();
+  /** Hints, links, lookup notes and Review notes the cards showed. */
+  seen: string[] = [];
+  rows: ReviewRow[] = [];
+  events: TaskEvent[] = [];
+  terminal: string[][] = [];
+  decisions: [TaskId, string][] = [];
+  private log: string[] = [];
+  constructor(private script: UiScript = {}) {}
+
+  /** The task rows' lines in FakeTerm's format ("spin" for a row's detail). */
+  text(): string {
+    return this.log.join('\n');
+  }
+
+  hooks(): ApplyHooks {
+    return {
+      emit: (e) => {
+        this.events.push(e);
+        if (e.detail) this.log.push(`spin ${e.detail}`);
+        for (const l of e.lines ?? []) this.log.push(l.kind === 'info' ? l.text : `${l.kind} ${l.text}`);
+      },
+      decide: async (id, error) => {
+        this.decisions.push([id, error]);
+        return this.script.decide?.(id, error) ?? 'skip';
+      },
+      withTerminal: async (fn, intro) => {
+        this.terminal.push(intro ?? []);
+        return fn();
+      },
+    };
+  }
+
+  async run(c: SetupUiContext): Promise<SetupUiResult> {
+    this.context = c;
+    const s = c.session;
+    await settle(s);
+    this.notice = s.notice();
+    if (s.screen() === 'question') this.first = s.current();
+    if (this.script.start === 'decline') return { kind: 'declined' };
+    if (this.script.start === 'ctrl-c') return { kind: 'quit', reason: 'ctrl-c' };
+    for (let n = 0; s.screen() === 'question'; n++) {
+      if (n > 100) throw new Error('the questions never end');
+      await settle(s);
+      const v = s.current();
+      this.asked.push(v.id);
+      this.views.set(v.id, v);
+      this.seen.push(...v.hint, ...(v.link ? [v.link] : []));
+      const queue = this.script.answers?.[v.id];
+      const value = queue?.length ? queue.shift()! : v.kind === 'select' || v.kind === 'multi' ? v.initial : '';
+      const r = await s.submit(value);
+      const note = s.notice();
+      if (note) this.seen.push(note.text);
+      if (r === 'stayed' && !this.script.answers?.[v.id]?.length) {
+        const now = s.current();
+        throw new Error(`${v.id} stayed: ${now.error ?? JSON.stringify(now.lookup)}`);
+      }
+    }
+    this.rows = s.reviewRows();
+    this.seen.push(...s.reviewNotes());
+    if (this.script.review === 'quit') return { kind: 'quit', reason: 'review' };
+    return { kind: 'applied', result: await c.apply({ rotateCookie: this.script.review === 'rotate' }, this.hooks()) };
   }
 }
 
@@ -101,6 +160,10 @@ interface Rec {
   fsCalls: string[];
   bins: unknown[];
   doctor: string[][];
+  /** The context each doctor command got. */
+  doctorCtx: { tty: boolean; argv: string[] }[];
+  /** doctorChecks calls (the setup screens' doctor task), by locale. */
+  checks: string[];
   installs: { user: boolean; o: unknown }[];
   ddns: string[];
   probes: number;
@@ -120,6 +183,7 @@ interface Opts {
   which?: (cmd: string) => string | null;
   /** The local listener serves a valid certificate (default yes). */
   cert?: boolean;
+  checks?: CheckResult[];
 }
 
 /** A home router answering UPnP: the machine looks like a home. */
@@ -130,10 +194,15 @@ const NAT: NatProbe = {
 /** The public IP on the interface itself: a VPS. */
 const VPS_NAT: NatProbe = { gateway: null, externalIp: null, localIp: '203.0.113.9', errors: [] };
 
+const CHECKS: CheckResult[] = [
+  { id: 'config', title: 'Configuration', status: 'ok', summary: 'fine' },
+  { id: 'dns', title: 'DNS', status: 'warn', summary: 'slow' },
+];
+
 function fakeDeps(term: FakeTerm, o: Opts = {}) {
   const platform = o.platform ?? 'linux';
   const files = new Map(Object.entries(o.files ?? {}));
-  const rec: Rec = { spawn: [], spawnInteractive: [], fsCalls: [], bins: [], doctor: [], installs: [], ddns: [], probes: 0, cert: [] };
+  const rec: Rec = { spawn: [], spawnInteractive: [], fsCalls: [], bins: [], doctor: [], doctorCtx: [], checks: [], installs: [], ddns: [], probes: 0, cert: [] };
   const fs: SetupFs = {
     mkdir: async (d) => void rec.fsCalls.push(`mkdir ${d}`),
     createFile: async (p, data, c) => {
@@ -189,6 +258,8 @@ function fakeDeps(term: FakeTerm, o: Opts = {}) {
       available: async () => o.available ?? false,
       shutdown: async () => {},
       status: async () => ({ supervised: true }) as Awaited<ReturnType<SetupDeps['control']['status']>>,
+      doctorSession: async () => ({ id: 's', url: 'https://telinha.example.com/doctor/s', expiresAt: 0 }),
+      doctorWait: async () => ({ state: 'expired' }),
     },
     bins: async (config) => void rec.bins.push({ media: config.media, ingress: config.ingress }),
     spawn: async (cmd) => {
@@ -216,7 +287,13 @@ function fakeDeps(term: FakeTerm, o: Opts = {}) {
       return () => (t += 1000);
     })(),
     sleep: async () => {},
-    doctor: async (c) => (rec.doctor.push(c.argv), 0),
+    doctor: async (c) => (rec.doctor.push(c.argv), rec.doctorCtx.push({ tty: c.tty, argv: c.argv }), 0),
+    doctorChecks: async (c, onResult) => {
+      rec.checks.push(c.locale);
+      const all = o.checks ?? CHECKS;
+      all.forEach((r, i) => onResult?.(r, i + 1, all.length));
+      return all;
+    },
     execPath: o.execPath ?? (platform === 'win32' ? 'C:\\bun\\bun.exe' : '/usr/bin/bun'),
     which: (cmd) => o.which?.(cmd) ?? null,
     certReady: async (host, port) => (rec.cert.push({ host, port }), o.cert ?? true),
@@ -224,7 +301,7 @@ function fakeDeps(term: FakeTerm, o: Opts = {}) {
   return { deps, rec, files };
 }
 
-function ctxFor(argv: string[], o: { tty?: boolean; compiled?: boolean; platform?: NodeJS.Platform; home?: string; env?: Record<string, string>; isRoot?: boolean } = {}) {
+function ctxFor(argv: string[], o: { tty?: boolean; yes?: boolean; compiled?: boolean; platform?: NodeJS.Platform; home?: string; env?: Record<string, string>; isRoot?: boolean } = {}) {
   const platform = o.platform ?? 'linux';
   const home = o.home ?? '/opt/telinha';
   const env = { TELINHA_HOME: home, ...o.env };
@@ -233,7 +310,7 @@ function ctxFor(argv: string[], o: { tty?: boolean; compiled?: boolean; platform
   const err: string[] = [];
   const ctx: CliContext = {
     argv, env, paths, envFile: (platform === 'win32' ? win32 : posix).join(paths.config, 'telinha.env'), locale: 'en',
-    tty: o.tty ?? false, yes: false, stdout: (l) => void out.push(l), stderr: (l) => void err.push(l), compiled: o.compiled ?? false, version: '0.7.0',
+    tty: o.tty ?? false, yes: o.yes ?? false, stdout: (l) => void out.push(l), stderr: (l) => void err.push(l), compiled: o.compiled ?? false, version: '0.7.0',
   };
   return { ctx, out, err };
 }
@@ -244,31 +321,31 @@ function config(text: string, home = '/opt/telinha', o: { compiled?: boolean } =
 }
 
 const ENV = '/opt/telinha/config/telinha.env';
-const go = (ctx: CliContext, deps: SetupDeps, o: { stdin?: () => Promise<string> } = {}) => run({ flags: {}, positionals: [], rest: [] }, ctx, deps, o);
+const go = (ctx: CliContext, deps: Partial<SetupDeps>, o: { stdin?: () => Promise<string> } = {}) => run({ flags: {}, positionals: [], rest: [] }, ctx, deps, o);
+/** A run on a terminal with the scripted screens. */
+const goUi = (ctx: CliContext, deps: SetupDeps, ui: FakeUi) => go(ctx, { ...deps, ui });
 
-const discordAnswers = (): Record<string, unknown[]> => ({
-  'secret:DISCORD_TOKEN': ['tok-good'],
-  'secret:DISCORD_CLIENT_SECRET': ['good-secret'],
-  'multiselect:channels': [[CHANNEL]],
-});
+const discordAnswers = (): UiScript['answers'] => ({ discordToken: ['tok-good'], clientSecret: ['good-secret'], channels: [[CHANNEL]] });
 /** A fresh home install that takes every default: no domain on Cloudflare, DuckDNS on 8443. */
-const freshHome = (): Record<string, unknown[]> => ({ ...discordAnswers(), 'text:duckdns-domain': ['my-group'], 'secret:DUCKDNS_TOKEN': ['duck-token'] });
+const freshHome = (): UiScript['answers'] => ({ ...discordAnswers(), duckName: ['my-group'], duckToken: ['duck-token'] });
 /** A fresh VPS install with an own domain. */
-const freshVps = (): Record<string, unknown[]> => ({ ...discordAnswers(), 'select:hosting': ['vps'], 'text:public-url': ['telinha.example.com'] });
+const freshVps = (): UiScript['answers'] => ({ ...discordAnswers(), hosting: ['vps'], domain: ['telinha.example.com'] });
 
 /** The home DuckDNS block as the file holds it. */
 const HOME_DUCK = { HOSTING: 'home', INGRESS: 'direct', PUBLIC_URL: DUCK_URL, HTTP_PORT: '0', HTTPS_PORT: '8443', ACME_DNS: 'duckdns', DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'my-group', DUCKDNS_TOKEN: 'duck-token' };
+const QUIET = ['--no-service', '--no-upnp', '--no-doctor'];
 
-describe('interactive', () => {
+describe('on a terminal: the setup screens', () => {
   test('fresh home install, no domain: DuckDNS on a high port, valid without warnings, the port everywhere it matters', async () => {
-    const term = new FakeTerm(freshHome());
+    const term = new FakeTerm();
+    const ui = new FakeUi({ answers: freshHome() });
     const { ctx } = ctxFor(['setup', '--no-service'], { tty: true, compiled: true });
     const { deps, rec, files } = fakeDeps(term, { available: true });
-    expect(await go(ctx, deps)).toBe(0);
+    expect(await goUi(ctx, deps, ui)).toBe(0);
     const text = files.get(ENV)!;
     const vars = parseEnvFile(text).vars;
     expect(vars).toMatchObject({
-      ...HOME_DUCK, UPNP: 'auto', LOCALE: 'en',
+      ...HOME_DUCK, UPNP: 'auto', LOCALE: 'en', AUTO_UPDATE: 'on',
       DISCORD_TOKEN: 'tok-good', DISCORD_CLIENT_ID: APP, DISCORD_CLIENT_SECRET: 'good-secret', GUILD_ID: GUILD, ROLE_ID: ROLE, CHANNEL_IDS: CHANNEL,
     });
     expect(vars.TUNNEL_TOKEN).toBeUndefined();
@@ -277,41 +354,49 @@ describe('interactive', () => {
     expect(c.warnings).toEqual([]);
     expect(c.acmeDns).toEqual({ provider: 'duckdns', token: 'duck-token' });
     expect(c.httpsPort).toBe(8443);
-    expect(rec.ddns).toEqual(['my-group 203.0.113.9']);
+    // Checked while answering, then set again by the install.
+    expect(rec.ddns).toEqual(['my-group 203.0.113.9', 'my-group 203.0.113.9']);
     // The machine suggested home (a router answered); nothing about opening 80/443 was asked.
-    expect(term.asked).toContain('select:hosting');
-    expect(term.asked).toContain('select:cf-domain');
-    expect(term.asked).not.toContain('select:advanced');
-    const out = term.text_();
-    expect(out).toContain('This machine: Debian GNU/Linux 12 (bookworm), x64, public IP 203.0.113.9. Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).');
-    expect(out).toContain(`ok Address: ${DUCK_URL} (the port is part of it).`);
-    // Discord's redirect carries the port and is registered (the fixture has it).
-    expect(out).toContain('ok Redirect URI is registered.');
+    expect(ui.asked.slice(0, 3)).toEqual(['lang', 'hosting', 'homeCf']);
+    expect(ui.asked).not.toContain('homeAdvanced');
+    expect(ui.seen).toContain('This machine: Debian GNU/Linux 12 (bookworm), x64, public IP 203.0.113.9.');
+    expect(ui.seen).toContain('Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).');
+    expect(ui.rows.find((r) => r.kind === 'url')?.value).toBe(DUCK_URL);
+    // Discord's redirect carries the port and is registered (the fixture has it): not asked.
+    expect(ui.asked).not.toContain('redirect');
+    const out = ui.text();
     expect(out).toContain('Telinha asks the router for TCP 7881, UDP 7882, TCP 8443');
     expect(out).not.toContain('TCP 443');
     // The certificate wait knows it comes through DuckDNS, and asks the high port.
     expect(out).toContain("spin Waiting for the HTTPS certificate (Let's Encrypt through DuckDNS, usually 1-3 minutes)...");
     expect(rec.cert).toEqual([{ host: 'my-group.duckdns.org', port: 8443 }]);
-    expect(out).toContain(`Open ${DUCK_URL} or type /telinha`);
-    expect(out).not.toContain('duck-token');
+    // Doctor ran as data for the screens, not as the doctor command.
+    expect(rec.checks).toEqual(['en']);
+    expect(rec.doctor).toEqual([]);
+    // The terminal keeps a summary and the next steps once the screens are gone.
+    const after = term.text_();
+    expect(after).toContain('ok Write telinha.env: Wrote /opt/telinha/config/telinha.env');
+    expect(after).toContain('ok Check everything: 1 ok · 1 warning · 0 failed · 0 skipped');
+    expect(after).toContain(`Open ${DUCK_URL} or type /telinha`);
+    for (const shown of [out, after, ui.seen.join('\n')]) expect(shown).not.toContain('duck-token');
   });
 
   test('home, a custom port: the redirect URI shown for Discord carries it', async () => {
-    const term = new FakeTerm({ ...freshHome(), 'text:https-port': ['9443'], 'select:redirect': ['skip'] });
-    const { ctx } = ctxFor(['setup', '--no-service', '--no-upnp', '--no-doctor'], { tty: true });
-    const { deps, files } = fakeDeps(term);
-    expect(await go(ctx, deps)).toBe(0);
-    const out = term.text_();
-    expect(out).toContain('    https://my-group.duckdns.org:9443/auth/callback');
-    expect(out).toContain('warn Login will fail until https://my-group.duckdns.org:9443/auth/callback is a redirect of the app');
+    const ui = new FakeUi({ answers: { ...freshHome(), httpsPort: ['9443'], redirect: ['skip'] } });
+    const { ctx } = ctxFor(['setup', ...QUIET], { tty: true });
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, ui)).toBe(0);
+    expect(ui.views.get('redirect')?.link).toBe('https://my-group.duckdns.org:9443/auth/callback');
+    expect(ui.seen).toContain('Login will fail until https://my-group.duckdns.org:9443/auth/callback is a redirect of the app (telinha doctor checks it).');
+    expect(ui.text()).toContain('warn Login will fail until https://my-group.duckdns.org:9443/auth/callback is a redirect of the app');
     expect(parseEnvFile(files.get(ENV)!).vars).toMatchObject({ PUBLIC_URL: 'https://my-group.duckdns.org:9443', HTTPS_PORT: '9443' });
   });
 
   test('fresh home with a domain on Cloudflare: tunnel, no HTTP ports, no DNS certificate', async () => {
-    const term = new FakeTerm({ ...discordAnswers(), 'select:cf-domain': ['yes'], 'secret:TUNNEL_TOKEN': [TUNNEL], 'text:public-url': ['telinha.example.com'] });
-    const { ctx } = ctxFor(['setup', '--no-service', '--no-upnp', '--no-doctor'], { tty: true });
-    const { deps, rec, files } = fakeDeps(term);
-    expect(await go(ctx, deps)).toBe(0);
+    const ui = new FakeUi({ answers: { ...discordAnswers(), homeCf: ['yes'], tunnelToken: [TUNNEL], tunnelHost: ['telinha.example.com'] } });
+    const { ctx } = ctxFor(['setup', ...QUIET], { tty: true });
+    const { deps, rec, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, ui)).toBe(0);
     const text = files.get(ENV)!;
     expect(parseEnvFile(text).vars).toMatchObject({ HOSTING: 'home', INGRESS: 'tunnel', TUNNEL_TOKEN: TUNNEL, PUBLIC_URL: URL_, UPNP: 'auto' });
     expect(text).toContain('#HTTP_PORT=80\n');
@@ -322,10 +407,11 @@ describe('interactive', () => {
   });
 
   test('fresh VPS, own domain: 80/443, file written and valid, then binaries, provider firewall, doctor', async () => {
-    const term = new FakeTerm(freshVps());
+    const term = new FakeTerm();
+    const ui = new FakeUi({ answers: freshVps() });
     const { ctx } = ctxFor(['setup'], { tty: true });
     const { deps, rec, files } = fakeDeps(term);
-    expect(await go(ctx, deps)).toBe(0);
+    expect(await goUi(ctx, deps, ui)).toBe(0);
     const text = files.get(ENV)!;
     const vars = parseEnvFile(text).vars;
     expect(vars).toMatchObject({
@@ -339,21 +425,27 @@ describe('interactive', () => {
     expect(vars.LIVEKIT_API_SECRET!.length).toBeGreaterThanOrEqual(32);
     expect(config(text).publicHost).toBe('telinha.example.com');
     expect(config(text).warnings).toEqual([]);
-    // Not compiled: no AUTO_UPDATE question, no service, start by hand.
-    expect(term.asked).not.toContain('confirm:auto-update');
-    expect(term.asked).not.toContain('select:cf-domain');
-    expect(term.asked).not.toContain('confirm:upnp');
+    // Not compiled: no updates question, no service, start by hand.
+    expect(ui.asked).not.toContain('autoUpdate');
+    expect(ui.asked).not.toContain('homeCf');
+    expect(ui.asked).not.toContain('upnp');
+    expect(ui.seen).toContain('telinha.example.com points at this network (203.0.113.9).');
     expect(rec.bins).toEqual([{ media: 'self', ingress: 'direct' }]);
     expect(rec.installs).toEqual([]);
-    expect(rec.doctor).toEqual([['doctor', '--no-phone']]);
-    const out = term.text_();
+    expect(rec.checks).toEqual(['en']);
+    const out = ui.text();
     expect(out).toContain("Open these ports in your provider's firewall (security group / security list) and in this machine's own firewall: TCP 7881, UDP 7882, TCP 443, TCP 80");
     expect(out).not.toContain('Forward these ports on the router');
+    expect(out).toContain('Running from source: no service is installed (the native binary installs one).');
     expect(out).toContain('Start it with: bun server/src/index.ts run');
+    // The certificate waits for a running service: none here.
+    expect(rec.cert).toEqual([]);
     // Secrets never reach the screen.
-    expect(out).not.toContain('tok-good');
-    expect(out).not.toContain('good-secret');
-    expect(out).not.toContain(vars.COOKIE_SECRET!);
+    for (const shown of [out, term.text_(), ui.seen.join('\n'), JSON.stringify(ui.rows)]) {
+      expect(shown).not.toContain('tok-good');
+      expect(shown).not.toContain('good-secret');
+      expect(shown).not.toContain(vars.COOKIE_SECRET!);
+    }
     expect(rec.fsCalls).toContain('chmod /opt/telinha/config 700');
   });
 
@@ -364,132 +456,200 @@ describe('interactive', () => {
   ].join('\n');
 
   test('re-run: every default kept, secrets kept, unmanaged keys verbatim', async () => {
-    const term = new FakeTerm();
-    const { ctx } = ctxFor(['setup', '--no-service', '--no-upnp', '--no-doctor'], { tty: true });
-    const { deps, files } = fakeDeps(term, { files: { [ENV]: PREVIOUS } });
-    expect(await go(ctx, deps)).toBe(0);
+    const ui = new FakeUi();
+    const { ctx } = ctxFor(['setup', ...QUIET], { tty: true });
+    const { deps, files } = fakeDeps(new FakeTerm(), { files: { [ENV]: PREVIOUS } });
+    expect(await goUi(ctx, deps, ui)).toBe(0);
     const text = files.get(ENV)!;
     const vars = parseEnvFile(text).vars;
     expect(vars).toMatchObject({ DISCORD_TOKEN: 'tok-good', COOKIE_SECRET: 'old-cookie-secret', LIVEKIT_API_KEY: 'telinhaabcdef12', LIVEKIT_API_SECRET: '0123456789abcdef0123456789abcdef', ROLE_ID: ROLE, HOSTING: 'vps', PUBLIC_URL: URL_ }); // gitleaks:allow
     const other = text.slice(text.indexOf('# --- Other settings'));
     expect(other).toContain('SESSION_DAYS=14\nACME_EMAIL="me@example.com"\nMY_NOTE=\'keep # me\'\n');
-    // LOCALE was set: no language question; HOSTING=vps preselected (a home router answers here); secrets offered as "keep current".
-    expect(term.asked).not.toContain('select:lang');
-    expect(term.asked).toContain('select:hosting');
-    expect(term.asked).not.toContain('select:cf-domain');
-    expect(term.asked).toContain('select:DISCORD_TOKEN');
-    expect(term.asked).not.toContain('secret:DISCORD_TOKEN');
-    expect(term.text_()).toContain('COOKIE_SECRET (kept)');
+    // LOCALE was set: no language question; HOSTING=vps preselected (a home router answers here); secrets offered as "keep the current one".
+    expect(ui.asked).not.toContain('lang');
+    expect(ui.views.get('hosting')?.initial).toBe('vps');
+    expect(ui.asked).not.toContain('homeCf');
+    expect(ui.views.get('discordToken')?.keepsSecret).toBe(true);
+    expect(ui.rows.filter((r) => r.kind === 'secret').map((r) => r.value)).toEqual(['kept', 'kept']);
     expect(config(text).sessionSeconds).toBe(14 * 86400);
     // Same answers, same file: idempotent.
     const again = fakeDeps(new FakeTerm(), { files: { [ENV]: text } });
-    await go(ctx, again.deps);
+    await goUi(ctx, again.deps, new FakeUi());
     expect(again.files.get(ENV)).toBe(text);
   });
 
   test('re-run of a home DuckDNS file on Enter reproduces it', async () => {
-    const first = fakeDeps(new FakeTerm(freshHome()));
-    const { ctx } = ctxFor(['setup', '--no-service', '--no-upnp', '--no-doctor'], { tty: true });
-    expect(await go(ctx, first.deps)).toBe(0);
+    const first = fakeDeps(new FakeTerm());
+    const { ctx } = ctxFor(['setup', ...QUIET], { tty: true });
+    expect(await goUi(ctx, first.deps, new FakeUi({ answers: freshHome() }))).toBe(0);
     const text = first.files.get(ENV)!;
-    const term = new FakeTerm();
-    const again = fakeDeps(term, { files: { [ENV]: text } });
-    expect(await go(ctx, again.deps)).toBe(0);
+    const ui = new FakeUi();
+    const again = fakeDeps(new FakeTerm(), { files: { [ENV]: text } });
+    expect(await goUi(ctx, again.deps, ui)).toBe(0);
     expect(again.files.get(ENV)).toBe(text);
-    expect(term.asked).toContain('text:https-port');
-    expect(term.asked).not.toContain('select:advanced');
+    expect(ui.asked).toContain('httpsPort');
+    expect(ui.asked).not.toContain('homeAdvanced');
+  });
+
+  test('--yes on a re-run opens at the Review and writes the same file', async () => {
+    const ui = new FakeUi();
+    const { ctx } = ctxFor(['setup', ...QUIET], { tty: true, yes: true });
+    const { deps, files } = fakeDeps(new FakeTerm(), { files: { [ENV]: PREVIOUS } });
+    expect(await goUi(ctx, deps, ui)).toBe(0);
+    expect(ui.asked).toEqual([]);
+    expect(parseEnvFile(files.get(ENV)!).vars).toMatchObject({ HOSTING: 'vps', PUBLIC_URL: URL_, COOKIE_SECRET: 'old-cookie-secret', DISCORD_CLIENT_ID: APP });
   });
 
   test('re-run with "rotate": a new cookie secret, the rest kept', async () => {
-    const term = new FakeTerm({ 'select:review': ['rotate'] });
-    const { ctx } = ctxFor(['setup', '--no-service', '--no-upnp', '--no-doctor'], { tty: true });
-    const { deps, files } = fakeDeps(term, { files: { [ENV]: PREVIOUS } });
-    await go(ctx, deps);
+    const ui = new FakeUi({ review: 'rotate' });
+    const { ctx } = ctxFor(['setup', ...QUIET], { tty: true });
+    const { deps, files } = fakeDeps(new FakeTerm(), { files: { [ENV]: PREVIOUS } });
+    expect(await goUi(ctx, deps, ui)).toBe(0);
     const vars = parseEnvFile(files.get(ENV)!).vars;
     expect(vars.COOKIE_SECRET).not.toBe('old-cookie-secret');
     expect(vars.LIVEKIT_API_KEY).toBe('telinhaabcdef12');
   });
 
-  test('cancel at the review writes nothing', async () => {
-    const term = new FakeTerm({ ...freshHome(), 'select:review': ['abort'] });
+  test('quit at the Review writes nothing', async () => {
+    const ui = new FakeUi({ answers: freshHome(), review: 'quit' });
     const { ctx, err } = ctxFor(['setup'], { tty: true });
-    const { deps, files } = fakeDeps(term);
-    expect(await go(ctx, deps)).toBe(1);
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, ui)).toBe(1);
     expect(files.size).toBe(0);
     expect(err).toEqual(['Nothing was written.']);
   });
 
-  test('Linux user, VPS on 443: the sysctl step is offered; declined, the command is printed and the file stays on 443', async () => {
-    const term = new FakeTerm({ ...freshVps(), 'confirm:sysctl': [false] });
-    const home = '/home/me/.local/share/telinha';
-    const { ctx } = ctxFor(['setup', '--no-upnp', '--no-doctor'], { tty: true, compiled: true, home, isRoot: false });
-    const { deps, rec, files } = fakeDeps(term, {
-      isRoot: false, execPath: `${home}/bin/telinha`,
-      files: { '/proc/sys/net/ipv4/ip_unprivileged_port_start': '1024\n', [`${home}/bin/telinha`]: 'binary' },
-    });
-    expect(await go(ctx, deps)).toBe(0);
-    expect(term.asked).toContain('confirm:sysctl');
+  test('Ctrl+C before the file: 130, nothing written', async () => {
+    const { ctx, err } = ctxFor(['setup'], { tty: true });
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, new FakeUi({ start: 'ctrl-c' }))).toBe(130);
+    expect(files.size).toBe(0);
+    expect(err).toEqual(['Nothing was written.']);
+  });
+
+  const LINUX_USER = '/home/me/.local/share/telinha';
+  const linuxUser = (o: Opts = {}) => fakeDeps(new FakeTerm(), {
+    isRoot: false, execPath: `${LINUX_USER}/bin/telinha`,
+    files: { '/proc/sys/net/ipv4/ip_unprivileged_port_start': '1024\n', [`${LINUX_USER}/bin/telinha`]: 'binary' }, ...o,
+  });
+
+  test('Linux user, VPS on 443, "show me the command": printed, no sudo, the file stays on 443', async () => {
+    const ui = new FakeUi({ answers: { ...freshVps(), sysctl: ['manual'] } });
+    const { ctx } = ctxFor(['setup', '--no-upnp', '--no-doctor'], { tty: true, compiled: true, home: LINUX_USER, isRoot: false });
+    const { deps, rec, files } = linuxUser();
+    expect(await goUi(ctx, deps, ui)).toBe(0);
+    expect(ui.asked).toContain('sysctl');
     expect(rec.spawnInteractive).toEqual([]);
+    expect(ui.terminal).toEqual([]);
     expect(SYSCTL_SCRIPT).toBe('printf "net.ipv4.ip_unprivileged_port_start=80\\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system');
-    expect(rec.spawn.some((c) => c.includes('setcap'))).toBe(false);
-    const text = files.get(`${home}/config/telinha.env`)!;
+    expect(rec.spawn.some((c) => c.includes('setcap') || c[0] === 'sudo')).toBe(false);
+    const text = files.get(`${LINUX_USER}/config/telinha.env`)!;
     expect(parseEnvFile(text).vars).toMatchObject({ HTTPS_PORT: '443', HTTP_PORT: '80', PUBLIC_URL: URL_ });
-    expect(config(text, home).httpsPort).toBe(443);
+    expect(config(text, LINUX_USER).httpsPort).toBe(443);
     // Written once: no rewrite to high ports.
     expect(rec.fsCalls.filter((c) => c.startsWith('create ') && c.includes('telinha.env'))).toHaveLength(1);
-    expect(term.asked).not.toContain('confirm:high-ports');
-    const out = term.text_();
+    const out = ui.text();
     expect(out).toContain('warn The setting was not changed.');
     expect(out).toContain(`To use 80/443 later: sudo sh -c '${SYSCTL_SCRIPT}'`);
     expect(out).not.toContain('8443');
-    expect(rec.installs).toEqual([{ user: true, o: { firewall: false, exe: `${home}/bin/telinha`, home, locale: 'en' } }]);
-    expect(term.asked).toContain('confirm:auto-update');
+    expect(rec.installs).toEqual([{ user: true, o: { firewall: false, exe: `${LINUX_USER}/bin/telinha`, home: LINUX_USER, locale: 'en' } }]);
+    expect(ui.asked).toContain('autoUpdate');
     expect(out).toContain('Still to do by hand: loginctl enable-linger me');
     expect(rec.fsCalls.some((c) => c.startsWith('chown'))).toBe(false);
   });
 
+  test('Linux user, VPS on 443, sudo: the screens step aside for sudo only, the explanation first', async () => {
+    const ui = new FakeUi({ answers: freshVps() });
+    const { ctx } = ctxFor(['setup', '--no-upnp', '--no-doctor'], { tty: true, compiled: true, home: LINUX_USER, isRoot: false });
+    const { deps, rec } = linuxUser();
+    expect(await goUi(ctx, deps, ui)).toBe(0);
+    expect(ui.views.get('sysctl')?.initial).toBe('sudo');
+    expect(rec.spawnInteractive).toEqual([['sudo', 'sh', '-c', SYSCTL_SCRIPT]]);
+    expect(ui.terminal).toEqual([[
+      'Ports 80, 443 are below 1024: Linux lets only root bind them unless one setting changes.',
+      'One sudo command allows ports from 80 up for every user (it survives updates):',
+    ]]);
+    expect(ui.text()).toContain('ok Ports from 80 up are allowed now.');
+  });
+
   test('Linux user at home on 8443: no sysctl step at all', async () => {
-    const term = new FakeTerm(freshHome());
-    const home = '/home/me/.local/share/telinha';
-    const { ctx } = ctxFor(['setup', '--no-upnp', '--no-doctor'], { tty: true, compiled: true, home, isRoot: false });
-    const { deps, rec } = fakeDeps(term, { isRoot: false, execPath: `${home}/bin/telinha`, files: { '/proc/sys/net/ipv4/ip_unprivileged_port_start': '1024\n', [`${home}/bin/telinha`]: 'binary' } });
-    expect(await go(ctx, deps)).toBe(0);
-    expect(term.asked).not.toContain('confirm:sysctl');
+    const ui = new FakeUi({ answers: freshHome() });
+    const { ctx } = ctxFor(['setup', '--no-upnp', '--no-doctor'], { tty: true, compiled: true, home: LINUX_USER, isRoot: false });
+    const { deps, rec } = linuxUser();
+    expect(await goUi(ctx, deps, ui)).toBe(0);
+    expect(ui.asked).not.toContain('sysctl');
     expect(rec.spawn.some((c) => c[0] === 'sudo')).toBe(false);
+    expect(ui.terminal).toEqual([]);
   });
 
   test('a running service is restarted to read the new file', async () => {
-    const term = new FakeTerm(freshHome());
     let shutdowns = 0;
-    const { ctx } = ctxFor(['setup', '--no-service', '--no-upnp', '--no-doctor'], { tty: true });
-    const { deps } = fakeDeps(term, { available: true });
+    const ui = new FakeUi({ answers: freshHome() });
+    const { ctx } = ctxFor(['setup', ...QUIET], { tty: true });
+    const { deps } = fakeDeps(new FakeTerm(), { available: true });
     deps.control.shutdown = async () => void shutdowns++;
-    await go(ctx, deps);
+    expect(await goUi(ctx, deps, ui)).toBe(0);
     expect(shutdowns).toBe(1);
-    expect(term.text_()).toContain('Telinha is running.');
+    expect(ui.text()).toContain('ok Telinha is running.');
   });
 
   test('home, advanced ports with UPnP on: the router step names only what the mapper asks for; 80/443 stay by hand', async () => {
-    const term = new FakeTerm({ ...discordAnswers(), 'select:cf-domain': ['advanced'], 'select:advanced': ['ports'], 'select:ingress': ['domain'], 'text:public-url': ['telinha.example.com'] });
+    const ui = new FakeUi({ answers: { ...discordAnswers(), homeCf: ['advanced'], homeAdvanced: ['ports'], advancedAddress: ['domain'], domain: ['telinha.example.com'] } });
     const { ctx } = ctxFor(['setup', '--no-service', '--no-doctor'], { tty: true });
-    const { deps, files } = fakeDeps(term);
-    expect(await go(ctx, deps)).toBe(0);
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, ui)).toBe(0);
     expect(parseEnvFile(files.get(ENV)!).vars).toMatchObject({ HOSTING: 'home', INGRESS: 'direct', HTTP_PORT: '80', HTTPS_PORT: '443', UPNP: 'auto' });
-    const out = term.text_();
-    expect(out).toContain('Telinha will not ask the router for 80 and 443');
+    expect(ui.seen).toContain('Telinha will not ask the router for 80 and 443: keep them forwarded yourself.');
+    const out = ui.text();
     expect(out).toContain('Telinha asks the router for TCP 7881, UDP 7882 while it runs');
     expect(out).not.toMatch(/asks the router for [^\n]*TCP (443|80)\b/);
     expect(out).toContain('Forward these ports on the router to this machine: TCP 443, TCP 80');
   });
 
-  test('--https-port next to a TTY is the default of the home port question', async () => {
-    const term = new FakeTerm(freshHome());
-    const { ctx } = ctxFor(['setup', '--https-port', '9443', '--no-service', '--no-upnp', '--no-doctor'], { tty: true });
-    const { deps, files } = fakeDeps(term);
-    expect(await go(ctx, deps)).toBe(0);
+  test('--https-port next to a terminal is the default of the home port question', async () => {
+    const ui = new FakeUi({ answers: { ...freshHome(), redirect: ['skip'] } });
+    const { ctx } = ctxFor(['setup', '--https-port', '9443', ...QUIET], { tty: true });
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, ui)).toBe(0);
+    expect(ui.views.get('httpsPort')?.defaultText).toBe('9443');
     expect(parseEnvFile(files.get(ENV)!).vars).toMatchObject({ PUBLIC_URL: 'https://my-group.duckdns.org:9443', HTTPS_PORT: '9443', HTTP_PORT: '0', ACME_DNS: 'duckdns' });
   });
 
+  test('on a terminal: flag errors are a notice on the first card, not exit 2; the screens still open', async () => {
+    // Before the setup screens these flags next to a terminal exited 2; --non-interactive still does (next test).
+    const ui = new FakeUi({ start: 'ctrl-c' });
+    const { ctx, err } = ctxFor(['setup', '--lang', 'en', '--host', 'home', '--public-url', URL_], { tty: true });
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, ui)).toBe(130);
+    expect(ui.context).not.toBeNull();
+    expect(ui.notice).toEqual({ kind: 'presetErrors', text: HOME_NEEDS_ADVANCED });
+    // The flag the rule is about is no default; the others still are.
+    expect(ui.first).toMatchObject({ id: 'hosting', initial: 'home' });
+    expect(files.size).toBe(0);
+    expect(err).toEqual(['Nothing was written.']);
+  });
+
+  test('--non-interactive: the same flags still exit 2 with the same message', async () => {
+    const argv = ['setup', '--non-interactive', '--lang', 'en', '--host', 'home', '--public-url', URL_, '--guild', GUILD, '--role', ROLE, '--channels', CHANNEL];
+    const { ctx, err } = ctxFor(argv, { env: { DISCORD_TOKEN: 'tok-good', DISCORD_CLIENT_SECRET: 'good-secret' } });
+    const ui = new FakeUi();
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await goUi(ctx, deps, ui)).toBe(2);
+    expect(err).toEqual([HOME_NEEDS_ADVANCED]);
+    expect(ui.context).toBeNull();
+    expect(files.size).toBe(0);
+  });
+
+  test('a terminal without the setup screens takes the plain path; doctor prints plain (tty false) without the phone test', async () => {
+    const term = new FakeTerm();
+    const argv = ['setup', '--host', 'vps', '--public-url', URL_, '--guild', GUILD, '--role', ROLE, '--channels', CHANNEL, '--no-service', '--no-upnp'];
+    const { ctx } = ctxFor(argv, { tty: true, env: { DISCORD_TOKEN: 'tok-good', DISCORD_CLIENT_SECRET: 'good-secret' } });
+    const { deps, rec } = fakeDeps(term);
+    expect(await go(ctx, deps)).toBe(0);
+    expect(rec.doctorCtx).toEqual([{ tty: false, argv: ['doctor', '--no-phone'] }]);
+    expect(rec.checks).toEqual([]);
+    expect(term.text_()).toContain('step Checking everything (telinha doctor)');
+  });
 });
 
 describe('non-interactive', () => {
@@ -1011,13 +1171,24 @@ describe('pieces', () => {
     expect(publicPorts({ INGRESS: 'tunnel', MEDIA_UDP_PORT: '50000' })).toEqual(['TCP 7881', 'UDP 50000']);
   });
 
-  test('offerSetup: declined -> null; accepted -> runs setup', async () => {
+  test('offerSetup: the welcome card declined -> null; set up -> setup runs (quit at the Review: 1)', async () => {
     const { ctx } = ctxFor([], { tty: true });
-    const no = fakeDeps(new FakeTerm({ 'confirm:setup': [false] }));
-    expect(await offerSetup(ctx, no.deps)).toBeNull();
-    const term = new FakeTerm({ ...freshHome(), 'select:review': ['abort'] });
-    const yes = fakeDeps(term);
-    expect(await offerSetup(ctx, yes.deps)).toBe(1);
+    const no = new FakeUi({ start: 'decline' });
+    expect(await offerSetup(ctx, { ...fakeDeps(new FakeTerm()).deps, ui: no })).toBeNull();
+    expect(no.context?.offer).toEqual({ envFile: ENV });
+    expect(no.context?.shownFile).toBe(ENV);
+    const yes = new FakeUi({ answers: freshHome(), review: 'quit' });
+    const { deps, files } = fakeDeps(new FakeTerm());
+    expect(await offerSetup(ctx, { ...deps, ui: yes })).toBe(1);
+    expect(yes.asked).toContain('hosting');
+    expect(files.size).toBe(0);
+  });
+
+  test('offerSetup without the setup screens: the plain path says why it runs and what is missing', async () => {
+    const term = new FakeTerm();
+    const { ctx, err } = ctxFor([], { tty: true });
+    expect(await offerSetup(ctx, fakeDeps(term).deps)).toBe(2);
     expect(term.text_()).toContain('warn No configuration yet (/opt/telinha/config/telinha.env).');
+    expect(err.at(-1)).toStartWith('missing in non-interactive mode: --public-url');
   });
 });

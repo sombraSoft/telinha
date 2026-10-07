@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createPortMapper, discoverGateways, probe, type Mapping, type NatDeps, type UdpFactory } from '../src/nat/index.ts';
+import { createPortMapper, defaultNatDeps, discoverGateways, probe, type Mapping, type NatDeps, type UdpFactory } from '../src/nat/index.ts';
 
 const GW = '192.168.0.1';
 const LOCAL = '192.168.0.10';
@@ -408,5 +408,24 @@ describe('createPortMapper', () => {
     writeFileSync(statePath, '{"mappings":[]}');
     await lan({ igd: true }).mapper({ statePath }).stop();
     expect(readFileSync(statePath, 'utf8')).toBe('{"mappings":[]}');
+  });
+});
+
+describe('the default UDP socket', () => {
+  test('a refused datagram (ICMP port unreachable) is not an uncaught error', async () => {
+    // A port nobody listens on: bind one, note it, let it go.
+    const probe = await Bun.udpSocket({ hostname: '127.0.0.1', port: 0 });
+    const closed = probe.port;
+    probe.close();
+    const s = await defaultNatDeps().udp({ onMessage: () => {} });
+    try {
+      // On Linux the second recv after a refused send fails with ECONNREFUSED.
+      for (let i = 0; i < 3; i++) {
+        s.send(new Uint8Array([0, 0]), closed, '127.0.0.1');
+        await Bun.sleep(50);
+      }
+    } finally {
+      s.close();
+    }
   });
 });

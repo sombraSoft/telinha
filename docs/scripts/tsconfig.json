@@ -1,6 +1,9 @@
 {
   // The generator and the tests run under Bun. No allowJs: nothing here
   // imports astro.config.mjs (the tests read it as text).
+  // jsx options: the generator imports cli/doctor.ts and cli/setup.ts, and tsc
+  // follows their dynamic import() of server/src/tui/**/*.tsx, which fails with
+  // TS6142 without a jsx option.
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["ESNext"],
@@ -14,7 +17,9 @@
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid"
   },
   "include": ["**/*.ts"]
 }

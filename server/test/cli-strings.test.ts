@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { defineStrings, dicts, localeFromTag, pickLocale, ts } from '../src/cli/strings.ts';
+import { at as applyStrings } from '../src/cli/setup/apply-strings.ts';
 import { t as setupStrings } from '../src/cli/setup/strings.ts';
 
 describe('ts', () => {
@@ -31,30 +32,39 @@ describe('ts', () => {
       for (const flag of ['--non-interactive', '--host home|vps', '--duckdns-domain', '--advanced', '80/443']) expect(help).toContain(flag);
     }
   });
+
+  test('setup and doctor help say what a terminal shows', () => {
+    expect(ts('en', 'helpSetup')).toContain('On a terminal it opens the setup screens: arrows and Enter answer, Esc goes back, Tab jumps to a step, then Review and Install.');
+    expect(ts('pt-BR', 'helpSetup')).toContain('Num terminal ele abre as telas de configuração: setas e Enter respondem, Esc volta, Tab pula pra uma etapa, depois Revisão e Instalação.');
+    expect(ts('en', 'helpDoctor')).toContain('On a terminal the results are an interactive checklist: Enter shows how to fix a row, r runs the checks again.');
+    expect(ts('pt-BR', 'helpDoctor')).toContain('Num terminal o resultado é uma lista interativa: Enter mostra como corrigir uma linha, r roda as verificações de novo.');
+  });
+
+  test('the prompt texts left with the prompts', () => {
+    for (const k of ['needsInput', 'yesNo', 'answerYesNo', 'pickAtLeast', 'selectHint', 'multiHint', 'keepCurrent']) expect(Object.keys(dicts.en)).not.toContain(k);
+    for (const k of ['welcome', 'hostingQ', 'cfDomainQ', 'reviewQ', 'sysctlQ', 'autoUpdateQ']) expect(Object.keys(setupStrings.en)).not.toContain(k);
+  });
 });
 
 describe('setup strings', () => {
-  test('pt-BR keeps every key and placeholder of en; nothing says "phase" or tells a home to open 80/443', () => {
-    const en = setupStrings.en as Record<string, string>;
-    const pt = setupStrings.ptBR as Record<string, string>;
-    expect(Object.keys(pt).sort()).toEqual(Object.keys(en).sort());
-    for (const [k, v] of Object.entries(en)) {
-      const want = [...v.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
-      const got = [...pt[k]!.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
-      expect(`${k}: ${got.join(',')}`).toBe(`${k}: ${want.join(',')}`);
-    }
-    for (const d of [en, pt]) {
-      for (const v of Object.values(d)) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b/);
-      // The old ports question and the 443 -> 8443 router rewrite are gone.
-      expect(Object.values(d).join('\n')).not.toMatch(/reach this machine\?|chegam nesta máquina\?|Switch to port 8443|Mudar pra porta 8443/);
-    }
-    expect(en.homeIntro).toContain('usually');
-    expect(en.httpsPortLow).toContain('usually');
-    expect(pt.homeIntro).toContain('em geral');
-    expect(pt.httpsPortLow).toContain('em geral');
-    expect(en.homeNeedsAdvanced).toEndWith('; on a rented server pass --host vps');
-    expect(pt.homeNeedsAdvanced).toEndWith('; num servidor alugado passe --host vps');
-  });
+  // The questions' texts (qstrings.ts) are tested next to the setup model.
+  for (const [name, dict] of [['install lines', setupStrings], ['task list', applyStrings]] as const) {
+    test(`${name}: pt-BR keeps every key and placeholder of en; nothing says "phase" or tells a home to open 80/443`, () => {
+      const en = dict.en as Record<string, string>;
+      const pt = dict.ptBR as Record<string, string>;
+      expect(Object.keys(pt).sort()).toEqual(Object.keys(en).sort());
+      for (const [k, v] of Object.entries(en)) {
+        const want = [...v.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+        const got = [...pt[k]!.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+        expect(`${k}: ${got.join(',')}`).toBe(`${k}: ${want.join(',')}`);
+      }
+      for (const d of [en, pt]) {
+        for (const v of Object.values(d)) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b/);
+        // The old ports question and the 443 -> 8443 router rewrite are gone.
+        expect(Object.values(d).join('\n')).not.toMatch(/reach this machine\?|chegam nesta máquina\?|Switch to port 8443|Mudar pra porta 8443|open (ports )?80|abra a 80/);
+      }
+    });
+  }
 });
 
 describe('defineStrings', () => {

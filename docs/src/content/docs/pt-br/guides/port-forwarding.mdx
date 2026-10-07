@@ -226,7 +226,7 @@ ainda decide se deixa entrar.
   <TabItem label="Windows">
 
 O `telinha service install --firewall` (que o passo de administrador do
-assistente roda) primeiro remove toda regra de entrada ligada ao
+setup roda) primeiro remove toda regra de entrada ligada ao
 `livekit-server.exe` ou ao `caddy.exe` da pasta `bin\`, e depois cria regras
 de entrada que permitem o tráfego em todos os perfis de rede, cada uma ligada
 ao seu programa. A remoção importa: se você rodou a Telinha num console antes
@@ -240,7 +240,7 @@ para esses programas, e bloquear ganha de permitir.
 | `Telinha HTTPS` (direct) | `caddy.exe` | TCP `HTTPS_PORT` |
 | `Telinha HTTP` (direct, `HTTP_PORT` diferente de 0, então não nas instalações de casa) | `caddy.exe` | TCP `HTTP_PORT` |
 
-Depois de mudar uma porta, rode o assistente de novo (ou o comando de
+Depois de mudar uma porta, rode o setup de novo (ou o comando de
 instalação num terminal de administrador). O
 `telinha service uninstall --firewall` remove as regras.
 

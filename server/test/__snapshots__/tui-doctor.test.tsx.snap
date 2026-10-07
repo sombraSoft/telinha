@@ -1,0 +1,289 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`doctor frames results with an expanded row, en 120x34 1`] = `
+"  \\ /
+ ╭───╮ telinha doctor                                                                                             vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭─ Doctor ───────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │                                                                                                                    │
+ │  Doctor                                                                                                            │
+ │  Health checks for this install. Enter shows how to fix a row.                                                     │
+ │                                                                                                                    │
+ │      ✔ Configuration              telinha.env is valid                                                             │
+ │      ✔ Discord bot token          Signed in as Telinha#4410                                                        │
+ │      ✔ DNS                        gurizada.duckdns.org points at 203.0.113.7                                       │
+ │  ❯ ▾ ✖ Router                     UDP 7882 is not reachable from the internet                                      │
+ │        Router: 192.168.0.1 (UPnP)                                                                                  │
+ │        └ Fix                                                                                                       │
+ │          Forward UDP 7882 on your router to 192.168.0.23, then run telinha doctor again.                           │
+ │                                                                                                                    │
+ │      – Carrier NAT                Skipped: needs the internet                                                      │
+ │      ! Updates                    0.9.1 is available (running 0.9.0)                                               │
+ │                                                                                                                    │
+ │  Phone test                                                                                                        │
+ │      ✔ HTTPS                      80 ms                                                                            │
+ │      ✔ LiveKit connection         works                                                                            │
+ │      ✔ Sending video              works                                                                            │
+ │      ✔ First path                 UDP to 203.0.113.7, 40 ms                                                        │
+ │      ! UDP 7882                   failed                                                                           │
+ │      ✔ TCP 7881                   works, 60 ms                                                                     │
+ │                                                                                                                    │
+ │  3 ok · 1 warning · 1 failed · 1 skipped                                                                           │
+ │                                                                                                                    │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+ ↑↓ move  enter details  r run again  p phone test  q quit
+"
+`;
+
+exports[`doctor frames waiting for the phone, en 120x34 1`] = `
+" ╭─ Doctor ─────────────────────────────────────────────────────────╮ ╭─ Phone test ──────────────────────────────────╮
+ │                                                                  │ │ Open this on your phone with Wi-Fi OFF        │
+ │  Doctor                                                          │ │ (mobile data):                                │
+ │  Health checks for this install. Enter shows how to fix a row.   │ │ https://my-group.duckdns.org:8443/doctor?t=Xq │
+ │                                                                  │ │ 3vN8rT2mK7pL5wZ9cB4dF6gH1jS0aY-eU_iO2kR7t     │
+ │  ❯ ▸ ✔ Configuration              telinha.env is valid           │ │ ⠋ Waiting for the phone (10:00)               │
+ │      ✔ Discord bot token          Signed in as Telinha#4410      │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      ✔ DNS                        gurizada.duckdns.org points …  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      ✖ Router                     UDP 7882 is not reachable fr…  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      – Carrier NAT                Skipped: needs the internet    │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      ! Updates                    0.9.1 is available (running …  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │                                                                  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │  3 ok · 1 warning · 1 failed · 1 skipped                         │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │                                                                  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ ╰──────────────────────────────────────────────────────────────────╯ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      ╰───────────────────────────────────────────────╯
+
+
+
+ ↑↓ move  enter details  r run again  p phone test  s skip  q quit
+"
+`;
+
+exports[`doctor frames results with an expanded row, pt-BR 120x34 1`] = `
+"  \\ /
+ ╭───╮ telinha diagnóstico                                                                                        vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭─ Diagnóstico ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │                                                                                                                    │
+ │  Diagnóstico                                                                                                       │
+ │  Verificações desta instalação. Enter mostra como corrigir uma linha.                                              │
+ │                                                                                                                    │
+ │      ✔ Configuração               telinha.env is valid                                                             │
+ │      ✔ Token do bot               Signed in as Telinha#4410                                                        │
+ │      ✔ DNS                        gurizada.duckdns.org points at 203.0.113.7                                       │
+ │  ❯ ▾ ✖ Roteador                   UDP 7882 is not reachable from the internet                                      │
+ │        Router: 192.168.0.1 (UPnP)                                                                                  │
+ │        └ Como corrigir                                                                                             │
+ │          Forward UDP 7882 on your router to 192.168.0.23, then run telinha doctor again.                           │
+ │                                                                                                                    │
+ │      – NAT da operadora           Skipped: needs the internet                                                      │
+ │      ! Atualizações               0.9.1 is available (running 0.9.0)                                               │
+ │                                                                                                                    │
+ │  Teste no celular                                                                                                  │
+ │      ✔ HTTPS                      80 ms                                                                            │
+ │      ✔ Conexão com o LiveKit      funciona                                                                         │
+ │      ✔ Envio de vídeo             funciona                                                                         │
+ │      ✔ Primeiro caminho           UDP até 203.0.113.7, 40 ms                                                       │
+ │      ! UDP 7882                   falhou                                                                           │
+ │      ✔ TCP 7881                   funciona, 60 ms                                                                  │
+ │                                                                                                                    │
+ │  3 ok · 1 aviso · 1 com falha · 1 pulado                                                                           │
+ │                                                                                                                    │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+ ↑↓ mover  enter detalhes  r rodar de novo  p teste no celular  q sair
+"
+`;
+
+exports[`doctor frames waiting for the phone, pt-BR 120x34 1`] = `
+" ╭─ Diagnóstico ────────────────────────────────────────────────────╮ ╭─ Teste no celular ────────────────────────────╮
+ │                                                                  │ │ Abra isto no celular com o Wi-Fi DESLIGADO    │
+ │  Diagnóstico                                                     │ │ (dados móveis):                               │
+ │  Verificações desta instalação. Enter mostra como corrigir uma…  │ │ https://my-group.duckdns.org:8443/doctor?t=Xq │
+ │                                                                  │ │ 3vN8rT2mK7pL5wZ9cB4dF6gH1jS0aY-eU_iO2kR7t     │
+ │  ❯ ▸ ✔ Configuração               telinha.env is valid           │ │ ⠋ Esperando o celular (10:00)                 │
+ │      ✔ Token do bot               Signed in as Telinha#4410      │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      ✔ DNS                        gurizada.duckdns.org points …  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      ✖ Roteador                   UDP 7882 is not reachable fr…  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      – NAT da operadora           Skipped: needs the internet    │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │      ! Atualizações               0.9.1 is available (running …  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │                                                                  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │  3 ok · 1 aviso · 1 com falha · 1 pulado                         │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │                                                                  │ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ ╰──────────────────────────────────────────────────────────────────╯ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+                                                                      ╰───────────────────────────────────────────────╯
+
+
+
+ ↑↓ mover  enter detalhes  r rodar de novo  p teste no celular  s pular  q sair
+"
+`;
+
+exports[`doctor frames results with an expanded row, en 80x30 1`] = `
+"  \\ /
+ ╭───╮ telinha doctor                                                     vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭─ Doctor ───────────────────────────────────────────────────────────────────╮
+ │                                                                            │
+ │  Doctor                                                                    │
+ │  Health checks for this install. Enter shows how to fix a row.             │
+ │                                                                            │
+ │      ✔ Configuration              telinha.env is valid                     │
+ │      ✔ Discord bot token          Signed in as Telinha#4410                │
+ │      ✔ DNS                        gurizada.duckdns.org points at 203.0.1…  │
+ │  ❯ ▾ ✖ Router                     UDP 7882 is not reachable from the int…  │
+ │        UDP 7882 is not reachable from the internet                         │
+ │        Router: 192.168.0.1 (UPnP)                                          │
+ │        └ Fix                                                               │
+ │          Forward UDP 7882 on your router to 192.168.0.23, then run         │
+ │          telinha doctor again.                                             │
+ │                                                                            │
+ │      – Carrier NAT                Skipped: needs the internet              │
+ │      ! Updates                    0.9.1 is available (running 0.9.0)       │
+ │                                                                            │
+ │  Phone test                                                                │
+ │    ↓ 6 more                                                                │
+ │                                                                            │
+ │  3 ok · 1 warning · 1 failed · 1 skipped                                   │
+ │                                                                            │
+ ╰────────────────────────────────────────────────────────────────────────────╯
+
+ ↑↓ move  enter details  r run again  p phone test  q quit
+"
+`;
+
+exports[`doctor frames waiting for the phone, en 80x30 1`] = `
+" ╭─ Phone test ───────────────────────────────────────────────────────────────╮
+ │  Open this on your phone with Wi-Fi OFF (mobile data):                     │
+ │  https://my-group.duckdns.org:8443/doctor?t=Xq3vN8rT2mK7pL5wZ9cB4dF6gH1jS  │
+ │  0aY-eU_iO2kR7t                                                            │
+ │  ⠋ Waiting for the phone (10:00)                                           │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ ╰────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ move  enter details  r run again  p phone test  s skip  q quit
+"
+`;
+
+exports[`doctor frames results with an expanded row, pt-BR 80x30 1`] = `
+"  \\ /
+ ╭───╮ telinha diagnóstico                                                vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭─ Diagnóstico ──────────────────────────────────────────────────────────────╮
+ │                                                                            │
+ │  Diagnóstico                                                               │
+ │  Verificações desta instalação. Enter mostra como corrigir uma linha.      │
+ │                                                                            │
+ │      ✔ Configuração               telinha.env is valid                     │
+ │      ✔ Token do bot               Signed in as Telinha#4410                │
+ │      ✔ DNS                        gurizada.duckdns.org points at 203.0.1…  │
+ │  ❯ ▾ ✖ Roteador                   UDP 7882 is not reachable from the int…  │
+ │        UDP 7882 is not reachable from the internet                         │
+ │        Router: 192.168.0.1 (UPnP)                                          │
+ │        └ Como corrigir                                                     │
+ │          Forward UDP 7882 on your router to 192.168.0.23, then run         │
+ │          telinha doctor again.                                             │
+ │                                                                            │
+ │      – NAT da operadora           Skipped: needs the internet              │
+ │      ! Atualizações               0.9.1 is available (running 0.9.0)       │
+ │                                                                            │
+ │  Teste no celular                                                          │
+ │    ↓ mais 6                                                                │
+ │                                                                            │
+ │  3 ok · 1 aviso · 1 com falha · 1 pulado                                   │
+ │                                                                            │
+ ╰────────────────────────────────────────────────────────────────────────────╯
+
+ ↑↓ mover  enter detalhes  r rodar de novo  p teste no celular  q sair
+"
+`;
+
+exports[`doctor frames waiting for the phone, pt-BR 80x30 1`] = `
+" ╭─ Teste no celular ─────────────────────────────────────────────────────────╮
+ │  Abra isto no celular com o Wi-Fi DESLIGADO (dados móveis):                │
+ │  https://my-group.duckdns.org:8443/doctor?t=Xq3vN8rT2mK7pL5wZ9cB4dF6gH1jS  │
+ │  0aY-eU_iO2kR7t                                                            │
+ │  ⠋ Esperando o celular (10:00)                                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ │  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                             │
+ ╰────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ mover  enter detalhes  r rodar de novo  p teste no celular  s pular  q sair
+"
+`;

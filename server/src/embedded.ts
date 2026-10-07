@@ -1,4 +1,4 @@
-// The page built into the native binary: `bun build --compile --asset=web/dist`
+// The page built into the native binary: Bun.build's `compile.assets: ['<root>/web/dist']`
 // keeps only the directory's basename, next to the bundled entry.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';

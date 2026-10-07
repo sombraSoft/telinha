@@ -1,6 +1,6 @@
 ---
 title: Docker
-description: Run Telinha as one container on a Linux Docker host, with the setup wizard in the image and optional automatic updates.
+description: Run Telinha as one container on a Linux Docker host, with the setup screens in the image and optional automatic updates.
 sidebar:
   order: 6
 ---
@@ -22,7 +22,7 @@ stable release.
   create the app before the setup or while it runs: see
   [Discord app](/telinha/start/discord/).
 - For the address people open: at home a domain on Cloudflare, or nothing (the
-  wizard gives you a free DuckDNS address); on a VPS your own domain, DuckDNS
+  setup gives you a free DuckDNS address); on a VPS your own domain, DuckDNS
   or sslip.io. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
   compares them.
 - At home, access to your router's admin page unless it does UPnP, and a line
@@ -83,22 +83,34 @@ example lists every key with a comment), then `docker compose up -d`.
 
 ## Run the setup
 
-While `telinha.env` still has empty values, the installer offers the setup
-wizard. It runs inside the image, so nothing else gets installed on the host.
-To run it yourself later:
+While `telinha.env` still has empty values, the installer offers the setup. It
+runs inside the image, so nothing else gets installed on the host. To run it
+yourself later:
 
 ```sh
 docker run --rm -it --user 0 -e TELINHA_HOME=/telinha -v /opt/telinha/config:/telinha/config ghcr.io/sombrasoft/telinha:latest setup --docker
 ```
 
-The wizard speaks English or Brazilian Portuguese and explains every question
-in a line or two; servers, roles and channels come from lists.
+`-it` is required: the setup draws full-screen screens and reads your keys, so
+it needs the terminal. Without it (a script, a pipe) the same command prints
+plain lines and takes every answer from flags and the environment, see
+[Command line](/telinha/reference/cli/#telinha-setup).
+
+The screens show the steps down the left (Where, Address, Discord, Ports,
+Review, Install; there is no Updates step in Docker, `telinha-update` does that
+job), the current question as a card on the right and a hint that explains the
+choice. Servers, roles and channels come from lists. A first run starts with the
+language, English or Brazilian Portuguese. It works from 80 columns by 24 rows,
+and the keys are the same as in the other installs: ↑ ↓ and Enter or the number
+of an option answer, Esc or ← goes back, Tab jumps to a step already answered,
+secrets show as dots (paste, Ctrl+R shows or hides them) and Ctrl+C quits.
+[Command line](/telinha/reference/cli/#keys) lists every key.
 
 <Steps>
 
-1. **Where Telinha runs.** *Where will Telinha run?* Answer for the machine
-   the container runs on: *A computer at home (a PC or a home server)* or *A
-   rented server (VPS)*.
+1. **Where.** *Where will Telinha run?* Answer for the machine the container
+   runs on: *A computer at home (a PC or a home server)* or *A rented server
+   (VPS)*.
 
 2. **Address.** At home, where connections usually do not let the web ports
    80 and 443 in, it asks *Do you have a domain on Cloudflare?*: yes gives a
@@ -106,24 +118,31 @@ in a line or two; servers, roles and channels come from lists.
    (`https://my-group.duckdns.org:8443`, the certificate comes through
    DuckDNS). On a VPS it asks *How will people reach Telinha?*: your own
    domain, DuckDNS or sslip.io on 80 and 443, a Cloudflare Tunnel or your own
-   reverse proxy. At home it then asks whether Telinha may open the ports on
-   the router through UPnP (it works from the container, thanks to host
-   networking).
+   reverse proxy.
 
-3. **Media ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
-   something else on the host uses them.
-
-4. **Discord.** The bot token, the client secret, the login redirect (the one
-   thing you add by hand on the Developer Portal), the server, the role that
-   may enter, the channels and the command name.
+3. **Discord.** Paste the bot token: it is checked with Discord right away and
+   your app is read from it. Then the client secret, the server, the role that
+   may enter, the channels and the command name, all from lists. When the app
+   does not have the login redirect yet, a card shows the address to add under
+   OAuth2 → Redirects, the one thing you do by hand on the Developer Portal.
    [Discord app](/telinha/start/discord/) walks through every screen.
 
-5. **Review.** Every value on one screen; confirm and it writes
-   `/opt/telinha/config/telinha.env` (mode 600). There is no updates question:
-   in Docker, `telinha-update` does that job.
+4. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+   something else on the host uses them. At home it then asks whether Telinha
+   may open the ports on the router through UPnP (it works from the container,
+   thanks to host networking).
 
-6. **Start it.** The wizard stops after the file (no programs to download, no
-   service, no firewall, no router probe) and prints how to start:
+5. **Review.** Every answer on one screen, grouped by step; choose *Apply* to
+   write `/opt/telinha/config/telinha.env` (mode 600), or go back to change
+   something. Nothing is written before that.
+
+6. **Install.** Docker's list is short: the Discord app is checked (and its
+   intents switched on), the DuckDNS address is updated if you picked one, and
+   the file is written. No programs to download, no service, no firewall, no
+   router probe. If a task fails the screen offers *Retry*, *Skip* or *Back to
+   questions*, as in the other installs (no *Skip* when the file itself cannot
+   be written). The last card shows the file it wrote
+   and how to start:
 
    ```sh
    cd /opt/telinha && docker compose up -d
@@ -183,13 +202,15 @@ Doctor runs inside the container:
 docker exec -it telinha bun server/src/index.ts doctor
 ```
 
-It runs every check and prints one row each, with what to do about anything
-that is not ok: the `gateway`, `cgnat` and `mappings` rows tell you what the
-router agreed to. Then it shows a link and a QR code for the phone test: open
-it on your phone with Wi-Fi off, so the test comes from outside your network.
-It tells you whether the page, the LiveKit connection, UDP and TCP all work
-from there. [Doctor and troubleshooting](/telinha/guides/doctor/) explains
-every row and what a failure means.
+With `-it` it is a checklist, one row per check with a spinner until it has its
+result: press Enter on a row to see its detail and, when it is not ok, the fix,
+and `r` to run every check again (the `gateway`, `cgnat` and `mappings` rows
+tell you what the router agreed to). When the checks are done a panel shows a
+link and a QR code for the phone test: open it on your phone with Wi-Fi off, so
+the test comes from outside your network. It tells you whether the page, the
+LiveKit connection, UDP and TCP all work from there, and `p` starts a new test.
+Without `-it` it prints the table. [Doctor and troubleshooting](/telinha/guides/doctor/)
+explains every row and what a failure means.
 
 The container also has a healthcheck: `docker compose ps` shows it unhealthy
 while a bundled program is down, for example a Caddy that cannot bind its port
@@ -238,7 +259,7 @@ telinha-update --now
 See [Updates](/telinha/guides/updates/) for pinning a version and the other
 subcommands.
 
-**Changing settings** means running the wizard again (the `docker run` line
+**Changing settings** means running the setup again (the `docker run` line
 above, or `sh install-docker.sh --setup` from the bundle) and re-creating the
 container so it reads the new file:
 

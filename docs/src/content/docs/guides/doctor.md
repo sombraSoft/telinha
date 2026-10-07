@@ -1,6 +1,6 @@
 ---
 title: Doctor and troubleshooting
-description: Run telinha doctor, read its table and the phone test, and fix the usual problems by symptom.
+description: Run telinha doctor, read its checklist and the phone test, and fix the usual problems by symptom.
 sidebar:
   order: 3
 ---
@@ -21,6 +21,10 @@ telinha doctor --no-phone   # every check, no phone test
 telinha doctor --json       # machine-readable result on stdout
 ```
 
+On a terminal doctor is an interactive checklist. Without one (a pipe, a
+script, a scheduled task) or with `--json` it prints plain lines instead; both
+run the same checks.
+
 - It reads the same configuration as `telinha run`: `telinha.env` plus the
   environment.
 - Each check gets at most 10 seconds; a check that takes longer fails with
@@ -30,7 +34,7 @@ telinha doctor --json       # machine-readable result on stdout
 - `--json` prints `{ checks, phone }` (`phone` only when the test ran); the
   phone link and the QR code then go to stderr.
 - The exit code is 1 when a check or the phone test failed; warnings and
-  skipped checks do not count.
+  skipped checks do not count. Ctrl+C in the checklist exits with 130.
 - It speaks the language of the command line: `--lang pt-BR` or `LOCALE`.
 
 Where to run it:
@@ -42,19 +46,52 @@ Where to run it:
 | Docker | `docker exec -it telinha bun server/src/index.ts doctor` |
 | From a clone | `bun server/src/index.ts doctor` |
 
-## Reading the table
+The setup shows the same checklist at its end (*Show the doctor report*), with
+the results of the checks it already ran.
 
-One row per check, in the order you would fix things:
+## The checklist
+
+One row per check, in the order you would fix things. A spinner shows while a
+check runs; then the row gets an icon and a one-line result:
 
 | Icon | Meaning |
 | --- | --- |
-| `✓` | ok |
+| `✔` | ok |
 | `!` | warning: works, but something is off or could not be confirmed |
-| `✗` | failure: this breaks Telinha for someone |
+| `✖` | failure: this breaks Telinha for someone |
 | `–` | skipped: not relevant to this setup, or an earlier check has to pass first |
 
-Under a row that is not ok come the details and a line starting with `→`: what
-to do about it. For example:
+Under the list a line counts them (`11 ok · 1 warning · 1 failed · 2 skipped`),
+in the colour of the worst one. Move to a row and press Enter to open it: its
+details, and for a row that is not ok a **Fix** line saying what to do. An ok
+row opens to its details, or to *Nothing to do*.
+
+| Key | What it does |
+| --- | --- |
+| `↑` `↓` (or `k` `j`) | Move between rows |
+| `Enter`, `Space` or `→` | Open or close the row under the cursor |
+| `r` | Run every check again, with fresh data: do it after fixing something |
+| `p` | Start a new phone test (when Telinha is running) |
+| `s` | Stop waiting for the phone |
+| `q` or `Esc` | Quit; the exit code is 1 when a check or the phone test failed |
+
+A row opened on a failed DNS check, for example:
+
+```
+✖ DNS                telinha.example.com points at 198.51.100.7, but the public IP is 203.0.113.9.
+                     └ Fix
+                       Change the A record of telinha.example.com to 203.0.113.9.
+```
+
+Fix from the top: a broken configuration skips most checks after it, and a
+bot token Discord rejects skips the other Discord checks. Every check, what it
+looks at and what its result means:
+[Doctor checks](/telinha/reference/doctor-checks/).
+
+## Plain output
+
+Without a terminal, doctor prints one line per check, then a summary, with the
+details dimmed and the fix after an arrow:
 
 ```
 ✓ Public IP          The internet sees this network as 203.0.113.9.
@@ -64,15 +101,16 @@ to do about it. For example:
                      → Forward them by hand on the router to 192.168.0.10: UDP 7882
 ```
 
-Fix from the top: a broken configuration skips most checks after it, and a
-bot token Discord rejects skips the other Discord checks. Every check, what it
-looks at and what its result means:
-[Doctor checks](/telinha/reference/doctor-checks/).
+The icons are `✓`, `!`, `✗` and `–`, with the same meanings as above. The phone
+test is skipped without a terminal (its link needs someone to open it), unless
+`--json` runs on one.
 
 ## The phone test
 
 With the service running and the checks done, doctor asks Telinha for a
-one-time link and prints it with a QR code:
+one-time link. In the checklist it appears in a panel beside the list (under
+it on a narrow terminal, where the code takes the screen until the phone
+answers) with a QR code, and the same panel then shows the result:
 
 ```
 Open this on your phone with Wi-Fi OFF (mobile data):
@@ -83,12 +121,18 @@ Mobile data matters: on your own Wi-Fi the phone is inside your network and
 proves nothing about the router. No Discord login is needed. The link works
 once and only within 10 minutes, and the cookie it leaves (15 minutes) opens
 nothing but the test page and the LiveKit relay, for a private room of its
-own. The page runs the test, and both the phone and the terminal show the
-result.
+own. The page runs the test; the phone and the terminal both show the result,
+and the rows join the checklist as a *Phone test* group; a failed one carries its fix.
 
-Doctor waits up to 10 minutes for the phone; Ctrl+C skips the wait. The test
-is skipped with `--no-phone` or `--local`, without an interactive terminal, and
-when Telinha is not running (start it with `telinha service start`).
+Doctor waits up to 10 minutes for the phone. Press `s` (Ctrl+C in the plain
+output) to stop waiting, and `p` for a new link when one expires or you
+skipped. The test is skipped with `--no-phone` or `--local`, without an
+interactive terminal, and when Telinha is not running (start it with
+`telinha service start`).
+
+The QR code is drawn whole or not at all: when the window is too small for it,
+even with the header out of the way, the panel shows the link alone; make the
+window larger to get the code.
 
 ### What each row measures
 

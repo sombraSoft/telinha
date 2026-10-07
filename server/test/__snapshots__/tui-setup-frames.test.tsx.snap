@@ -1,0 +1,1453 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: where 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Where · Step 1 of 7 ───────────────────────────────────────────────────────────────────╮
+ │ ❯ Where                │ │                                                                                         │
+ │                        │ │  Where will Telinha run?                                                                │
+ │ ○ Address              │ │  Pick the machine that stays on and hosts the rooms.                                    │
+ │                        │ │                                                                                         │
+ │ ○ Discord              │ │  ❯ 1. A computer at home                                                                │
+ │                        │ │       Your PC or a home server, behind your internet router                             │
+ │ ○ Ports                │ │    2. A rented server (VPS)                                                             │
+ │                        │ │       Hetzner, DigitalOcean, Oracle Cloud and the like: it has its own public IP        │
+ │ ○ Updates              │ │                                                                                         │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Review               │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │                        │ │ Good for a group of friends: Telinha runs on a machine you already have.                │
+ │ ○ Install              │ │                                                                                         │
+ │                        │ │ Home internet connections usually do not let the web ports 80 and 443 in, so Telinha    │
+ ╰────────────────────────╯ │ does not count on them. Next you pick how people reach this machine: a Cloudflare       │
+                            │ Tunnel (if you have a domain on Cloudflare) or a free DuckDNS address with HTTPS on     │
+                            │ port 8443.                                                                              │
+                            │                                                                                         │
+                            │ This machine: Debian GNU/Linux 12 (bookworm), x64, public IP 203.0.113.9.               │
+                            │ Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).                                           │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+ ↑↓ move  1-9 pick  enter select  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: home-cloudflare 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Address · Step 2 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Do you have a domain on Cloudflare?                                                    │
+ │                        │ │  Home internet connections usually do not let the web ports 80 and 443 in, so Telinha   │
+ │ ❯ Address              │ │  does not count on them.                                                                │
+ │                        │ │                                                                                         │
+ │ ○ Discord              │ │    1. Yes: use a Cloudflare Tunnel                                                      │
+ │                        │ │       Your own address; nothing to open for the pages                                   │
+ │ ○ Ports                │ │  ❯ 2. No: use a free DuckDNS address                                                    │
+ │                        │ │       Like https://name.duckdns.org:8443                                                │
+ │ ○ Updates              │ │                                                                                         │
+ │                        │ │    3. Advanced…                                                                         │
+ │ ○ Review               │ │       I opened 80/443 myself, or I run my own reverse proxy                             │
+ │                        │ │                                                                                         │
+ │ ○ Install              │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ ╰────────────────────────╯ │ You get https://<name>.duckdns.org:8443. The certificate comes from Let's Encrypt       │
+                            │ through your DuckDNS token (DNS-01): nothing to open on 80 or 443.                      │
+                            │                                                                                         │
+                            │ Some strict networks (offices, schools) only let browsers reach port 443, so people     │
+                            │ there cannot open the links; a domain on Cloudflare has no such limit.                  │
+                            │                                                                                         │
+                            │ You need a free duckdns.org account and its token.                                      │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+ ↑↓ move  1-9 pick  enter select  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: duck-token 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Address · Step 2 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  DuckDNS token                                                                          │
+ │                        │ │  Paste the token shown at the top of duckdns.org.                                       │
+ │ ❯ Address              │ │                                                                                         │
+ │                        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │ ○ Discord              │ │  │ ••••••••••••••••••••••••••••••••••••▌                        │                       │
+ │                        │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │ ○ Ports                │ │  36 characters · pasted                                                                 │
+ │                        │ │                                                                                         │
+ │ ○ Updates              │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Review               │ │ Open duckdns.org, sign in, add a subdomain, and copy the token shown at the top.        │
+ │                        │ │                                                                                         │
+ │ ○ Install              │ │ Telinha uses it to keep my-group.duckdns.org pointing at this network and to prove the  │
+ │                        │ │ name is yours when it gets the HTTPS certificate.                                       │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+ ctrl+v paste  enter confirm  ctrl+r show/hide  esc/← back  tab steps
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: https-port 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Address · Step 2 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  HTTPS port                                                                             │
+ │                        │ │  Which port will the pages use? (1024-65535)                                            │
+ │ ❯ Address              │ │                                                                                         │
+ │                        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │ ○ Discord              │ │  │ ▌8443                                                        │                       │
+ │                        │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │ ○ Ports                │ │  default: 8443                                                                          │
+ │                        │ │                                                                                         │
+ │ ○ Updates              │ │  › my-group.duckdns.org now points at 203.0.113.9.                                      │
+ │                        │ │                                                                                         │
+ │ ○ Review               │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Install              │ │ Telinha serves HTTPS on a port of its own and gets the certificate from Let's Encrypt   │
+ │                        │ │ through your DuckDNS token: nothing to open on 80 or 443. Change it only if 8443 is     │
+ ╰────────────────────────╯ │ already used on this machine.                                                           │
+                            │                                                                                         │
+                            │ Your address: https://my-group.duckdns.org:8443                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+ enter confirm  ctrl+u clear  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: bot-token-checking 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Step 3 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Discord bot token                                                                      │
+ │                        │ │  Paste your bot's token.                                                                │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │                        │ │  │ ••••••••••••••••••••                                         │                       │
+ │ ❯ Discord              │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │                        │ │  20 characters · pasted                                                                 │
+ │ ○ Ports                │ │  ⠋ Checking the token with Discord…                                                     │
+ │                        │ │                                                                                         │
+ │ ○ Updates              │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Review               │ │ Your Discord app: discord.com/developers/applications -> New Application, then Bot ->   │
+ │                        │ │ Reset Token and copy it.                                                                │
+ │ ○ Install              │ │ Telinha checks it with Discord right away (it only reads).                              │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ctrl+v paste  enter confirm  ctrl+r show/hide  esc/← back  tab steps
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: bot-token-rejected 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Step 3 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Discord bot token                                                                      │
+ │                        │ │  Paste your bot's token.                                                                │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │                        │ │  │ ••••••••••••••••••••▌                                        │                       │
+ │ ❯ Discord              │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │                        │ │  20 characters · pasted                                                                 │
+ │ ○ Ports                │ │                                                                                         │
+ │                        │ │  ✖ Discord rejected the token; copy it again and paste it here.                         │
+ │ ○ Updates              │ │                                                                                         │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Review               │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │                        │ │ Your Discord app: discord.com/developers/applications -> New Application, then Bot ->   │
+ │ ○ Install              │ │ Reset Token and copy it.                                                                │
+ │                        │ │ Telinha checks it with Discord right away (it only reads).                              │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ctrl+v paste  enter confirm  ctrl+r show/hide  esc/← back  tab steps
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: guild 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Step 3 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Which server?                                                                          │
+ │                        │ │  Which Discord server is Telinha for?                                                   │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ❯ 1. Gurizada                                                                          │
+ │                        │ │    2. Clube do Livro                                                                    │
+ │ ❯ Discord              │ │                                                                                         │
+ │                        │ │    3. Another server (add the bot)                                                      │
+ │ ○ Ports                │ │                                                                                         │
+ │                        │ │  › Client secret accepted.                                                              │
+ │ ○ Updates              │ │                                                                                         │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Review               │
+ │                        │
+ │ ○ Install              │
+ │                        │
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ↑↓ move  1-9 pick  enter select  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: channels 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Step 3 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Where does the command work?                                                           │
+ │                        │ │  Pick one or more text channels.                                                        │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │    1. [ ] #geral                                                                        │
+ │                        │ │  ❯ 2. [x] #telinha                                                                      │
+ │ ❯ Discord              │ │    3. [ ] #filmes                                                                       │
+ │                        │ │                                                                                         │
+ │ ○ Ports                │ │  1 selected                                                                             │
+ │                        │ │                                                                                         │
+ │ ○ Updates              │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Review               │ │ The slash command works only in these channels.                                         │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Install              │
+ │                        │
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ↑↓ move  space toggle  a all  enter confirm  esc/← back  tab steps
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: router 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Ports · Step 4 of 7 ───────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Ask the router?                                                                        │
+ │                        │ │  Let Telinha ask the router to open the ports it needs (UPnP / NAT-PMP)?                │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ❯ 1. Yes, ask the router                                                               │
+ │                        │ │       Works on most home routers; telinha doctor shows the result                       │
+ │ ✔ Discord              │ │    2. No, I forward them myself                                                         │
+ │   /telinha · Gurizada  │ │       Setup lists the ports to forward                                                  │
+ │                        │ │                                                                                         │
+ │ ❯ Ports                │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Updates              │ │ The media ports and TCP 8443 must reach this machine from the internet.                 │
+ │                        │ │                                                                                         │
+ │ ○ Review               │ │ Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).                                           │
+ │                        │ │                                                                                         │
+ │ ○ Install              │ │ Ports to forward                                                                        │
+ │                        │ │ TCP 7881 → 192.168.0.10                                                                 │
+ ╰────────────────────────╯ │ UDP 7882 → 192.168.0.10                                                                 │
+                            │ TCP 8443 → 192.168.0.10                                                                 │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+ ↑↓ move  1-9 pick  enter select  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: sidebar 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭─ steps ────────────────╮ ╭─ Ports · Step 4 of 7 ───────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Ask the router?                                                                        │
+ │                        │ │  Let Telinha ask the router to open the ports it needs (UPnP / NAT-PMP)?                │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ❯ 1. Yes, ask the router                                                               │
+ │                        │ │       Works on most home routers; telinha doctor shows the result                       │
+ │ ✔ Discord              │ │    2. No, I forward them myself                                                         │
+ │   /telinha · Gurizada  │ │       Setup lists the ports to forward                                                  │
+ │                        │ │                                                                                         │
+ │ ❯ Ports  ‹             │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Updates              │ │ The media ports and TCP 8443 must reach this machine from the internet.                 │
+ │                        │ │                                                                                         │
+ │ ○ Review               │ │ Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).                                           │
+ │                        │ │                                                                                         │
+ │ ○ Install              │ │ Ports to forward                                                                        │
+ │                        │ │ TCP 7881 → 192.168.0.10                                                                 │
+ │ Pick a step to jump to │ │ UDP 7882 → 192.168.0.10                                                                 │
+ ╰────────────────────────╯ │ TCP 8443 → 192.168.0.10                                                                 │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+ ↑↓ move  enter jump  esc question  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: review 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Review · Step 6 of 7 ──────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Review                                                                                 │
+ │                        │ │  Check your answers. Nothing has changed on this machine yet.                           │
+ │ ✔ Address              │ │  They go to /opt/telinha/config/telinha.env.                                            │
+ │   DuckDNS :8443        │ │                                                                                         │
+ │                        │ │  Where      Where will Telinha run?               A computer at home                    │
+ │ ✔ Discord              │ │  Address    Do you have a domain on Cloudflare?   No: use a free DuckDNS address        │
+ │   /telinha · Gurizada  │ │             DuckDNS name                          my-group                              │
+ │                        │ │             DuckDNS token                         set                                   │
+ │ ✔ Ports                │ │             HTTPS port                            8443                                  │
+ │   TCP 7881, 8443       │ │             Web address                           https://my-group.duckdns.org:8443     │
+ │   UDP 7882             │ │  Discord    Discord bot token                     set                                   │
+ │                        │ │             Client secret                         set                                   │
+ │ ✔ Updates              │ │             Which server?                         Gurizada                              │
+ │   automatic            │ │             Who may enter the rooms?              @Membro                               │
+ │                        │ │             Where does the command work?          #telinha                              │
+ │ ❯ Review               │ │             Command name                          telinha                               │
+ │                        │ │             Group name                            Gurizada                              │
+ │ ○ Install              │ │  Ports      Media ports                           Keep TCP 7881 and UDP 7882            │
+ │                        │ │             Ask the router?                       Yes, ask the router                   │
+ ╰────────────────────────╯ │  Updates    Updates                               Yes, update automatically             │
+                            │                                                                                         │
+                            │  ❯ 1. Apply                                                                             │
+                            │       Write telinha.env, install and start Telinha                                      │
+                            │    2. Back to the questions                                                             │
+                            │    3. Quit without writing                                                              │
+                            │                                                                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ move  enter select  pgup/pgdn scroll  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: apply-running 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Install · Step 7 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Installing Telinha                                                                     │
+ │                        │ │  Working…                                                                               │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ✔ Discord app                Bot: Telinha Bot (app id 111111111111111111)              │
+ │                        │ │  ✔ DuckDNS address            my-group.duckdns.org now points at 203.0.113.9.           │
+ │ ✔ Discord              │ │  ✔ Write telinha.env          Wrote /opt/telinha/config/telinha.env                     │
+ │   /telinha · Gurizada  │ │  ⠋ Download the programs      ███████████░░░░░░░░░░░  52%  10.9 / 21.0 MB  livekit      │
+ │                        │ │  ○ Install the service                                                                  │
+ │ ✔ Ports                │ │  ○ Start Telinha                                                                        │
+ │   TCP 7881, 8443       │ │  ○ HTTPS certificate                                                                    │
+ │   UDP 7882             │ │  ○ Check everything                                                                     │
+ │                        │ │                                                                                         │
+ │ ✔ Updates              │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │   automatic            │
+ │                        │
+ │ ✔ Review               │
+ │                        │
+ │ ⠋ Install              │
+ │                        │
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+ ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: apply-failed 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Install · Step 7 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Installing Telinha                                                                     │
+ │                        │ │                                                                                         │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ✔ Discord app                Bot: Telinha Bot (app id 111111111111111111)              │
+ │                        │ │  ✔ DuckDNS address            my-group.duckdns.org now points at 203.0.113.9.           │
+ │ ✔ Discord              │ │  ✔ Write telinha.env          Wrote /opt/telinha/config/telinha.env                     │
+ │   /telinha · Gurizada  │ │  ✔ Download the programs      Programs ready in /opt/telinha/bin                        │
+ │                        │ │  ✖ Install the service        Service install failed: systemctl enable --now telinha.…  │
+ │ ✔ Ports                │ │      ✔ Copied the program to /opt/telinha/bin/telinha                                   │
+ │   TCP 7881, 8443       │ │      ✖ Service install failed: systemctl enable --now telinha.service exited with 1     │
+ │   UDP 7882             │ │  ○ Start Telinha                                                                        │
+ │                        │ │  ○ HTTPS certificate                                                                    │
+ │ ✔ Updates              │ │  ○ Check everything                                                                     │
+ │   automatic            │ │                                                                                         │
+ │                        │ │  The service is not installed: try again, or skip and start Telinha with telinha run.   │
+ │ ✔ Review               │ │                                                                                         │
+ │                        │ │  ❯ 1. Retry                                                                             │
+ │ ✖ Install              │ │       Run this step again                                                               │
+ │                        │ │    2. Skip                                                                              │
+ ╰────────────────────────╯ │       Leave it and go on with the rest                                                  │
+                            │    3. Back to questions                                                                 │
+                            │       Change answers, then apply again                                                  │
+                            │                                                                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+ ↑↓ move  enter select  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a home install from the first question to the last card: apply-done 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Install · Step 7 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   A computer at home   │ │  Installing Telinha                                                                     │
+ │                        │ │                                                                                         │
+ │ ✔ Address              │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ✔ Discord app                Bot: Telinha Bot (app id 111111111111111111)              │
+ │                        │ │  ✔ DuckDNS address            my-group.duckdns.org now points at 203.0.113.9.           │
+ │ ✔ Discord              │ │  ✔ Write telinha.env          Wrote /opt/telinha/config/telinha.env                     │
+ │   /telinha · Gurizada  │ │  ✔ Download the programs      Programs ready in /opt/telinha/bin                        │
+ │                        │ │  ✔ Install the service        Service installed (systemd-system)                        │
+ │ ✔ Ports                │ │  ✔ Start Telinha              Telinha is running.                                       │
+ │   TCP 7881, 8443       │ │  ✔ HTTPS certificate          HTTPS certificate in place.                               │
+ │   UDP 7882             │ │  ! Check everything           2 ok · 1 warning · 1 failed · 0 skipped                   │
+ │                        │ │                                                                                         │
+ │ ✔ Updates              │ │  ✔ Telinha is running → https://my-group.duckdns.org:8443                               │
+ │   automatic            │ │                                                                                         │
+ │                        │ │  ❯ 1. Show the doctor report                                                            │
+ │ ✔ Review               │ │       See what works and what needs attention                                           │
+ │                        │ │    2. Exit                                                                              │
+ │ ✔ Install              │ │       Telinha keeps running as a service                                                │
+ │                        │ │                                                                                         │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+ ↑↓ move  enter select  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 a VPS: the address choices: vps-address 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Address · Step 2 of 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Where                │ │                                                                                         │
+ │   Rented server (VPS)  │ │  How will people reach Telinha?                                                         │
+ │                        │ │  Pick the web address Telinha uses.                                                     │
+ │ ❯ Address              │ │                                                                                         │
+ │                        │ │  ❯ 1. My own domain                                                                     │
+ │ ○ Discord              │ │       e.g. telinha.example.com, pointed at this machine                                 │
+ │                        │ │    2. A free DuckDNS address                                                            │
+ │ ○ Ports                │ │       <name>.duckdns.org, follows a changing IP                                         │
+ │                        │ │    3. No domain: sslip.io                                                               │
+ │ ○ Updates              │ │       A name made from the server's fixed IP                                            │
+ │                        │ │    4. Cloudflare Tunnel                                                                 │
+ │ ○ Review               │ │       Needs a domain on Cloudflare; no web ports to open                                │
+ │                        │ │                                                                                         │
+ │ ○ Install              │ │    5. Advanced: my own reverse proxy                                                    │
+ │                        │ │       It terminates HTTPS and forwards to Telinha                                       │
+ ╰────────────────────────╯ │                                                                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+                            ╭─ About this ────────────────────────────────────────────────────────────────────────────╮
+                            │ Create an A record for your domain pointing at 203.0.113.9.                             │
+                            │                                                                                         │
+                            │ Telinha gets its certificate from Let's Encrypt over ports 80 and 443.                  │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+ ↑↓ move  1-9 pick  enter select  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 120x34 telinha alone without a telinha.env: the welcome card: welcome 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                                                              vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Welcome ───────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Where                │ │                                                                                         │
+ │                        │ │  Set Telinha up now?                                                                    │
+ │ ○ Address              │ │  No configuration yet (/opt/telinha/config/telinha.env).                                │
+ │                        │ │                                                                                         │
+ │ ○ Discord              │ │  Telinha is screen sharing for a Discord group. A few questions make its telinha.env;   │
+ │                        │ │  nothing changes on this machine before the Review.                                     │
+ │ ○ Ports                │ │                                                                                         │
+ │                        │ │  ❯ 1. Set it up                                                                         │
+ │ ○ Review               │ │       Answer the questions, check the Review, then install                              │
+ │                        │ │    2. Quit                                                                              │
+ │ ○ Install              │ │       Nothing is written                                                                │
+ │                        │ │                                                                                         │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ↑↓ move  enter select  ctrl+c quit
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: where 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Onde · Passo 1 de 7 ───────────────────────────────────────────────────────────────────╮
+ │ ❯ Onde                 │ │                                                                                         │
+ │                        │ │  Onde a Telinha vai rodar?                                                              │
+ │ ○ Endereço             │ │  Escolha a máquina que fica ligada e hospeda as salas.                                  │
+ │                        │ │                                                                                         │
+ │ ○ Discord              │ │  ❯ 1. Um computador em casa                                                             │
+ │                        │ │       Seu PC ou um servidor caseiro, atrás do roteador da sua internet                  │
+ │ ○ Portas               │ │    2. Um servidor alugado (VPS)                                                         │
+ │                        │ │       Hetzner, DigitalOcean, Oracle Cloud e parecidos: tem IP público próprio           │
+ │ ○ Atualizações         │ │                                                                                         │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Revisão              │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │                        │ │ Bom pra um grupo de amigos: a Telinha roda numa máquina que você já tem.                │
+ │ ○ Instalação           │ │                                                                                         │
+ │                        │ │ A internet de casa em geral não deixa as portas web 80 e 443 entrarem, então a Telinha  │
+ ╰────────────────────────╯ │ não conta com elas. Em seguida você escolhe como o pessoal chega nesta máquina: um      │
+                            │ Cloudflare Tunnel (se você tem um domínio na Cloudflare) ou um endereço grátis do       │
+                            │ DuckDNS com HTTPS na porta 8443.                                                        │
+                            │                                                                                         │
+                            │ Esta máquina: Debian GNU/Linux 12 (bookworm), x64, IP público 203.0.113.9.              │
+                            │ Roteador: Fritz!Box (UPnP IGD v2, 192.168.0.1).                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+ ↑↓ mover  1-9 atalho  enter escolher  esc/← voltar  tab passos  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: home-cloudflare 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Endereço · Passo 2 de 7 ───────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Você tem um domínio na Cloudflare?                                                     │
+ │                        │ │  A internet de casa em geral não deixa as portas web 80 e 443 entrarem, então a         │
+ │ ❯ Endereço             │ │  Telinha não conta com elas.                                                            │
+ │                        │ │                                                                                         │
+ │ ○ Discord              │ │    1. Sim: usar um Cloudflare Tunnel                                                    │
+ │                        │ │       Seu próprio endereço; nada pra abrir pras páginas                                 │
+ │ ○ Portas               │ │  ❯ 2. Não: usar um endereço grátis do DuckDNS                                           │
+ │                        │ │       Tipo https://nome.duckdns.org:8443                                                │
+ │ ○ Atualizações         │ │                                                                                         │
+ │                        │ │    3. Avançado…                                                                         │
+ │ ○ Revisão              │ │       Eu mesmo abri a 80/443, ou tenho meu próprio proxy reverso                        │
+ │                        │ │                                                                                         │
+ │ ○ Instalação           │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ ╰────────────────────────╯ │ Você fica com https://<nome>.duckdns.org:8443. O certificado vem do Let's Encrypt pelo  │
+                            │ seu token do DuckDNS (DNS-01): nada pra abrir na 80 ou na 443.                          │
+                            │                                                                                         │
+                            │ Algumas redes rígidas (empresas, escolas) só deixam o navegador chegar na porta 443,    │
+                            │ então quem estiver nelas não abre os links; um domínio na Cloudflare não tem essa       │
+                            │ limitação.                                                                              │
+                            │                                                                                         │
+                            │ Você precisa de uma conta grátis no duckdns.org e do token dela.                        │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+ ↑↓ mover  1-9 atalho  enter escolher  esc/← voltar  tab passos  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: duck-token 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Endereço · Passo 2 de 7 ───────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Token do DuckDNS                                                                       │
+ │                        │ │  Cole o token mostrado no topo do duckdns.org.                                          │
+ │ ❯ Endereço             │ │                                                                                         │
+ │                        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │ ○ Discord              │ │  │ ••••••••••••••••••••••••••••••••••••▌                        │                       │
+ │                        │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │ ○ Portas               │ │  36 caracteres · colado                                                                 │
+ │                        │ │                                                                                         │
+ │ ○ Atualizações         │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Revisão              │ │ Abra o duckdns.org, entre, adicione um subdomínio e copie o token mostrado no topo.     │
+ │                        │ │                                                                                         │
+ │ ○ Instalação           │ │ A Telinha usa ele pra manter my-group.duckdns.org apontando pra esta rede e pra provar  │
+ │                        │ │ que o nome é seu na hora de pegar o certificado HTTPS.                                  │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+ ctrl+v colar  enter confirmar  ctrl+r mostrar/ocultar  esc/← voltar  tab passos
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: https-port 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Endereço · Passo 2 de 7 ───────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Porta HTTPS                                                                            │
+ │                        │ │  Qual porta as páginas vão usar? (1024-65535)                                           │
+ │ ❯ Endereço             │ │                                                                                         │
+ │                        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │ ○ Discord              │ │  │ ▌8443                                                        │                       │
+ │                        │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │ ○ Portas               │ │  padrão: 8443                                                                           │
+ │                        │ │                                                                                         │
+ │ ○ Atualizações         │ │  › my-group.duckdns.org agora aponta pra 203.0.113.9.                                   │
+ │                        │ │                                                                                         │
+ │ ○ Revisão              │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Instalação           │ │ A Telinha serve HTTPS numa porta própria e pega o certificado do Let's Encrypt pelo seu │
+ │                        │ │ token do DuckDNS: nada pra abrir na 80 ou na 443. Só mude se a 8443 já estiver em uso   │
+ ╰────────────────────────╯ │ nesta máquina.                                                                          │
+                            │                                                                                         │
+                            │ Seu endereço: https://my-group.duckdns.org:8443                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+ enter confirmar  ctrl+u limpar  esc/← voltar  tab passos  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: bot-token-checking 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Passo 3 de 7 ────────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Token do bot do Discord                                                                │
+ │                        │ │  Cole o token do seu bot.                                                               │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │                        │ │  │ ••••••••••••••••••••                                         │                       │
+ │ ❯ Discord              │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │                        │ │  20 caracteres · colado                                                                 │
+ │ ○ Portas               │ │  ⠋ Conferindo o token com o Discord…                                                    │
+ │                        │ │                                                                                         │
+ │ ○ Atualizações         │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Revisão              │ │ Seu app do Discord: discord.com/developers/applications -> New Application, depois Bot  │
+ │                        │ │ -> Reset Token e copie.                                                                 │
+ │ ○ Instalação           │ │ A Telinha confere ele com o Discord na hora (só leitura).                               │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ctrl+v colar  enter confirmar  ctrl+r mostrar/ocultar  esc/← voltar  tab passos
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: bot-token-rejected 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Passo 3 de 7 ────────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Token do bot do Discord                                                                │
+ │                        │ │  Cole o token do seu bot.                                                               │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ╭──────────────────────────────────────────────────────────────╮                       │
+ │                        │ │  │ ••••••••••••••••••••▌                                        │                       │
+ │ ❯ Discord              │ │  ╰──────────────────────────────────────────────────────────────╯                       │
+ │                        │ │  20 caracteres · colado                                                                 │
+ │ ○ Portas               │ │                                                                                         │
+ │                        │ │  ✖ O Discord recusou o token; copie de novo e cole aqui.                                │
+ │ ○ Atualizações         │ │                                                                                         │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Revisão              │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │                        │ │ Seu app do Discord: discord.com/developers/applications -> New Application, depois Bot  │
+ │ ○ Instalação           │ │ -> Reset Token e copie.                                                                 │
+ │                        │ │ A Telinha confere ele com o Discord na hora (só leitura).                               │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ctrl+v colar  enter confirmar  ctrl+r mostrar/ocultar  esc/← voltar  tab passos
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: guild 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Passo 3 de 7 ────────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Qual servidor?                                                                         │
+ │                        │ │  A Telinha é pra qual servidor do Discord?                                              │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ❯ 1. Gurizada                                                                          │
+ │                        │ │    2. Clube do Livro                                                                    │
+ │ ❯ Discord              │ │                                                                                         │
+ │                        │ │    3. Outro servidor (adicionar o bot)                                                  │
+ │ ○ Portas               │ │                                                                                         │
+ │                        │ │  › Client secret aceito.                                                                │
+ │ ○ Atualizações         │ │                                                                                         │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Revisão              │
+ │                        │
+ │ ○ Instalação           │
+ │                        │
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ↑↓ mover  1-9 atalho  enter escolher  esc/← voltar  tab passos  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: channels 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Discord · Passo 3 de 7 ────────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Onde o comando funciona?                                                               │
+ │                        │ │  Escolha um ou mais canais de texto.                                                    │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │    1. [ ] #geral                                                                        │
+ │                        │ │  ❯ 2. [x] #telinha                                                                      │
+ │ ❯ Discord              │ │    3. [ ] #filmes                                                                       │
+ │                        │ │                                                                                         │
+ │ ○ Portas               │ │  1 marcado                                                                              │
+ │                        │ │                                                                                         │
+ │ ○ Atualizações         │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Revisão              │ │ O comando de barra só funciona nestes canais.                                           │
+ │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │ ○ Instalação           │
+ │                        │
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+ ↑↓ mover  space marcar  a todos  enter confirmar  esc/← voltar  tab passos
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: router 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Portas · Passo 4 de 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Pedir pro roteador?                                                                    │
+ │                        │ │  Deixar a Telinha pedir pro roteador abrir as portas que ela precisa (UPnP / NAT-PMP)?  │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ❯ 1. Sim, pedir pro roteador                                                           │
+ │                        │ │       Funciona na maioria dos roteadores de casa; o telinha doctor mostra o resultado   │
+ │ ✔ Discord              │ │    2. Não, eu mesmo redireciono                                                         │
+ │   /telinha · Gurizada  │ │       O setup lista as portas pra redirecionar                                          │
+ │                        │ │                                                                                         │
+ │ ❯ Portas               │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Atualizações         │ │ As portas de mídia e a TCP 8443 precisam chegar nesta máquina vindas da internet.       │
+ │                        │ │                                                                                         │
+ │ ○ Revisão              │ │ Roteador: Fritz!Box (UPnP IGD v2, 192.168.0.1).                                         │
+ │                        │ │                                                                                         │
+ │ ○ Instalação           │ │ Portas pra redirecionar                                                                 │
+ │                        │ │ TCP 7881 → 192.168.0.10                                                                 │
+ ╰────────────────────────╯ │ UDP 7882 → 192.168.0.10                                                                 │
+                            │ TCP 8443 → 192.168.0.10                                                                 │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+ ↑↓ mover  1-9 atalho  enter escolher  esc/← voltar  tab passos  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: sidebar 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭─ passos ───────────────╮ ╭─ Portas · Passo 4 de 7 ─────────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Pedir pro roteador?                                                                    │
+ │                        │ │  Deixar a Telinha pedir pro roteador abrir as portas que ela precisa (UPnP / NAT-PMP)?  │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ❯ 1. Sim, pedir pro roteador                                                           │
+ │                        │ │       Funciona na maioria dos roteadores de casa; o telinha doctor mostra o resultado   │
+ │ ✔ Discord              │ │    2. Não, eu mesmo redireciono                                                         │
+ │   /telinha · Gurizada  │ │       O setup lista as portas pra redirecionar                                          │
+ │                        │ │                                                                                         │
+ │ ❯ Portas  ‹            │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │                        │ ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+ │ ○ Atualizações         │ │ As portas de mídia e a TCP 8443 precisam chegar nesta máquina vindas da internet.       │
+ │                        │ │                                                                                         │
+ │ ○ Revisão              │ │ Roteador: Fritz!Box (UPnP IGD v2, 192.168.0.1).                                         │
+ │                        │ │                                                                                         │
+ │ ○ Instalação           │ │ Portas pra redirecionar                                                                 │
+ │                        │ │ TCP 7881 → 192.168.0.10                                                                 │
+ │ Escolha um passo pra   │ │ UDP 7882 → 192.168.0.10                                                                 │
+ │ ir até ele             │ │ TCP 8443 → 192.168.0.10                                                                 │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+ ↑↓ mover  enter ir  esc pergunta  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: review 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Revisão · Passo 6 de 7 ────────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Revisão                                                                                │
+ │                        │ │  Confira suas respostas. Nada mudou nesta máquina ainda.                                │
+ │ ✔ Endereço             │ │  Elas vão para /opt/telinha/config/telinha.env.                                         │
+ │   DuckDNS :8443        │ │                                                                                         │
+ │                        │ │  Onde         Onde a Telinha vai rodar?             Um computador em casa               │
+ │ ✔ Discord              │ │  Endereço     Você tem um domínio na Cloudflare?    Não: usar um endereço grátis do D…  │
+ │   /telinha · Gurizada  │ │               Nome no DuckDNS                       my-group                            │
+ │                        │ │               Token do DuckDNS                      definido                            │
+ │ ✔ Portas               │ │               Porta HTTPS                           8443                                │
+ │   TCP 7881, 8443       │ │               Endereço web                          https://my-group.duckdns.org:8443   │
+ │   UDP 7882             │ │  Discord      Token do bot do Discord               definido                            │
+ │                        │ │               Client secret                         definido                            │
+ │ ✔ Atualizações         │ │               Qual servidor?                        Gurizada                            │
+ │   automáticas          │ │               Quem pode entrar nas salas?           @Membro                             │
+ │                        │ │               Onde o comando funciona?              #telinha                            │
+ │ ❯ Revisão              │ │               Nome do comando                       telinha                             │
+ │                        │ │               Nome do grupo                         Gurizada                            │
+ │ ○ Instalação           │ │  Portas       Portas de mídia                       Manter TCP 7881 e UDP 7882          │
+ │                        │ │               Pedir pro roteador?                   Sim, pedir pro roteador             │
+ ╰────────────────────────╯ │  Atualizações Atualizações                          Sim, atualizar automaticamente      │
+                            │                                                                                         │
+                            │  ❯ 1. Aplicar                                                                           │
+                            │       Gravar o telinha.env, instalar e iniciar a Telinha                                │
+                            │    2. Voltar pras perguntas                                                             │
+                            │    3. Sair sem gravar                                                                   │
+                            │                                                                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ mover  enter escolher  pgup/pgdn rolar  esc/← voltar  tab passos  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: apply-running 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Instalação · Passo 7 de 7 ─────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Instalando a Telinha                                                                   │
+ │                        │ │  Trabalhando…                                                                           │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ✔ App do Discord             Bot: Telinha Bot (app id 111111111111111111)              │
+ │                        │ │  ✔ Endereço no DuckDNS        my-group.duckdns.org agora aponta pra 203.0.113.9.        │
+ │ ✔ Discord              │ │  ✔ Gravar o telinha.env       /opt/telinha/config/telinha.env gravado                   │
+ │   /telinha · Gurizada  │ │  ⠋ Baixar os programas        ███████████░░░░░░░░░░░  52%  10.9 / 21.0 MB  livekit      │
+ │                        │ │  ○ Instalar o serviço                                                                   │
+ │ ✔ Portas               │ │  ○ Iniciar a Telinha                                                                    │
+ │   TCP 7881, 8443       │ │  ○ Certificado HTTPS                                                                    │
+ │   UDP 7882             │ │  ○ Verificar tudo                                                                       │
+ │                        │ │                                                                                         │
+ │ ✔ Atualizações         │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+ │   automáticas          │
+ │                        │
+ │ ✔ Revisão              │
+ │                        │
+ │ ⠋ Instalação           │
+ │                        │
+ ╰────────────────────────╯
+
+
+
+
+
+
+
+ ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: apply-failed 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Instalação · Passo 7 de 7 ─────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Instalando a Telinha                                                                   │
+ │                        │ │                                                                                         │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ✔ App do Discord             Bot: Telinha Bot (app id 111111111111111111)              │
+ │                        │ │  ✔ Endereço no DuckDNS        my-group.duckdns.org agora aponta pra 203.0.113.9.        │
+ │ ✔ Discord              │ │  ✔ Gravar o telinha.env       /opt/telinha/config/telinha.env gravado                   │
+ │   /telinha · Gurizada  │ │  ✔ Baixar os programas        Programas prontos em /opt/telinha/bin                     │
+ │                        │ │  ✖ Instalar o serviço         A instalação do serviço falhou: systemctl enable --now …  │
+ │ ✔ Portas               │ │      ✔ Programa copiado pra /opt/telinha/bin/telinha                                    │
+ │   TCP 7881, 8443       │ │      ✖ A instalação do serviço falhou: systemctl enable --now telinha.service exited    │
+ │   UDP 7882             │ │        with 1                                                                           │
+ │                        │ │  ○ Iniciar a Telinha                                                                    │
+ │ ✔ Atualizações         │ │  ○ Certificado HTTPS                                                                    │
+ │   automáticas          │ │  ○ Verificar tudo                                                                       │
+ │                        │ │                                                                                         │
+ │ ✔ Revisão              │ │  O serviço não foi instalado: tente de novo, ou pule e inicie a Telinha com telinha     │
+ │                        │ │  run.                                                                                   │
+ │ ✖ Instalação           │ │                                                                                         │
+ │                        │ │  ❯ 1. Tentar de novo                                                                    │
+ ╰────────────────────────╯ │       Rodar este passo de novo                                                          │
+                            │    2. Pular                                                                             │
+                            │       Deixar pra lá e seguir com o resto                                                │
+                            │    3. Voltar pras perguntas                                                             │
+                            │       Mudar respostas e aplicar de novo                                                 │
+                            │                                                                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+ ↑↓ mover  enter escolher  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a home install from the first question to the last card: apply-done 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Instalação · Passo 7 de 7 ─────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Computador em casa   │ │  Instalando a Telinha                                                                   │
+ │                        │ │                                                                                         │
+ │ ✔ Endereço             │ │                                                                                         │
+ │   DuckDNS :8443        │ │  ✔ App do Discord             Bot: Telinha Bot (app id 111111111111111111)              │
+ │                        │ │  ✔ Endereço no DuckDNS        my-group.duckdns.org agora aponta pra 203.0.113.9.        │
+ │ ✔ Discord              │ │  ✔ Gravar o telinha.env       /opt/telinha/config/telinha.env gravado                   │
+ │   /telinha · Gurizada  │ │  ✔ Baixar os programas        Programas prontos em /opt/telinha/bin                     │
+ │                        │ │  ✔ Instalar o serviço         Serviço instalado (systemd-system)                        │
+ │ ✔ Portas               │ │  ✔ Iniciar a Telinha          A Telinha está rodando.                                   │
+ │   TCP 7881, 8443       │ │  ✔ Certificado HTTPS          Certificado HTTPS no lugar.                               │
+ │   UDP 7882             │ │  ! Verificar tudo             2 ok · 1 aviso · 1 com falha · 0 pulados                  │
+ │                        │ │                                                                                         │
+ │ ✔ Atualizações         │ │  ✔ A Telinha está rodando → https://my-group.duckdns.org:8443                           │
+ │   automáticas          │ │                                                                                         │
+ │                        │ │  ❯ 1. Ver o diagnóstico                                                                 │
+ │ ✔ Revisão              │ │       Veja o que funciona e o que precisa de atenção                                    │
+ │                        │ │    2. Sair                                                                              │
+ │ ✔ Instalação           │ │       A Telinha continua rodando como serviço                                           │
+ │                        │ │                                                                                         │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+ ↑↓ mover  enter escolher  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 a VPS: the address choices: vps-address 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Endereço · Passo 2 de 7 ───────────────────────────────────────────────────────────────╮
+ │ ✔ Onde                 │ │                                                                                         │
+ │   Servidor (VPS)       │ │  Como o pessoal vai chegar na Telinha?                                                  │
+ │                        │ │  Escolha o endereço web que a Telinha usa.                                              │
+ │ ❯ Endereço             │ │                                                                                         │
+ │                        │ │  ❯ 1. Meu próprio domínio                                                               │
+ │ ○ Discord              │ │       ex.: telinha.exemplo.com.br, apontado pra esta máquina                            │
+ │                        │ │    2. Um endereço grátis do DuckDNS                                                     │
+ │ ○ Portas               │ │       <nome>.duckdns.org, acompanha IP que muda                                         │
+ │                        │ │    3. Sem domínio: sslip.io                                                             │
+ │ ○ Atualizações         │ │       Um nome feito a partir do IP fixo do servidor                                     │
+ │                        │ │    4. Cloudflare Tunnel                                                                 │
+ │ ○ Revisão              │ │       Precisa de um domínio na Cloudflare; sem portas web pra abrir                     │
+ │                        │ │                                                                                         │
+ │ ○ Instalação           │ │    5. Avançado: meu próprio proxy reverso                                               │
+ │                        │ │       Ele termina o HTTPS e repassa pra Telinha                                         │
+ ╰────────────────────────╯ │                                                                                         │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+                            ╭─ Sobre isto ────────────────────────────────────────────────────────────────────────────╮
+                            │ Crie um registro A do seu domínio apontando pra 203.0.113.9.                            │
+                            │                                                                                         │
+                            │ A Telinha pega o certificado do Let's Encrypt pelas portas 80 e 443.                    │
+                            ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+ ↑↓ mover  1-9 atalho  enter escolher  esc/← voltar  tab passos  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 120x34 telinha alone without a telinha.env: the welcome card: welcome 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                                                                       vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Boas-vindas ───────────────────────────────────────────────────────────────────────────╮
+ │ ○ Onde                 │ │                                                                                         │
+ │                        │ │  Configurar a Telinha agora?                                                            │
+ │ ○ Endereço             │ │  Ainda não tem configuração (/opt/telinha/config/telinha.env).                          │
+ │                        │ │                                                                                         │
+ │ ○ Discord              │ │  A Telinha é compartilhamento de tela pro seu grupo do Discord. Algumas perguntas       │
+ │                        │ │  montam o telinha.env dela; nada muda nesta máquina antes da Revisão.                   │
+ │ ○ Portas               │ │                                                                                         │
+ │                        │ │  ❯ 1. Configurar                                                                        │
+ │ ○ Revisão              │ │       Responda as perguntas, confira a Revisão e instale                                │
+ │                        │ │    2. Sair                                                                              │
+ │ ○ Instalação           │ │       Nada é gravado                                                                    │
+ │                        │ │                                                                                         │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ↑↓ mover  enter escolher  ctrl+c sair
+"
+`;
+
+exports[`setup frames, en 80x30 the first question and a pasted token: the hint pane under the card, cut to fit: where 80x30 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                      vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Where · Step 1 of 6 ───────────────────────────╮
+ │ ❯ Where                │ │                                                 │
+ │                        │ │  Where will Telinha run?                        │
+ │ ○ Address              │ │  Pick the machine that stays on and hosts the   │
+ │                        │ │  rooms.                                         │
+ │ ○ Discord              │ │                                                 │
+ │                        │ │  ❯ 1. A computer at home                        │
+ │ ○ Ports                │ │       Your PC or a home server, behind your     │
+ │                        │ │       internet router                           │
+ │ ○ Review               │ │    2. A rented server (VPS)                     │
+ │                        │ │       Hetzner, DigitalOcean, Oracle Cloud and   │
+ │ ○ Install              │ │       the like: it has its own public IP        │
+ │                        │ │                                                 │
+ ╰────────────────────────╯ ╰─────────────────────────────────────────────────╯
+                            ╭─ About this ────────────────────────────────────╮
+                            │ Good for a group of friends: Telinha runs on a  │
+                            │ machine you already have.                       │
+                            │                                                 │
+                            │ Home internet connections usually do not let    │
+                            │ the web ports 80 and 443 in, so Telinha does    │
+                            │ not count on them. Next you pick how people     │
+                            │ reach this machine: a Cloudflare Tunnel (if you │
+                            │ have a domain on Cloudflare) or a free DuckDNS  │
+                            │ …                                               │
+                            ╰─────────────────────────────────────────────────╯
+ ↑↓ move  1-9 pick  enter select  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 80x30 the first question and a pasted token: the hint pane under the card, cut to fit: duck-token 80x30 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                      vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Address · Step 2 of 6 ─────────────────────────╮
+ │ ✔ Where                │ │                                                 │
+ │   A computer at home   │ │  DuckDNS token                                  │
+ │                        │ │  Paste the token shown at the top of            │
+ │ ❯ Address              │ │  duckdns.org.                                   │
+ │                        │ │                                                 │
+ │ ○ Discord              │ │  ╭───────────────────────────────────────────╮  │
+ │                        │ │  │ ••••••••••••••••••••••••••••••••••••▌     │  │
+ │ ○ Ports                │ │  ╰───────────────────────────────────────────╯  │
+ │                        │ │  36 characters · pasted                         │
+ │ ○ Review               │ │                                                 │
+ │                        │ ╰─────────────────────────────────────────────────╯
+ │ ○ Install              │ ╭─ About this ────────────────────────────────────╮
+ │                        │ │ Open duckdns.org, sign in, add a subdomain, and │
+ ╰────────────────────────╯ │ copy the token shown at the top.                │
+                            │                                                 │
+                            │ Telinha uses it to keep my-group.duckdns.org    │
+                            │ pointing at this network and to prove the name  │
+                            │ is yours when it gets the HTTPS certificate.    │
+                            ╰─────────────────────────────────────────────────╯
+
+
+
+
+
+ ctrl+v paste  enter confirm  ctrl+r show/hide  esc/← back  tab steps
+"
+`;
+
+exports[`setup frames, en 80x24 (the smallest terminal) a Review with a note, a failed install, the last card: everything that matters fits: review 80x24 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                      vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Review · Step 6 of 7 ──────────────────────────╮
+ │ ✔ Where                │ │                                                 │
+ │   A computer at home   │ │  Review                                         │
+ │ ✔ Address              │ │  Check your answers. Nothing has changed on t…  │
+ │   DuckDNS :8443        │ │                                                 │
+ │ ✔ Discord              │ │  Where      Where will Telin… A computer at h…  │
+ │   /telinha · Gurizada  │ │  Address    Do you have a do… No: use a free …  │
+ │ ✔ Ports                │ │             DuckDNS name      my-group          │
+ │   TCP 7881, 8443       │ │             DuckDNS token     set               │
+ │   UDP 7882             │ │             HTTPS port        8443              │
+ │ ✔ Updates              │ │             Web address       https://my-grou…  │
+ │   automatic            │ │    ↓ 16 more                                    │
+ │ ❯ Review               │ │                                                 │
+ │ ○ Install              │ │  ❯ 1. Apply                                     │
+ ╰────────────────────────╯ │    2. Back to the questions                     │
+                            │    3. Quit without writing                      │
+                            │                                                 │
+                            ╰─────────────────────────────────────────────────╯
+
+ ↑↓ move  enter select  pgup/pgdn scroll  esc/← back  tab steps  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 80x24 (the smallest terminal) a Review with a note, a failed install, the last card: everything that matters fits: apply-failed 80x24 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                      vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Install · Step 7 of 7 ─────────────────────────╮
+ │ ✔ Where                │ │                                                 │
+ │   A computer at home   │ │  Installing Telinha                             │
+ │ ✔ Address              │ │                                                 │
+ │   DuckDNS :8443        │ │                                                 │
+ │ ✔ Discord              │ │  ✖ Install the service        Service install…  │
+ │   /telinha · Gurizada  │ │      ✖ Service install failed: systemctl        │
+ │ ✔ Ports                │ │        enable --now telinha.service exited      │
+ │   TCP 7881, 8443       │ │        with 1                                   │
+ │   UDP 7882             │ │    ↑ 4 more  ↓ 4 more                           │
+ │ ✔ Updates              │ │                                                 │
+ │   automatic            │ │  The service is not installed: try again, or    │
+ │ ✔ Review               │ │  skip and start Telinha with telinha run.       │
+ │ ✖ Install              │ │                                                 │
+ ╰────────────────────────╯ │  ❯ 1. Retry                                     │
+                            │    2. Skip                                      │
+                            │    3. Back to questions                         │
+                            │                                                 │
+                            ╰─────────────────────────────────────────────────╯
+ ↑↓ move  enter select  ctrl+c quit
+"
+`;
+
+exports[`setup frames, en 80x24 (the smallest terminal) a Review with a note, a failed install, the last card: everything that matters fits: apply-done 80x24 1`] = `
+"  \\ /
+ ╭───╮ telinha setup                                                      vtest
+ │•‿•│ Screen sharing for your Discord group
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Install · Step 7 of 7 ─────────────────────────╮
+ │ ✔ Where                │ │                                                 │
+ │   A computer at home   │ │  Installing Telinha                             │
+ │ ✔ Address              │ │                                                 │
+ │   DuckDNS :8443        │ │                                                 │
+ │ ✔ Discord              │ │  ! Discord app                Login will fail…  │
+ │   /telinha · Gurizada  │ │      ! Login will fail until                    │
+ │ ✔ Ports                │ │        https://my-group.duckdns.org:8443/auth/  │
+ │   TCP 7881, 8443       │ │        callback is a redirect of the app        │
+ │   UDP 7882             │ │        (telinha doctor checks it).              │
+ │ ✔ Updates              │ │    ↓ 8 more                                     │
+ │   automatic            │ │                                                 │
+ │ ✔ Review               │ │  ✔ Telinha is running → https://my-group.duc…   │
+ │ ✔ Install              │ │                                                 │
+ ╰────────────────────────╯ │  ❯ 1. Show the doctor report                    │
+                            │    2. Exit                                      │
+                            │                                                 │
+                            ╰─────────────────────────────────────────────────╯
+
+ ↑↓ move  enter select  ctrl+c quit
+"
+`;
+
+exports[`setup frames, pt-BR 80x24 (the smallest terminal) a Review with a note, a failed install, the last card: everything that matters fits: review 80x24 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                               vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Revisão · Passo 6 de 7 ────────────────────────╮
+ │ ✔ Onde                 │ │                                                 │
+ │   Computador em casa   │ │  Revisão                                        │
+ │ ✔ Endereço             │ │  Confira suas respostas. Nada mudou nesta máq…  │
+ │   DuckDNS :8443        │ │                                                 │
+ │ ✔ Discord              │ │  Onde         Onde a Telinha v… Um computador…  │
+ │   /telinha · Gurizada  │ │  Endereço     Você tem um domí… Não: usar um …  │
+ │ ✔ Portas               │ │               Nome no DuckDNS   my-group        │
+ │   TCP 7881, 8443       │ │               Token do DuckDNS  definido        │
+ │   UDP 7882             │ │               Porta HTTPS       8443            │
+ │ ✔ Atualizações         │ │               Endereço web      https://my-gr…  │
+ │   automáticas          │ │    ↓ mais 16                                    │
+ │ ❯ Revisão              │ │                                                 │
+ │ ○ Instalação           │ │  ❯ 1. Aplicar                                   │
+ ╰────────────────────────╯ │    2. Voltar pras perguntas                     │
+                            │    3. Sair sem gravar                           │
+                            │                                                 │
+                            ╰─────────────────────────────────────────────────╯
+
+ ↑↓ mover  enter escolher  pgup/pgdn rolar  esc/← voltar  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 80x24 (the smallest terminal) a Review with a note, a failed install, the last card: everything that matters fits: apply-failed 80x24 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                               vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Instalação · Passo 7 de 7 ─────────────────────╮
+ │ ✔ Onde                 │ │                                                 │
+ │   Computador em casa   │ │  Instalando a Telinha                           │
+ │ ✔ Endereço             │ │                                                 │
+ │   DuckDNS :8443        │ │                                                 │
+ │ ✔ Discord              │ │  ✖ Instalar o serviço         A instalação do…  │
+ │   /telinha · Gurizada  │ │      ✖ A instalação do serviço falhou:          │
+ │ ✔ Portas               │ │        systemctl enable --now telinha.service   │
+ │   TCP 7881, 8443       │ │        exited with 1                            │
+ │   UDP 7882             │ │    ↑ mais 4  ↓ mais 4                           │
+ │ ✔ Atualizações         │ │                                                 │
+ │   automáticas          │ │  O serviço não foi instalado: tente de novo,    │
+ │ ✔ Revisão              │ │  ou pule e inicie a Telinha com telinha run.    │
+ │ ✖ Instalação           │ │                                                 │
+ ╰────────────────────────╯ │  ❯ 1. Tentar de novo                            │
+                            │    2. Pular                                     │
+                            │    3. Voltar pras perguntas                     │
+                            │                                                 │
+                            ╰─────────────────────────────────────────────────╯
+ ↑↓ mover  enter escolher  ctrl+c sair
+"
+`;
+
+exports[`setup frames, pt-BR 80x24 (the smallest terminal) a Review with a note, a failed install, the last card: everything that matters fits: apply-done 80x24 1`] = `
+"  \\ /
+ ╭───╮ telinha configuração                                               vtest
+ │•‿•│ Compartilhamento de tela pro seu grupo do Discord
+ ╰───╯
+ ╭────────────────────────╮ ╭─ Instalação · Passo 7 de 7 ─────────────────────╮
+ │ ✔ Onde                 │ │                                                 │
+ │   Computador em casa   │ │  Instalando a Telinha                           │
+ │ ✔ Endereço             │ │                                                 │
+ │   DuckDNS :8443        │ │                                                 │
+ │ ✔ Discord              │ │  ! App do Discord             O login vai fal…  │
+ │   /telinha · Gurizada  │ │      ! O login vai falhar até                   │
+ │ ✔ Portas               │ │        https://my-group.duckdns.org:8443/auth/  │
+ │   TCP 7881, 8443       │ │        callback ser um redirect do app (o       │
+ │   UDP 7882             │ │        telinha doctor verifica).                │
+ │ ✔ Atualizações         │ │    ↓ mais 8                                     │
+ │   automáticas          │ │                                                 │
+ │ ✔ Revisão              │ │  ✔ A Telinha está rodando → https://my-group…   │
+ │ ✔ Instalação           │ │                                                 │
+ ╰────────────────────────╯ │  ❯ 1. Ver o diagnóstico                         │
+                            │    2. Sair                                      │
+                            │                                                 │
+                            ╰─────────────────────────────────────────────────╯
+
+ ↑↓ mover  enter escolher  ctrl+c sair
+"
+`;

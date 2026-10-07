@@ -1,4 +1,4 @@
-// CLI strings (help, wizard, doctor, service, update) in EN and pt-BR. Same
+// CLI strings (help, setup, doctor, service, update) in EN and pt-BR. Same
 // pattern as i18n.ts: en is the source of keys, the Dict type forces pt-BR to
 // define every key, `{param}` is substituted. Kept apart from i18n.ts because
 // only the CLI needs them; a command with many strings keeps its own dictionary
@@ -62,8 +62,8 @@ const en = {
   help: HELP_EN,
   usage: 'Usage: telinha [command] [flags]. Run telinha help for the list of commands.',
   helpRun: 'Usage: telinha run\n\nStarts the service in this console: reads telinha.env, starts LiveKit (and Caddy or cloudflared) and serves the rooms. Ctrl+C stops it.',
-  helpSetup: 'Usage: telinha setup [--non-interactive] [flags]\n\nAsks the questions that make up telinha.env, downloads what Telinha needs, installs the service and runs doctor. Secrets come from the environment (DISCORD_TOKEN, ...) or from --<name>-file <path|->, never from flags. Non-interactive: --host home|vps picks the defaults; at home, --duckdns-domain means HTTPS on a high port with a DNS certificate, and 80/443 or your own proxy need --advanced.',
-  helpDoctor: 'Usage: telinha doctor [--json] [--no-phone] [--local]\n\nChecks the configuration, Discord, DNS, TLS, the router and the service. --local skips internet checks, --no-phone skips the phone test.',
+  helpSetup: 'Usage: telinha setup [--non-interactive] [flags]\n\nAsks the questions that make up telinha.env, downloads what Telinha needs, installs the service and runs doctor. On a terminal it opens the setup screens: arrows and Enter answer, Esc goes back, Tab jumps to a step, then Review and Install. Secrets come from the environment (DISCORD_TOKEN, ...) or from --<name>-file <path|->, never from flags. Non-interactive: --host home|vps picks the defaults; at home, --duckdns-domain means HTTPS on a high port with a DNS certificate, and 80/443 or your own proxy need --advanced.',
+  helpDoctor: 'Usage: telinha doctor [--json] [--no-phone] [--local]\n\nChecks the configuration, Discord, DNS, TLS, the router and the service. On a terminal the results are an interactive checklist: Enter shows how to fix a row, r runs the checks again. --local skips internet checks, --no-phone skips the phone test.',
   helpUpdate: 'Usage: telinha update [--check | --now]\n\n--check only shows what would be installed; --now installs even with rooms open.',
   helpService: 'Usage: telinha service install [--firewall] [--user] | uninstall | start | stop | restart | status',
   unknownCommand: 'unknown command {cmd}',
@@ -79,19 +79,6 @@ const en = {
   argSecretFlag: '{flag} is not accepted: secrets never go on the command line (others can read it in the process list and shell history). Set {env} in the environment or use {flag}-file <path|-> (- reads stdin).',
   argOneStdin: 'only one secret can be read from stdin (-) per run',
   argBadLang: '--lang must be en or pt-BR, got {value}',
-  // term.ts
-  needsInput: 'no answer for "{q}" (non-interactive)',
-  yesNoDefYes: '(Y/n)',
-  yesNoDefNo: '(y/N)',
-  yesNo: '(y/n)',
-  answerYesNo: 'Answer y or n.',
-  required: 'An answer is required.',
-  pickAtLeast: 'Pick at least {n}.',
-  selectHint: '↑/↓ move, Enter picks',
-  multiHint: '↑/↓ move, Space toggles, a = all, Enter confirms',
-  moreAbove: '↑ {n} more',
-  moreBelow: '↓ {n} more',
-  keepCurrent: '(keep current)',
 } as const;
 
 export type Key = keyof typeof en;
@@ -101,8 +88,8 @@ const ptBR: Dict = {
   help: HELP_PT,
   usage: 'Uso: telinha [comando] [opções]. Rode telinha help pra ver os comandos.',
   helpRun: 'Uso: telinha run\n\nInicia o serviço neste console: lê o telinha.env, sobe o LiveKit (e o Caddy ou o cloudflared) e serve as salas. Ctrl+C para.',
-  helpSetup: 'Uso: telinha setup [--non-interactive] [opções]\n\nFaz as perguntas que montam o telinha.env, baixa o que a Telinha precisa, instala o serviço e roda o doctor. Segredos vêm do ambiente (DISCORD_TOKEN, ...) ou de --<nome>-file <caminho|->, nunca de opções. Não interativo: --host home|vps escolhe os padrões; em casa, --duckdns-domain quer dizer HTTPS numa porta alta com certificado via DNS, e 80/443 ou seu próprio proxy precisam de --advanced.',
-  helpDoctor: 'Uso: telinha doctor [--json] [--no-phone] [--local]\n\nVerifica a configuração, o Discord, o DNS, o TLS, o roteador e o serviço. --local pula as verificações pela internet, --no-phone pula o teste no celular.',
+  helpSetup: 'Uso: telinha setup [--non-interactive] [opções]\n\nFaz as perguntas que montam o telinha.env, baixa o que a Telinha precisa, instala o serviço e roda o doctor. Num terminal ele abre as telas de configuração: setas e Enter respondem, Esc volta, Tab pula pra uma etapa, depois Revisão e Instalação. Segredos vêm do ambiente (DISCORD_TOKEN, ...) ou de --<nome>-file <caminho|->, nunca de opções. Não interativo: --host home|vps escolhe os padrões; em casa, --duckdns-domain quer dizer HTTPS numa porta alta com certificado via DNS, e 80/443 ou seu próprio proxy precisam de --advanced.',
+  helpDoctor: 'Uso: telinha doctor [--json] [--no-phone] [--local]\n\nVerifica a configuração, o Discord, o DNS, o TLS, o roteador e o serviço. Num terminal o resultado é uma lista interativa: Enter mostra como corrigir uma linha, r roda as verificações de novo. --local pula as verificações pela internet, --no-phone pula o teste no celular.',
   helpUpdate: 'Uso: telinha update [--check | --now]\n\n--check só mostra o que seria instalado; --now instala mesmo com salas abertas.',
   helpService: 'Uso: telinha service install [--firewall] [--user] | uninstall | start | stop | restart | status',
   unknownCommand: 'comando desconhecido {cmd}',
@@ -117,18 +104,6 @@ const ptBR: Dict = {
   argSecretFlag: '{flag} não é aceito: segredo nunca vai na linha de comando (dá pra ver na lista de processos e no histórico do shell). Defina {env} no ambiente ou use {flag}-file <caminho|-> (- lê do stdin).',
   argOneStdin: 'só um segredo pode ser lido do stdin (-) por execução',
   argBadLang: '--lang precisa ser en ou pt-BR, veio {value}',
-  needsInput: 'sem resposta pra "{q}" (modo não interativo)',
-  yesNoDefYes: '(S/n)',
-  yesNoDefNo: '(s/N)',
-  yesNo: '(s/n)',
-  answerYesNo: 'Responda s ou n.',
-  required: 'Precisa de uma resposta.',
-  pickAtLeast: 'Escolha pelo menos {n}.',
-  selectHint: '↑/↓ move, Enter escolhe',
-  multiHint: '↑/↓ move, Espaço marca, a = todos, Enter confirma',
-  moreAbove: '↑ mais {n}',
-  moreBelow: '↓ mais {n}',
-  keepCurrent: '(manter o atual)',
 };
 
 export const dicts: Record<Locale, Dict> = { en, 'pt-BR': ptBR };

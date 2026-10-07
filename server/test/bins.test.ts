@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { validate } from '../../scripts/versions.ts';
 import { writeTarGz, writeZip } from '../src/archive.ts';
 import {
-  PLATFORMS, TOOLS, assetSpec, caddyRelease, ensureBinaries, ensureBinariesForConfig, isPinned, loadVersions, resolveCaddyRelease, sha256,
+  PLATFORMS, TOOLS, assetSpec, caddyRelease, download, ensureBinaries, ensureBinariesForConfig, isPinned, loadVersions, resolveCaddyRelease, sha256,
   toolsFor, type Versions,
 } from '../src/bins.ts';
 import { releaseAssetUrl } from '../src/releasetag.ts';
@@ -383,5 +383,53 @@ describe('ensureBinariesForConfig', () => {
     const r = await ensureBinariesForConfig({ media: 'self', ingress: 'external' }, { bin: tmp() }, () => {},
       { ...host, versions: up.versions, fetch: async () => new Response('', { status: 503 }), which: (n) => `/usr/local/bin/${n}` });
     expect(r.paths.livekit).toBe('/usr/local/bin/livekit-server');
+  });
+});
+
+describe('download progress', () => {
+  /** A body in chunks with a Content-Length, like GitHub's. */
+  const chunked = (parts: string[], length = true) => async () => {
+    const data = parts.map((p) => enc.encode(p));
+    const size = data.reduce((n, d) => n + d.byteLength, 0);
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        for (const d of data) c.enqueue(d);
+        c.close();
+      },
+    });
+    return new Response(body, { headers: length ? { 'content-length': String(size) } : {} });
+  };
+
+  test('streams the body and reports bytes against the size; the data is whole', async () => {
+    const seen: [number, number | null][] = [];
+    const data = await download('https://x.test/a', chunked(['abc', 'defg', 'h']), (got, total) => void seen.push([got, total]));
+    expect(new TextDecoder().decode(data)).toBe('abcdefgh');
+    expect(seen).toEqual([[0, 8], [3, 8], [7, 8], [8, 8]]);
+  });
+
+  test('no Content-Length: the size is null; no callback: nothing streamed by hand', async () => {
+    const seen: (number | null)[] = [];
+    await download('https://x.test/a', chunked(['ab', 'c'], false), (_got, total) => void seen.push(total));
+    expect(seen).toEqual([null, null, null]);
+    expect(new TextDecoder().decode(await download('https://x.test/a', chunked(['ab', 'c'])))).toBe('abc');
+  });
+
+  test('ensureBinaries and ensureBinariesForConfig name the tool; the result is the same without it', async () => {
+    const up = fakeUpstream();
+    const tools = new Set<string>();
+    let last = 0;
+    const bin = tmp();
+    const r = await ensureBinariesForConfig({ media: 'self', ingress: 'tunnel' }, { bin }, () => {}, {
+      platform: 'linux', arch: 'x64', versions: up.versions, fetch: up.fetch,
+      progress: (tool, got) => {
+        tools.add(tool);
+        last = got;
+      },
+    });
+    expect([...tools].sort()).toEqual(['cloudflared', 'livekit']);
+    expect(last).toBeGreaterThan(0);
+    expect(r.changed).toEqual(['livekit', 'cloudflared']);
+    const plain = await ensureBinaries(['livekit'], { os: 'linux', arch: 'amd64', outDir: tmp(), versions: up.versions, fetch: up.fetch, log: () => {} });
+    expect(plain.changed).toEqual(['livekit']);
   });
 });

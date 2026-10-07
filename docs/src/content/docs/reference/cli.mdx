@@ -37,14 +37,26 @@ the service is up) leaves the first alone and exits 1 with
 
 <FlagTable locale="en" command="setup" />
 
-With `--non-interactive` (implied without a terminal) every answer comes from
-flags, then the environment (any `telinha.env` key), then the existing file. A
-missing answer exits 2 naming the flag or variable. Required:
+On a terminal, setup opens full-screen screens: the steps down the left (Where,
+Address, Discord, Ports, Updates, Review, Install), one question at a time as a
+card with a hint, then the Review and a live Install list; [Keys](#keys) lists
+the keys. `--yes` counts every question that already has an answer as answered,
+whether it came from a flag, from the existing `telinha.env` or from the
+machine's own suggestion, so the screens open on the first one that has none
+(often the bot token) or on the Review when every question has one; nothing is
+written before you apply there. A rule that a flag breaks (for example
+`--host home --public-url https://x.example` without `--advanced`) shows as a
+notice on the first card, and that flag is not used as a default.
+
+With `--non-interactive` (implied without a terminal) nothing opens: every
+answer comes from flags, then the environment (any `telinha.env` key), then the
+existing file, and the run prints plain lines. A flag that breaks a rule, or a
+missing answer, exits 2 naming the flag or variable. Required:
 `--public-url` (or `--duckdns-domain`), the bot token, the client secret,
 `--guild`, `--role`, `--channels`, plus the tunnel or DuckDNS token in those
 modes.
 
-`--host home|vps` (or `HOSTING`) picks the defaults the interactive wizard
+`--host home|vps` (or `HOSTING`) picks the defaults the setup screens
 would; without it the existing file decides, else a guess from the machine
 that is `home` unless it clearly is a VPS. At home, `--duckdns-domain` means
 HTTPS on `--https-port` (8443) with a certificate through DuckDNS, and
@@ -67,8 +79,10 @@ A script for a VPS passes `--host vps` instead, and there `--public-url` or
 
 <FlagTable locale="en" command="doctor" />
 
-Exit 1 when a check or the phone test failed. The checks are listed in
-[Doctor checks](/telinha/reference/doctor-checks/).
+Exit 1 when a check or the phone test failed. On a terminal doctor is an
+interactive checklist ([Keys](#keys)); without one, or with `--json`, it prints
+plain lines (see [Doctor and troubleshooting](/telinha/guides/doctor/)). The
+checks are listed in [Doctor checks](/telinha/reference/doctor-checks/).
 
 ## telinha update
 
@@ -97,6 +111,58 @@ telinha update --now       # install even with rooms open; also retries a failed
 unit (`~/.config/systemd/user/telinha.service`, `systemctl --user`) instead of
 the system one; on Windows it takes the account the Task Scheduler task runs
 as, which the elevated install passes along with `--sid`.
+
+## Keys
+
+The setup screens and the doctor checklist read these keys. The key help in the
+last row of the terminal always shows the ones that work on the screen you are
+on.
+
+**Setup**
+
+| Key | What it does |
+| --- | --- |
+| `↑` `↓` (or `k` `j`) | Move between options |
+| `1`-`9` | Pick the option with that number |
+| `Enter` | Choose the option, or confirm a typed answer |
+| `Space` | Mark or unmark an option in a multiple choice (the channels) |
+| `a` | Mark all, or none, in a multiple choice |
+| `Esc` or `←` | Back to the previous question; the answers stay. From the step list, back to the card. Off while the install runs |
+| `Tab` | Focus the step list; there `↑` `↓` move, `Enter` or `→` jumps to a step already answered, `Esc` returns. Under 80 columns the list is hidden and `Tab` shows it in place of the card |
+| `Ctrl+U` | Clear a text field |
+| Paste | Into a text or secret field, with the terminal's paste shortcut (`Ctrl+V`, often `Ctrl+Shift+V`) |
+| `Ctrl+R` | Show or hide a secret you typed or pasted |
+| `PgUp` `PgDn` | Scroll a long Review |
+| `Ctrl+C` | Quit setup. During the install, press it twice: stopping half way can leave a half install |
+
+A secret field shows dots, never the text, and says only how many characters
+were typed or that the text was pasted. On the Review a secret is `set`, `kept`
+or `generated`.
+
+**Doctor**
+
+| Key | What it does |
+| --- | --- |
+| `↑` `↓` (or `k` `j`) | Move between rows |
+| `Enter`, `Space` or `→` | Open or close a row: its details and, when it is not ok, the fix |
+| `r` | Run every check again |
+| `p` | Start a new phone test |
+| `s` | Stop waiting for the phone |
+| `q` or `Esc` | Quit (inside the setup, back to its last card). `Ctrl+C` quits the whole command (exit code 130 for `telinha doctor`) |
+
+## Colours
+
+The screens use the terminal's own foreground and background, and the Telinha
+accent colour for the focus. They find out whether the terminal is light or
+dark by asking it, then from `COLORFGBG`, else assume dark; some terminals, the
+older Windows console host among them, do not answer, so set `TELINHA_THEME`
+to `light` or `dark` to force one. With `NO_COLOR` set, every colour becomes
+the terminal's own.
+
+```
+TELINHA_THEME=light telinha setup     # or dark
+NO_COLOR=1 telinha doctor
+```
 
 ## Exit codes
 

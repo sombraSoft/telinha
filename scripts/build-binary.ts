@@ -1,6 +1,6 @@
-// Native binaries: `bun build --compile` per target with the built page
-// embedded, then the release archives and SHA256SUMS. Also packs our Caddy
-// build (the Dockerfile's caddy-export output) as a release archive.
+// Native binaries: Bun.build with `compile` per target (the Solid JSX plugin
+// and the built page embedded), then the release archives and SHA256SUMS. Also
+// packs our Caddy build (the Dockerfile's caddy-export output) as a release archive.
 //
 //   bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out dist-bin] [--smoke]
 //   bun scripts/build-binary.ts sums [--out dist-bin]
@@ -8,8 +8,10 @@
 //
 // <t>: linux-x64 | linux-arm64 | windows-x64 | windows-arm64 | linux | windows | host.
 // Default: this OS's targets. Windows targets need a Windows host: the version
-// resource (ProductName etc.) is only written there.
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+// resource (ProductName etc.) is only written there. Cross builds need every
+// OpenTUI native package: `bun install --os='*' --cpu='*'` first.
+import solidPlugin from '@opentui/solid/bun-plugin';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { writeTarGz, writeZip, type Entry } from '../server/src/archive.ts';
@@ -20,12 +22,23 @@ const ROOT = resolve(import.meta.dir, '..');
 
 // x64 ships the baseline builds only: the default ones need AVX2 and die with
 // "Illegal instruction" on older or low-end home servers.
-const BUN_TARGET: Record<Target, string> = {
+const BUN_TARGET: Record<Target, Bun.Build.CompileTarget> = {
   'linux-x64': 'bun-linux-x64-baseline',
   'linux-arm64': 'bun-linux-arm64',
   'windows-x64': 'bun-windows-x64-baseline',
   'windows-arm64': 'bun-windows-arm64',
 };
+
+// Binary sizes before the terminal UI landed; --smoke fails past baseline +
+// SIZE_MARGIN, which catches Babel or a second copy of something big getting bundled.
+const SIZE_BASELINE: Record<Target, number> = {
+  'linux-x64': 83_248_608,
+  'linux-arm64': 83_216_680,
+  'windows-x64': 88_020_992,
+  'windows-arm64': 79_513_088,
+};
+const SIZE_MARGIN = 20_000_000;
+const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
 
 const isWindows = (t: Target) => t.startsWith('windows-');
 const exeName = (t: Target) => (isWindows(t) ? 'telinha.exe' : 'telinha');
@@ -107,38 +120,50 @@ function shortCommit(): string {
   return sha || 'unknown';
 }
 
-/** The `bun build` argv for one target (run from the repo root). */
-export function buildArgs(t: Target, o: { version: string; commit: string; outfile: string }): string[] {
-  const args = [
-    'build', '--compile', `--target=${BUN_TARGET[t]}`, '--minify', '--sourcemap=none',
-    // Embedded as <virtual root>/dist; embedded.ts looks for it there.
-    '--asset=web/dist',
-    `--define=BUILD_VERSION=${JSON.stringify(o.version)}`,
-    `--define=BUILD_COMMIT=${JSON.stringify(o.commit)}`,
-    `--define=BUILD_TARGET=${JSON.stringify(t)}`,
-    // The binary must never pick up a .env or bunfig.toml from the user's cwd.
-    '--no-compile-autoload-dotenv', '--no-compile-autoload-bunfig',
-  ];
-  if (isWindows(t)) {
-    // The version resource takes four numbers: 0.7.0-rc.1 -> 0.7.0.0.
-    const numeric = o.version.split('-')[0]!;
-    args.push(
-      '--windows-title=Telinha', '--windows-publisher=sombraSoft', `--windows-version=${numeric}.0`,
-      '--windows-description=Telinha screen share server', '--windows-copyright=MIT',
-    );
-  }
-  args.push('server/src/index.ts', `--outfile=${o.outfile}`);
-  return args;
+/** The Bun.build config for one target. The API, not the CLI: only it takes the Solid plugin. */
+export function buildConfig(t: Target, o: { version: string; commit: string; outfile: string }): Bun.BuildConfig {
+  const define: Record<string, string> = {
+    BUILD_VERSION: JSON.stringify(o.version),
+    BUILD_COMMIT: JSON.stringify(o.commit),
+    BUILD_TARGET: JSON.stringify(t),
+  };
+  // Keeps only OpenTUI's glibc branch: the Linux binaries are glibc builds (the
+  // Alpine image runs the source with OPENTUI_LIBC=musl instead).
+  if (!isWindows(t)) define['process.env.OPENTUI_LIBC'] = JSON.stringify('glibc');
+  return {
+    entrypoints: [join(ROOT, 'server', 'src', 'index.ts')],
+    plugins: [solidPlugin],
+    minify: true,
+    sourcemap: 'none',
+    define,
+    compile: {
+      target: BUN_TARGET[t],
+      outfile: o.outfile,
+      // Embedded as <virtual root>/dist; embedded.ts looks for it there.
+      assets: [join(ROOT, 'web', 'dist')],
+      // The binary must never pick up a .env or bunfig.toml from the user's cwd
+      // (a project bunfig's preload would even stop it from starting).
+      autoloadDotenv: false,
+      autoloadBunfig: false,
+      // The version resource takes four numbers: 0.7.0-rc.1 -> 0.7.0.0.
+      ...(isWindows(t) && {
+        windows: {
+          title: 'Telinha', publisher: 'sombraSoft', version: `${o.version.split('-')[0]!}.0`,
+          description: 'Telinha screen share server', copyright: 'MIT',
+        },
+      }),
+    },
+  };
 }
 
 async function compile(t: Target, o: Options, commit: string): Promise<string> {
   const outfile = join(o.out, t, exeName(t));
   await rm(join(o.out, t), { recursive: true, force: true });
   step(`compile ${t} (${BUN_TARGET[t]}, ${o.version}, ${commit})`);
-  const p = Bun.spawn([process.execPath, ...buildArgs(t, { version: o.version, commit, outfile })], {
-    cwd: ROOT, stdout: 'inherit', stderr: 'inherit',
-  });
-  if ((await p.exited) !== 0 || !existsSync(outfile)) throw new Error(`bun build failed for ${t}`);
+  // throw: false so the bundler's own messages are printed, not just "Bundle failed".
+  const r = await Bun.build({ ...buildConfig(t, { version: o.version, commit, outfile }), throw: false });
+  for (const log of r.logs) console.log(String(log));
+  if (!r.success || !existsSync(outfile)) throw new Error(`bun build failed for ${t}`);
   return outfile;
 }
 
@@ -149,7 +174,7 @@ async function pack(t: Target, exe: string, out: string): Promise<string> {
   ];
   const file = join(out, assetName(t));
   await Bun.write(file, isWindows(t) ? writeZip(entries) : writeTarGz(entries));
-  console.log(file);
+  console.log(`${file} (${mb(statSync(file).size)}; ${exeName(t)} ${mb(statSync(exe).size)})`);
   return file;
 }
 
@@ -177,6 +202,27 @@ async function smoke(o: Options): Promise<void> {
   if (r.exitCode !== 0) throw new Error(`--version exited with ${r.exitCode ?? r.signalCode}`);
   const want = `telinha ${o.version}`;
   if (line !== want && !line.startsWith(`${want} `)) throw new Error(`--version printed "${line}", want "${want} (...)"`);
+
+  step(`smoke: TELINHA_SMOKE_TUI=1 ${exe} --version`);
+  const tui = Bun.spawnSync([exe, '--version'], {
+    cwd: o.out, env: { ...process.env, TELINHA_SMOKE_TUI: '1' }, stdout: 'pipe', stderr: 'inherit', timeout: 60_000,
+  });
+  const frame = tui.stdout.toString().trim();
+  console.log(frame);
+  if (tui.exitCode !== 0 || !frame.includes('count 1')) throw new Error(`the TUI smoke failed (exit ${tui.exitCode ?? tui.signalCode})`);
+
+  step('smoke: binary size and contents');
+  for (const t of o.targets) {
+    const bin = join(o.out, t, exeName(t));
+    const size = statSync(bin).size;
+    const limit = SIZE_BASELINE[t] + SIZE_MARGIN;
+    console.log(`${t}: ${mb(size)} (limit ${mb(limit)})`);
+    if (size > limit) throw new Error(`${t} is ${mb(size)}, over ${mb(limit)}: something big got bundled`);
+    // The Solid plugin transforms at build time; Babel in the binary means the runtime preload got bundled.
+    if (Buffer.from(await Bun.file(bin).arrayBuffer()).includes('@babel/core')) {
+      throw new Error(`${t} contains @babel/core: Babel must not be bundled`);
+    }
+  }
 }
 
 /** The buildx export's caddy[.exe] as caddy-<target>.tar.gz|.zip, the one file inside named like the binary. */

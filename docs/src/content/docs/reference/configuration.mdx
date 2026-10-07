@@ -9,7 +9,7 @@ import ConfigTable from '../../../components/ConfigTable.astro';
 import generated from '../../../data/generated.json';
 
 Everything lives in one `KEY=value` file, `telinha.env`. `telinha setup` writes
-it, and running the wizard again is how settings change; editing the file by
+it, and running the setup again is how settings change; editing the file by
 hand and restarting (`telinha service restart`) works too. Real environment
 variables override the file; one set to the empty string does not. A key
 Telinha does not know logs `config: unknown key FOO in telinha.env` and is
@@ -30,7 +30,7 @@ double quotes and strips ` #...` comments from an env file; Telinha's own
 parser reads values literally. The one spelling both read the same is a
 single-quoted value, so single-quote every value containing `$`, `\` or `#`
 (`COOKIE_SECRET='a$b#c'`). Telinha warns at start about an unquoted one, and
-the wizard single-quotes every secret it writes.
+the setup single-quotes every secret it writes.
 
 The tables below are generated from the code at every build: the key list,
 the defaults and the "required" column come from the server itself.

@@ -1,6 +1,6 @@
 ---
 title: Docker
-description: Rode a Telinha num contêiner só, num host Linux com Docker, com o assistente dentro da imagem e atualizações automáticas opcionais.
+description: Rode a Telinha num contêiner só, num host Linux com Docker, com o setup dentro da imagem e atualizações automáticas opcionais.
 sidebar:
   order: 6
 ---
@@ -19,10 +19,10 @@ opcional, o `telinha-update`, mantém tudo na versão estável mais nova.
   VPS, e acesso de root (`sudo`). O Alpine e outros sistemas com musl ficam
   aqui: a versão nativa precisa de glibc.
 - Um servidor do Discord onde você pode criar um aplicativo e adicionar um bot.
-  Dá para criar o aplicativo antes do assistente ou durante ele: veja
+  Dá para criar o aplicativo antes do setup ou durante ele: veja
   [Aplicativo do Discord](/telinha/pt-br/start/discord/).
 - Para o endereço que o pessoal abre: em casa, um domínio na Cloudflare, ou
-  nada (o assistente te dá um endereço grátis do DuckDNS); numa VPS, um
+  nada (o setup te dá um endereço grátis do DuckDNS); numa VPS, um
   domínio seu, DuckDNS ou sslip.io.
   [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
   compara as opções.
@@ -83,24 +83,37 @@ compose nessa versão.
 `telinha.env.example` para `/opt/telinha/config/telinha.env`, preencha (o
 exemplo lista cada chave com um comentário) e rode `docker compose up -d`.
 
-## Rode o assistente
+## Rode o setup
 
 Enquanto o `telinha.env` ainda tem valores vazios, o instalador oferece o
-assistente de configuração. Ele roda dentro da imagem, então nada mais é
-instalado no host. Para rodar você mesmo depois:
+setup. Ele roda dentro da imagem, então nada mais é instalado no host. Para
+rodar você mesmo depois:
 
 ```sh
 docker run --rm -it --user 0 -e TELINHA_HOME=/telinha -v /opt/telinha/config:/telinha/config ghcr.io/sombrasoft/telinha:latest setup --docker
 ```
 
-O assistente fala português do Brasil ou inglês e explica cada pergunta em uma
-ou duas linhas; servidores, cargos e canais aparecem em listas.
+O `-it` é obrigatório: o setup desenha telas cheias e lê as suas teclas, então
+precisa do terminal. Sem ele (um script, um pipe) o mesmo comando imprime linhas
+simples e tira cada resposta das opções e do ambiente, veja
+[Linha de comando](/telinha/pt-br/reference/cli/#telinha-setup).
+
+As telas mostram os passos na lateral esquerda (Onde, Endereço, Discord,
+Portas, Revisão, Instalação; no Docker não tem passo de Atualizações, quem cuida
+disso é o `telinha-update`), a pergunta atual num cartão à direita e uma dica
+que explica a escolha. Servidores, cargos e canais aparecem em listas. Na
+primeira vez ele começa pelo idioma, português do Brasil ou inglês. Funciona a
+partir de 80 colunas por 24 linhas, e as teclas são as mesmas das outras
+instalações: ↑ ↓ e Enter, ou o número de uma opção, respondem; Esc ou ← volta;
+Tab pula para um passo já respondido; segredos aparecem como bolinhas (cole,
+Ctrl+R mostra ou esconde) e Ctrl+C sai.
+[Linha de comando](/telinha/pt-br/reference/cli/#teclas) lista todas as teclas.
 
 <Steps>
 
-1. **Onde a Telinha roda.** *Onde a Telinha vai rodar?* Responda pela máquina
-   onde o contêiner roda: *Um computador em casa (um PC ou um servidor
-   caseiro)* ou *Um servidor alugado (VPS)*.
+1. **Onde.** *Onde a Telinha vai rodar?* Responda pela máquina onde o contêiner
+   roda: *Um computador em casa (um PC ou um servidor caseiro)* ou *Um
+   servidor alugado (VPS)*.
 
 2. **Endereço.** Em casa, onde a internet em geral não deixa as portas web 80
    e 443 entrarem, ele pergunta *Você tem um domínio na Cloudflare?*: sim dá
@@ -108,24 +121,32 @@ ou duas linhas; servidores, cargos e canais aparecem em listas.
    porta 8443 (`https://my-group.duckdns.org:8443`, o certificado vem pelo
    DuckDNS). Numa VPS ele pergunta *Como o pessoal vai chegar na Telinha?*: um
    domínio seu, DuckDNS ou sslip.io na 80 e na 443, um Cloudflare Tunnel ou o
-   seu próprio proxy reverso. Em casa ele pergunta depois se a Telinha pode
-   abrir as portas no roteador por UPnP (funciona de dentro do contêiner,
-   graças à rede do host).
+   seu próprio proxy reverso.
 
-3. **Portas de mídia.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a
-   não ser que outro programa do host já use alguma.
-
-4. **Discord.** O token do bot, o segredo do cliente, o redirecionamento de
-   login (a única coisa que você adiciona na mão no Portal do Desenvolvedor), o
-   servidor, o cargo que pode entrar, os canais e o nome do comando.
+3. **Discord.** Cole o token do bot: ele é conferido com o Discord na hora e o
+   seu app é lido a partir dele. Depois o segredo do cliente, o servidor, o
+   cargo que pode entrar, os canais e o nome do comando, tudo em listas. Quando
+   o app ainda não tem o redirecionamento de login, um cartão mostra o endereço
+   para adicionar em OAuth2 → Redirects, a única coisa que você faz na mão no
+   Portal do Desenvolvedor.
    [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
 
-5. **Revisão.** Todos os valores numa tela só; confirme e ele grava
-   `/opt/telinha/config/telinha.env` (modo 600). Não tem pergunta sobre
-   atualizações: no Docker, quem cuida disso é o `telinha-update`.
+4. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
+   que outro programa do host já use alguma. Em casa ele pergunta depois se a
+   Telinha pode abrir as portas no roteador por UPnP (funciona de dentro do
+   contêiner, graças à rede do host).
 
-6. **Inicie.** O assistente para depois do arquivo (sem programas para baixar,
-   sem serviço, sem firewall, sem olhar o roteador) e mostra como iniciar:
+5. **Revisão.** Todas as respostas numa tela só, agrupadas por passo; escolha
+   *Aplicar* para gravar `/opt/telinha/config/telinha.env` (modo 600), ou volte
+   para mudar algo. Nada é gravado antes disso.
+
+6. **Instalação.** No Docker a lista é curta: o app do Discord é conferido (com
+   os intents ligados), o endereço do DuckDNS é atualizado se você escolheu um,
+   e o arquivo é gravado. Sem programas para baixar, sem serviço, sem firewall,
+   sem olhar o roteador. Se uma tarefa falha a tela oferece *Tentar de novo*,
+   *Pular* ou *Voltar pras perguntas*, como nas outras instalações (sem *Pular*
+   quando o próprio arquivo não pode ser gravado). O último
+   cartão mostra o arquivo gravado e como iniciar:
 
    ```sh
    cd /opt/telinha && docker compose up -d
@@ -154,7 +175,7 @@ O contêiner usa a rede do host, então as portas são as do host:
 
 Em casa é só isso: nunca a 80 nem a 443. Com um Cloudflare Tunnel só as duas
 portas de mídia são necessárias (túneis não levam WebRTC). Se você mudou
-alguma porta no assistente, use o seu valor.
+alguma porta no setup, use o seu valor.
 
 **Em casa**, primeiro o UPnP: quando ele está ligado (`UPNP=auto`) e o roteador
 aceita, a Telinha mapeia essas portas enquanto roda. Se não, faça o
@@ -188,12 +209,15 @@ O doctor roda dentro do contêiner:
 docker exec -it telinha bun server/src/index.ts doctor
 ```
 
-Ele roda todas as verificações e mostra uma linha para cada, com o que fazer em
-tudo que não estiver ok: as linhas `gateway`, `cgnat` e `mappings` mostram o que
-o roteador aceitou. Depois ele mostra um link e um QR code para o teste pelo
-celular: abra no celular com o Wi-Fi desligado, para o teste vir de fora da sua
-rede. Ele diz se a página, a conexão com o LiveKit, o UDP e o TCP funcionam de
-lá. [Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
+Com `-it` ele é uma lista de verificações, uma linha para cada, com um spinner
+até sair o resultado: aperte Enter numa linha para ver os detalhes e, quando ela
+não está ok, como corrigir, e `r` para rodar todas de novo (as linhas `gateway`,
+`cgnat` e `mappings` mostram o que o roteador aceitou). Quando as verificações
+terminam, um painel mostra um link e um QR code para o teste pelo celular: abra
+no celular com o Wi-Fi desligado, para o teste vir de fora da sua rede. Ele diz
+se a página, a conexão com o LiveKit, o UDP e o TCP funcionam de lá, e `p`
+começa um novo teste. Sem `-it` ele imprime a tabela.
+[Doctor e solução de problemas](/telinha/pt-br/guides/doctor/) explica cada
 linha e o que uma falha quer dizer.
 
 O contêiner também tem um healthcheck: o `docker compose ps` mostra ele como
@@ -243,7 +267,7 @@ telinha-update --now
 Veja [Atualizações](/telinha/pt-br/guides/updates/) para fixar uma versão e os
 outros subcomandos.
 
-**Mudar as configurações** é rodar o assistente de novo (a linha do
+**Mudar as configurações** é rodar o setup de novo (a linha do
 `docker run` acima, ou `sh install-docker.sh --setup` no pacote) e recriar o
 contêiner para ele ler o arquivo novo:
 

@@ -8,7 +8,7 @@ sidebar:
 import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
 
 Answer three questions in order. Each answer points to a quickstart or a
-guide, and the setup wizard (`telinha setup`) asks the first two in the same
+guide, and the setup (`telinha setup`) asks the first two in the same
 words, so nothing you decide here is final.
 
 <Steps>
@@ -29,7 +29,7 @@ words, so nothing you decide here is final.
 
 The machine has to stay on while people watch. Anything that runs one of
 the [supported builds](/telinha/start/how-it-works/#machine-and-operating-system)
-works. The wizard asks *Where will Telinha run?* and offers two answers.
+works. The setup asks *Where will Telinha run?* and offers two answers.
 
 **A computer at home (a PC or a home server)**, behind your internet router:
 
@@ -95,7 +95,7 @@ differ, you are behind CGNAT or a second router. Cannot open the status page?
 Ask your ISP: "does my line have its own public IPv4, or is it behind
 CGNAT?" Once Telinha is installed,
 `telinha doctor` runs the same test for you (the `cgnat` check, which needs a
-router that answers UPnP, NAT-PMP or PCP), and the setup wizard warns about
+router that answers UPnP, NAT-PMP or PCP), and the setup warns about
 it. Behind CGNAT a Cloudflare Tunnel still gets the pages through, but not
 the media, so ask your ISP for a public IPv4 (often free, sometimes called
 "removing CGNAT") or run Telinha on a VPS. A private WAN address instead
@@ -138,4 +138,4 @@ curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/instal
 ```
 
 Before you install, have the [Discord app](/telinha/start/discord/) ready,
-or create it while the wizard waits.
+or create it while the setup waits.

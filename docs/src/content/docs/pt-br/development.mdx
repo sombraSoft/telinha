@@ -14,7 +14,7 @@ Use um clone para desenvolver, ou numa plataforma sem versão pronta. Rodando do
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
 bun install --frozen-lockfile && bun run build
-bun server/src/index.ts setup    # same wizard; downloads the helper binaries into <home>/bin
+bun server/src/index.ts setup    # same setup; downloads the helper binaries into <home>/bin
 bun server/src/index.ts          # run in this console
 ```
 
@@ -57,18 +57,22 @@ O `bun run dev` baixa o `livekit-server` (fixado no `versions.json`, com sha256 
 
 O servidor roda com `DEV_USER` definido (padrão `1:Dev`, ou seja `<id>:<nome>`), um login falso que dispensa o Discord e o bot. Ele é recusado a menos que `PUBLIC_URL` seja `http://localhost` ou `http://127.0.0.1`, `LISTEN` seja um endereço de loopback e `INGRESS` seja `external`, e nesse modo toda requisição cujo `Host` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 421. Use `DEV_LOCALE=en` ou `pt-BR` para forçar o idioma. Não há comando de barra em desenvolvimento, então qualquer código de sala válido (`/r/lamo-futi`, `/r/bada-kodi`: duas ou três sílabas de consoante e vogal de cada lado do hífen) abre uma sala no primeiro uso. `CLOSE_EMPTY_SECONDS=30 bun run dev` mostra uma sala fechando.
 
+### Telas do terminal
+
+As telas do setup e do doctor em `server/src/tui` são arquivos `.tsx` (OpenTUI com Solid); o `server/tsconfig.json` e o `docs/scripts/tsconfig.json` definem `"jsx": "preserve"` e `"jsxImportSource": "@opentui/solid"`. O Bun só roda esse JSX pela transformação Solid do OpenTUI: o `bun test` carrega ela pelo preload `[test]` do `bunfig.toml` e do `server/bunfig.toml`, uma execução a partir do código registra ela com `prepareTui()` (`server/src/tui/load.ts`), e o build nativo aplica ela como plugin. Os `server/test/tui-*.test.tsx` desenham as telas num terminal de teste e comparam snapshots dos quadros; `bun test server/test/tui-setup-frames.test.tsx -u` reescreve eles depois de uma mudança intencional. `TELINHA_THEME=light` ou `dark` força as cores, e `TELINHA_SMOKE_TUI=1 bun server/src/index.ts --version` roda o smoke da interface do terminal a partir do código.
+
 ## Binários nativos
 
-O `bun run compile` (`scripts/build-binary.ts`) roda `bun build --compile` com o `web/dist` embutido (rode `bun run build` antes). Ele escreve `dist-bin/<target>/telinha[.exe]`, os pacotes de release `dist-bin/telinha-linux-{x64,arm64}.tar.gz` e `dist-bin/telinha-windows-{x64,arm64}.zip` (cada um com `LICENSE`) e `dist-bin/SHA256SUMS`.
+O `bun run compile` (`scripts/build-binary.ts`) compila com o `Bun.build` (a opção `compile`, mais o plugin do Solid para as telas do terminal) com o `web/dist` embutido (rode `bun run build` antes). Ele escreve `dist-bin/<target>/telinha[.exe]`, os pacotes de release `dist-bin/telinha-linux-{x64,arm64}.tar.gz` e `dist-bin/telinha-windows-{x64,arm64}.zip` (cada um com `LICENSE`) e `dist-bin/SHA256SUMS`.
 
 | Opção | Significado |
 | --- | --- |
 | `--target` | `linux-x64`, `linux-arm64`, `windows-x64`, `windows-arm64`, `linux`, `windows` ou `host`; repetível, o padrão são os dois alvos do sistema atual |
 | `--version X.Y.Z` | Versão a embutir, por padrão a do `package.json` |
 | `--out DIR` | Pasta de saída |
-| `--smoke` | Roda o `--version` do binário deste computador |
+| `--smoke` | Roda o `--version` do binário deste computador, depois o smoke da interface do terminal, e confere o tamanho de cada binário e que nenhum Babel foi embutido |
 
-O `bun run compile sums` reescreve o `SHA256SUMS` para os pacotes que estiverem em `dist-bin/`, incluindo os `caddy-<target>`. O `bun run compile pack-caddy --target <t> --from DIR` empacota um `caddy` já compilado como o pacote de release daquele alvo; o workflow de release compila cada um pelo estágio `caddy-export` do `Dockerfile`. Os alvos Linux compilam de qualquer sistema. Os alvos Windows só compilam no Windows, onde o Bun consegue escrever o recurso de versão. Os alvos x64 são os builds baseline do Bun. O binário nunca lê um `.env` ou `bunfig.toml` da pasta onde roda.
+O `bun run compile sums` reescreve o `SHA256SUMS` para os pacotes que estiverem em `dist-bin/`, incluindo os `caddy-<target>`. O `bun run compile pack-caddy --target <t> --from DIR` empacota um `caddy` já compilado como o pacote de release daquele alvo; o workflow de release compila cada um pelo estágio `caddy-export` do `Dockerfile`. Os alvos Linux compilam de qualquer sistema depois que o `bun install --os='*' --cpu='*'` baixou o pacote nativo do OpenTUI de cada alvo. Os alvos Windows só compilam no Windows, onde o Bun consegue escrever o recurso de versão. Os alvos x64 são os builds baseline do Bun. O binário nunca lê um `.env` ou `bunfig.toml` da pasta onde roda.
 
 ## Este site
 

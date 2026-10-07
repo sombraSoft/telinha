@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CliContext } from '../src/cli/args.ts';
 import type { DoctorReport, DoctorSessionState } from '../src/cli/control.ts';
-import { buildCheckContext, DOCTOR_FLAGS, phoneHints, phoneStatus, run, type DoctorControl } from '../src/cli/doctor.ts';
+import { buildCheckContext, DOCTOR_FLAGS, phoneHints, phoneRows, phoneStatus, run, type DoctorControl, type DoctorTuiRunner } from '../src/cli/doctor.ts';
+import { doctorStrings } from '../src/cli/doctor-strings.ts';
 import type { Check, CheckContext, CheckStatus } from '../src/doctor/types.ts';
 import { resolvePaths } from '../src/paths.ts';
 import { PROD_ENV } from './helpers.ts';
@@ -157,8 +158,9 @@ describe('telinha doctor', () => {
     expect(ctl.calls).toEqual([]);
   });
 
+  // On a terminal only --json stays plain; the phone test runs there too.
   test('service not running: says how to start it', async () => {
-    const c = ctx({ argv: ['doctor'], tty: true });
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
     const ctl = control({ available: false });
     expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')] })).toBe(0);
     expect(c.text()).toContain('telinha service start');
@@ -166,7 +168,7 @@ describe('telinha doctor', () => {
   });
 
   test('phone test: link, QR, long-poll until done, rows and hints', async () => {
-    const c = ctx({ argv: ['doctor'], tty: true });
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
     const report: DoctorReport = { ...REPORT, udp: { ok: false, error: 'fell back to TCP' } };
     const ctl = control({ states: [{ state: 'pending' }, { state: 'opened', openedAt: 1 }, { state: 'done', openedAt: 1, report }] });
     const code = await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')] });
@@ -186,7 +188,7 @@ describe('telinha doctor', () => {
   });
 
   test('phone test: both media paths closed is a failure', async () => {
-    const c = ctx({ argv: ['doctor'], tty: true });
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
     const report: DoctorReport = { ...REPORT, initial: null, udp: { ok: false }, tcp: { ok: false } };
     const ctl = control({ states: [{ state: 'done', report }] });
     expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')] })).toBe(1);
@@ -194,14 +196,14 @@ describe('telinha doctor', () => {
   });
 
   test('phone test: an expired link is a warning, not a failure', async () => {
-    const c = ctx({ argv: ['doctor'], tty: true });
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
     const ctl = control({ states: [{ state: 'pending' }, { state: 'expired' }] });
     expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')] })).toBe(0);
     expect(c.text()).toContain('The link expired');
   });
 
   test('Ctrl+C skips the wait', async () => {
-    const c = ctx({ argv: ['doctor'], tty: true });
+    const c = ctx({ argv: ['doctor', '--json'], tty: true });
     const ctl = control({ states: ['hang'] });
     let interrupt = () => {};
     let removed = false;
@@ -227,10 +229,52 @@ describe('telinha doctor', () => {
   });
 
   test('pt-BR', async () => {
-    const c = ctx({ argv: ['doctor'], tty: true, locale: 'pt-BR' });
+    const c = ctx({ argv: ['doctor', '--json'], tty: true, locale: 'pt-BR' });
     const ctl = control({ available: false });
     await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')] });
     expect(c.text()).toContain('Inicie a Telinha');
+  });
+});
+
+describe('telinha doctor on a terminal', () => {
+  function runner(code: number) {
+    const calls: Parameters<DoctorTuiRunner>[0][] = [];
+    const tui: DoctorTuiRunner = async (o) => (calls.push(o), code);
+    return { tui, calls };
+  }
+
+  test('the interactive doctor runs, gets the flags, and its exit code is the result', async () => {
+    const c = ctx({ argv: ['doctor', '--no-phone', '--local'], tty: true });
+    const r = runner(1);
+    const seen: CheckContext[] = [];
+    const ctl = control();
+    const checks = [fakeCheck('a', 'ok', {}, seen)];
+    expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks, tui: r.tui })).toBe(1);
+    expect(r.calls).toHaveLength(1);
+    expect(r.calls[0]!.flags).toEqual({ phone: false, local: true });
+    expect(r.calls[0]!.ctx).toBe(c.ctx);
+    expect(r.calls[0]!.deps.checks).toBe(checks);
+    // Nothing ran or printed on the plain side.
+    expect(seen).toEqual([]);
+    expect(ctl.calls).toEqual([]);
+    expect(c.text()).toBe('');
+    expect(c.json).toEqual([]);
+  });
+
+  test('no terminal (setup runs it this way) and --json stay plain', async () => {
+    for (const o of [{ argv: ['doctor', '--no-phone'], tty: false }, { argv: ['doctor', '--json', '--no-phone'], tty: true }]) {
+      const c = ctx(o);
+      const r = runner(9);
+      expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: control().client, checks: [fakeCheck('a', 'ok')], tui: r.tui })).toBe(0);
+      expect(r.calls).toEqual([]);
+    }
+  });
+
+  test('a usage error never opens the interactive doctor', async () => {
+    const c = ctx({ argv: ['doctor', '--jsonn'], tty: true });
+    const r = runner(0);
+    expect(await run(args, c.ctx, { ...noPhone, out: c.out, control: control().client, checks: [], tui: r.tui })).toBe(2);
+    expect(r.calls).toEqual([]);
   });
 });
 
@@ -250,5 +294,18 @@ describe('phone result', () => {
     expect(phoneHints({ ...REPORT, tcp: { ok: false } }, ports).map((h) => h.key)).toEqual(['hintTcp']);
     // A wrong LIVEKIT_NODE_IP shows up as the address the phone was sent to.
     expect(phoneHints(REPORT, ports, '198.51.100.1')).toEqual([{ key: 'hintIp', params: { ip: '203.0.113.7', publicIp: '198.51.100.1' } }]);
+  });
+
+  test('rows, shared by the plain and the interactive doctor', () => {
+    const s = (k: Parameters<typeof doctorStrings>[1], p?: Record<string, string | number>) => doctorStrings('en', k, p);
+    const rows = phoneRows({ ...REPORT, publish: { ok: false, error: 'no camera' } }, ports, s);
+    expect(rows.map((r) => [r.id, r.ok, r.label, r.value])).toEqual([
+      ['https', true, 'HTTPS', '80 ms'],
+      ['signaling', true, 'LiveKit connection', 'works'],
+      ['publish', false, 'Sending video', 'failed: no camera'],
+      ['initial', true, 'First path', 'UDP to 203.0.113.7, 40 ms'],
+      ['udp', true, 'UDP 7882', 'works, 40 ms'],
+      ['tcp', true, 'TCP 7881', 'works, 60 ms'],
+    ]);
   });
 });

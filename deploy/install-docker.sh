@@ -82,10 +82,10 @@ unfilled() {
 if [ "$setup" != no ] && [ -n "$have_docker" ] && { [ "$setup" = yes ] || { [ -t 0 ] && unfilled; }; }; then
 	tty=-i
 	[ -t 0 ] && [ -t 1 ] && tty=-it
-	echo "starting the setup wizard (docker run $image setup --docker)" >&2
+	echo "starting setup (docker run $image setup --docker)" >&2
 	if ! docker run --rm "$tty" --user 0 -e TELINHA_HOME=/telinha -e TELINHA_HOST_ENV="$env" \
 		-v "$dir/config:/telinha/config" "$image" setup --docker; then
-		echo "warning: the setup wizard did not finish; edit $env by hand or re-run with --setup" >&2
+		echo "warning: setup did not finish; edit $env by hand or re-run with --setup" >&2
 	fi
 fi
 

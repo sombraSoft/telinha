@@ -14,7 +14,7 @@ setup again, or edit `telinha.env` and restart. Every key is described in
 
 ## Which one
 
-The wizard asks *Where will Telinha run?* first, and the options depend on
+The setup asks *Where will Telinha run?* first, and the options depend on
 the answer. `HOSTING` in `telinha.env` records it (`home` or `vps`).
 
 **At home** it asks *Do you have a domain on Cloudflare?* Home internet
@@ -76,7 +76,7 @@ reason you chose a tunnel is that nothing at all reaches your network, read
 
 The home choice without a domain. DuckDNS gives you a free
 `<name>.duckdns.org` that follows your changing IP. On duckdns.org: sign in,
-add a subdomain, and copy the token shown at the top of the page. The wizard
+add a subdomain, and copy the token shown at the top of the page. The setup
 tries the token at once and writes:
 
 ```
@@ -208,7 +208,7 @@ Forward the media ports as in every other mode.
 
 ## Advanced: ports 80 and 443 at home
 
-The wizard's home question has a third answer, *Advanced*, for two cases it
+The setup's home question has a third answer, *Advanced*, for two cases it
 never picks on its own: you opened ports 80 and 443 on your router to this
 machine yourself, or you run your own reverse proxy. With the first, Telinha
 writes the VPS values (`HTTP_PORT=80`, `HTTPS_PORT=443`, no `ACME_DNS`) for

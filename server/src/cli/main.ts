@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import type { RunOptions } from '../run.ts';
 import { versionLine } from '../version.ts';
 import { buildContext, GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, type ParsedArgs } from './args.ts';
+import type { SetupUi } from './setup/ui.ts';
 import { pickLocale, ts, type Key } from './strings.ts';
 
 export type Command = 'run' | 'setup' | 'doctor' | 'update' | 'service';
@@ -14,6 +15,7 @@ const COMMANDS: readonly Command[] = ['run', 'setup', 'doctor', 'update', 'servi
 const HELP: Record<Command, Key> = { run: 'helpRun', setup: 'helpSetup', doctor: 'helpDoctor', update: 'helpUpdate', service: 'helpService' };
 
 type Runner = (args: ParsedArgs, ctx: CliContext) => Promise<number>;
+type SetupModule = Pick<typeof import('./setup.ts'), 'run' | 'offerSetup'>;
 
 export interface MainDeps {
   env?: Record<string, string | undefined>;
@@ -29,6 +31,10 @@ export interface MainDeps {
   offerSetup?: (ctx: CliContext) => Promise<number | null>;
   /** After that offer, before the double-clicked console closes. Default term.ts waitForEnter. */
   waitForEnter?: (prompt: string) => Promise<void>;
+  /** setup.ts, loaded on use; tests pass a recorder. */
+  setup?: () => Promise<SetupModule>;
+  /** The setup screens, loaded only on a terminal. Default loadSetupUi. */
+  loadSetupUi?: () => Promise<SetupUi>;
 }
 
 interface Globals {
@@ -72,10 +78,22 @@ export function scanGlobals(argv: string[]): Globals {
   return g;
 }
 
-async function defaultRunner(command: Exclude<Command, 'run'>): Promise<Runner> {
+/** The setup screens. OpenTUI and Solid load only here, on a terminal: `run` and plain runs never pull them in. */
+export async function loadSetupUi(): Promise<SetupUi> {
+  await (await import('../tui/load.ts')).prepareTui();
+  return (await import('../tui/setup/index.tsx')).setupUi;
+}
+
+const setupModule = async (deps: MainDeps): Promise<SetupModule> => (deps.setup ?? (() => import('./setup.ts')))();
+/** The screens for setup on a terminal; nothing (the plain run) otherwise. */
+const setupDeps = async (ctx: CliContext, deps: MainDeps) => (ctx.tty ? { ui: await (deps.loadSetupUi ?? loadSetupUi)() } : {});
+
+async function defaultRunner(command: Exclude<Command, 'run'>, deps: MainDeps): Promise<Runner> {
   switch (command) {
-    case 'setup':
-      return (await import('./setup.ts')).run;
+    case 'setup': {
+      const setup = await setupModule(deps);
+      return async (args, ctx) => setup.run(args, ctx, await setupDeps(ctx, deps));
+    }
     case 'doctor':
       return (await import('./doctor.ts')).run;
     case 'update':
@@ -136,7 +154,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number 
   }
 
   if (command !== 'run') {
-    const runner = deps.commands?.[command as Exclude<Command, 'run'>] ?? (await defaultRunner(command as Exclude<Command, 'run'>));
+    const runner = deps.commands?.[command as Exclude<Command, 'run'>] ?? (await defaultRunner(command as Exclude<Command, 'run'>, deps));
     return runner({ flags: {}, positionals: [command, ...g.positionals], rest: [] }, ctx);
   }
 
@@ -156,7 +174,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number 
   // up: the wizard, not a config error in a window that closes at once.
   const bare = argv.length === 0 && ctx.tty;
   if (bare && !existsSync(ctx.envFile) && !ctx.env.PUBLIC_URL) {
-    const offer = deps.offerSetup ?? (async (c: CliContext) => (await import('./setup.ts')).offerSetup(c));
+    const offer = deps.offerSetup ?? (async (c: CliContext) => (await setupModule(deps)).offerSetup(c, await setupDeps(c, deps)));
     let code: number | null;
     try {
       code = await offer(ctx);
