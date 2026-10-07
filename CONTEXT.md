@@ -75,6 +75,14 @@ How web traffic reaches the install: `direct` (the caddy helper terminates TLS),
 **Footprint**:
 What an install puts on its machine for a given media mode, ingress mode and TURN: the helpers it runs, the ports it binds and the exposures it opens.
 
+**Apply**:
+Setup's write-and-run phase, after the questions: it writes `telinha.env` and runs the install tasks.
+_Avoid_: Install (for this phase; an install is the folder and its file)
+
+**Apply task**:
+One step Apply runs and shows as a row, e.g. downloading a helper or registering the service.
+_Avoid_: Step (the setup screens' sidebar steps)
+
 ### Releases
 
 **Release tag**:

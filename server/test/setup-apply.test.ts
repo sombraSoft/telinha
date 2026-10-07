@@ -7,7 +7,7 @@ import type { ServiceManager, SpawnOutcome } from '../src/service/index.ts';
 import type { CliContext } from '../src/cli/args.ts';
 import type { Spinner, Term } from '../src/cli/term.ts';
 import {
-  backTarget, planTasks, runApply, silentOut, TASKS, type ApplyHooks, type ApplyOptions, type ApplyTarget, type SecretMemo, type TaskEvent, type TaskId,
+  backTarget, planTasks, runApply, silentOut, TaskList, TASKS, type ApplyHooks, type ApplyOptions, type ApplyTarget, type SecretMemo, type TaskId, type TaskRow,
 } from '../src/cli/setup/apply.ts';
 import { at } from '../src/cli/setup/apply-strings.ts';
 import { createDiscordSetup } from '../src/cli/setup/discord.ts';
@@ -173,14 +173,19 @@ const OPTS = (more: Partial<ApplyOptions> = {}): ApplyOptions => ({
   flags: { noService: false, noFirewall: false, noUpnp: false, noDoctor: false, offline: false }, ...more,
 });
 
-/** Records every event and every decision; decide answers from a script (then skip). */
+/** Each value in turn, a repeat of the one before dropped. */
+const changes = <T>(xs: T[]): T[] => xs.filter((x, i) => i === 0 || JSON.stringify(x) !== JSON.stringify(xs[i - 1]));
+
+/** Records every decision and every state of the task list; decide answers from a script (then skip). */
 function hooks(script: ('retry' | 'skip' | 'back' | 'abort')[] = []) {
-  const events: TaskEvent[] = [];
+  const tasks = new TaskList();
+  /** The rows after each change. */
+  const seen: TaskRow[][] = [];
+  tasks.subscribe(() => void seen.push(tasks.rows));
   const decided: [TaskId, string][] = [];
   const terminal: string[][] = [];
   let inTerminal = false;
   const h: ApplyHooks = {
-    emit: (e) => void events.push(e),
     decide: async (id, error) => (decided.push([id, error]), script.shift() ?? 'skip'),
     withTerminal: async (fn, intro) => {
       terminal.push(intro ?? []);
@@ -192,9 +197,14 @@ function hooks(script: ('retry' | 'skip' | 'back' | 'abort')[] = []) {
       }
     },
   };
-  const statuses = (id: TaskId) => events.filter((e) => e.id === id && (e.status !== 'running' || (!e.detail && !e.lines && !e.progress && !e.checks))).map((e) => e.status);
-  const lines = (id: TaskId) => events.filter((e) => e.id === id).flatMap((e) => e.lines ?? []).map((l) => `${l.kind} ${l.text}`);
-  return { h, events, decided, terminal, statuses, lines, inTerminal: () => inTerminal };
+  const row = (id: TaskId) => seen.flatMap((rows) => rows.filter((r) => r.id === id));
+  /** The statuses the row went through (a retry shows as running again). */
+  const statuses = (id: TaskId) => changes(row(id).map((r) => r.status));
+  const details = (id: TaskId) => changes(row(id).map((r) => r.detail).filter(Boolean));
+  const progress = (id: TaskId) => changes(row(id).flatMap((r) => (r.progress ? [r.progress] : [])));
+  /** The latest attempt's lines. */
+  const lines = (id: TaskId) => (tasks.rows.find((r) => r.id === id)?.lines ?? []).map((l) => `${l.kind} ${l.text}`);
+  return { h, tasks, seen, decided, terminal, statuses, details, progress, lines, inTerminal: () => inTerminal };
 }
 
 describe('planTasks', () => {
@@ -243,12 +253,12 @@ describe('planTasks', () => {
 });
 
 describe('runApply', () => {
-  test('events: every row pending first, then running and a final status; lines are what the plain output printed', async () => {
+  test('rows: every task pending first, then running and a final status; lines are what the plain output printed', async () => {
     const { w, sink, target, files } = make({ compiled: false, available: false });
     const r = hooks();
-    const result = await runApply(w, target, VALUES(), ['discord', 'config', 'binaries', 'service', 'start'], OPTS({ compiled: false }), r.h);
+    const result = await runApply(w, target, VALUES(), ['discord', 'config', 'binaries', 'service', 'start'], OPTS({ compiled: false }), r.h, r.tasks);
     expect(result.kind).toBe('done');
-    expect(r.events.slice(0, 5).map((e) => `${e.id} ${e.status}`)).toEqual(['discord pending', 'config pending', 'binaries pending', 'service pending', 'start pending']);
+    expect(r.seen[0]!.map((e) => `${e.id} ${e.status}`)).toEqual(['discord pending', 'config pending', 'binaries pending', 'service pending', 'start pending']);
     expect(r.statuses('discord')).toEqual(['pending', 'running', 'ok']);
     expect(r.statuses('config')).toEqual(['pending', 'running', 'ok']);
     // From source the service row says why nothing is installed.
@@ -257,14 +267,18 @@ describe('runApply', () => {
     // Nothing installed, nothing running: start it by hand, a warning.
     expect(r.statuses('start')).toEqual(['pending', 'running', 'warn']);
     expect(r.lines('config')).toEqual(['ok Wrote /opt/telinha/config/telinha.env']);
-    expect(r.events.find((e) => e.id === 'binaries' && e.detail)?.detail).toBe('Downloading LiveKit, Caddy...');
-    // The plain terminal got the very same lines, in order, as they came.
+    expect(r.details('binaries')).toEqual(['Downloading LiveKit, Caddy...']);
+    // The plain terminal got the very same lines, in order, as they came, under the tasks' headers.
     expect(sink.out).toEqual([
+      'step Discord',
       `ok Bot: Telinha Bot (app id ${APP})`,
       'ok Wrote /opt/telinha/config/telinha.env',
+      'step Programs',
       'spin Downloading LiveKit, Caddy...',
       'ok Programs ready in /opt/telinha/bin',
+      'step Service',
       'Running from source: no service is installed (the native binary installs one).',
+      'step Start',
       'Start it with: bun server/src/index.ts run',
     ]);
     if (result.kind === 'done') expect(result.tasks).toMatchObject({ discord: 'ok', config: 'ok', binaries: 'ok', service: 'skipped', start: 'warn', router: 'skipped' });
@@ -274,7 +288,7 @@ describe('runApply', () => {
   test('a failure asks decide: retry runs the task again, skip goes on', async () => {
     const { w, target, files } = make();
     const r = hooks(['retry', 'skip']);
-    const result = await runApply(w, target, VALUES({ ROLE_ID: '999999999999999999' }), ['discord', 'config'], OPTS(), r.h);
+    const result = await runApply(w, target, VALUES({ ROLE_ID: '999999999999999999' }), ['discord', 'config'], OPTS(), r.h, r.tasks);
     expect(r.decided).toEqual([['discord', 'Role 999999999999999999 does not exist in the server.'], ['discord', 'Role 999999999999999999 does not exist in the server.']]);
     expect(r.statuses('discord')).toEqual(['pending', 'running', 'fail', 'running', 'fail', 'skipped']);
     expect(result).toMatchObject({ kind: 'done', tasks: { discord: 'skipped', config: 'ok' } });
@@ -293,7 +307,7 @@ describe('runApply', () => {
     // The service never answers: the failure comes after the file.
     const after = make({ available: false });
     const r = hooks(['abort']);
-    expect(await runApply(after.w, after.target, VALUES(), ['config', 'service', 'start', 'doctor'], OPTS({ flags: { ...OPTS().flags, offline: true } }), r.h)).toEqual({ kind: 'aborted', wrote: true });
+    expect(await runApply(after.w, after.target, VALUES(), ['config', 'service', 'start', 'doctor'], OPTS({ flags: { ...OPTS().flags, offline: true } }), r.h, r.tasks)).toEqual({ kind: 'aborted', wrote: true });
     expect(r.decided[0]![0]).toBe('start');
     expect(r.decided[0]![1]).toContain('Telinha does not answer yet');
     expect(r.statuses('doctor')).toEqual(['pending']);
@@ -302,7 +316,7 @@ describe('runApply', () => {
   test('the file cannot be skipped: skipping it stops the run with nothing written', async () => {
     const { w, target, files } = make();
     const r = hooks(['skip']);
-    const result = await runApply(w, target, VALUES({ PUBLIC_URL: 'not a url' }), ['config', 'binaries', 'start'], OPTS(), r.h);
+    const result = await runApply(w, target, VALUES({ PUBLIC_URL: 'not a url' }), ['config', 'binaries', 'start'], OPTS(), r.h, r.tasks);
     expect(r.decided[0]![1]).toStartWith('the resulting configuration is invalid:');
     expect(r.statuses('config')).toEqual(['pending', 'running', 'fail']);
     expect(r.statuses('binaries')).toEqual(['pending']);
@@ -314,7 +328,7 @@ describe('runApply', () => {
     const { w, target } = make({ bins: async () => Promise.reject(new Error('boom')) });
     // downloadBinaries turns a failed download into a warning itself.
     const r = hooks();
-    expect(await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), r.h)).toMatchObject({ kind: 'done', tasks: { binaries: 'warn' } });
+    expect(await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), r.h, r.tasks)).toMatchObject({ kind: 'done', tasks: { binaries: 'warn' } });
     expect(r.lines('binaries')).toEqual(['fail Download failed: boom. telinha run tries again at start.']);
     const broken = make({ doctor: async () => Promise.reject(new Error('gone')) });
     broken.w.deps.control.available = () => Promise.reject(new Error('no control'));
@@ -322,7 +336,7 @@ describe('runApply', () => {
     broken.w.deps.serviceManager = () => {
       throw new Error('no manager');
     };
-    expect(await runApply(broken.w, broken.target, VALUES(), ['config', 'service'], OPTS(), rb.h)).toMatchObject({ kind: 'done', tasks: { service: 'skipped' } });
+    expect(await runApply(broken.w, broken.target, VALUES(), ['config', 'service'], OPTS(), rb.h, rb.tasks)).toMatchObject({ kind: 'done', tasks: { service: 'skipped' } });
     expect(rb.decided).toEqual([['service', 'no manager']]);
     expect(rb.lines('service')).toContain('fail no manager');
   });
@@ -335,7 +349,7 @@ describe('runApply', () => {
       const seen: { inside: boolean | null } = { inside: null };
       const r = hooks();
       m.w.deps.spawnInteractive = async () => ((seen.inside = r.inTerminal()), 0);
-      await runApply(m.w, m.target, VALUES(), ['config', 'binaries', 'service', 'router', 'start', 'cert', 'doctor'], OPTS({ sysctl: mode }), r.h);
+      await runApply(m.w, m.target, VALUES(), ['config', 'binaries', 'service', 'router', 'start', 'cert', 'doctor'], OPTS({ sysctl: mode }), r.h, r.tasks);
       if (mode === 'sudo') {
         expect(r.terminal).toEqual([[
           'Ports 80, 443 are below 1024: Linux lets only root bind them unless one setting changes.',
@@ -363,10 +377,9 @@ describe('runApply', () => {
       },
     });
     const r = hooks();
-    await runApply(w, target, VALUES(), ['config', 'service'], OPTS(), r.h);
+    await runApply(w, target, VALUES(), ['config', 'service'], OPTS(), r.h, r.tasks);
     expect(r.terminal).toEqual([]);
-    const details = r.events.filter((e) => e.id === 'service' && e.detail).map((e) => e.detail);
-    expect(details).toEqual(['Approve the Windows administrator prompt…']);
+    expect(r.details('service')).toEqual(['Approve the Windows administrator prompt…']);
     expect(r.lines('service')).toContain('ok Background task');
     expect(r.statuses('service').at(-1)).toBe('ok');
   });
@@ -398,7 +411,7 @@ describe('runApply', () => {
     expect(r1.LIVEKIT_API_KEY).toBe('telinhaabcdef12');
   });
 
-  test('byte progress from the downloads: events per tool, and the plain terminal hears it', async () => {
+  test('byte progress from the downloads: per tool on the row, and the plain terminal hears it', async () => {
     const { w, target, sink } = make({
       bins: async (_c, _p, log, progress) => {
         log('[bins] downloading livekit.tar.gz');
@@ -408,22 +421,21 @@ describe('runApply', () => {
       },
     });
     const r = hooks();
-    await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), r.h);
-    const progress = r.events.filter((e) => e.progress).map((e) => e.progress);
-    expect(progress).toEqual([
+    await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), r.h, r.tasks);
+    expect(r.progress('binaries')).toEqual([
       { done: 0, total: 2_000_000, unit: 'bytes', label: 'livekit' },
       { done: 2_000_000, total: 2_000_000, unit: 'bytes', label: 'livekit' },
       { done: 512, total: null, unit: 'bytes', label: 'caddy' },
     ]);
-    expect(r.events.filter((e) => e.id === 'binaries' && e.detail).map((e) => e.detail)).toEqual(['Downloading LiveKit, Caddy...', 'downloading livekit.tar.gz']);
+    expect(r.details('binaries')).toEqual(['Downloading LiveKit, Caddy...', 'downloading livekit.tar.gz']);
     expect(sink.progressCalls).toEqual([[0, 2_000_000, 'livekit'], [2_000_000, 2_000_000, 'livekit'], [512, null, 'caddy']]);
   });
 
   test('the certificate wait reports the time waited against its limit', async () => {
     const { w, target, rec } = make({ available: true, cert: false });
     const r = hooks();
-    await runApply(w, target, VALUES(), ['config', 'start', 'cert'], OPTS(), r.h);
-    const waits = r.events.filter((e) => e.id === 'cert' && e.progress).map((e) => e.progress!);
+    await runApply(w, target, VALUES(), ['config', 'start', 'cert'], OPTS(), r.h, r.tasks);
+    const waits = r.progress('cert');
     expect(waits.length).toBeGreaterThan(10);
     expect(waits.every((p) => p.unit === 'ms' && p.total === 90_000)).toBe(true);
     expect(rec.cert).toBe(waits.length + 1);
@@ -437,12 +449,9 @@ describe('runApply', () => {
     ];
     const data = make({ checks });
     const r = hooks();
-    const result = await runApply(data.w, data.target, VALUES(), ['config', 'doctor'], OPTS(), r.h);
-    const running = r.events.filter((e) => e.id === 'doctor' && e.checks);
-    expect(running.map((e) => [e.detail, e.progress, e.checks!.length])).toEqual([
-      ['1 of 2 checks', { done: 1, total: 2, unit: 'items' }, 1],
-      ['2 of 2 checks', { done: 2, total: 2, unit: 'items' }, 2],
-    ]);
+    const result = await runApply(data.w, data.target, VALUES(), ['config', 'doctor'], OPTS(), r.h, r.tasks);
+    expect(r.details('doctor')).toEqual(['1 of 2 checks', '2 of 2 checks']);
+    expect(r.progress('doctor')).toEqual([{ done: 1, total: 2, unit: 'items' }, { done: 2, total: 2, unit: 'items' }]);
     expect(result).toMatchObject({ kind: 'done', doctor: checks, tasks: { doctor: 'warn' } });
     expect(r.lines('doctor')).toEqual(['warn 1 ok · 0 warnings · 1 failed · 0 skipped']);
     expect(data.rec.doctor).toEqual([]);
@@ -457,13 +466,13 @@ describe('runApply', () => {
     const m = make();
     const r = hooks();
     const values = VALUES({ DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'my-group', DUCKDNS_TOKEN: DUCK, PUBLIC_URL: 'https://my-group.duckdns.org' });
-    await runApply(m.w, m.target, values, ['duckdns', 'config'], OPTS(), r.h);
+    await runApply(m.w, m.target, values, ['duckdns', 'config'], OPTS(), r.h, r.tasks);
     expect(m.rec.ddns).toEqual(['my-group 203.0.113.9']);
     expect(r.lines('duckdns')).toEqual(['ok my-group.duckdns.org now points at 203.0.113.9.']);
     const bad = make();
     bad.w.deps.ddns = () => ({ update: async () => {}, last: () => ({ ip: '', at: 1, ok: false, error: 'KO' }) });
     const rb = hooks(['abort']);
-    expect(await runApply(bad.w, bad.target, values, ['duckdns', 'config'], OPTS(), rb.h)).toEqual({ kind: 'aborted', wrote: false });
+    expect(await runApply(bad.w, bad.target, values, ['duckdns', 'config'], OPTS(), rb.h, rb.tasks)).toEqual({ kind: 'aborted', wrote: false });
     expect(rb.decided).toEqual([['duckdns', 'DuckDNS did not accept it: KO']]);
   });
 
@@ -475,5 +484,101 @@ describe('runApply', () => {
     s.stop();
     expect(out.colors).toBe(false);
     expect(out.link('https://x')).toBe('https://x');
+  });
+});
+
+describe('TaskList', () => {
+  const plain: ApplyHooks = { decide: async () => 'skip', withTerminal: (fn) => fn() };
+
+  test('a retry starts the row over: it shows the latest attempt only', async () => {
+    const { w, target } = make();
+    const tasks = new TaskList();
+    const atDecide: TaskRow[] = [];
+    const script = ['retry', 'skip'] as const;
+    const hooks: ApplyHooks = { ...plain, decide: async () => (atDecide.push(tasks.rows[0]!), script[atDecide.length - 1]!) };
+    await runApply(w, target, VALUES({ ROLE_ID: '999999999999999999' }), ['discord', 'config'], OPTS(), hooks, tasks);
+    const lines = ['ok Bot: Telinha Bot (app id 111111111111111111)', 'fail Role 999999999999999999 does not exist in the server.'];
+    expect(atDecide.map((r) => [r.status, ...r.lines.map((l) => `${l.kind} ${l.text}`)])).toEqual([['fail', ...lines], ['fail', ...lines]]);
+    expect(tasks.rows.map((r) => [r.id, r.status])).toEqual([['discord', 'skipped'], ['config', 'ok']]);
+  });
+
+  test('a spinner\'s next line is the row\'s result; a line without a spinner is not', async () => {
+    const { w, target } = make();
+    const tasks = new TaskList();
+    const seen: TaskRow[] = [];
+    tasks.subscribe(() => void seen.push(...tasks.rows.filter((r) => r.id === 'binaries')));
+    await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), plain, tasks);
+    // While the download runs the spinner is up and nothing has ended it.
+    expect(seen.find((r) => r.spinning)).toMatchObject({ status: 'running', detail: 'Downloading LiveKit, Caddy...', result: null });
+    const [config, binaries] = tasks.rows;
+    expect(binaries).toMatchObject({ status: 'ok', spinning: false, result: { kind: 'ok', text: 'Programs ready in /opt/telinha/bin' } });
+    expect(config).toMatchObject({ status: 'ok', result: null, lines: [{ kind: 'ok', text: 'Wrote /opt/telinha/config/telinha.env' }] });
+  });
+
+  test('what is left to do: a warning with its explanation, every router line; the summary leads with the headline', async () => {
+    const home = '/home/me/.local/share/telinha';
+    const files = { '/proc/sys/net/ipv4/ip_unprivileged_port_start': '1024', [`${home}/bin/telinha`]: 'x' };
+    const { w, target } = make({ isRoot: false, home, files, available: true });
+    const tasks = new TaskList();
+    await runApply(w, target, VALUES(), ['config', 'service', 'router', 'start'], OPTS({ sysctl: 'manual' }), plain, tasks);
+    const row = (id: TaskId) => tasks.rows.find((r) => r.id === id)!;
+    expect(row('service').status).toBe('warn');
+    expect(row('service').todo.map((l) => l.kind)).toEqual(['warn', 'info']);
+    expect(row('service').todo[0]!.text).toBe('The setting was not changed.');
+    expect(row('service').todo[1]!.text).toStartWith('To use 80/443 later: sudo sh -c');
+    expect(row('router').todo).toEqual(row('router').lines);
+    expect(row('config').todo).toEqual([]);
+
+    const summary = tasks.summary();
+    expect(summary.map((r) => [r.id, r.status])).toEqual([['config', 'ok'], ['service', 'warn'], ['router', 'ok'], ['start', 'ok']]);
+    const at = (id: TaskId) => summary.find((r) => r.id === id)!;
+    expect(at('config')).toEqual({ id: 'config', status: 'ok', headline: { kind: 'ok', text: `Wrote ${home}/config/telinha.env` }, todo: [] });
+    // The router's first line heads its row; the rest are what is left to do.
+    expect(at('router').headline).toEqual(row('router').lines[0]!);
+    expect(at('router').todo).toEqual(row('router').lines.slice(1));
+    // A warning row heads with how it went, its warning under it.
+    expect(at('service').headline?.kind).toBe('ok');
+    expect(at('service').todo).toEqual(row('service').todo);
+  });
+
+  test('the summary leaves out what has not finished; a failure heads with its last failed line', async () => {
+    const { w, target } = make({ available: false });
+    const tasks = new TaskList();
+    const offline = OPTS({ flags: { ...OPTS().flags, offline: true } });
+    await runApply(w, target, VALUES(), ['config', 'service', 'start', 'doctor'], offline, { ...plain, decide: async () => 'abort' }, tasks);
+    expect(tasks.rows.map((r) => r.status)).toEqual(['ok', 'ok', 'fail', 'pending']);
+    const summary = tasks.summary();
+    expect(summary.map((r) => [r.id, r.status])).toEqual([['config', 'ok'], ['service', 'ok'], ['start', 'fail']]);
+    expect(summary[2]!.headline).toEqual(tasks.rows[2]!.lines.findLast((l) => l.kind === 'fail')!);
+    expect(summary[2]!.headline?.text).toContain('Telinha does not answer yet');
+  });
+
+  test('wrote is the latest run\'s file, wroteAny any run\'s; a new run starts the rows over', async () => {
+    const tasks = new TaskList();
+    expect([tasks.wrote, tasks.wroteAny, tasks.rows]).toEqual([false, false, []]);
+    const first = make();
+    await runApply(first.w, first.target, VALUES(), ['config'], OPTS(), plain, tasks);
+    expect([tasks.wrote, tasks.wroteAny]).toEqual([true, true]);
+    const again = make();
+    await runApply(again.w, again.target, VALUES({ DISCORD_TOKEN: 'nope' }), ['discord', 'config'], OPTS(), { ...plain, decide: async () => 'abort' }, tasks);
+    expect([tasks.wrote, tasks.wroteAny]).toEqual([false, true]);
+    expect(tasks.rows.map((r) => [r.id, r.status])).toEqual([['discord', 'fail'], ['config', 'pending']]);
+  });
+
+  test('subscribe hears every change until it unsubscribes; rows is a copy', async () => {
+    const tasks = new TaskList();
+    let calls = 0;
+    const off = tasks.subscribe(() => void calls++);
+    const m = make();
+    await runApply(m.w, m.target, VALUES(), ['config'], OPTS(), plain, tasks);
+    // The plan, the attempt, the line, the end.
+    expect(calls).toBe(4);
+    off();
+    await runApply(m.w, m.target, VALUES(), ['config'], OPTS(), plain, tasks);
+    expect(calls).toBe(4);
+    const rows = tasks.rows;
+    rows[0]!.lines.push({ kind: 'fail', text: 'mine' });
+    rows[0]!.status = 'fail';
+    expect(tasks.rows[0]).toMatchObject({ status: 'ok', lines: [{ kind: 'ok', text: 'Wrote /opt/telinha/config/telinha.env' }] });
   });
 });

@@ -20,7 +20,7 @@ import { autostartEnabled, defaultTrayLauncher, trayDistPath, trayExePath } from
 import { assertOneStdin, GLOBAL_FLAGS, parseArgs, readSecretSource, UsageError, type ArgSpec, type CliContext, type ParsedArgs } from './args.ts';
 import { createControlClient } from './control.ts';
 import { at } from './setup/apply-strings.ts';
-import { planTasks, runApply, silentOut, TASKS, todoLines, type ApplyHooks, type ApplyOptions, type ApplyResult, type ApplyTarget, type SecretMemo, type TaskId, type TaskLine, type TaskStatus } from './setup/apply.ts';
+import { planTasks, runApply, silentOut, TaskList, TASKS, type ApplyHooks, type ApplyOptions, type ApplyResult, type ApplyTarget, type SecretMemo, type SummaryRow, type TaskLine } from './setup/apply.ts';
 import { createDiscordSetup } from './setup/discord.ts';
 import { MANAGED_KEYS } from './setup/envwrite.ts';
 import { defaultOsName, detectHost, routerLabel, type HostInfo } from './setup/host.ts';
@@ -288,26 +288,11 @@ function applyOptions(ctx: CliContext, flags: Flags, docker: boolean, o: Pick<Ap
 
 const textOf = (locale: Locale, x: Text) => ('raw' in x ? x.raw : q(locale, x.key, x.params));
 
-/** The plain run's task headers (the setup screens show the task labels instead). */
-const HEADERS: Partial<Record<TaskId, SKey>> = {
-  discord: 'discordTitle', binaries: 'binsTitle', service: 'serviceTitle', router: 'routerTitle', start: 'startTitle', doctor: 'doctorTitle',
+/** No one to ask: up to the file a failure leaves nothing written; after it, what is left still helps. */
+const plainHooks: ApplyHooks = {
+  decide: async (id) => (id === 'discord' || id === 'duckdns' || id === 'config' ? 'abort' : 'skip'),
+  withTerminal: (fn) => fn(),
 };
-
-/** Lines as they come, a header when a task starts, and no one to ask. */
-function plainHooks(w: Wizard): ApplyHooks {
-  const started = new Set<TaskId>();
-  return {
-    emit(e) {
-      if (e.status !== 'running' || started.has(e.id)) return;
-      started.add(e.id);
-      const header = HEADERS[e.id];
-      if (header) w.out.step(w.s(header));
-    },
-    // Up to the file a failure leaves nothing written; after it, what is left still helps.
-    decide: async (id) => (id === 'discord' || id === 'duckdns' || id === 'config' ? 'abort' : 'skip'),
-    withTerminal: (fn) => fn(),
-  };
-}
 
 async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o: { stdin?: () => Promise<string> }): Promise<number> {
   const docker = !!flags.docker;
@@ -326,7 +311,7 @@ async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o:
   const w = makeWizard(ctx, deps, ctx.locale, host, { docker, out: deps.term(ctx.locale) });
   w.out.info(hostLine(w));
   const opts = applyOptions(ctx, flags, docker, { sysctl: 'auto', rotateCookie: false, doctorMode: 'cli', tray: trayFromFlags(flags, env) });
-  const result = await runApply(w, l, values, planTasks(values, opts), opts, plainHooks(w));
+  const result = await runApply(w, l, values, planTasks(values, opts), opts, plainHooks);
   if (result.kind !== 'done') return 1;
   nextSteps(w, values, { file: l.shown });
   return result.code;
@@ -339,74 +324,24 @@ async function portStart(deps: SetupDeps): Promise<number | null> {
   return Number.isInteger(n) ? n : null;
 }
 
-/** One task's latest attempt, as the setup screens' row has it. */
-interface RanTask {
-  status: TaskStatus;
-  lines: TaskLine[];
-  /** The line that ended the task's spinner ("Service installed"). */
-  result: TaskLine | null;
-  spinning: boolean;
-}
-
-/** What the plain epilogue needs from the task list the screens showed. */
-interface Ran { plan: TaskId[]; tasks: Map<TaskId, RanTask> }
-
-function tracker(): { ran: Ran; track(plan: TaskId[]): (e: Parameters<ApplyHooks['emit']>[0]) => void } {
-  const ran: Ran = { plan: [], tasks: new Map() };
-  return {
-    ran,
-    track(plan) {
-      ran.plan = plan;
-      ran.tasks.clear();
-      return (e) => {
-        let t = ran.tasks.get(e.id);
-        // A bare 'running' starts an attempt (a retry starts clean), as on the screens.
-        if (!t || (e.status === 'running' && !e.detail && !e.lines && !e.progress && !e.checks)) {
-          t = { status: e.status, lines: [], result: null, spinning: false };
-          ran.tasks.set(e.id, t);
-        }
-        t.status = e.status;
-        if (e.detail !== undefined) t.spinning = true;
-        if (e.lines?.length) {
-          if (t.spinning) t.result = e.lines[0]!;
-          t.spinning = false;
-          t.lines.push(...e.lines);
-        }
-      };
-    },
-  };
-}
-
-/** The line a task's summary row shows: what its spinner ended with, the failure, or the line that says it all. */
-function headline(id: TaskId, t: RanTask): TaskLine | undefined {
-  // The router's lines are a list to read top down (what was found, what is left to do).
-  if (id === 'router') return t.lines[0];
-  if (t.status === 'fail') return t.lines.findLast((l) => l.kind === 'fail') ?? t.lines.at(-1);
-  return t.result ?? t.lines.find((l) => l.kind === 'ok') ?? t.lines.at(-1);
-}
-
-/** One row per task that ran: ✓/!/✗/– label: its headline; under it what is left to do (todoLines). */
-function summary(out: Out, locale: Locale, ran: Ran): void {
-  const rows = ran.plan.filter((id) => ['ok', 'warn', 'fail', 'skipped'].includes(ran.tasks.get(id)?.status ?? ''));
+/** One row per finished task: ✓/!/✗/– label: its headline; under it what else is left to do. */
+function summary(out: Out, locale: Locale, rows: SummaryRow[]): void {
   if (!rows.length) return;
   out.step(at(locale, 'summaryTitle'));
   const mark = (k: TaskLine['kind']) => (k === 'ok' ? out.style.green('✓') : k === 'warn' ? out.style.yellow('!') : k === 'fail' ? out.style.red('✗') : ' ');
-  for (const id of rows) {
-    const t = ran.tasks.get(id)!;
-    const label = at(locale, TASKS[id].label);
-    const head = headline(id, t);
-    const [first = '', ...more] = head?.text.split('\n') ?? [];
-    const line = head ? `${label}: ${first}` : label;
-    if (t.status === 'ok') out.ok(line);
-    else if (t.status === 'warn') out.warn(line);
-    else if (t.status === 'fail') out.fail(line);
+  for (const r of rows) {
+    const label = at(locale, TASKS[r.id].label);
+    const [first = '', ...more] = r.headline?.text.split('\n') ?? [];
+    const line = r.headline ? `${label}: ${first}` : label;
+    if (r.status === 'ok') out.ok(line);
+    else if (r.status === 'warn') out.warn(line);
+    else if (r.status === 'fail') out.fail(line);
     else out.line(`${out.style.dim('–')} ${line}`);
     for (const m of more) out.line(`  ${m}`);
-    for (const l of todoLines(id, t.lines)) {
-      if (l === head) continue;
+    for (const l of r.todo) {
       const [a = '', ...rest] = l.text.split('\n');
       out.line(`    ${mark(l.kind)} ${a}`);
-      for (const r of rest) out.line(`      ${r}`);
+      for (const x of rest) out.line(`      ${x}`);
     }
   }
 }
@@ -432,25 +367,17 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
   host.catch(() => {});
 
   const memo: SecretMemo = { made: {} };
-  const { ran, track } = tracker();
-  let applied: Values | null = null;
   // Across re-applies: an earlier attempt's telinha.env stays on disk whatever the last one did.
-  let wroteAny = false;
+  const tasks = new TaskList();
+  let applied: Values | null = null;
   const apply = async (a: { rotateCookie: boolean }, hooks: ApplyHooks): Promise<ApplyResult> => {
     const h = await host;
     const values = session.values();
     const chosen = session.applyOptions();
     const opts = applyOptions(ctx, flags, docker, { sysctl: chosen.sysctl ?? 'auto', rotateCookie: a.rotateCookie, doctorMode: 'data', secrets: memo, tray: chosen.tray });
-    const plan = planTasks(values, opts);
-    const record = track(plan);
     applied = values;
     const w = makeWizard(ctx, deps, session.locale, h, { docker, out: silentOut() });
-    const emit: ApplyHooks['emit'] = (e) => {
-      record(e);
-      if (e.id === 'config' && (e.status === 'ok' || e.status === 'warn')) wroteAny = true;
-      hooks.emit(e);
-    };
-    return runApply(w, l, values, plan, opts, { ...hooks, emit });
+    return runApply(w, l, values, planTasks(values, opts), opts, hooks, tasks);
   };
   const doctor = docker || flags['no-doctor'] ? null : {
     buildContext: async () => (await import('./doctor.ts')).buildCheckContext({ ...ctx, locale: session.locale }, { local: false, control: deps.control }),
@@ -467,7 +394,7 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
 
   let result: SetupUiResult;
   try {
-    result = await ui.run({ ctx, version: ctx.version, docker, session, apply, offer: o.offer, doctor, shownFile: l.shown });
+    result = await ui.run({ ctx, version: ctx.version, docker, session, tasks, apply, offer: o.offer, doctor, shownFile: l.shown });
   } finally {
     session.dispose();
   }
@@ -476,17 +403,15 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
   const locale = session.locale;
   const out = deps.term(locale);
   if (result.kind === 'declined') return null;
-  const config = ran.tasks.get('config')?.status;
-  const wrote = config === 'ok' || config === 'warn';
   // The last attempt did not get to the file, an earlier one did: say so instead of "nothing was written".
-  const notWritten = () => (wroteAny ? out.warn(t(locale, 'wroteEarlier', { file: l.shown })) : ctx.stderr(t(locale, 'aborted')));
+  const notWritten = () => (tasks.wroteAny ? out.warn(t(locale, 'wroteEarlier', { file: l.shown })) : ctx.stderr(t(locale, 'aborted')));
   if (result.kind === 'quit' || result.result.kind === 'back') {
-    if (wrote || wroteAny) summary(out, locale, ran);
-    if (!wrote) notWritten();
+    if (tasks.wroteAny) summary(out, locale, tasks.summary());
+    if (!tasks.wrote) notWritten();
     return result.kind === 'quit' && result.reason === 'ctrl-c' ? 130 : 1;
   }
   const r = result.result;
-  summary(out, locale, ran);
+  summary(out, locale, tasks.summary());
   if (r.kind === 'aborted') {
     if (!r.wrote) notWritten();
     return 1;

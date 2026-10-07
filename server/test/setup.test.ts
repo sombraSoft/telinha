@@ -11,7 +11,7 @@ import type { InstallResult, ServiceManager, SpawnOutcome } from '../src/service
 import type { CliContext } from '../src/cli/args.ts';
 import type { Spinner, Term } from '../src/cli/term.ts';
 import { offerSetup, run } from '../src/cli/setup.ts';
-import type { ApplyHooks, TaskEvent, TaskId } from '../src/cli/setup/apply.ts';
+import type { ApplyHooks, TaskId } from '../src/cli/setup/apply.ts';
 import { createDiscordSetup } from '../src/cli/setup/discord.ts';
 import type { QuestionId } from '../src/cli/setup/model.ts';
 import type { Notice, QuestionView, ReviewRow, SetupSession } from '../src/cli/setup/session.ts';
@@ -67,7 +67,7 @@ interface UiScript {
   decide?: (id: TaskId, error: string) => 'retry' | 'skip' | 'back' | 'abort';
 }
 
-/** The setup screens, scripted: answers through the session, then apply with recording hooks. */
+/** The setup screens, scripted: answers through the session, then apply, its task rows written down as they change. */
 class FakeUi implements SetupUi {
   context: SetupUiContext | null = null;
   first: QuestionView | null = null;
@@ -77,7 +77,6 @@ class FakeUi implements SetupUi {
   /** Hints, links, lookup notes and Review notes the cards showed. */
   seen: string[] = [];
   rows: ReviewRow[] = [];
-  events: TaskEvent[] = [];
   terminal: string[][] = [];
   decisions: [TaskId, string][] = [];
   private log: string[] = [];
@@ -88,13 +87,23 @@ class FakeUi implements SetupUi {
     return this.log.join('\n');
   }
 
+  /** Each row's new detail and new lines, as a screen would show them. */
+  watch(tasks: SetupUiContext['tasks']): () => void {
+    const shown = new Map<TaskId, { detail: string; lines: number }>();
+    return tasks.subscribe(() => {
+      for (const r of tasks.rows) {
+        const was = shown.get(r.id) ?? { detail: '', lines: 0 };
+        // A retry's row starts clean.
+        if (r.lines.length < was.lines) was.lines = 0;
+        if (r.detail && r.detail !== was.detail) this.log.push(`spin ${r.detail}`);
+        for (const l of r.lines.slice(was.lines)) this.log.push(l.kind === 'info' ? l.text : `${l.kind} ${l.text}`);
+        shown.set(r.id, { detail: r.detail, lines: r.lines.length });
+      }
+    });
+  }
+
   hooks(): ApplyHooks {
     return {
-      emit: (e) => {
-        this.events.push(e);
-        if (e.detail) this.log.push(`spin ${e.detail}`);
-        for (const l of e.lines ?? []) this.log.push(l.kind === 'info' ? l.text : `${l.kind} ${l.text}`);
-      },
       decide: async (id, error) => {
         this.decisions.push([id, error]);
         return this.script.decide?.(id, error) ?? 'skip';
@@ -134,7 +143,12 @@ class FakeUi implements SetupUi {
     this.rows = s.reviewRows();
     this.seen.push(...s.reviewNotes());
     if (this.script.review === 'quit') return { kind: 'quit', reason: 'review' };
-    return { kind: 'applied', result: await c.apply({ rotateCookie: this.script.review === 'rotate' }, this.hooks()) };
+    const stop = this.watch(c.tasks);
+    try {
+      return { kind: 'applied', result: await c.apply({ rotateCookie: this.script.review === 'rotate' }, this.hooks()) };
+    } finally {
+      stop();
+    }
   }
 }
 

@@ -297,8 +297,9 @@ export interface DriverOptions {
   doctorChecks?: Check[];
   /** Replaces the doctor hooks setup.ts gives (its context builder reads the real machine). */
   doctor?: SetupUiContext['doctor'];
-  /** Replaces the install: a test plays the task events itself. */
+  /** Replaces the install and its task list: a test shows rows of its own. */
   apply?: SetupUiContext['apply'];
+  tasks?: SetupUiContext['tasks'];
 }
 
 /** The setup screens on OpenTUI's test renderer: what run() returns is what the user picked. */
@@ -316,7 +317,7 @@ export class Driver implements SetupUi {
     this.context = c;
     let finish!: (r: SetupUiResult) => void;
     const result = new Promise<SetupUiResult>((r) => (finish = r));
-    const ctx: SetupUiContext = { ...c, doctor: c.doctor && this.o.doctor !== undefined ? this.o.doctor : c.doctor, ...(this.o.apply ? { apply: this.o.apply } : {}) };
+    const ctx: SetupUiContext = { ...c, doctor: c.doctor && this.o.doctor !== undefined ? this.o.doctor : c.doctor, ...(this.o.apply ? { apply: this.o.apply } : {}), ...(this.o.tasks ? { tasks: this.o.tasks } : {}) };
     const s = await openApp(
       () =>
         createComponent(SetupApp, {
