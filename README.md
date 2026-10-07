@@ -582,6 +582,12 @@ exactly `telinha.exe`, `telinha-tray.exe` and `LICENSE`, a tray smoke test
 `telinha.exe` and `telinha-tray.exe` with a throwaway self-signed certificate
 and runs them, so a signature never breaks either.
 
+On a PR, the `changes` job skips the jobs a change cannot affect (`ci.yml`
+lists which paths each job builds): a Dockerfile-only PR runs `image`,
+`caddy`, `lint` and `gitleaks`. A change to shared config (`ci.yml`, any
+`package.json`, `bun.lock`, `bunfig.toml`, `tsconfig.json`, `mise.toml`,
+`mise.lock`, `global.json`) runs everything, and so does every push to `main`.
+
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
 Dockerfile (its `golang` and bun images included), `deploy/compose.yml`,
 GitHub Actions and everything in `versions.json`: the two downloaded binaries,

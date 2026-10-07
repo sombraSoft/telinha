@@ -17,7 +17,75 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Which areas a PR touches, so jobs that cannot be affected are skipped (a
+  # skipped job counts as passed in `required`). Shared config and lockfiles
+  # count as every area, and pushes to main always run everything.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      test: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.test == 'true' }}
+      e2e: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.e2e == 'true' }}
+      binaries: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.binaries == 'true' }}
+      docs: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.docs == 'true' }}
+      image: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.image == 'true' }}
+      caddy: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.caddy == 'true' }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        if: github.event_name == 'pull_request'
+        id: f
+        with:
+          filters: |
+            all:
+              - .github/workflows/ci.yml
+              - package.json
+              - '*/package.json'
+              - bun.lock
+              - bunfig.toml
+              - tsconfig.json
+              - mise.toml
+              - mise.lock
+              - global.json
+            test:
+              - 'server/**'
+              - 'web/**'
+              - 'docs/**'
+              - 'scripts/**'
+              - 'e2e/**'
+              - versions.json
+            e2e:
+              - 'server/**'
+              - 'web/**'
+              - 'e2e/**'
+              - playwright.config.ts
+              - versions.json
+            binaries:
+              - 'server/**'
+              - 'web/**'
+              - 'tray/**'
+              - 'scripts/**'
+              - versions.json
+            docs:
+              - 'docs/**'
+              - 'server/**'
+            image:
+              - Dockerfile
+              - .dockerignore
+              - 'server/**'
+              - 'web/**'
+              - 'deploy/**'
+              - 'scripts/**'
+              - versions.json
+            caddy:
+              - Dockerfile
+              - versions.json
+              - scripts/caddy-build.ts
+
   test:
+    needs: changes
+    if: needs.changes.outputs.test == 'true'
     name: test (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -39,6 +107,8 @@ jobs:
   # Browser tests against the real stack (LiveKit --dev + server + built page).
   # Not a required check yet.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -70,6 +140,8 @@ jobs:
   # Native binaries. Windows targets build on Windows: Bun writes the version
   # resource (ProductName etc.) only there. Not a required check yet.
   binaries:
+    needs: changes
+    if: needs.changes.outputs.binaries == 'true'
     name: binaries (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -484,6 +556,8 @@ jobs:
         run: bun scripts/versions.ts check
 
   docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -518,6 +592,8 @@ jobs:
   # smoke test checks its version and modules and validates the DNS-01 and TURN
   # (layer4, PROXY v2) Caddyfiles.
   image:
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -571,6 +647,8 @@ jobs:
   # Windows-only Go build break in a module bump shows up before release (the
   # image job covers linux). Not a required check.
   caddy:
+    needs: changes
+    if: needs.changes.outputs.caddy == 'true'
     name: caddy (windows-x64)
     runs-on: ubuntu-24.04
     steps:
@@ -592,10 +670,11 @@ jobs:
 
   # The one check the ruleset requires: it passes when every job in `needs`
   # passed (or was skipped), so adding, renaming or dropping a gating job is a
-  # change to this list, not to the ruleset.
+  # change to this list, not to the ruleset. `changes` is in it because its
+  # failure would skip the jobs it gates.
   required:
     if: always()
-    needs: [test, lint, gitleaks, image]
+    needs: [changes, test, lint, gitleaks, image]
     runs-on: ubuntu-24.04
     steps:
       - name: every gating job passed
