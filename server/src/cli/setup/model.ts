@@ -73,7 +73,7 @@ export type AnswerId = QuestionId | HiddenId;
 /**
  * Answers resolveValues always reads, whether or not they are in flowIds: the hidden ids
  * plus clientId, which is a visible question only offline; online it is filled by the
- * discordApp lookup (session) or by --client-id / the file (answersFromFlags, defaultAnswers).
+ * discordApp lookup (setup state) or by --client-id / the file (answersFromFlags, defaultAnswers).
  */
 export const ALWAYS_COUNTED: readonly AnswerId[] = [
   'publicUrl',

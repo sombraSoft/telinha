@@ -89,12 +89,15 @@
 
   const statLines = $derived.by(() => {
     if (!prefs.stats || !stats) return '';
-    const path = stats.relay === null ? '?' : `${stats.relay ? 'TURN' : t('stats.direct')} ${stats.rttMs}ms`;
+    const path =
+      stats.relay === null
+        ? t('stats.pathUnknown')
+        : t(stats.relay ? 'stats.viaTurn' : 'stats.toLivekit', { ms: stats.rttMs ?? '?' });
     return [
       `${stats.out ? t('stats.sending') : t('stats.receiving')} ${stats.width}×${stats.height} @ ${stats.fps} fps`,
       `${stats.mbps.toFixed(1)} Mbps · ${stats.codec}${stats.impl ? ` · ${stats.impl}` : ''}`,
       stats.out ? t('stats.limit', { reason: stats.limitation }) : t('stats.lost', { count: stats.lost }),
-      t('stats.server', { path }),
+      path,
     ].join('\n');
   });
 </script>

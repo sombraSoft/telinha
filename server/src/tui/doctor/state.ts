@@ -1,7 +1,7 @@
 // The doctor screen's state: check rows filled in live as runChecks reports,
 // re-runs with a fresh context, and the phone test (doctor/phone-test.ts: a
 // version signal bumped by its subscribe() makes the reads reactive, as the
-// setup store does for SetupSession).
+// setup store does for SetupState).
 import { type Accessor, batch, createComputed, createMemo, createSignal } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import type { Locale } from '../../cli/strings.ts';

@@ -1,16 +1,16 @@
 // One question at a time: the card (step badge, title, question, then a
 // picker or a field, the lookup's state, errors and notices) and the "About
 // this" pane beside it on wide terminals or under it. Everything shown comes
-// from the session's view: a secret is never in it, only whether one is kept.
+// from the setup state's view: a secret is never in it, only whether one is kept.
 import type { RGBA } from '@opentui/core';
 import { createMemo, createSignal, For, Match, Show, Switch } from 'solid-js';
 import { q } from '../../../cli/setup/qstrings.ts';
-import type { ActionId, QuestionView, SetupSession } from '../../../cli/setup/session.ts';
+import type { ActionId, QuestionView, SetupState } from '../../../cli/setup/state.ts';
 import { useLocale } from '../../strings.ts';
 import { c } from '../../theme.ts';
 import { CARD_CHROME, fit, useLayout, wrap } from '../../ui/layout.ts';
 import { Bold, Card, Field, HintPane, Picker, type PickOption, Spinner } from '../../ui/widgets.tsx';
-import type { SessionStore } from '../store.ts';
+import type { StateStore } from '../store.ts';
 
 type Color = string | RGBA;
 export interface Line {
@@ -80,8 +80,8 @@ export function splitExtra(lines: string[]): { lines: string[]; extra?: { head: 
 const ACTION = '\u0000';
 
 export interface QuestionProps {
-  session: SetupSession;
-  store: SessionStore;
+  state: SetupState;
+  store: StateStore;
   active: () => boolean;
   /** "Quit setup" on a lookup that cannot go on. */
   quit(): void;
@@ -190,11 +190,11 @@ function QuestionCard(p: QuestionProps) {
   // ---- answering
   const submit = (v: string | string[]) => {
     setQuiet(false);
-    void p.session.submit(v);
+    void p.state.submit(v);
   };
   const act = async (id: ActionId) => {
     if (id === 'quit') return p.quit();
-    await p.session.action(id);
+    await p.state.action(id);
     if (p.store.view()?.lookup.state === 'idle') setGen((g) => g + 1);
   };
   const pick = (v: string | string[]) => {

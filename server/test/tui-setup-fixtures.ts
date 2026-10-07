@@ -1,4 +1,4 @@
-// A fake machine for driving the real setup (session, apply, file writes)
+// A fake machine for driving the real setup (setup state, apply, file writes)
 // through the setup screens with OpenTUI's test renderer: Discord's REST API,
 // DuckDNS, a home router, an in-memory filesystem, a service manager that can
 // fail, byte progress that can be held mid-download, and a SetupUi that
@@ -218,7 +218,7 @@ export function machine(o: MachineOptions = {}) {
   let fails = o.serviceFails ?? 0;
   let writeFails = o.writeFails ?? 0;
   // Host detection waits for the public IP lookup (the router probe runs beside it, not in Docker);
-  // setup.ts hands the result to the session right after.
+  // setup.ts hands the result to the setup state right after.
   let looked!: () => void;
   const detected = new Promise<void>((r) => (looked = r)).then(() => Bun.sleep(10));
   let installed = false;
@@ -462,7 +462,7 @@ export async function startSetup(argv: string[], o: StartOptions = {}) {
   const driver = new Driver(o);
   const code = run({ flags: {}, positionals: [], rest: [] }, ctx, { ...m.deps, ui: driver });
   const s = await started(m, driver, code, err);
-  return { s, code, driver, term, out, err, ...m, session: () => driver.context!.session };
+  return { s, code, driver, term, out, err, ...m, state: () => driver.context!.state };
 }
 
 /** `telinha` alone without a telinha.env: the welcome card first. */
@@ -474,24 +474,24 @@ export async function startOffer(o: StartOptions = {}) {
   const driver = new Driver(o);
   const code = offerSetup(ctx, { ...m.deps, ui: driver });
   const s = await started(m, driver, code, err);
-  return { s, code, driver, term, out, err, ...m, session: () => driver.context!.session };
+  return { s, code, driver, term, out, err, ...m, state: () => driver.context!.state };
 }
 
 export type Started = Awaited<ReturnType<typeof startSetup>>;
 
 /**
- * Waits until the session shows `id` (or the Review) with no lookup running,
+ * Waits until the setup state shows `id` (or the Review) with no lookup running,
  * whatever the language; returns the frame.
  */
 export async function at(
-  r: Pick<Started, 's' | 'session'>,
+  r: Pick<Started, 's' | 'state'>,
   id: QuestionId | 'review',
   o: { running?: boolean; ms?: number } = {},
 ): Promise<string> {
   const end = Date.now() + (o.ms ?? 3000);
   for (;;) {
     await settle(r.s, 20);
-    const s = r.session();
+    const s = r.state();
     const here =
       id === 'review'
         ? s.screen() === 'review'
@@ -543,7 +543,7 @@ export async function homeDuckKeys(r: Started): Promise<void> {
 export async function defaultsToReview(r: Started): Promise<string> {
   for (let i = 0; i < 20; i++) {
     await settle(r.s, 20);
-    const s = r.session();
+    const s = r.state();
     if (s.screen() === 'review') return at(r, 'review');
     const v = s.current();
     if (v.lookup.state === 'running') continue;
