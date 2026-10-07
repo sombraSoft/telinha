@@ -1,6 +1,6 @@
 // The phone test page against the E2E stack: a phone test from the control
 // endpoint (as `telinha doctor` gets it), the one-time link, the page's run
-// through the /livekit relay, and the report the CLI would print.
+// through the /livekit signaling proxy, and the report the CLI would print.
 //
 // Needs the local control endpoint (/internal/*, token in <data>/run/control.token)
 // in the server the stack runs; without it the spec skips itself.

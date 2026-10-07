@@ -1,7 +1,7 @@
 // HTTP handler: the login gate in front of everything but /auth/*, /healthz,
 // the page's hashed assets, the doctor page (its own one-time cookie) and the
 // local control endpoint (its own token); Discord OAuth, LiveKit tokens for
-// open rooms, the member list (/auth/members), the LiveKit signaling relay
+// open rooms, the member list (/auth/members), the signaling proxy
 // (/livekit/*), the room page (/r/<code>) and /healthz.
 // Everything external is injected so tests drive it with plain Request objects.
 import { randomBytes } from 'node:crypto';
@@ -39,7 +39,7 @@ export interface Deps {
   log?: (...a: unknown[]) => void;
   /** run.ts: (req, data) => server.upgrade(req, { data }). */
   upgrade?: (req: Request, data: ProxyData) => boolean;
-  /** The /livekit/* relay (proxy.ts); unset = /livekit/* is 404. */
+  /** The /livekit/* signaling proxy (proxy.ts); unset = /livekit/* is 404. */
   proxy?: Pick<LivekitProxy, 'allows' | 'fetch' | 'upgradeData'>;
   /** /healthz: open rooms; default: the Room module's. */
   openRooms?: () => number;
@@ -57,7 +57,7 @@ export interface Deps {
   timeout?: (req: Request, seconds: number) => void;
   /** /doctor and /doctor/*: the phone test (doctor/routes.ts); null = not ours, 404. */
   doctor?: (req: Request, url: URL) => Promise<Response | null>;
-  /** A valid telinha_doctor cookie opens the /livekit relay (and nothing else) for the phone test. */
+  /** A valid telinha_doctor cookie opens the /livekit signaling proxy (and nothing else) for the phone test. */
   doctorCookie?: (value: string | undefined, now: number) => { id: string } | null;
 }
 
@@ -341,7 +341,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
 
     if (path.startsWith('/auth/')) return new Response('Not found', { status: 404 });
 
-    // The gate: everything below is for members only (the phone test may use the relay).
+    // The gate: everything below is for members only (the phone test may use the signaling proxy).
     const livekit = path === '/livekit' || path.startsWith('/livekit/');
     const doctor = livekit && Boolean(deps.doctorCookie?.(cookies[DOCTOR_COOKIE], now()));
     const s = doctor ? null : session();

@@ -173,10 +173,10 @@ export function startBot(o: {
     }
   }
 
-  // The whole guild once per gateway session (members, roles and presences of
+  // The whole guild once per gateway connection (members, roles and presences of
   // the online ones); the events below keep it current from there. A failed
   // load (fetch timeout, Discord hiccup) tries again: 30 s, 1, 2, 4... up to
-  // 10 min, until one works or a new session starts over.
+  // 10 min, until one works or a new connection starts over.
   let retry: ReturnType<typeof setTimeout> | null = null;
   let failures = 0;
   async function loadMembers() {

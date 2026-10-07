@@ -1,5 +1,6 @@
-// /livekit/* relay to the local LiveKit, behind the login gate in http.ts. Only
-// signaling passes here (small protobuf messages); media goes peer <-> LiveKit.
+// /livekit/*: the signaling proxy to the local LiveKit, behind the login gate
+// in http.ts. Only signaling passes here (small protobuf messages); media goes
+// peer <-> LiveKit.
 // Bun 1.4.2 (verified): server.upgrade(req, { data }) works after an await in fetch and returning undefined after it is fine; the client WebSocket takes binaryType 'arraybuffer' and close(code, reason).
 import type { ServerWebSocket, WebSocketHandler } from 'bun';
 
@@ -9,7 +10,7 @@ export interface ProxyData {
 }
 
 export interface LivekitProxy {
-  /** Only LiveKit's signaling (/rtc, /rtc/validate, /rtc/v1, ...) is relayed. */
+  /** Only LiveKit's signaling (/rtc, /rtc/validate, /rtc/v1, ...) is proxied. */
   allows(rest: string): boolean;
   /** HTTP (non-upgrade) request for /livekit/<rest>: forwarded to <apiUrl>/<rest><search>. */
   fetch(req: Request, rest: string, search: string): Promise<Response>;
@@ -69,7 +70,7 @@ export function createLivekitProxy(o: { apiUrl: string; log: (...a: unknown[]) =
   const wsBase = base.replace(/^http/, 'ws');
   const conns = new WeakMap<ServerWebSocket<ProxyData>, Conn>();
 
-  // Twirp (RoomService) needs the API secret anyway; this is defense in depth.
+  // Twirp (the LiveKit room API) needs the API secret anyway; this is defense in depth.
   // No percent escapes: an encoded slash could be decoded upstream into another route.
   const allows = (rest: string) => (rest === '/rtc' || rest.startsWith('/rtc/')) && !rest.includes('%');
   const notFound = () =>
