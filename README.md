@@ -548,11 +548,12 @@ them; the native updater and `telinha-update` ignore them unless pinned
 
 The `main` ruleset requires two checks. `required` is a job in `ci.yml` that
 passes only when the jobs it `needs` pass: `test (ubuntu-24.04)`,
-`test (windows-2025)`, `lint` (shellcheck of `deploy/install-docker.sh`,
-`deploy/install.sh`, `deploy/telinha-update` and `scripts/smoke.sh`, a
-PowerShell parse and pinned PSScriptAnalyzer run of `deploy/install.ps1`,
-actionlint, `bun scripts/versions.ts check`), `gitleaks` and `image` (builds
-both architectures, smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the
+`test (windows-2025)` (which also runs the tray's MSTest suite), `lint`
+(shellcheck of `deploy/install-docker.sh`, `deploy/install.sh`,
+`deploy/telinha-update` and `scripts/smoke.sh`, a PowerShell parse and pinned
+PSScriptAnalyzer run of `deploy/install.ps1`, actionlint,
+`bun scripts/versions.ts check`), `gitleaks` and `image` (builds both
+architectures, smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the
 PR title is a Conventional Commit with one of the types `feat`, `fix`, `docs`,
 `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; it runs again
 when the title is edited. Four jobs also run on every PR but are not
@@ -574,8 +575,8 @@ Telinha) of both Windows binaries. The `image` job runs the same two checks on
 library selected by `OPENTUI_LIBC=musl`. The binaries jobs
 install every OS and CPU package (`bun install --os='*' --cpu='*'`) so each target
 embeds its own OpenTUI library. On
-Windows that job also runs the tray's MSTest tests and builds it with the
-version, checks its version resource and `--version`, that each zip holds
+Windows that job also builds the tray with the version, checks its version
+resource and `--version`, that each zip holds
 exactly `telinha.exe`, `telinha-tray.exe` and `LICENSE`, a tray smoke test
 (started without elevation: `tray.json`, `telinha tray status`,
 `telinha tray stop`), and an Authenticode check that signs copies of

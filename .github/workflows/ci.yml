@@ -54,6 +54,7 @@ jobs:
               - 'docs/**'
               - 'scripts/**'
               - 'e2e/**'
+              - 'tray/**'
               - versions.json
             e2e:
               - 'server/**'
@@ -108,6 +109,15 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
+      # The tray's MSTest suite runs here rather than in the binaries job so a
+      # tray break (or a NuGet bump that causes one) fails the required check.
+      - if: runner.os == 'Windows'
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+      - name: tray tests
+        if: runner.os == 'Windows'
+        run: dotnet test tray/tests/telinha-tray.tests.csproj -c Release -nologo
 
   # Browser tests against the real stack (LiveKit --dev + server + built page).
   # Not a required check yet.
@@ -214,17 +224,16 @@ jobs:
       - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - run: bun run build
       - if: runner.os == 'Windows'
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x
-      # Tests first: dotnet test rebuilds the tray without -p:Version.
+      # The test job runs the tray's tests; this is only the versioned build the
+      # zips and the version resource check below need.
       - name: tray
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $v = (Get-Content package.json | ConvertFrom-Json).version
-          dotnet test tray/tests/telinha-tray.tests.csproj -c Release -nologo
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           dotnet build tray/telinha-tray.csproj -c Release -nologo -p:Version=$v
       # --smoke runs the host binary's --version and its terminal UI smoke, and
       # checks the binary sizes and that Babel was not bundled.
