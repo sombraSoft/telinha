@@ -1,5 +1,5 @@
 // The setup screens' root: header, the step sidebar, the card area and the
-// key help. Which card shows comes from the session (a question or the
+// key help. Which card shows comes from the setup state (a question or the
 // Review) or from here (the welcome card, the install, the doctor report).
 // Keys no screen used end here: Tab (sidebar), Esc / ← (back), Ctrl+C.
 import { type Accessor, createEffect, createSignal, Match, on, Show, Switch, useContext } from 'solid-js';
@@ -19,7 +19,7 @@ import { ApplyScreen } from './screens/apply.tsx';
 import { QuestionScreen } from './screens/question.tsx';
 import { ReviewScreen, stepBadge } from './screens/review.tsx';
 import { WelcomeScreen } from './screens/welcome.tsx';
-import { type ApplyStore, createApplyStore, createSessionStore, type SessionStore } from './store.ts';
+import { type ApplyStore, createApplyStore, createStateStore, type StateStore } from './store.ts';
 import { useS } from './strings.ts';
 
 export interface SetupAppProps {
@@ -34,7 +34,7 @@ export interface SetupAppProps {
 }
 
 export function SetupApp(p: SetupAppProps) {
-  const store = createSessionStore(p.c.session);
+  const store = createStateStore(p.c.state);
   const apply = createApplyStore(p.c.tasks);
   const chrome = createChrome();
   createEffect(() => p.setLocale?.(store.locale()));
@@ -47,16 +47,16 @@ export function SetupApp(p: SetupAppProps) {
   );
 }
 
-type Place = 'welcome' | 'session' | 'apply' | 'doctor';
+type Place = 'welcome' | 'questions' | 'apply' | 'doctor';
 
-function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
+function Root(p: SetupAppProps & { store: StateStore; apply: ApplyStore }) {
   const t = useT();
   const s = useS();
   const L = useLayout();
   const chrome = useContext(ChromeCtx);
-  const { session } = p.c;
+  const { state } = p.c;
   const { store, apply } = p;
-  const [place, setPlace] = createSignal<Place>(p.c.offer ? 'welcome' : 'session');
+  const [place, setPlace] = createSignal<Place>(p.c.offer ? 'welcome' : 'questions');
   const [focus, setFocus] = createSignal<'card' | 'sidebar'>('card');
   const [cursor, setCursor] = createSignal(0);
   const [applyNotice, setApplyNotice] = createSignal<'noBack' | 'quitAgain' | null>(null);
@@ -72,7 +72,7 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
     p.done(r);
   };
 
-  const screen = () => (place() === 'session' ? store.screen() : place());
+  const screen = () => (place() === 'questions' ? store.screen() : place());
   const cardActive = () => focus() === 'card';
   const asking = () => screen() === 'question' || screen() === 'review';
 
@@ -113,19 +113,19 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
     finish({ kind: 'applied', result: r });
   };
 
-  /** "Back to questions": the question the failed task is about (the session opens it by walking back from the Review). */
+  /** "Back to questions": the question the failed task is about (the setup state opens it by walking back from the Review). */
   const backTo = (id: TaskId) => {
-    setPlace('session');
+    setPlace('questions');
     setFocus('card');
     const target = TASKS[id].backTo;
-    if (session.screen() !== 'review' && !session.toReview()) return;
+    if (state.screen() !== 'review' && !state.toReview()) return;
     if (target === 'review') return;
     for (let i = 0; i < 100; i++) {
-      if (!session.back()) break;
-      if (session.current().id === target) return;
+      if (!state.back()) break;
+      if (state.current().id === target) return;
     }
     // Not asked on this run (sysctl, UPnP): the Review.
-    session.toReview();
+    state.toReview();
   };
 
   const onCtrlC = () => {
@@ -163,7 +163,7 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
         return true;
       }
       if (k.name === 'escape' || k.name === 'left') {
-        if (asking()) return session.back(), true;
+        if (asking()) return state.back(), true;
         if (screen() === 'apply') return setApplyNotice('noBack'), true;
       }
       return false;
@@ -172,7 +172,7 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
 
   const jump = (i: number) => {
     const step = sideSteps()[i];
-    if (step && session.jump(step.id as StepId)) setFocus('card');
+    if (step && state.jump(step.id as StepId)) setFocus('card');
   };
 
   // ---- key help per state
@@ -244,13 +244,13 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
                 <WelcomeScreen
                   envFile={p.c.offer?.envFile ?? p.c.shownFile}
                   active={cardActive}
-                  onGo={() => setPlace('session')}
+                  onGo={() => setPlace('questions')}
                   onQuit={() => finish({ kind: 'declined' })}
                 />
               </Match>
               <Match when={screen() === 'question'}>
                 <QuestionScreen
-                  session={session}
+                  state={state}
                   store={store}
                   active={cardActive}
                   quit={() => finish({ kind: 'quit', reason: 'review' })}
@@ -258,7 +258,7 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
               </Match>
               <Match when={screen() === 'review'}>
                 <ReviewScreen
-                  session={session}
+                  state={state}
                   store={store}
                   active={cardActive}
                   shownFile={p.c.shownFile}
@@ -274,7 +274,7 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
                   badge={() => stepBadge(store, 'install', store.locale())}
                   docker={p.c.docker}
                   shownFile={p.c.shownFile}
-                  webAddress={() => result()?.values.PUBLIC_URL ?? session.webAddress()}
+                  webAddress={() => result()?.values.PUBLIC_URL ?? state.webAddress()}
                   canDoctor={!!p.c.doctor}
                   notice={applyNoticeText}
                   active={cardActive}

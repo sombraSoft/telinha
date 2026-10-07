@@ -1,4 +1,4 @@
-// Same rule as the server (server/src/codes.ts): a room code is 2+2 or 3+3
+// Same rule as Telinha (server/src/codes.ts): a room code is 2+2 or 3+3
 // consonant-vowel syllables, "lamo-futi" or "lamofu-tibare". Rooms are named by
 // the bot's slash command; the page never makes one up.
 const S = '(?:[bdfgjklmnprstvz][aeiou])';

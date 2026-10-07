@@ -3,13 +3,13 @@
 // with a new cookie secret, back to the questions, or quit without writing.
 import { type Accessor, createMemo, createSignal, For, Show } from 'solid-js';
 import { q } from '../../../cli/setup/qstrings.ts';
-import type { ReviewRow, SetupSession } from '../../../cli/setup/session.ts';
+import type { ReviewRow, SetupState } from '../../../cli/setup/state.ts';
 import { useKeys } from '../../keys.ts';
 import { useLocale, useT } from '../../strings.ts';
 import { c } from '../../theme.ts';
 import { CARD_CHROME, fit, pad, useLayout, wrap } from '../../ui/layout.ts';
 import { Bold, Card, Picker, type PickOption } from '../../ui/widgets.tsx';
-import type { SessionStore } from '../store.ts';
+import type { StateStore } from '../store.ts';
 import { useS } from '../strings.ts';
 import { type Line, Lines, marked, paint, pickerRows } from './question.tsx';
 
@@ -20,16 +20,16 @@ const MIN_ROWS = 3;
 
 type Item = { kind: 'row'; row: ReviewRow } | { kind: 'line'; line: Line };
 
-/** "Review · Step 6 of 7" for a step the session has no question in. */
-export function stepBadge(store: SessionStore, id: string, locale: Parameters<typeof q>[0]): string {
+/** "Review · Step 6 of 7" for a step the setup state has no question in. */
+export function stepBadge(store: StateStore, id: string, locale: Parameters<typeof q>[0]): string {
   const steps = store.steps();
   const i = steps.findIndex((s) => s.id === id);
   return q(locale, 'badge', { step: steps[i]?.label ?? id, n: i + 1, total: steps.length });
 }
 
 export function ReviewScreen(p: {
-  session: SetupSession;
-  store: SessionStore;
+  state: SetupState;
+  store: StateStore;
   active: () => boolean;
   shownFile: string;
   docker: boolean;
@@ -152,7 +152,7 @@ export function ReviewScreen(p: {
 
   const choose = (v: string | string[]) => {
     if (v === 'apply' || v === 'rotate') return p.onApply(v === 'rotate');
-    if (v === 'back') return void p.session.back();
+    if (v === 'back') return void p.state.back();
     p.onQuit();
   };
 
