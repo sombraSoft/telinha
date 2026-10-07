@@ -1,4 +1,4 @@
-// `telinha run`: the service. Reads telinha.env, supervises livekit-server (with
+// `telinha run`: the Telinha process. Reads telinha.env, supervises livekit-server (with
 // MEDIA=self; MEDIA=cloud uses LiveKit Cloud) and caddy or cloudflared (per
 // INGRESS), gates every page behind the Discord login, carries LiveKit signaling
 // through the signaling proxy at /livekit (self only), serves rooms at
