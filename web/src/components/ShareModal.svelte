@@ -2,8 +2,7 @@
   import { untrack } from 'svelte';
   import head from '../assets/telinha-head.webp';
   import { t } from '../lib/i18n/i18n.svelte';
-  import { prefs } from '../lib/prefs.svelte';
-  import type { RoomController } from '../lib/room.svelte';
+  import type { RoomSession } from '../lib/room.svelte';
   import {
     FRAME_RATES,
     PRESETS,
@@ -20,7 +19,7 @@
     open = $bindable(false),
     fallback,
   }: {
-    rc: RoomController;
+    rc: RoomSession;
     open: boolean;
     /** Gets focus on close when the opener has gone (Quality vanishes when the share ends). */
     fallback?: HTMLElement;
@@ -29,13 +28,12 @@
   const id = $props.id();
   let dlg = $state<HTMLDialogElement>();
   // Edited here, saved only on Go live / Apply; Back throws it away.
-  let draft = $state<ShareSettings>({ ...prefs.share });
+  let draft = $state<ShareSettings>(untrack(() => ({ ...rc.shareSettings })));
   let opener: HTMLElement | null = null;
   let openedLive = false;
   let downOnBackdrop = false;
 
-  // While streaming it changes the live share instead of starting one. Audio
-  // is picked in the browser's picker, so it can't change mid-share.
+  // While streaming it changes the live share instead of starting one.
   const live = $derived(!!rc.share);
 
   // A real modal <dialog>: the browser traps focus, makes the page inert and
@@ -45,7 +43,7 @@
     if (!d) return;
     if (open && !d.open) {
       untrack(() => {
-        draft = { ...prefs.share };
+        draft = { ...rc.shareSettings };
         opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         openedLive = !!rc.share;
       });
@@ -90,9 +88,8 @@
 
   function submit() {
     open = false;
-    if (live) void rc.setShareSettings({ ...draft, audio: prefs.share.audio });
     // Still inside the click, so the browser's picker may open.
-    else void rc.startShare({ ...draft });
+    void rc.useShareSettings({ ...draft });
   }
 </script>
 
@@ -159,13 +156,13 @@
         name="audio"
         data-testid="share-audio"
         aria-describedby="{id}-audio-hint"
-        checked={live ? prefs.share.audio : draft.audio}
-        disabled={live}
+        checked={rc.canChangeAudio ? draft.audio : rc.shareSettings.audio}
+        disabled={!rc.canChangeAudio}
         onchange={(e) => (draft.audio = e.currentTarget.checked)}
       />
       <span>{t('share.audio')}</span>
     </label>
-    <p class="hint" id="{id}-audio-hint">{live ? t('share.audioLocked') : t('share.audioHint')}</p>
+    <p class="hint" id="{id}-audio-hint">{rc.canChangeAudio ? t('share.audioHint') : t('share.audioLocked')}</p>
 
     <div class="actions">
       <button class="btn ghost" data-testid="share-back" onclick={() => (open = false)}>{t('share.back')}</button>

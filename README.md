@@ -429,8 +429,8 @@ A Telinha link does not live forever:
   secret: the login gate is.
 - Every `POLL_SECONDS` the server lists the participants of each open room.
   The slash command's message is a live card: who is streaming (with the
-  quality the page reports, e.g. `1080p60 · H265`), who is watching, and since
-  when. It is edited only when it changes, at most every 5 s, without pinging
+  quality the page reports, e.g. `1080p60 · H265`), who else is in the room
+  while someone streams, and since when. It is edited only when it changes, at most every 5 s, without pinging
   anyone. Editing goes through the bot's REST API, which needs View Channel
   and Read Message History in the command's channels (slash-command replies
   alone need neither); without them the card stays as posted (logged once as

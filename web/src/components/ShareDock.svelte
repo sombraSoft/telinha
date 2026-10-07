@@ -2,7 +2,7 @@
   import { tick, untrack } from 'svelte';
   import { DOCK_MARGIN, clampTo, homeOf, nearHome, parseDockPos, placeDock, toFraction, type Point, type Screen } from '../lib/dock';
   import { t } from '../lib/i18n/i18n.svelte';
-  import type { RoomController } from '../lib/room.svelte';
+  import type { RoomSession } from '../lib/room.svelte';
   import { canShareScreen } from '../lib/share';
   import { load, save } from '../lib/store';
   import ShareModal from './ShareModal.svelte';
@@ -11,7 +11,7 @@
     rc,
     clearance = $bindable(0),
   }: {
-    rc: RoomController;
+    rc: RoomSession;
     /** Room the stage keeps free at its bottom (px), so the dock at home hides no tile controls. */
     clearance?: number;
   } = $props();

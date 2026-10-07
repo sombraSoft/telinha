@@ -6,9 +6,11 @@ import {
 import { t, type Key, type Locale } from './i18n.ts';
 import type { RoomRecord } from './rooms.ts';
 
+/** Who is in the room, one entry per person (Discord user). */
 export interface Live {
-  /** quality: e.g. "1080p60 · H265", as the page reports it */
+  /** People sharing a screen. quality: e.g. "1080p60 · H265", as the page reports it */
   streamers: { id: string; quality?: string }[];
+  /** People present and not streaming. */
   viewers: string[];
 }
 
@@ -95,7 +97,8 @@ export function renderCard(rec: RoomRecord, live: Live, o: CardOptions): Card {
   const content = fit(l, [
     t(l, 'opened', { who, what }),
     { key: 'cardStreaming', items: live.streamers.map((s) => (s.quality ? `${mention(s.id)} (${s.quality})` : mention(s.id))) },
-    { key: 'cardWatching', items: live.viewers.map(mention) },
+    // Only while someone streams: with nothing on, arrivals are not worth an edit.
+    { key: 'cardInRoom', items: live.streamers.length ? live.viewers.map(mention) : [] },
     // Discord renders the relative time itself, so the clock needs no edits.
     t(l, 'cardOpenedAt', { when: `<t:${Math.floor(rec.createdAt / 1000)}:R>` }),
     t(l, 'tip', { group: o.group }),

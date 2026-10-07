@@ -218,9 +218,12 @@ describe('card edits', () => {
     await s.tickAt(1000); // nobody: same as the posted card
     expect(s.edits).toEqual([]);
     s.set([viewer('1')]);
+    await s.tickAt(1500); // nobody streams: who is in the room is not on the card
+    expect(s.edits).toEqual([]);
+    s.set([viewer('1'), streamer('2')]);
     await s.tickAt(2000);
     expect(s.edits.map((e) => e.at)).toEqual([T0 + 2000]);
-    expect(s.edits[0]!.card.content).toContain('👀 Watching: <@1>');
+    expect(s.edits[0]!.card.content).toContain('🔴 Streaming: <@2>\n👀 In the room: <@1>');
     expect(s.edits[0]).toMatchObject({ channelId: '300', messageId: '999' });
     expect(s.edits[0]!.card.allowedMentions).toEqual({ parse: [] });
 
@@ -239,28 +242,28 @@ describe('card edits', () => {
 
   test("LiveKit's listing order does not cause edits", async () => {
     const s = setup();
-    s.set([viewer('2'), viewer('1')]);
+    s.set([streamer('3'), viewer('2'), viewer('1')]);
     await s.tickAt(1000);
-    s.set([viewer('1'), viewer('2')]);
+    s.set([viewer('1'), viewer('2'), streamer('3')]);
     await s.tickAt(10_000);
     expect(s.edits).toHaveLength(1);
-    expect(s.edits[0]!.card.content).toContain('👀 Watching: <@2>, <@1>');
+    expect(s.edits[0]!.card.content).toContain('👀 In the room: <@2>, <@1>');
   });
 
   test('a change that reverts before the flush is dropped', async () => {
     const s = setup();
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     await s.tickAt(1000);
-    s.set([viewer('1'), viewer('2')]);
+    s.set([streamer('1'), viewer('2')]);
     await s.tickAt(2000);
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     await s.tickAt(7000);
     expect(s.edits).toHaveLength(1);
   });
 
   test('a final card due within the gap is flushed on a later tick, then the room is forgotten', async () => {
     const s = setup({ closeEmptyMs: 2000 });
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     await s.tickAt(1000); // edit
     s.set([]);
     await s.tickAt(3000); // empty for 2 s: closed, but the last edit was 2 s ago
@@ -276,10 +279,10 @@ describe('card edits', () => {
   test('message deleted (404): stop editing, lifecycle goes on', async () => {
     const s = setup();
     s.failEdits(Object.assign(new Error('Unknown Message'), { status: 404 }));
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     await s.tickAt(1000);
     s.failEdits(null);
-    s.set([viewer('1'), viewer('2')]);
+    s.set([streamer('1'), viewer('2')]);
     await s.tickAt(10_000);
     expect(s.edits).toEqual([]);
     s.set([]);
@@ -291,9 +294,9 @@ describe('card edits', () => {
   test('403 (no access to the channel) is permanent too: no retries, the closed card is not owed', async () => {
     const s = setup();
     s.failEdits(Object.assign(new Error('Missing Access'), { status: 403, code: 50001 }));
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     await s.tickAt(1000);
-    s.set([viewer('1'), viewer('2')]);
+    s.set([streamer('1'), viewer('2')]);
     await s.tickAt(60_000);
     s.set([]);
     await s.tickAt(10 * MIN);
@@ -314,18 +317,18 @@ describe('card edits', () => {
   test('transient errors back off and give up after a while', async () => {
     const s = setup();
     s.failEdits(Object.assign(new Error('Service Unavailable'), { status: 503 }));
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     for (let sec = 1; sec <= 3600; sec += 5) await s.tickAt(sec * 1000);
     expect(s.editTries()).toBe(10);
     s.failEdits(null);
-    s.set([viewer('2')]);
+    s.set([streamer('2')]);
     await s.tickAt(3700_000);
     expect(s.edits).toEqual([]);
   });
 
   test('a closed card a restart left unsent is sent by the next process', async () => {
     const s = setup({ closeEmptyMs: 2000 });
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     await s.tickAt(1000); // edit
     s.set([]);
     await s.tickAt(3000); // closed, final card waits for the gap
@@ -342,7 +345,7 @@ describe('card edits', () => {
   test('other edit errors are retried after the gap', async () => {
     const s = setup();
     s.failEdits(Object.assign(new Error('Service Unavailable'), { status: 503 }));
-    s.set([viewer('1')]);
+    s.set([streamer('1')]);
     await s.tickAt(1000);
     s.failEdits(null);
     await s.tickAt(2000);
