@@ -5,7 +5,7 @@
 import { AccessToken, TrackSource } from 'livekit-server-sdk';
 import { cookie, parseCookies } from '../auth.ts';
 import type { Config } from '../config.ts';
-import type { RoomService } from '../livekit.ts';
+import { roomTimeouts, type RoomService } from '../livekit.ts';
 import type { StaticFiles } from '../static.ts';
 import { COOKIE_TTL_MS, DOCTOR_COOKIE, type DoctorReport, type DoctorStore } from './session.ts';
 
@@ -16,7 +16,7 @@ export const MAX_REPORT_BYTES = 16 * 1024;
 
 export type DoctorConfig = Pick<Config,
   'cookieSecret' | 'secureCookies' | 'livekitUrl' | 'livekitKey' | 'livekitSecret' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort'
-  | 'media' | 'turn'>;
+  | 'media' | 'turn' | 'closeEmptySeconds'>;
 
 export type DoctorHandler = (req: Request, url: URL) => Promise<Response | null>;
 
@@ -151,7 +151,7 @@ export function createDoctorRoutes(o: {
       const room = doctorRoom(s.id);
       try {
         // auto_create is off: the room exists only because we ask for it.
-        await rooms.ensureRoom(room);
+        await rooms.ensureRoom(room, roomTimeouts(c.closeEmptySeconds));
       } catch (e) {
         store.returnGrant(s.id);
         log('doctor ensureRoom failed', (e as Error).message);

@@ -11,12 +11,12 @@ import type { Control } from './control.ts';
 import { DOCTOR_COOKIE } from './doctor/session.ts';
 import { fromAcceptLanguage, resolveLocale, type Locale } from './i18n.ts';
 import { ROOM_RE } from './codes.ts';
-import { createToken, newIdentity, type RoomService } from './livekit.ts';
+import { createToken, newIdentity } from './livekit.ts';
 import { devMembers, type DirMember } from './members.ts';
 import * as pages from './pages.ts';
 import type { LivekitProxy, ProxyData } from './proxy.ts';
 import type { IsMember } from './roles.ts';
-import type { Registry } from './rooms.ts';
+import type { Rooms } from './rooms.ts';
 import type { StaticFiles } from './static.ts';
 import { version as programVersion } from './version.ts';
 
@@ -26,8 +26,7 @@ export interface Deps {
   config: Config;
   isMember: IsMember;
   files: StaticFiles;
-  registry: Registry;
-  rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>;
+  rooms: Pick<Rooms, 'admit' | 'openRooms'>;
   /** Display name of the group in the given locale. */
   group: (locale: Locale) => string;
   discordReady?: () => boolean;
@@ -42,7 +41,7 @@ export interface Deps {
   upgrade?: (req: Request, data: ProxyData) => boolean;
   /** The /livekit/* relay (proxy.ts); unset = /livekit/* is 404. */
   proxy?: Pick<LivekitProxy, 'allows' | 'fetch' | 'upgradeData'>;
-  /** /healthz: open rooms; default: the registry's. */
+  /** /healthz: open rooms; default: the Room module's. */
   openRooms?: () => number;
   /** /healthz: child process states (supervisor), e.g. { livekit: 'up' }. */
   children?: () => Record<string, string>;
@@ -100,10 +99,10 @@ export function uaFamily(ua: string | null): string {
 
 /** Resolves to undefined after a successful WebSocket upgrade (Bun owns the socket then). */
 export function createHandler(deps: Deps): (req: Request) => Promise<Response | undefined> {
-  const { config: c, isMember, files, group, registry, rooms, proxy } = deps;
+  const { config: c, isMember, files, group, rooms, proxy } = deps;
   const discordReady = deps.discordReady ?? (() => false);
   const members = deps.members ?? (() => null);
-  const openRooms = deps.openRooms ?? (() => registry.open().length);
+  const openRooms = deps.openRooms ?? (() => rooms.openRooms().length);
   const children = deps.children ?? (() => ({}));
   const version = deps.version ?? programVersion();
   const doFetch: Fetch = deps.fetch ?? ((input, init) => fetch(input, init));
@@ -247,30 +246,12 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       if (!s) return json(401, { error: 'login' });
       if (!(await isMember(s.id))) return json(403, { error: 'members' });
       if (!ROOM_RE.test(room)) return json(400, { error: 'room' });
-      let rec = registry.get(room);
-      // Dev/E2E have no slash command: any valid room code opens one (closed stays closed).
-      if (!rec && c.dev) {
-        rec = registry.create({
-          room, guildId: '', channelId: '', locale: localeOf(s), openerId: s.id, openerName: s.name, what: null, createdAt: now(),
-        });
-        log('dev room', room);
-      }
-      if (!rec) return json(404, { error: 'unknown' });
-      // Someone is on the way in: the lifecycle must not close it under them.
-      // Before the await below, so a poll during it sees the fresh time.
-      if (rec.closedAt !== null || !registry.touch(room, now())) return json(410, { error: 'closed' });
-      // LiveKit drops an idle room on its own; auto_create is off, so bring it back.
-      try {
-        await rooms.ensureRoom(room);
-      } catch (e) {
-        log('ensureRoom failed', room, (e as Error).message);
-        return json(503, { error: 'livekit' });
-      }
-      // Closed while we waited (e.g. by hand): don't leave a room nobody polls.
-      if (registry.get(room)?.closedAt !== null) {
-        await rooms.deleteRoom(room).catch((e: unknown) => log('deleteRoom failed', room, (e as Error).message));
-        return json(410, { error: 'closed' });
-      }
+      const locale = localeOf(s);
+      // In dev, an unknown code opens a room under this session's name and locale.
+      const admitted = await rooms.admit(room, { id: s.id, name: s.name, locale });
+      if (admitted === 'unknown') return json(404, { error: 'unknown' });
+      if (admitted === 'closed') return json(410, { error: 'closed' });
+      if (admitted === 'media-down') return json(503, { error: 'livekit' });
       const identity = newIdentity(s.id, random);
       // The bot's directory is live and has the server nick; the session only has
       // the name and avatar from login (no avatar at all for sessions older than
@@ -278,7 +259,6 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       const me = members()?.find((m) => m.id === s.id);
       const name = me?.name ?? s.name;
       const avatar = me?.avatar ?? s.avatar ?? null;
-      const locale = localeOf(s);
       const token = await createToken({
         key: c.livekitKey, secret: c.livekitSecret, room, identity, name, id: s.id, avatar,
       });

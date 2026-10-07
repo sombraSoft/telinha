@@ -20,6 +20,13 @@ The free text the opener gives `/telinha` to say what the room is for.
 **Empty room**:
 A room with nobody in it and nobody joining (no token minted) for the close window.
 
+**Card**:
+The bot's message for a room in the channel where `/telinha` ran, edited as people come and go and once more when the room closes.
+_Avoid_: Embed, status message
+
+**Admission**:
+Letting a member into a room before their token is minted: the room is open, kept from closing while they connect, and exists in LiveKit.
+
 **Member**:
 A person in the group: holds the gate role and is not a bot.
 _Avoid_: Using it for Discord's notion, which is a guild member
