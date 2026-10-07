@@ -8,10 +8,10 @@
   import { currentLocale, t } from './lib/i18n/i18n.svelte';
   import { MembersFeed } from './lib/members.svelte';
   import { prefs } from './lib/prefs.svelte';
-  import { RoomController, noticeText } from './lib/room.svelte';
+  import { RoomSession, browserClock, livekitRoom, noticeText, serverTokens } from './lib/room.svelte';
   import { resolveTheme } from './lib/theme';
 
-  const rc = new RoomController();
+  const rc = new RoomSession({ room: livekitRoom, tokens: serverTokens(), clock: browserClock, prefs });
   const members = new MembersFeed();
   /** Space the share dock needs at the stage bottom while it sits at home. */
   let dockClear = $state(0);

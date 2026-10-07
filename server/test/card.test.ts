@@ -35,11 +35,15 @@ describe('open card', () => {
     expect(c.content.split('\n')).toEqual([
       '📺 **Zé** opened a Telinha',
       '🔴 Streaming: <@1> (1080p60 · H265), <@2>',
-      '👀 Watching: <@3>, <@4>',
+      '👀 In the room: <@3>, <@4>',
       '⏱️ Opened <t:1700000000:R>',
       expect.stringContaining('Only Crew can join') as unknown as string,
     ]);
     expect(buttons(c)[0]!.label).toBe('Open Telinha');
+  });
+
+  test('nobody streaming: who is in the room stays off the card', () => {
+    expect(renderCard(REC, { streamers: [], viewers: ['3', '4'] }, OPTS)).toEqual(renderCard(REC, NOBODY, OPTS));
   });
 
   test('user text is not interpolated', () => {
@@ -63,7 +67,7 @@ describe('open card', () => {
     expect(c.content.length).toBeLessThanOrEqual(MAX_CONTENT);
     const lines = c.content.split('\n');
     expect(lines[1]).toMatch(/^🔴 Transmitindo: <@\d+> \(1440p60 · AV1\).* \+\d+$/);
-    expect(lines[2]).toMatch(/^👀 Assistindo: <@\d+>.* \+\d+$/);
+    expect(lines[2]).toMatch(/^👀 Na sala: <@\d+>.* \+\d+$/);
     // every id is either shown or counted
     const shown = (l: string) => (l.match(/<@\d+>/g) ?? []).length + Number(/\+(\d+)$/.exec(l)?.[1] ?? 0);
     expect(shown(lines[1]!)).toBe(50);
