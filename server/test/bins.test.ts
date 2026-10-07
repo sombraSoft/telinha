@@ -31,7 +31,7 @@ function fakeUpstream(ver = '1.0.0', tag = 'v9.9.9') {
   const assets = new Map<string, Uint8Array>();
   const versions: Versions = {
     livekit: { version: ver, sha256: {} },
-    caddy: { version: '2.11.4', xcaddy: 'v0.4.7', modules: { 'github.com/caddy-dns/duckdns': 'v0.5.0' } },
+    caddy: { version: ver, xcaddy: 'v1.0.0', modules: { 'github.com/caddy-dns/duckdns': 'v1.0.0' } },
     cloudflared: { version: ver, sha256: {} },
   };
   const sums: string[] = [];
@@ -65,14 +65,14 @@ function fakeUpstream(ver = '1.0.0', tag = 'v9.9.9') {
 
 describe('assetSpec', () => {
   test('cloudflared on windows-arm64 is the x64 build', () => {
-    const s = assetSpec('cloudflared', '2026.9.3', 'windows', 'arm64');
+    const s = assetSpec('cloudflared', '2030.1.0', 'windows', 'arm64');
     expect(s.asset).toBe('cloudflared-windows-amd64.exe');
     expect(s.hashKey).toBe('windows-amd64');
     expect(s.verify).toBe('pinned');
   });
 
   test('livekit has native windows-arm64 builds, pinned', () => {
-    expect(assetSpec('livekit', '1.13.7', 'windows', 'arm64')).toMatchObject({ asset: 'livekit_1.13.7_windows_arm64.zip', hashKey: 'windows-arm64', verify: 'pinned' });
+    expect(assetSpec('livekit', '1.2.3', 'windows', 'arm64')).toMatchObject({ asset: 'livekit_1.2.3_windows_arm64.zip', hashKey: 'windows-arm64', verify: 'pinned' });
   });
 
   test('caddy is the Telinha release asset, verified through the release sums', () => {
@@ -122,7 +122,7 @@ describe('assetSpec', () => {
       'caddy: xcaddy must be a tag like v0.4.7',
       'caddy: modules must be a non-empty object of Go module path -> tag',
     ]);
-    v.caddy = { version: '2.11.4', xcaddy: 'v0.4.7', modules: { duckdns: 'v0.5.0', 'github.com/mholt/caddy-l4': 'latest' } };
+    v.caddy = { version: '1.2.3', xcaddy: 'v1.2.3', modules: { duckdns: 'v1.2.3', 'github.com/mholt/caddy-l4': 'latest' } };
     expect(validate(v)).toEqual(['caddy: duckdns is not a Go module path', 'caddy: github.com/mholt/caddy-l4 needs a tag like v1.2.3']);
   });
 });

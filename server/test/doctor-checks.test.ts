@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { loadVersions } from '../src/bins.ts';
 import { loadConfig, type Config } from '../src/config.ts';
 import { broadAclEntries, CHECKS, compareVersions, inviteUrl, neededPorts, runChecks } from '../src/doctor/checks.ts';
 import type {
@@ -17,6 +18,8 @@ const ENV = {
 const ENV_FILE = '/srv/telinha/config/telinha.env';
 const API = 'https://discord.com/api/v10';
 const PUBLIC = '203.0.113.7';
+// The check compares sidecars with versions.json; read it so a pin bump needs no test edit.
+const LIVEKIT = loadVersions().livekit.version;
 
 // Paths are joined with the host's separator; the fixtures use '/'.
 const norm = (p: string) => p.replaceAll('\\', '/');
@@ -109,7 +112,7 @@ function ctxFor(o: Opts = {}) {
     latestTag: async () => { latestCalls++; return o.latest === undefined ? 'v0.7.0' : o.latest; },
     updateState: o.updateState ?? null,
     trayState: o.trayState ?? null,
-    net, sys, versions: { livekit: { version: '1.13.7' }, caddy: { version: '2.11.4' }, cloudflared: { version: '2026.9.3' } },
+    net, sys,
   };
   return { ctx, calls: f.calls, latestCalls: () => latestCalls };
 }
@@ -127,7 +130,7 @@ const one = async (id: string, o: Opts = {}) => {
 
 const BIN_FILES = {
   [ENV_FILE]: 'GUILD_ID=100\n',
-  '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': '1.13.7\n',
+  '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': `${LIVEKIT}\n`,
   '/srv/telinha/bin/caddy': '', '/srv/telinha/bin/caddy.version': 'v0.7.0\n',
 };
 
@@ -211,13 +214,13 @@ describe('binaries', () => {
   test('present with matching sidecars', async () => {
     const r = await one('binaries', { files: BIN_FILES });
     expect(r.status).toBe('ok');
-    expect(r.detail?.map(norm)).toEqual(['livekit 1.13.7 (/srv/telinha/bin/livekit-server)', 'caddy v0.7.0 (/srv/telinha/bin/caddy)']);
+    expect(r.detail?.map(norm)).toEqual([`livekit ${LIVEKIT} (/srv/telinha/bin/livekit-server)`, 'caddy v0.7.0 (/srv/telinha/bin/caddy)']);
   });
 
   test('stale sidecar is a pending update (warn); missing is a fail', async () => {
     const stale = await one('binaries', { files: { ...BIN_FILES, '/srv/telinha/bin/livekit.version': '1.10.0' } });
     expect(stale.status).toBe('warn');
-    expect(stale.summary).toContain('livekit 1.10.0 is installed, 1.13.7 is pinned');
+    expect(stale.summary).toContain(`livekit 1.10.0 is installed, ${LIVEKIT} is pinned`);
     const missing = await one('binaries', { files: { [ENV_FILE]: '' } });
     expect(missing.status).toBe('fail');
     expect(missing.fix).toContain('Start telinha');
@@ -237,7 +240,7 @@ describe('binaries', () => {
     // What a Go binary carries: the module IDs and the build info's module paths, as plain strings.
     const binary = (...strings: string[]) => async () => new TextEncoder().encode(`\x7fELF...${strings.join('\0')}...`);
     const onPath = { which: (n: string) => (n === 'caddy' ? '/usr/bin/caddy' : null) };
-    const files = { [ENV_FILE]: '', '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': '1.13.7\n' };
+    const files = { [ENV_FILE]: '', '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': `${LIVEKIT}\n` };
     const ours = { ...files, '/srv/telinha/bin/caddy': '', '/srv/telinha/bin/caddy.version': 'v0.7.0' };
 
     const dev = await one('binaries', { env: DUCK, files, compiled: false, sys: { ...onPath, readBytes: binary('tls.issuance.acme') } });
