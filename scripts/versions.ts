@@ -3,8 +3,9 @@
 // caddy is a build recipe (we build it, each release's SHA256SUMS pins it): validated, never hashed here.
 import { writeFile } from 'node:fs/promises';
 import {
-  PLATFORMS, TOOLS, VERSIONS_FILE, assetSpec, download, isPinned, sha256, type Arch, type Os, type Platform, type Tool, type Versions,
+  HELPERS, PLATFORMS, VERSIONS_FILE, assetSpec, download, isPinned, sha256, type Arch, type Helper, type Os, type Platform, type Versions,
 } from '../server/src/bins.ts';
+import { parseSums } from '../server/src/release.ts';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const SEMVER = /^\d+\.\d+\.\d+$/;
@@ -12,12 +13,12 @@ const TAG = /^v\d/;
 // host/owner/repo[/subpath][/vN], as Go module paths are written.
 const GO_MODULE = /^[a-z0-9.-]+\.[a-z]{2,}(\/[A-Za-z0-9._~-]+){2,}$/;
 
-/** One per distinct pinned asset (platforms that fall back to another build share its key); none for a built tool. */
-export function assets(tool: Tool, version: string): { key: Platform; spec: ReturnType<typeof assetSpec> }[] {
+/** One per distinct pinned asset (platforms that fall back to another build share its key); none for a built helper. */
+export function assets(helper: Helper, version: string): { key: Platform; spec: ReturnType<typeof assetSpec> }[] {
   const seen = new Map<Platform, ReturnType<typeof assetSpec>>();
   for (const p of PLATFORMS) {
     const [os, arch] = p.split('-') as [Os, Arch];
-    const spec = assetSpec(tool, version, os, arch);
+    const spec = assetSpec(helper, version, os, arch);
     if (spec.verify !== 'pinned') return [];
     if (!seen.has(spec.hashKey)) seen.set(spec.hashKey, spec);
   }
@@ -28,112 +29,100 @@ export function validate(v: unknown): string[] {
   const errors: string[] = [];
   if (typeof v !== 'object' || v === null) return ['versions.json is not an object'];
   const rec = v as Record<string, any>;
-  for (const tool of TOOLS) {
-    const e = rec[tool];
+  for (const helper of HELPERS) {
+    const e = rec[helper];
     if (!e || typeof e.version !== 'string' || !e.version) {
-      errors.push(`${tool}: missing version`);
+      errors.push(`${helper}: missing version`);
       continue;
     }
-    if (!isPinned(tool)) {
-      errors.push(...validateBuild(tool, e));
+    if (!isPinned(helper)) {
+      errors.push(...validateBuild(helper, e));
       continue;
     }
-    const keys = assets(tool, e.version).map((a) => a.key);
+    const keys = assets(helper, e.version).map((a) => a.key);
     for (const key of keys) {
       const h = e.sha256?.[key];
-      if (typeof h !== 'string' || !HEX64.test(h)) errors.push(`${tool}: sha256 for ${key} missing or not 64 hex chars`);
+      if (typeof h !== 'string' || !HEX64.test(h)) errors.push(`${helper}: sha256 for ${key} missing or not 64 hex chars`);
     }
     for (const key of Object.keys(e.sha256 ?? {})) {
-      if (!keys.includes(key as Platform)) errors.push(`${tool}: sha256 for ${key} matches no asset`);
+      if (!keys.includes(key as Platform)) errors.push(`${helper}: sha256 for ${key} matches no asset`);
     }
   }
   return errors;
 }
 
-function validateBuild(tool: Tool, e: Record<string, any>): string[] {
+function validateBuild(helper: Helper, e: Record<string, any>): string[] {
   const errors: string[] = [];
-  if (!SEMVER.test(e.version)) errors.push(`${tool}: version ${e.version} is not x.y.z`);
-  if (typeof e.xcaddy !== 'string' || !TAG.test(e.xcaddy)) errors.push(`${tool}: xcaddy must be a tag like v0.4.7`);
+  if (!SEMVER.test(e.version)) errors.push(`${helper}: version ${e.version} is not x.y.z`);
+  if (typeof e.xcaddy !== 'string' || !TAG.test(e.xcaddy)) errors.push(`${helper}: xcaddy must be a tag like v0.4.7`);
   const mods = e.modules;
   if (typeof mods !== 'object' || mods === null || Array.isArray(mods) || !Object.keys(mods).length) {
-    errors.push(`${tool}: modules must be a non-empty object of Go module path -> tag`);
+    errors.push(`${helper}: modules must be a non-empty object of Go module path -> tag`);
   } else {
     for (const [path, tag] of Object.entries(mods)) {
-      if (!GO_MODULE.test(path)) errors.push(`${tool}: ${path} is not a Go module path`);
-      if (typeof tag !== 'string' || !TAG.test(tag)) errors.push(`${tool}: ${path} needs a tag like v1.2.3`);
+      if (!GO_MODULE.test(path)) errors.push(`${helper}: ${path} is not a Go module path`);
+      if (typeof tag !== 'string' || !TAG.test(tag)) errors.push(`${helper}: ${path} needs a tag like v1.2.3`);
     }
   }
-  if ('sha256' in e) errors.push(`${tool}: caddy is built, not downloaded: remove its sha256 (each release's SHA256SUMS pins it)`);
+  if ('sha256' in e) errors.push(`${helper}: caddy is built, not downloaded: remove its sha256 (each release's SHA256SUMS pins it)`);
   return errors;
 }
 
-// Upstream checksum files ("<hash>  <file>" lines); null when the tool publishes none (cloudflared) or is built by us (caddy).
-export function checksumsUrl(tool: Tool, version: string): string | null {
-  const spec = assetSpec(tool, version, 'linux', 'amd64');
-  if (tool === 'livekit') return spec.url.replace(spec.asset, 'checksums.txt');
+// Upstream checksum files, in the sha256sum format our own SHA256SUMS uses (parseSums
+// reads both); null when the helper publishes none (cloudflared) or is built by us (caddy).
+export function checksumsUrl(helper: Helper, version: string): string | null {
+  const spec = assetSpec(helper, version, 'linux', 'amd64');
+  if (helper === 'livekit') return spec.url.replace(spec.asset, 'checksums.txt');
   return null;
 }
 
-export function parseChecksums(text: string): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const line of text.split('\n')) {
-    const [hash, file] = line.trim().split(/\s+/);
-    if (hash && file) map.set(file.replace(/^\*/, ''), hash.toLowerCase());
-  }
-  return map;
-}
-
 /**
- * The independent check on the hashes the image and installers trust: a tool
+ * The independent check on the hashes the image and installers trust: a helper
  * that publishes checksums must be cross-checked, so any failure to get them
  * (network, 5xx, rate limit, a missing file) stops the refresh instead of
  * silently skipping the check.
  */
 export async function upstreamChecksums(
-  tool: Tool, version: string, get: (url: string) => Promise<Uint8Array> = download,
-): Promise<Map<string, string> | null> {
-  const url = checksumsUrl(tool, version);
+  helper: Helper, version: string, get: (url: string) => Promise<Uint8Array> = download,
+): Promise<Record<string, string> | null> {
+  const url = checksumsUrl(helper, version);
   if (!url) return null;
   let text: string;
   try {
     text = new TextDecoder().decode(await get(url));
   } catch (e) {
-    throw new Error(`${tool} ${version}: could not fetch upstream checksums, refusing to pin unchecked hashes (${e instanceof Error ? e.message : e})`);
+    throw new Error(`${helper} ${version}: could not fetch upstream checksums, refusing to pin unchecked hashes (${e instanceof Error ? e.message : e})`);
   }
-  const map = parseChecksums(text);
-  if (!map.size) throw new Error(`${tool} ${version}: upstream checksums at ${url} list nothing`);
-  return map;
+  const sums = parseSums(text);
+  if (!Object.keys(sums).length) throw new Error(`${helper} ${version}: upstream checksums at ${url} list nothing`);
+  return sums;
 }
 
 async function refresh(): Promise<void> {
   const versions = (await Bun.file(VERSIONS_FILE).json()) as Versions & { $comment?: string };
-  for (const tool of TOOLS) {
-    if (!isPinned(tool)) {
-      console.log(`[versions] ${tool} ${versions[tool].version}: built with xcaddy, nothing to refresh`);
+  for (const helper of HELPERS) {
+    if (!isPinned(helper)) {
+      console.log(`[versions] ${helper} ${versions[helper].version}: built with xcaddy, nothing to refresh`);
       continue;
     }
-    const entry = versions[tool];
-    const upstream = await upstreamChecksums(tool, entry.version);
-    const list = assets(tool, entry.version);
+    const entry = versions[helper];
+    const upstream = await upstreamChecksums(helper, entry.version);
+    const list = assets(helper, entry.version);
     const hashes = new Map<Platform, string>();
     await Promise.all(
       list.map(async ({ key, spec }) => {
         console.log(`[versions] ${spec.asset}`);
         const data = await download(spec.url);
-        const listed = upstream?.get(spec.asset);
+        const listed = upstream?.[spec.asset];
         if (upstream && !listed) throw new Error(`${spec.asset} not listed in upstream checksums`);
-        if (listed) {
-          // Upstream lists are sha256 or sha512: pick the digest by length.
-          const algo = listed.length === 128 ? 'sha512' : 'sha256';
-          const computed = new Bun.CryptoHasher(algo).update(data).digest('hex');
-          if (computed !== listed) throw new Error(`${spec.asset}: computed ${algo} ${computed}, upstream says ${listed}`);
-        }
-        hashes.set(key, sha256(data));
+        const computed = sha256(data);
+        if (listed && computed !== listed) throw new Error(`${spec.asset}: computed sha256 ${computed}, upstream says ${listed}`);
+        hashes.set(key, computed);
       }),
     );
     // Fixed platform order keeps the diff of versions.json stable.
     entry.sha256 = Object.fromEntries(list.map(({ key }) => [key, hashes.get(key)!]));
-    console.log(`[versions] ${tool} ${entry.version}: ${upstream ? 'cross-checked against upstream' : 'upstream publishes no checksums, pinned as downloaded'}`);
+    console.log(`[versions] ${helper} ${entry.version}: ${upstream ? 'cross-checked against upstream' : 'upstream publishes no checksums, pinned as downloaded'}`);
   }
   await writeFile(VERSIONS_FILE, `${JSON.stringify(versions, null, 2)}\n`);
 }

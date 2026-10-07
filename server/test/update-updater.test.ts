@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { basename } from 'node:path';
-import { writeTarGz, writeZip } from '../src/archive.ts';
+import { writeArchive } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
-import { parseSums } from '../src/update/github.ts';
+import { TRAY_EXE, assetName, exeName, parseSums } from '../src/release.ts';
 import { PendingError, type GitHubReleases, type UpdateFs } from '../src/update/types.ts';
 import { compareVersions, createUpdater, type UpdaterOptions } from '../src/update/updater.ts';
+import type { Target } from '../src/version.ts';
 
 const T0 = 1_700_000_000_000;
 const HOUR = 3_600_000;
@@ -74,13 +75,13 @@ function memFs() {
 
 interface Release { sums?: string; assets: Record<string, Uint8Array> }
 
-/** A tar.gz (or zip for Windows targets) holding one executable, plus its SHA256SUMS line. */
-function release(tag: string, o: { asset?: string; content?: string; badSum?: boolean; noLine?: boolean; member?: string; tray?: string } = {}): Release {
-  const asset = o.asset ?? 'telinha-linux-x64.tar.gz';
-  const member = o.member ?? (asset.endsWith('.zip') ? 'telinha.exe' : 'telinha');
-  const entries = [{ path: member, mode: 0o755, data: enc.encode(o.content ?? `binary ${tag}`) }];
-  if (o.tray) entries.push({ path: 'telinha-tray.exe', mode: 0o755, data: enc.encode(o.tray) });
-  const bytes = asset.endsWith('.zip') ? writeZip(entries) : writeTarGz(entries);
+/** A target's archive (linux-x64 by default) holding one executable, plus its SHA256SUMS line. */
+function release(tag: string, o: { target?: Target; content?: string; badSum?: boolean; noLine?: boolean; member?: string; tray?: string } = {}): Release {
+  const target = o.target ?? 'linux-x64';
+  const asset = assetName(target);
+  const entries = [{ path: o.member ?? exeName(target), mode: 0o755, data: enc.encode(o.content ?? `binary ${tag}`) }];
+  if (o.tray) entries.push({ path: TRAY_EXE, mode: 0o755, data: enc.encode(o.tray) });
+  const bytes = writeArchive(target, entries);
   const sum = o.badSum ? 'f'.repeat(64) : sha256(bytes);
   return { sums: o.noLine ? `${'a'.repeat(64)}  other.zip\n` : `${sum}  ${asset}\n`, assets: { [asset]: bytes } };
 }
@@ -170,7 +171,7 @@ describe('createUpdater', () => {
   test('Windows target: zip, telinha.exe, .exe names', async () => {
     const s = setup({
       target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
-      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { asset: 'telinha-windows-x64.zip' }) },
+      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64' }) },
     });
     expect((await s.updater.update('now')).action).toBe('staged');
     expect(s.m.text(`${PATHS.bin}/telinha.exe`)).toBe('binary v0.8.0');
@@ -180,7 +181,7 @@ describe('createUpdater', () => {
   test('Windows target with the tray in the release: an installed tray is replaced and recorded', async () => {
     const s = setup({
       target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
-      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { asset: 'telinha-windows-x64.zip', tray: 'tray v0.8.0' }) },
+      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64', tray: 'tray v0.8.0' }) },
     });
     s.m.put(`${PATHS.bin}/telinha-tray.exe`, 'tray v0.7.0');
     expect((await s.updater.update('now')).action).toBe('staged');
@@ -192,7 +193,7 @@ describe('createUpdater', () => {
   test('a failed install removes both staged .new files', async () => {
     const s = setup({
       target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
-      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { asset: 'telinha-windows-x64.zip', tray: 'tray v0.8.0' }) },
+      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64', tray: 'tray v0.8.0' }) },
     });
     s.m.put(`${PATHS.bin}/telinha-tray.exe`, 'tray v0.7.0');
     // The main swap fails after the download wrote both .new files.

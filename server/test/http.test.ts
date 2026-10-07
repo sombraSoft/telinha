@@ -20,9 +20,8 @@ describe('/healthz', () => {
     expect(await r.json()).toEqual({ ok: true, version: VERSION, discord: true, dev: false, rooms: 3, children: { livekit: 'up', caddy: 'restarting' } });
   });
 
-  test('defaults: the registry\'s open rooms, no children', async () => {
-    const s = setup();
-    s.registry.close('bafo-kiru', NOW);
+  test('defaults: the Room module\'s open rooms, no children', async () => {
+    const s = setup({ rooms: ['lamofu-tibare'] });
     expect(await (await s.get('/healthz')).json()).toEqual({ ok: true, version: VERSION, discord: true, dev: false, rooms: 1, children: {} });
   });
 
@@ -235,41 +234,18 @@ describe('/auth/token', () => {
     expect(kept.user).toMatchObject({ name: 'Zé', avatar: 'old' });
   });
 
-  test('only rooms /telinha opened: unknown 404, closed 410, nothing minted or created', async () => {
+  test('a token only once the room admits the member: unknown 404, closed 410, LiveKit down 503', async () => {
+    for (const [admission, status, error] of [['unknown', 404, 'unknown'], ['closed', 410, 'closed'], ['media-down', 503, 'livekit']] as const) {
+      const s = setup({ admit: async () => admission });
+      const r = await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() });
+      expect([r.status, await r.json()]).toEqual([status, { error }]);
+    }
+  });
+
+  test('admits the session\'s member in their locale (a dev room opens under them)', async () => {
     const s = setup();
-    const unknown = await s.get('/auth/token?room=tuge-dosa', { cookie: s.sessionCookie() });
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toEqual({ error: 'unknown' });
-    expect(s.registry.get('tuge-dosa')).toBeNull();
-
-    s.registry.close('bafo-kiru', NOW - 1);
-    const closed = await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() });
-    expect(closed.status).toBe(410);
-    expect(await closed.json()).toEqual({ error: 'closed' });
-    expect(s.ensured).toEqual([]);
-  });
-
-  test('open room: LiveKit room ensured before the token, room kept alive', async () => {
-    const s = setup();
-    expect((await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() })).status).toBe(200);
-    expect(s.ensured).toEqual(['bafo-kiru']);
-    // a token is not a join: the card's duration ignores it
-    expect(s.registry.get('bafo-kiru')).toMatchObject({ lastTokenAt: NOW, lastSeenAt: null, firstJoinAt: null, seen: [] });
-  });
-
-  test('closed while LiveKit was being asked: 410 and the room it made is deleted', async () => {
-    const s = setup({ ensureRoom: async (room) => void s.registry.close(room, NOW) });
-    const r = await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() });
-    expect(r.status).toBe(410);
-    expect(await r.json()).toEqual({ error: 'closed' });
-    expect(s.deleted).toEqual(['bafo-kiru']);
-  });
-
-  test('LiveKit down -> 503, no token', async () => {
-    const s = setup({ ensureRoom: async () => { throw new Error('ECONNREFUSED'); } });
-    const r = await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() });
-    expect(r.status).toBe(503);
-    expect(await r.json()).toEqual({ error: 'livekit' });
+    expect((await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie({ locale: 'pt-BR' }) })).status).toBe(200);
+    expect(s.admitted).toEqual([['bafo-kiru', { id: '1', name: 'Zé', locale: 'pt-BR' }]]);
   });
 
   test('LIVEKIT_PUBLIC_URL override', async () => {
@@ -283,7 +259,7 @@ describe('/auth/token', () => {
     const r = await s.member('/auth/token?room=bafo-kiru');
     expect(r.status).toBe(200);
     expect(((await r.json()) as { url: string }).url).toBe('wss://proj.livekit.cloud');
-    expect(s.ensured).toEqual(['bafo-kiru']);
+    expect(s.admitted.map(([room]) => room)).toEqual(['bafo-kiru']);
     expect((await s.member('/livekit/rtc')).status).toBe(404);
     expect((await s.member('/livekit/rtc', { upgrade: 'websocket' })).status).toBe(404);
   });
@@ -520,17 +496,11 @@ describe('DEV_USER mode', () => {
     expect((await setup().get('/healthz', { host: 'telinha.example.com' })).status).toBe(200);
   });
 
-  test('an unknown valid room code opens on first use; a closed one stays closed', async () => {
-    const s = setup({ env: DEV_ENV, rooms: [] });
+  test('the dev member is admitted under their name and locale (rooms.ts opens an unknown code in dev)', async () => {
+    const s = setup({ env: DEV_ENV, rooms: [], admit: async () => 'ok' });
     const r = await s.get('/auth/token?room=debu-gamo', { cookie: s.sessionCookie({ id: '1', name: 'Dev', locale: 'pt-BR' }) });
     expect(r.status).toBe(200);
-    expect(s.registry.get('debu-gamo')).toMatchObject({
-      openerId: '1', openerName: 'Dev', locale: 'pt-BR', messageId: null, createdAt: NOW, closedAt: null,
-    });
-    expect(s.ensured).toEqual(['debu-gamo']);
-    s.registry.close('debu-gamo', NOW);
-    const again = await s.get('/auth/token?room=debu-gamo', { cookie: s.sessionCookie({ id: '1' }) });
-    expect(again.status).toBe(410);
+    expect(s.admitted).toEqual([['debu-gamo', { id: '1', name: 'Dev', locale: 'pt-BR' }]]);
   });
 
   test('only the dev user is a member', async () => {

@@ -1,5 +1,5 @@
 // LiveKit access tokens (members may join, watch and only publish screen
-// share) and the RoomService calls the room lifecycle needs.
+// share) and the RoomService calls the Room module (rooms.ts) needs.
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 
 // One identity per tab: LiveKit kicks the older connection on a duplicate
@@ -22,7 +22,7 @@ export async function createToken(o: {
   return at.toJwt();
 }
 
-/** What the lifecycle reads from a participant (a subset of ParticipantInfo). */
+/** What the Room module reads from a participant (a subset of ParticipantInfo). */
 export interface LiveParticipant {
   identity: string;
   metadata: string;
@@ -30,30 +30,35 @@ export interface LiveParticipant {
   tracks: { source: TrackSource }[];
 }
 
+export type RoomTimeouts = ReturnType<typeof roomTimeouts>;
+
 export interface RoomService {
   /** Idempotent: LiveKit returns the existing room when it is still there. */
-  ensureRoom(room: string): Promise<void>;
+  ensureRoom(room: string, timeouts: RoomTimeouts): Promise<void>;
   /** [] when LiveKit has no such room (never created, or dropped when idle). */
   listParticipants(room: string): Promise<LiveParticipant[]>;
   /** No-op when the room is already gone. */
   deleteRoom(room: string): Promise<void>;
 }
 
+/**
+ * How long LiveKit keeps a room: ensureRoom asks it per room, livekit.yaml sets
+ * it as the default. emptyTimeout outlives our own close so LiveKit never drops
+ * a room before anyone had the chance to open the link.
+ */
+export const roomTimeouts = (closeEmptySeconds: number) => ({ emptyTimeout: closeEmptySeconds + 120, departureTimeout: 20 });
+
 export const isNotFound = (e: unknown) => {
   const err = e as { status?: unknown; code?: unknown } | null;
   return err?.status === 404 || err?.code === 'not_found';
 };
 
-export function roomService(o: {
-  url: string; key: string; secret: string; closeEmptySeconds: number;
-}): RoomService {
+export function roomService(o: { url: string; key: string; secret: string }): RoomService {
   const client = new RoomServiceClient(o.url, o.key, o.secret);
   return {
-    async ensureRoom(room) {
+    async ensureRoom(room, timeouts) {
       // auto_create is off, so this is the only way a room comes to exist.
-      // emptyTimeout outlives our own close so LiveKit never drops a room
-      // before anyone had the chance to open the link.
-      await client.createRoom({ name: room, emptyTimeout: o.closeEmptySeconds + 120, departureTimeout: 20 });
+      await client.createRoom({ name: room, ...timeouts });
     },
     async listParticipants(room) {
       try {

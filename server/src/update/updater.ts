@@ -6,10 +6,10 @@
 // and skipped until a newer tag exists (`telinha update --now` retries it).
 import { join } from 'node:path';
 import type { Paths } from '../paths.ts';
+import { TRAY_NEW, isStableTag, newExeName } from '../release.ts';
 import type { Target } from '../version.ts';
 import { isCompiled } from '../version.ts';
-import { downloadRelease, newExeName, trayNewExeName } from './download.ts';
-import { isStableTag } from './github.ts';
+import { downloadRelease } from './download.ts';
 import { readState, statePath as defaultStatePath, writeState } from './state.ts';
 import { finish as finishSwap, stage } from './swap.ts';
 import {
@@ -217,7 +217,7 @@ export function createUpdater(o: UpdaterOptions): Updater {
       o.onApplied(tag);
       return result(check, 'staged', `${tag} installed; restarting to apply it`);
     } catch (e) {
-      for (const name of [newExeName(o.target), trayNewExeName(o.target)]) await fs.rm(join(o.paths.bin, name)).catch(() => {});
+      for (const name of [newExeName(o.target), TRAY_NEW]) await fs.rm(join(o.paths.bin, name)).catch(() => {});
       if (e instanceof FailedError) {
         state.failed = { tag, at: now(), reason: e.message };
         await save();

@@ -3,22 +3,23 @@
 // release (verified against that release's SHA256SUMS). Every asset is verified
 // before anything is extracted. Used by the native `run`/`setup`, dev/E2E
 // (scripts/stack.ts) and the Docker build. The image's bins stage copies only
-// this file, archive.ts, version.ts, releasetag.ts and versions.json, so other
-// server modules are imported as types only.
+// this file, archive.ts, footprint.ts, version.ts, release.ts and
+// versions.json, so other server modules are imported as types only.
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import versionsJson from '../../versions.json' with { type: 'json' };
 import { readTarGz, readZip } from './archive.ts';
 import type { Config } from './config.ts';
+import { helpersOf } from './footprint.ts';
 import type { Paths } from './paths.ts';
-import { REPO, caddyAssetName, latestReleaseTag, parseSums, releaseAssetUrl } from './releasetag.ts';
+import { REPO, SUMS, archiveType, caddyAssetName, caddyExeName, latestReleaseTag, parseSums, releaseAssetUrl } from './release.ts';
 import { isCompiled, version } from './version.ts';
 
-export const TOOLS = ['livekit', 'caddy', 'cloudflared'] as const;
-export type Tool = (typeof TOOLS)[number];
-/** Tools downloaded from upstream with a sha256 per asset in versions.json. */
-export type PinnedTool = Exclude<Tool, 'caddy'>;
+export const HELPERS = ['livekit', 'caddy', 'cloudflared'] as const;
+export type Helper = (typeof HELPERS)[number];
+/** Helpers downloaded from upstream with a sha256 per asset in versions.json. */
+export type PinnedHelper = Exclude<Helper, 'caddy'>;
 export type Os = 'linux' | 'windows';
 export type Arch = 'amd64' | 'arm64';
 export const PLATFORMS = ['linux-amd64', 'linux-arm64', 'windows-amd64', 'windows-arm64'] as const;
@@ -49,22 +50,25 @@ export const VERSIONS_FILE = join(ROOT, 'versions.json');
 const GH = 'https://github.com';
 const RELEASE_TIMEOUT_MS = 30_000;
 
-export const isPinned = (tool: Tool): tool is PinnedTool => tool !== 'caddy';
+export const isPinned = (helper: Helper): helper is PinnedHelper => helper !== 'caddy';
 
-// Data-driven so a tool can point at another source. `version` is the upstream
+// Data-driven so a helper can point at another source. `version` is the upstream
 // version, except for caddy where it is the Telinha release tag (v0.6.0).
 // `member` is the file inside the archive (or the saved name for a raw binary).
-export function assetSpec(tool: Tool, version: string, os: Os, arch: Arch): Spec {
+export function assetSpec(helper: Helper, version: string, os: Os, arch: Arch): Spec {
   const exe = os === 'windows' ? '.exe' : '';
-  const archive = os === 'windows' ? 'zip' : 'tar.gz';
-  switch (tool) {
+  switch (helper) {
     case 'livekit': {
+      // LiveKit's own naming, which happens to match ours.
+      const archive = os === 'windows' ? 'zip' : 'tar.gz';
       const asset = `livekit_${version}_${os}_${arch}.${archive}`;
       return { url: `${GH}/livekit/livekit/releases/download/v${version}/${asset}`, asset, archive, member: `livekit-server${exe}`, hashKey: `${os}-${arch}`, verify: 'pinned' };
     }
     case 'caddy': {
-      const asset = caddyAssetName(os, arch);
-      return { url: releaseAssetUrl(version, asset), asset, archive, member: `caddy${exe}`, hashKey: `${os}-${arch}`, verify: 'release-sums' };
+      // Named after Telinha's targets, which say x64 where Go says amd64.
+      const target = `${os}-${arch === 'amd64' ? 'x64' : arch}` as const;
+      const asset = caddyAssetName(target);
+      return { url: releaseAssetUrl(version, asset), asset, archive: archiveType(target), member: caddyExeName(os), hashKey: `${os}-${arch}`, verify: 'release-sums' };
     }
     case 'cloudflared': {
       // No windows-arm64 build upstream; Windows 11 on ARM runs the x64 one emulated.
@@ -93,8 +97,8 @@ export function caddyRelease(tag: string, fetchFn: FetchFn): CaddyRelease {
   return {
     tag,
     sums: () => (sums ??= (async () => {
-      const res = await fetchFn(releaseAssetUrl(tag, 'SHA256SUMS'), { signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS) });
-      if (!res.ok) throw new Error(`SHA256SUMS of ${tag}: HTTP ${res.status}`);
+      const res = await fetchFn(releaseAssetUrl(tag, SUMS), { signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`${SUMS} of ${tag}: HTTP ${res.status}`);
       return parseSums(await res.text());
     })()),
   };
@@ -150,30 +154,30 @@ export type EnsureOptions = {
   arch: Arch;
   outDir: string;
   versions?: Versions;
-  /** Required when caddy is among the tools. */
+  /** Required when caddy is among the helpers. */
   release?: CaddyRelease;
   log?: (msg: string) => void;
-  /** Download progress per tool (bytes); optional, nothing else changes without it. */
-  progress?: (tool: Tool, received: number, total: number | null) => void;
+  /** Download progress per helper (bytes); optional, nothing else changes without it. */
+  progress?: (helper: Helper, received: number, total: number | null) => void;
   fetch?: FetchFn;
 };
 
 export type EnsureResult = {
-  /** Installed path per requested tool. */
-  paths: Partial<Record<Tool, string>>;
-  /** Tools (re)downloaded by this call. */
-  changed: Tool[];
+  /** Installed path per requested helper. */
+  paths: Partial<Record<Helper, string>>;
+  /** Helpers (re)downloaded by this call. */
+  changed: Helper[];
 };
 
-export async function ensureBinaries(names: Tool[], o: EnsureOptions): Promise<EnsureResult> {
+export async function ensureBinaries(names: Helper[], o: EnsureOptions): Promise<EnsureResult> {
   const versions = o.versions ?? loadVersions();
   const log = o.log ?? ((m: string) => console.log(m));
   const platform = `${o.os}-${o.arch}` as Platform;
   if (!PLATFORMS.includes(platform)) throw new Error(`no binaries for ${platform}`);
   await mkdir(o.outDir, { recursive: true });
 
-  const paths: Partial<Record<Tool, string>> = {};
-  const changed: Tool[] = [];
+  const paths: Partial<Record<Helper, string>> = {};
+  const changed: Helper[] = [];
   for (const name of names) {
     // Caddy's "version" is the release tag: a telinha update re-fetches its Caddy.
     let version: string;
@@ -229,15 +233,6 @@ export async function ensureBinaries(names: Tool[], o: EnsureOptions): Promise<E
   return { paths, changed };
 }
 
-/** The child binaries a config runs: LiveKit for self-hosted media, Caddy for direct ingress, cloudflared for the tunnel. */
-export function toolsFor(config: Pick<Config, 'media' | 'ingress'>): Tool[] {
-  const names: Tool[] = [];
-  if (config.media === 'self') names.push('livekit');
-  if (config.ingress === 'direct') names.push('caddy');
-  if (config.ingress === 'tunnel') names.push('cloudflared');
-  return names;
-}
-
 /**
  * Makes sure `paths.bin` holds the binaries this config needs. Offline (or any
  * download failure, including no reachable release for caddy) with a binary
@@ -266,7 +261,7 @@ export async function ensureBinariesForConfig(
   const versions = o.versions ?? loadVersions();
   const fetchFn = o.fetch ?? fetch;
   const result: EnsureResult = { paths: {}, changed: [] };
-  for (const name of toolsFor(config)) {
+  for (const name of helpersOf(config)) {
     try {
       const release = name === 'caddy' ? (o.release ?? (await resolveCaddyRelease(fetchFn, o.compiled))) : undefined;
       const r = await ensureBinaries([name], { os, arch, outDir: paths.bin, versions, release, log, progress: o.progress, fetch: fetchFn });
