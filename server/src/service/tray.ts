@@ -6,15 +6,13 @@
 // Every host call goes through an injected spawn so tests assert exact argv.
 import { win32 } from 'node:path';
 import type { Paths } from '../paths.ts';
+import { TRAY_DIST, TRAY_EXE } from '../release.ts';
 import { sameExe, type ProcessInfo } from '../supervisor.ts';
 import type { ServiceFs, SpawnFn } from './index.ts';
 
 // Windows paths whatever the host (tests run on Linux too).
 const { join } = win32;
 
-export const TRAY_EXE = 'telinha-tray.exe';
-/** The release's tray kept uninstalled: never run, kept current by the updater and install.ps1. */
-export const TRAY_DIST = 'telinha-tray.dist.exe';
 export const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 export const RUN_VALUE = 'Telinha';
 /** How long the tray gets to close on its own before it is killed. */

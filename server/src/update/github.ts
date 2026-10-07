@@ -1,17 +1,10 @@
 // GitHub releases without the API: `releases/latest` answers with a redirect to
 // the newest published non-prerelease tag (no rate limit, no token), and the
-// assets live under `releases/download/<tag>/`.
-import { REPO, isStableTag, latestReleaseTag, parseSums, releaseAssetUrl, tagFromRedirect } from '../releasetag.ts';
-import type { Target } from '../version.ts';
+// assets live under `releases/download/<release tag>/`.
+import { REPO, SUMS, isStableTag, latestReleaseTag, parseSums, releaseAssetUrl } from '../release.ts';
 import { PendingError, errorMessage, type GitHubReleases } from './types.ts';
 
-// The helpers live in releasetag.ts (bins.ts needs them without this module's imports).
-export { REPO, isStableTag, parseSums, tagFromRedirect };
-
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
-
-/** The release asset for a target: Linux ships tar.gz (tar is universal there), Windows zip. */
-export const assetName = (target: Target): string => (target.startsWith('windows') ? `telinha-${target}.zip` : `telinha-${target}.tar.gz`);
 
 export function createGitHubReleases(o: { fetch?: FetchFn; repo?: string; timeoutMs?: number } = {}): GitHubReleases {
   const fetchFn: FetchFn = o.fetch ?? fetch;
@@ -25,11 +18,11 @@ export function createGitHubReleases(o: { fetch?: FetchFn; repo?: string; timeou
     async sums(tag) {
       let res: Response;
       try {
-        res = await get(assetUrl(tag, 'SHA256SUMS'));
+        res = await get(assetUrl(tag, SUMS));
       } catch (e) {
-        throw new PendingError(`SHA256SUMS of ${tag}: ${errorMessage(e)}`);
+        throw new PendingError(`${SUMS} of ${tag}: ${errorMessage(e)}`);
       }
-      if (!res.ok) throw new PendingError(`SHA256SUMS of ${tag}: HTTP ${res.status}`);
+      if (!res.ok) throw new PendingError(`${SUMS} of ${tag}: HTTP ${res.status}`);
       return parseSums(await res.text());
     },
     async asset(tag, name) {

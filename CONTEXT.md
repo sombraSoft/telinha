@@ -66,5 +66,12 @@ The bare `X.Y.Z[-pre]` a Telinha binary reports about itself.
 **Prerelease**:
 A release whose tag has a hyphen (`v0.8.0-rc.1`); never installed unless pinned. A GitHub draft is not a release.
 
+**Target**:
+The OS and CPU a Telinha binary is built for (`linux-x64`, `windows-arm64`); a release has one archive per target.
+_Avoid_: Platform (Node's `win32`), amd64 (Go's name, used only for helpers)
+
+**Aside file**:
+A replaced program file renamed out of the way, never deleted (`telinha.old-<version>`, `telinha-tray.failed-<release tag>`), so a running exe never blocks an update; the updater sweeps them.
+
 **Exposure**:
 A port a helper opens to the outside, by protocol, that the firewall and the router must let in.
