@@ -39,6 +39,13 @@ export interface RoomService {
   deleteRoom(room: string): Promise<void>;
 }
 
+/**
+ * How long LiveKit keeps a room: ensureRoom asks it per room, livekit.yaml sets
+ * it as the default. emptyTimeout outlives our own close so LiveKit never drops
+ * a room before anyone had the chance to open the link.
+ */
+export const roomTimeouts = (closeEmptySeconds: number) => ({ emptyTimeout: closeEmptySeconds + 120, departureTimeout: 20 });
+
 export const isNotFound = (e: unknown) => {
   const err = e as { status?: unknown; code?: unknown } | null;
   return err?.status === 404 || err?.code === 'not_found';
@@ -51,9 +58,7 @@ export function roomService(o: {
   return {
     async ensureRoom(room) {
       // auto_create is off, so this is the only way a room comes to exist.
-      // emptyTimeout outlives our own close so LiveKit never drops a room
-      // before anyone had the chance to open the link.
-      await client.createRoom({ name: room, emptyTimeout: o.closeEmptySeconds + 120, departureTimeout: 20 });
+      await client.createRoom({ name: room, ...roomTimeouts(o.closeEmptySeconds) });
     },
     async listParticipants(room) {
       try {

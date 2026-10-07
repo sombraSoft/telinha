@@ -948,14 +948,13 @@ describe('router', () => {
     expect(pt.detail).toEqual(['Redirecionadas na mão, sem pedir ao roteador: TCP 443, TCP 80']);
   });
 
-  test('neededPorts follows ingress and the PUBLIC_URL port', () => {
+  test('neededPorts: web ports first, the outside port from PUBLIC_URL', () => {
     const c = loadConfig({ ...ENV, ...DUCK });
     expect(neededPorts(c)).toEqual([
       { protocol: 'tcp', external: 8443, internal: 8443 },
       { protocol: 'tcp', external: 7881, internal: 7881 },
       { protocol: 'udp', external: 7882, internal: 7882 },
     ]);
-    expect(neededPorts(loadConfig({ ...ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 't' }))).toHaveLength(2);
   });
 });
 

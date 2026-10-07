@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { validate } from '../../scripts/versions.ts';
 import { writeTarGz, writeZip } from '../src/archive.ts';
 import {
-  PLATFORMS, TOOLS, assetSpec, caddyRelease, download, ensureBinaries, ensureBinariesForConfig, isPinned, loadVersions, resolveCaddyRelease, sha256,
-  toolsFor, type Versions,
+  HELPERS, PLATFORMS, assetSpec, caddyRelease, download, ensureBinaries, ensureBinariesForConfig, isPinned, loadVersions, resolveCaddyRelease, sha256,
+  type Versions,
 } from '../src/bins.ts';
 import { releaseAssetUrl } from '../src/releasetag.ts';
 import { version } from '../src/version.ts';
@@ -35,20 +35,20 @@ function fakeUpstream(ver = '1.0.0', tag = 'v9.9.9') {
     cloudflared: { version: ver, sha256: {} },
   };
   const sums: string[] = [];
-  for (const tool of TOOLS) {
-    const v = isPinned(tool) ? ver : tag;
+  for (const helper of HELPERS) {
+    const v = isPinned(helper) ? ver : tag;
     for (const p of PLATFORMS) {
       const [os, arch] = p.split('-') as ['linux' | 'windows', 'amd64' | 'arm64'];
-      const spec = assetSpec(tool, v, os, arch);
+      const spec = assetSpec(helper, v, os, arch);
       if (assets.has(spec.url)) continue;
-      const exe = enc.encode(`${tool} ${spec.hashKey} ${v}`);
+      const exe = enc.encode(`${helper} ${spec.hashKey} ${v}`);
       const data = spec.archive === null ? exe
         : (spec.archive === 'zip' ? writeZip : writeTarGz)([
           { path: 'LICENSE', mode: 0o644, data: enc.encode('license') },
           { path: spec.member, mode: 0o755, data: exe },
         ]);
       assets.set(spec.url, data);
-      if (isPinned(tool)) versions[tool].sha256[spec.hashKey] = sha256(data);
+      if (isPinned(helper)) versions[helper].sha256[spec.hashKey] = sha256(data);
       else sums.push(`${sha256(data)}  ${spec.asset}`);
     }
   }
@@ -91,13 +91,13 @@ describe('assetSpec', () => {
 
   test('the bundled versions.json has a hash for every pinned asset', () => {
     const v = loadVersions();
-    for (const tool of TOOLS) {
-      if (!isPinned(tool)) continue;
+    for (const helper of HELPERS) {
+      if (!isPinned(helper)) continue;
       for (const p of PLATFORMS) {
         const [os, arch] = p.split('-') as ['linux' | 'windows', 'amd64' | 'arm64'];
-        const spec = assetSpec(tool, v[tool].version, os, arch);
+        const spec = assetSpec(helper, v[helper].version, os, arch);
         expect(spec.verify).toBe('pinned');
-        expect(v[tool].sha256[spec.hashKey]).toMatch(/^[0-9a-f]{64}$/);
+        expect(v[helper].sha256[spec.hashKey]).toMatch(/^[0-9a-f]{64}$/);
       }
     }
   });
@@ -305,12 +305,6 @@ describe('resolveCaddyRelease', () => {
 describe('ensureBinariesForConfig', () => {
   const host = { platform: 'linux', arch: 'x64' };
 
-  test('tools per config', () => {
-    expect(toolsFor({ media: 'self', ingress: 'direct' })).toEqual(['livekit', 'caddy']);
-    expect(toolsFor({ media: 'self', ingress: 'tunnel' })).toEqual(['livekit', 'cloudflared']);
-    expect(toolsFor({ media: 'cloud', ingress: 'external' })).toEqual([]);
-  });
-
   test('fetches what the config needs into paths.bin; a tunnel never looks up a release', async () => {
     const up = fakeUpstream();
     const bin = tmp();
@@ -414,19 +408,19 @@ describe('download progress', () => {
     expect(new TextDecoder().decode(await download('https://x.test/a', chunked(['ab', 'c'])))).toBe('abc');
   });
 
-  test('ensureBinaries and ensureBinariesForConfig name the tool; the result is the same without it', async () => {
+  test('ensureBinaries and ensureBinariesForConfig name the helper; the result is the same without it', async () => {
     const up = fakeUpstream();
-    const tools = new Set<string>();
+    const helpers = new Set<string>();
     let last = 0;
     const bin = tmp();
     const r = await ensureBinariesForConfig({ media: 'self', ingress: 'tunnel' }, { bin }, () => {}, {
       platform: 'linux', arch: 'x64', versions: up.versions, fetch: up.fetch,
-      progress: (tool, got) => {
-        tools.add(tool);
+      progress: (helper, got) => {
+        helpers.add(helper);
         last = got;
       },
     });
-    expect([...tools].sort()).toEqual(['cloudflared', 'livekit']);
+    expect([...helpers].sort()).toEqual(['cloudflared', 'livekit']);
     expect(last).toBeGreaterThan(0);
     expect(r.changed).toEqual(['livekit', 'cloudflared']);
     const plain = await ensureBinaries(['livekit'], { os: 'linux', arch: 'amd64', outDir: tmp(), versions: up.versions, fetch: up.fetch, log: () => {} });

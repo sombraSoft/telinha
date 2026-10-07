@@ -40,15 +40,15 @@ RUN cpu=$([ "$TARGETARCH" = amd64 ] && echo x64 || echo "$TARGETARCH") \
 
 # Downloaded child binaries for the target arch, sha256-checked against
 # versions.json. Repo layout kept (versions.json, scripts/, server/src/):
-# server/src/bins.ts imports ../../versions.json, archive.ts, version.ts and
-# releasetag.ts and nothing else of server/.
+# server/src/bins.ts imports ../../versions.json, archive.ts, footprint.ts,
+# version.ts and releasetag.ts and nothing else of server/.
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS bins
 # Set by buildx and podman from --platform (default: the host's).
 ARG TARGETOS TARGETARCH
 WORKDIR /b
 COPY versions.json ./
 COPY scripts/bins.ts scripts/
-COPY server/src/bins.ts server/src/archive.ts server/src/version.ts server/src/releasetag.ts server/src/
+COPY server/src/bins.ts server/src/archive.ts server/src/footprint.ts server/src/version.ts server/src/releasetag.ts server/src/
 RUN bun scripts/bins.ts --os "$TARGETOS" --arch "$TARGETARCH" --out /out livekit cloudflared
 
 # The bun binary for stages whose base image has none. A stage, not a bare
