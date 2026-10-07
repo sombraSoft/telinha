@@ -16,7 +16,7 @@ export const commandName =
     ? null
     : document.querySelector('meta[name="telinha-command"]')?.getAttribute('content')) || 'telinha';
 
-/** Same rule as the server: any Portuguese tag -> pt-BR, everything else -> en. */
+/** Same rule as Telinha: any Portuguese tag -> pt-BR, everything else -> en. */
 export function resolveLocale(tag: string | null | undefined): Locale {
   return tag && tag.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
 }

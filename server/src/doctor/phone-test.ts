@@ -1,7 +1,7 @@
 // The phone test, run from the CLI side: ask the running service for a
 // one-time link, long-poll until the phone reports (or the link expires, the
 // wait runs out, or the user skips), then turn the report into rows that carry
-// their status and the hint explaining them. Framework-free like SetupSession:
+// their status and the hint explaining them. Framework-free like SetupState:
 // the plain doctor awaits finished(), the screens subscribe() and re-read state.
 import type { ControlClient, DoctorReport, PhoneTestPoll } from '../cli/control.ts';
 import { type DoctorStrKey, doctorStrings } from '../cli/doctor-strings.ts';
