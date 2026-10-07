@@ -1,6 +1,7 @@
 // E2E against the production-like stack (`bun scripts/stack.ts --e2e`): the
 // built page served by the Bun server at /r/, the server's own livekit-server
-// child, LiveKit signaling through its gated /livekit relay, DEV_USER fake login.
+// child, LiveKit signaling through its gated /livekit signaling proxy, DEV_USER
+// fake login.
 import { defineConfig, devices } from '@playwright/test';
 
 const CI = !!process.env.CI;

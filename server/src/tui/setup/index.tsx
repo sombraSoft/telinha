@@ -10,7 +10,7 @@ export { SetupApp, type SetupAppProps } from './app.tsx';
 export const setupUi: SetupUi = {
   run: (c) =>
     runTui<SetupUiResult>({
-      locale: c.session.locale,
+      locale: c.state.locale,
       env: c.ctx.env,
       onCtrlC: () => ({ kind: 'quit', reason: 'ctrl-c' }),
       app: (done, h) => <SetupApp c={c} done={done} withTerminal={h.withTerminal} setLocale={h.setLocale} />,

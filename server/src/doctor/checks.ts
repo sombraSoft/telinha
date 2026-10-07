@@ -887,7 +887,7 @@ export function broadAclEntries(icaclsOutput: string): string[] {
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 function listenBase(c: Config): string {
-  const h = c.host === '0.0.0.0' ? '127.0.0.1' : c.host === '::' ? '::1' : c.host;
+  const h = c.listenHost === '0.0.0.0' ? '127.0.0.1' : c.listenHost === '::' ? '::1' : c.listenHost;
   return `http://${h.includes(':') ? `[${h}]` : h}:${c.port}`;
 }
 

@@ -10,10 +10,10 @@ export type { DoctorReport, PhoneTestPoll };
 
 export const DOCTOR_COOKIE = 'telinha_doctor';
 /** An unopened link dies after this. */
-export const SESSION_TTL_MS = 10 * 60_000;
+export const PHONE_TEST_TTL_MS = 10 * 60_000;
 /** The page's cookie, and how long an opened link stays alive. */
 export const COOKIE_TTL_MS = 15 * 60_000;
-export const MAX_SESSIONS = 5;
+export const MAX_PHONE_TESTS = 5;
 
 const ID_RE = /^[0-9a-f]{32}$/;
 
@@ -30,8 +30,8 @@ interface Entry {
   waiters: Set<() => void>;
 }
 
-export interface DoctorStore {
-  /** id 16 random bytes hex, token 32 bytes base64url; the oldest link goes when MAX_SESSIONS are live. */
+export interface PhoneTestStore {
+  /** id 16 random bytes hex, token 32 bytes base64url; the oldest link goes when MAX_PHONE_TESTS are live. */
   create(now?: number): { id: string; token: string; expiresAt: number };
   /** One-time: the token is gone after the first use. */
   claim(token: string, now?: number): { id: string } | null;
@@ -55,15 +55,15 @@ export interface DoctorStore {
 export const deriveDoctorKey = (cookieSecret: string): string =>
   createHmac('sha256', cookieSecret).update('telinha-doctor').digest('hex');
 
-export function createDoctorStore(o: {
+export function createPhoneTestStore(o: {
   cookieSecret: string;
   now?: () => number;
   random?: (n: number) => Uint8Array;
-}): DoctorStore {
+}): PhoneTestStore {
   const clock = o.now ?? Date.now;
   const random = o.random ?? ((n: number) => randomBytes(n));
   const doctorKey = deriveDoctorKey(o.cookieSecret);
-  const sessions = new Map<string, Entry>();
+  const phoneTests = new Map<string, Entry>();
   const byToken = new Map<string, string>();
 
   const live = (e: Entry | undefined, now: number): e is Entry => !!e && e.expiresAt > now;
@@ -74,27 +74,27 @@ export function createDoctorStore(o: {
   };
 
   const drop = (e: Entry) => {
-    sessions.delete(e.id);
+    phoneTests.delete(e.id);
     if (e.token) byToken.delete(e.token);
     wake(e);
   };
 
-  const store: DoctorStore = {
+  const store: PhoneTestStore = {
     create(now = clock()) {
       store.gc(now);
       // Map order is insertion order: the first one is the oldest.
-      while (sessions.size >= MAX_SESSIONS) drop(sessions.values().next().value!);
+      while (phoneTests.size >= MAX_PHONE_TESTS) drop(phoneTests.values().next().value!);
       const id = Buffer.from(random(16)).toString('hex');
       const token = Buffer.from(random(32)).toString('base64url');
       const e: Entry = {
         id,
         token,
         createdAt: now,
-        expiresAt: now + SESSION_TTL_MS,
+        expiresAt: now + PHONE_TEST_TTL_MS,
         granted: false,
         waiters: new Set(),
       };
-      sessions.set(id, e);
+      phoneTests.set(id, e);
       byToken.set(token, id);
       return { id, token, expiresAt: e.expiresAt };
     },
@@ -104,7 +104,7 @@ export function createDoctorStore(o: {
       const id = byToken.get(token);
       if (!id) return null;
       byToken.delete(token);
-      const e = sessions.get(id);
+      const e = phoneTests.get(id);
       if (!live(e, now)) return null;
       e.token = null;
       e.openedAt = now;
@@ -122,11 +122,11 @@ export function createDoctorStore(o: {
       const p = verify<{ typ?: unknown; d?: unknown; exp: number }>(doctorKey, value, now);
       // typ and the strict id shape keep any other signed payload out, even under the same key.
       if (!p || p.typ !== 'doctor' || typeof p.d !== 'string' || !ID_RE.test(p.d)) return null;
-      return live(sessions.get(p.d), now) ? { id: p.d } : null;
+      return live(phoneTests.get(p.d), now) ? { id: p.d } : null;
     },
 
     report(id, report, now = clock()) {
-      const e = sessions.get(id);
+      const e = phoneTests.get(id);
       if (!live(e, now) || e.report) return false;
       e.report = report;
       wake(e);
@@ -134,19 +134,19 @@ export function createDoctorStore(o: {
     },
 
     takeGrant(id) {
-      const e = sessions.get(id);
+      const e = phoneTests.get(id);
       if (!live(e, clock()) || e.granted) return false;
       e.granted = true;
       return true;
     },
 
     returnGrant(id) {
-      const e = sessions.get(id);
+      const e = phoneTests.get(id);
       if (e) e.granted = false;
     },
 
     state(id, now = clock()) {
-      const e = sessions.get(id);
+      const e = phoneTests.get(id);
       if (e?.report)
         return { state: 'done', ...(e.openedAt !== undefined ? { openedAt: e.openedAt } : {}), report: e.report };
       if (!live(e, now)) return { state: 'expired' };
@@ -156,7 +156,7 @@ export function createDoctorStore(o: {
     async wait(id, maxMs) {
       const first = store.state(id);
       if (first.state === 'done' || first.state === 'expired') return first;
-      const e = sessions.get(id)!;
+      const e = phoneTests.get(id)!;
       // Woken early when the phone opens the link, reports, or the link goes.
       await new Promise<void>((resolve) => {
         const done = () => {
@@ -171,7 +171,7 @@ export function createDoctorStore(o: {
     },
 
     gc(now = clock()) {
-      for (const e of [...sessions.values()]) {
+      for (const e of [...phoneTests.values()]) {
         // A finished test stays until its expiry so a late wait() still gets the report.
         if (e.expiresAt <= now) drop(e);
       }

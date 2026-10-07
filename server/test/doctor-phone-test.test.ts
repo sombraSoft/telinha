@@ -22,21 +22,19 @@ const REPORT: DoctorReport = {
 type Poll = PhoneTestPoll | 'hang' | 'throw';
 
 /** A control client whose polls answer from a list, or hang until answer(). */
-function control(
-  o: { available?: () => Promise<boolean>; session?: 'throw'; polls?: Poll[]; onWait?: () => void } = {},
-) {
+function control(o: { available?: () => Promise<boolean>; link?: 'throw'; polls?: Poll[]; onWait?: () => void } = {}) {
   const calls: string[] = [];
   const polls = [...(o.polls ?? [])];
   const pending: ((s: PhoneTestPoll) => void)[] = [];
   const client: DoctorControl = {
     available: () => (calls.push('available'), o.available ? o.available() : Promise.resolve(true)),
     status: async () => ({}) as never,
-    doctorSession: async () => {
-      calls.push('session');
-      if (o.session) throw new Error('503 from the service');
+    phoneTestLink: async () => {
+      calls.push('link');
+      if (o.link) throw new Error('503 from the service');
       return { id: 'abc', url: URL, expiresAt: 0 };
     },
-    doctorWait: (id, ms) => {
+    phoneTestWait: (id, ms) => {
       calls.push(`wait ${id} ${ms}`);
       o.onWait?.();
       const next = polls.shift() ?? 'hang';
@@ -95,7 +93,7 @@ describe('phone test run', () => {
   });
 
   test('the link cannot be made: error with the message', async () => {
-    const { t, seen } = phoneTest(control({ session: 'throw' }).client);
+    const { t, seen } = phoneTest(control({ link: 'throw' }).client);
     await t.start();
     expect(seen).toEqual(['starting', 'error']);
     expect(t.state).toEqual({ kind: 'error', message: '503 from the service' });
@@ -118,7 +116,7 @@ describe('phone test run', () => {
     expect(seen).toEqual(['starting', 'waiting', 'waiting opened', 'done']);
     expect(ctl.calls).toEqual([
       'available',
-      'session',
+      'link',
       `wait abc ${PHONE_POLL_MS}`,
       `wait abc ${PHONE_POLL_MS}`,
       `wait abc ${PHONE_POLL_MS}`,
@@ -200,7 +198,7 @@ describe('phone test run', () => {
     const second = t.start();
     await first;
     await Bun.sleep(0);
-    expect(ctl.calls.filter((c) => c === 'session')).toHaveLength(2);
+    expect(ctl.calls.filter((c) => c === 'link')).toHaveLength(2);
     ctl.answer({ state: 'done', report: { ...REPORT, udp: { ok: false }, tcp: { ok: false } } });
     await second;
     // One answer reached the second run's poll only; the first run went quiet.

@@ -1,10 +1,10 @@
-// `telinha run`: the service. Reads telinha.env, supervises livekit-server (with
+// `telinha run`: the Telinha process. Reads telinha.env, supervises livekit-server (with
 // MEDIA=self; MEDIA=cloud uses LiveKit Cloud) and caddy or cloudflared (per
-// INGRESS), gates every page behind the Discord login, relays LiveKit signaling
-// at /livekit (self only), serves rooms at /r/<code>, runs
-// the slash command and the room lifecycle, keeps the router's port mappings
-// and the DuckDNS record fresh, answers the local control endpoint and, in the
-// native binary, updates itself. See README.md.
+// INGRESS), gates every page behind the Discord login, carries LiveKit signaling
+// through the signaling proxy at /livekit (self only), serves rooms at
+// /r/<code>, runs the slash command and the room lifecycle, keeps the router's
+// port mappings and the DuckDNS record fresh, answers the local control
+// endpoint and, in the native binary, updates itself. See README.md.
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,8 +21,8 @@ import { waitForEnter } from './cli/term.ts';
 import { type Config, KNOWN_KEYS, loadConfig, upnpMappings } from './config.ts';
 import { type Control, createControl } from './control.ts';
 import { createDuckDns, type Ddns, startDdnsLoop } from './ddns.ts';
+import { createPhoneTestStore } from './doctor/phone-test-store.ts';
 import { createDoctorRoutes } from './doctor/routes.ts';
-import { createDoctorStore } from './doctor/session.ts';
 import { loadEnvFile, mergeEnv } from './envfile.ts';
 import { footprintOf } from './footprint.ts';
 import { createHandler } from './http.ts';
@@ -351,8 +351,8 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   };
   const updater = makeUpdater();
 
-  const doctorStore = createDoctorStore({ cookieSecret: config.cookieSecret });
-  const doctor = createDoctorRoutes({ store: doctorStore, config, files, rooms: livekit, log });
+  const phoneTestStore = createPhoneTestStore({ cookieSecret: config.cookieSecret });
+  const doctor = createDoctorRoutes({ store: phoneTestStore, config, files, rooms: livekit, log });
   const children = () => Object.fromEntries(sup.status().map((s) => [s.name, s.state]));
   const childStatus = () =>
     Object.fromEntries(
@@ -384,10 +384,10 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     status,
     doctor: {
       create: () => {
-        const s = doctorStore.create();
+        const s = phoneTestStore.create();
         return { id: s.id, url: `${config.publicUrl}/doctor?t=${s.token}`, expiresAt: s.expiresAt };
       },
-      wait: (id, ms) => doctorStore.wait(id, ms),
+      wait: (id, ms) => phoneTestStore.wait(id, ms),
     },
     update: updater ? (mode) => updater.update(mode) : null,
     shutdown: (reason) => exit(reason === 'restart' ? EXIT_RESTART : 0, `${reason} requested`),
@@ -395,7 +395,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   });
 
   // Cloud: browsers reach LiveKit Cloud directly, so /livekit/* stays a 404.
-  const proxy = footprint.relay ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
+  const proxy = footprint.signalingProxy ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
   // Bun.serve wants a handler even when nothing ever upgrades.
   const noSockets: WebSocketHandler<ProxyData> = { message() {} };
   const handler = createHandler({
@@ -415,17 +415,17 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     version: ctx.version,
     control,
     doctor,
-    doctorCookie: (value, now) => doctorStore.verifyCookie(value, now),
+    doctorCookie: (value, now) => phoneTestStore.verifyCookie(value, now),
   });
   try {
     server = Bun.serve<ProxyData>({
-      hostname: config.host,
+      hostname: config.listenHost,
       port: config.port,
       fetch: handler,
       websocket: proxy?.websocket ?? noSockets,
     });
   } catch (e) {
-    log(`start-up failed: cannot listen on ${config.host}:${config.port}: ${message(e)}`);
+    log(`start-up failed: cannot listen on ${config.listenHost}:${config.port}: ${message(e)}`);
     exit(1, 'no listener');
     return;
   }

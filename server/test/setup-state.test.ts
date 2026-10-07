@@ -3,7 +3,7 @@ import { createDiscordSetup, inviteUrl } from '../src/cli/setup/discord.ts';
 import type { HostInfo } from '../src/cli/setup/host.ts';
 import type { LookupDeps } from '../src/cli/setup/lookups.ts';
 import type { Answers, QuestionId, Text, TrayState } from '../src/cli/setup/model.ts';
-import { SetupSession } from '../src/cli/setup/session.ts';
+import { SetupState } from '../src/cli/setup/state.ts';
 import type { Values } from '../src/cli/setup/steps.ts';
 import type { Locale } from '../src/cli/strings.ts';
 import type { Ddns } from '../src/ddns.ts';
@@ -171,7 +171,7 @@ function make(o: Opts = {}) {
     unprivilegedPortStart: o.unprivilegedPortStart ?? null,
     ...(o.tray && { tray: o.tray }),
   };
-  const s = new SetupSession({
+  const s = new SetupState({
     env,
     host,
     base: { file, host, locale: o.locale ?? 'en', langFlag: env.langFlag, docker: env.docker, compiled: env.compiled },
@@ -188,7 +188,7 @@ function make(o: Opts = {}) {
 /** Lets the background list reads finish. */
 const settle = () => new Promise((r) => setTimeout(r, 5));
 
-async function answer(s: SetupSession, id: QuestionId, value: string | string[]) {
+async function answer(s: SetupState, id: QuestionId, value: string | string[]) {
   expect(s.current().id).toBe(id);
   const r = await s.submit(value);
   if (r !== 'advanced') throw new Error(`${id} stayed: ${JSON.stringify(s.current())}`);
@@ -196,7 +196,7 @@ async function answer(s: SetupSession, id: QuestionId, value: string | string[])
 }
 
 /** A fresh home install up to the Discord step: no domain on Cloudflare, DuckDNS on 8443. */
-async function homeDuck(s: SetupSession) {
+async function homeDuck(s: SetupState) {
   await answer(s, 'hosting', 'home');
   await answer(s, 'homeCf', 'no');
   await answer(s, 'duckName', 'My-Group.duckdns.org');
@@ -204,7 +204,7 @@ async function homeDuck(s: SetupSession) {
   await answer(s, 'httpsPort', '');
 }
 
-async function discord(s: SetupSession) {
+async function discord(s: SetupState) {
   await answer(s, 'discordToken', TOKEN);
   await answer(s, 'clientSecret', SECRET);
   await answer(s, 'guild', GUILD);
@@ -917,7 +917,7 @@ describe('hidden answers and apply options', () => {
   });
 
   test('TURN with an own domain: yes checks turn.<host> first; a missing record stays, or is kept with a note', async () => {
-    const vpsDomain = async (s: SetupSession) => {
+    const vpsDomain = async (s: SetupState) => {
       await answer(s, 'hosting', 'vps');
       await answer(s, 'vpsAddress', 'domain');
       await answer(s, 'domain', 't.example.com');

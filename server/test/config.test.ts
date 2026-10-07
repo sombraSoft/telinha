@@ -47,7 +47,7 @@ describe('loadConfig', () => {
     expect(c.dev).toBeNull();
     expect(c.publicUrl).toBe('https://tela.example.com');
     expect(c.channelIds).toEqual(['300', '301']);
-    expect(c.host).toBe('127.0.0.1');
+    expect(c.listenHost).toBe('127.0.0.1');
     expect(c.port).toBe(8081);
     expect(c.sessionSeconds).toBe(7 * 86400);
     expect(c.roleTtlMs).toBe(300_000);
@@ -122,7 +122,7 @@ describe('loadConfig', () => {
     expect(c.groupName).toBe('Crew');
     expect(c.livekitUrl).toBe('wss://lk.example.com');
     expect(c.webDir).toBe('/srv/web');
-    expect([c.host, c.port]).toEqual(['::1', 9000]);
+    expect([c.listenHost, c.port]).toEqual(['::1', 9000]);
     expect(c.sessionSeconds).toBe(86400);
     expect(c.roleTtlMs).toBe(10_000);
     expect(c.commandName).toBe('tela');
@@ -470,7 +470,7 @@ describe('port collisions', () => {
 });
 
 describe('MEDIA=cloud', () => {
-  test('defaults: browsers and RoomService go straight to the Cloud host', () => {
+  test('defaults: browsers and the LiveKit room API go straight to the Cloud host', () => {
     const c = loadConfig(CLOUD_ENV);
     expect(c.media).toBe('cloud');
     expect(c.livekitCloudHost).toBe('proj-abc123.livekit.cloud');

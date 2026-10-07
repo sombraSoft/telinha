@@ -180,8 +180,8 @@ function make(o: Opts = {}) {
       available: async () => o.available ?? false,
       shutdown: async () => {},
       status: async () => ({ supervised: true }),
-      doctorSession: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
-      doctorWait: async () => ({ state: 'expired' }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
+      phoneTestWait: async () => ({ state: 'expired' }),
     },
     bins: o.bins ?? (async () => {}),
     spawn: async (cmd: string[]) => {
@@ -605,7 +605,7 @@ describe('runApply', () => {
     expect(r.statuses('service').at(-1)).toBe('ok');
   });
 
-  test('secrets are made once per session: a retry or a re-apply writes the same ones; a rotation is made once too', async () => {
+  test('secrets are made once per setup run: a retry or a re-apply writes the same ones; a rotation is made once too', async () => {
     const memo: SecretMemo = { made: {} };
     const apply = async (o: Partial<ApplyOptions> = {}, values = VALUES()) => {
       const m = make();
@@ -618,7 +618,7 @@ describe('runApply', () => {
       expect(first[k]).toBeTruthy();
       expect(again[k]).toBe(first[k]);
     }
-    // Without the session's memo the counter-based random makes new ones.
+    // Without the run's memo the counter-based random makes new ones.
     expect((await apply()).COOKIE_SECRET).not.toBe(first.COOKIE_SECRET);
 
     const file = VALUES({

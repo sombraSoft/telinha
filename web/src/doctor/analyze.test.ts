@@ -50,7 +50,7 @@ const pairStats = (o: {
   ]);
 
 describe('selectedPath', () => {
-  test('the transport-selected pair: protocol, server address, rtt in ms', () => {
+  test('the transport-selected pair: protocol, SFU address, rtt in ms', () => {
     expect(selectedPath(pairStats({ protocol: 'udp', rtt: 0.0412 }))).toEqual({
       protocol: 'udp',
       candidateIp: '203.0.113.7',

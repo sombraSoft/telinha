@@ -405,7 +405,7 @@ describe('connection lost', () => {
     expect(lp.attributeWrites.filter((w) => 'watching' in w)).toEqual([{ watching: '' }, { watching: '' }]);
   });
 
-  test('closed by the server, or left on purpose: no rejoin', async () => {
+  test('closed by Telinha, or left on purpose: no rejoin', async () => {
     for (const [reason, key] of [
       [DisconnectReason.ROOM_DELETED, 'notice.closed'],
       [DisconnectReason.CLIENT_INITIATED, 'fatal.disconnected'],

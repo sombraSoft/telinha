@@ -1,5 +1,5 @@
 // The setup screens' own texts (EN + pt-BR): the welcome card, the Review,
-// the install list and its last card. Question texts come from the session
+// the install list and its last card. Question texts come from the setup state
 // (qstrings.ts), shared chrome from tui/strings.ts.
 import { useContext } from 'solid-js';
 import { defineStrings, type Params } from '../../cli/strings.ts';

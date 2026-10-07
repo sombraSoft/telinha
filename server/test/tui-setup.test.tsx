@@ -1,5 +1,5 @@
 // The setup screens driven with keys on OpenTUI's test renderer, wired to the
-// real setup (session, lookups, apply, file write) on a fake machine.
+// real setup (setup state, lookups, apply, file write) on a fake machine.
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { TaskId, TaskRow } from '../src/cli/setup/apply.ts';
 import type { SetupUiContext } from '../src/cli/setup/ui.ts';
@@ -210,7 +210,7 @@ describe('moving around', () => {
     await press(r.s, 'tab', 'down', 'down', 'down', 'enter');
     f = await until(r.s, 'Answer the earlier steps first');
     // Still on the first question, the sidebar still has the keys.
-    expect(r.session().current().id).toBe('hosting');
+    expect(r.state().current().id).toBe('hosting');
     await press(r.s, 'down', 'enter');
     expect(await until(r.s, 'Answer the earlier steps first')).toContain('Pick a step to jump to');
     await press(r.s, 'escape');
@@ -395,7 +395,7 @@ describe('the install', () => {
     );
     await press(r.s, 'ctrl+c');
     f = await until(r.s, 'Press Ctrl+C again to stop: the install may be left half done.');
-    expect(r.session().screen()).toBe('review');
+    expect(r.state().screen()).toBe('review');
     await press(r.s, 'ctrl+c');
     expect(await r.code).toBe(130);
     // The file was written before the download: the summary says so.
@@ -420,7 +420,7 @@ describe('the install', () => {
     await press(r.s, 'left');
     f = await until(r.s, '! The install has run: going back is disabled.');
     expect(f).toContain('Telinha is running');
-    expect(r.session().screen()).toBe('review');
+    expect(r.state().screen()).toBe('review');
     expect(await exit(r, f)).toBe(0);
   });
 
@@ -609,7 +609,7 @@ describe('lookups on the cards', () => {
     expect(f).toContain('Redirects -> Add Redirect, paste this, then Save Changes:');
     await press(r.s, '1');
     f = await until(r.s, '! Not there yet (did you press Save Changes?).');
-    expect(r.session().current().id).toBe('redirect');
+    expect(r.state().current().id).toBe('redirect');
     await press(r.s, '2');
     await at(r, 'guild');
     await press(r.s, 'enter');
@@ -636,7 +636,7 @@ describe('lookups on the cards', () => {
     r.world.hold = null;
     open();
     f = await until(r.s, '✖ Discord rejected the token; copy it again and paste it here.');
-    expect(r.session().current().id).toBe('discordToken');
+    expect(r.state().current().id).toBe('discordToken');
     // Typing hides the error until the next Enter.
     await press(r.s, 'ctrl+u');
     await paste(r.s, TOKEN);
@@ -699,8 +699,8 @@ describe('lookups on the cards', () => {
     expect(f).toContain('[ ] #geral');
     await press(r.s, 'enter');
     await at(r, 'command');
-    expect(r.session().answers().channels).toEqual(['444444444444444442', '444444444444444443']);
-    expect(r.session().answers().role).toBe(GUILD);
+    expect(r.state().answers().channels).toEqual(['444444444444444442', '444444444444444443']);
+    expect(r.state().answers().role).toBe(GUILD);
     await press(r.s, 'ctrl+c');
     await r.code;
   });

@@ -3,7 +3,7 @@
 // lists, DuckDNS, the domain's A record and busy media ports. Each returns a
 // LookupState; none writes anything except the DuckDNS update (it sets the
 // record to the current IP, which the running service does anyway). Run ids
-// let the session drop a result the user has moved on from.
+// let the setup state drop a result the user has moved on from.
 import type { Ddns } from '../../ddns.ts';
 import {
   type DiscordApplication,

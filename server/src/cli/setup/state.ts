@@ -49,7 +49,7 @@ import { defaultAnswers, keepHidden, type ResolveBase, resolveValues } from './r
 import { publicPorts, type Values } from './steps.ts';
 import type { TrayChoice } from './tray.ts';
 
-export interface SessionInit {
+export interface SetupStateInit {
   env: Omit<ModelEnv, 'lookups' | 'host'>;
   host: HostInfo | null;
   base: ResolveBase;
@@ -162,8 +162,8 @@ const list = (v: string | string[] | undefined): string[] =>
       : [];
 const isHidden = (id: AnswerId) => (HIDDEN_IDS as readonly string[]).includes(id);
 
-export class SetupSession {
-  readonly #init: SessionInit;
+export class SetupState {
+  readonly #init: SetupStateInit;
   readonly #env: ModelEnv;
   readonly #deps: LookupDeps;
   readonly #preset: Answers;
@@ -189,7 +189,7 @@ export class SetupSession {
   readonly #loading = new Set<string>();
   readonly #clients = new Map<string, DiscordSetup>();
 
-  constructor(init: SessionInit) {
+  constructor(init: SetupStateInit) {
     this.#init = init;
     this.#locale = init.locale;
     this.#env = { ...init.env, host: init.host, lookups: {}, locale: init.locale };

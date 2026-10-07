@@ -128,7 +128,7 @@ describe('createControlClient', () => {
     expect(await createControlClient({ ...h, fetch: refused, env: {} }).available()).toBe(false);
   });
 
-  test('doctor session, wait (capped at 30 s), update, shutdown', async () => {
+  test('phone test link, wait (capped at 30 s), update, shutdown', async () => {
     const h = home({ token: TOK });
     const f = fakeFetch((c) => {
       if (c.url.endsWith('/internal/doctor/sessions'))
@@ -139,8 +139,8 @@ describe('createControlClient', () => {
       return new Response('', { status: 404 });
     });
     const c = createControlClient({ ...h, fetch: f.fetch, env: {} });
-    expect(await c.doctorSession()).toEqual({ id: 'ab', url: 'https://x.test/doctor?t=1', expiresAt: 5 });
-    expect(await c.doctorWait('ab', 60_000)).toEqual({ state: 'opened', openedAt: 3 });
+    expect(await c.phoneTestLink()).toEqual({ id: 'ab', url: 'https://x.test/doctor?t=1', expiresAt: 5 });
+    expect(await c.phoneTestWait('ab', 60_000)).toEqual({ state: 'opened', openedAt: 3 });
     expect(f.calls[1]!.url).toBe('http://127.0.0.1:8081/internal/doctor/sessions/ab?wait=30000');
     expect((await c.update('scheduled')).action).toBe('deferred');
     expect(f.calls[2]!.body).toEqual({ mode: 'scheduled' });

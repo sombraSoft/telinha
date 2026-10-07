@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { sign } from '../src/auth.ts';
 import { loadConfig } from '../src/config.ts';
+import { createPhoneTestStore, type DoctorReport } from '../src/doctor/phone-test-store.ts';
 import { createDoctorRoutes, DOCTOR_COOKIE, MAX_REPORT_BYTES, parseReport } from '../src/doctor/routes.ts';
-import { createDoctorStore, type DoctorReport } from '../src/doctor/session.ts';
 import { staticFromEntries } from '../src/static.ts';
 import { ENTRIES, jwtPayload, NOW, PROD_ENV } from './helpers.ts';
 
@@ -24,7 +24,7 @@ function setup(
   o: { pageBuilt?: boolean; ensureRoom?: (room: string) => Promise<void>; env?: Record<string, string> } = {},
 ) {
   const config = loadConfig({ ...PROD_ENV, ...o.env });
-  const store = createDoctorStore({ cookieSecret: config.cookieSecret, now: () => NOW });
+  const store = createPhoneTestStore({ cookieSecret: config.cookieSecret, now: () => NOW });
   const entries: [string, Uint8Array][] = [...ENTRIES];
   if (o.pageBuilt !== false) entries.push(['doctor.html', new TextEncoder().encode(DOCTOR_HTML)]);
   const ensured: string[] = [];
@@ -45,7 +45,7 @@ function setup(
     const req = new Request(`${config.publicUrl}${path}`, init);
     return handle(req, new URL(req.url));
   };
-  /** A session opened through its link: the cookie header the phone then sends. */
+  /** A phone test opened through its link: the cookie header the phone then sends. */
   const opened = async () => {
     const s = store.create(NOW);
     const r = (await call(`/doctor?t=${s.token}`))!;
@@ -151,7 +151,7 @@ describe('doctor routes', () => {
     expect(((await direct.json()) as { ip: unknown }).ip).toBeNull();
   });
 
-  test('token: a private room, screen share publish only, no hidden grant, once per session', async () => {
+  test('token: a private room, screen share publish only, no hidden grant, once per phone test', async () => {
     const { config, call, opened, ensured } = setup();
     const s = await opened();
     const r = (await call('/doctor/api/token', post(s.cookie)))!;

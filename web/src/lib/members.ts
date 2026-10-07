@@ -30,7 +30,7 @@ export function parseMembers(body: unknown): Member[] | null {
   return out;
 }
 
-/** Same order as the server: online, idle, do-not-disturb, then by name. */
+/** Same order as Telinha: online, idle, do-not-disturb, then by name. */
 export function byStatus(a: Member, b: Member): number {
   return STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status) || collator.compare(a.name, b.name);
 }
@@ -86,7 +86,7 @@ export function poll(
     try {
       await run(ac.signal);
     } catch {
-      // offline, server restarting, aborted: the next tick tries again
+      // offline, Telinha restarting, aborted: the next tick tries again
     }
     running = false;
     if (!ac.signal.aborted && visible() && timer === null) timer = timers.set(() => void tick(), o.everyMs);

@@ -17,13 +17,13 @@ interface Shape {
   helpers: string[];
   ports: string[];
   exposures: string[];
-  relay: boolean;
+  signalingProxy: boolean;
 }
 const shape = (f: Footprint): Shape => ({
   helpers: f.helpers.map((h) => `${h.name}(${h.binary}): ${h.ports.map((p) => p.key).join(' ')}`),
   ports: f.ports.map((p) => p.key),
   exposures: f.exposures.map((e) => `${e.helper} ${e.key}/${e.protocol}`),
-  relay: f.relay,
+  signalingProxy: f.signalingProxy,
 });
 
 const LIVEKIT = 'livekit(livekit-server): LIVEKIT_PORT MEDIA_TCP_PORT MEDIA_UDP_PORT';
@@ -44,7 +44,7 @@ const TABLE: [Media, Ingress, turn: boolean, Shape][] = [
       helpers: [LIVEKIT, CADDY],
       ports: [...MEDIA_PORTS, 'LISTEN', ...WEB_PORTS],
       exposures: [...MEDIA_EXPOSED, ...WEB_EXPOSED],
-      relay: true,
+      signalingProxy: true,
     },
   ],
   [
@@ -56,29 +56,34 @@ const TABLE: [Media, Ingress, turn: boolean, Shape][] = [
       helpers: [`${LIVEKIT} TURN_PORT`, CADDY],
       ports: [...MEDIA_PORTS, 'LISTEN', ...WEB_PORTS, 'TURN_PORT'],
       exposures: [...MEDIA_EXPOSED, ...WEB_EXPOSED],
-      relay: true,
+      signalingProxy: true,
     },
   ],
   [
     'self',
     'tunnel',
     false,
-    { helpers: [LIVEKIT, CLOUDFLARED], ports: [...MEDIA_PORTS, 'LISTEN'], exposures: MEDIA_EXPOSED, relay: true },
+    {
+      helpers: [LIVEKIT, CLOUDFLARED],
+      ports: [...MEDIA_PORTS, 'LISTEN'],
+      exposures: MEDIA_EXPOSED,
+      signalingProxy: true,
+    },
   ],
   [
     'self',
     'external',
     false,
-    { helpers: [LIVEKIT], ports: [...MEDIA_PORTS, 'LISTEN'], exposures: MEDIA_EXPOSED, relay: true },
+    { helpers: [LIVEKIT], ports: [...MEDIA_PORTS, 'LISTEN'], exposures: MEDIA_EXPOSED, signalingProxy: true },
   ],
   [
     'cloud',
     'direct',
     false,
-    { helpers: [CADDY], ports: ['LISTEN', ...WEB_PORTS], exposures: WEB_EXPOSED, relay: false },
+    { helpers: [CADDY], ports: ['LISTEN', ...WEB_PORTS], exposures: WEB_EXPOSED, signalingProxy: false },
   ],
-  ['cloud', 'tunnel', false, { helpers: [CLOUDFLARED], ports: ['LISTEN'], exposures: [], relay: false }],
-  ['cloud', 'external', false, { helpers: [], ports: ['LISTEN'], exposures: [], relay: false }],
+  ['cloud', 'tunnel', false, { helpers: [CLOUDFLARED], ports: ['LISTEN'], exposures: [], signalingProxy: false }],
+  ['cloud', 'external', false, { helpers: [], ports: ['LISTEN'], exposures: [], signalingProxy: false }],
 ];
 
 describe('footprintOf', () => {

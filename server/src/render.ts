@@ -55,7 +55,7 @@ export function upstreamHost(listenHost: string): string {
 }
 
 export function renderCaddyfile(
-  c: Pick<Config, 'publicHost' | 'httpPort' | 'httpsPort' | 'acmeEmail' | 'acmeDns' | 'host' | 'port' | 'turn'>,
+  c: Pick<Config, 'publicHost' | 'httpPort' | 'httpsPort' | 'acmeEmail' | 'acmeDns' | 'listenHost' | 'port' | 'turn'>,
 ): string {
   const global = [
     '\tadmin off',
@@ -120,7 +120,7 @@ export function renderCaddyfile(
     `${c.publicHost} {`,
     ...tls,
     '\tencode zstd gzip',
-    `\treverse_proxy ${upstreamHost(c.host)}:${c.port}`,
+    `\treverse_proxy ${upstreamHost(c.listenHost)}:${c.port}`,
     '}',
     '',
     // Only so Caddy manages the TURN name's certificate: its connections never

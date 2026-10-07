@@ -74,11 +74,11 @@ function control(o: { available?: boolean; states?: (PhoneTestPoll | 'hang')[] }
   const client: DoctorControl = {
     available: async () => (calls.push('available'), o.available ?? true),
     status: async () => ({}) as never,
-    doctorSession: async () => (
-      calls.push('session'),
+    phoneTestLink: async () => (
+      calls.push('link'),
       { id: 'abc', url: 'https://telinha.example.com/doctor?t=TOKEN', expiresAt: Date.now() + 600_000 }
     ),
-    doctorWait: async (id, ms) => {
+    phoneTestWait: async (id, ms) => {
       calls.push(`wait ${id} ${ms}`);
       const next = states.shift() ?? { state: 'expired' };
       return next === 'hang' ? new Promise<PhoneTestPoll>(() => {}) : next;
@@ -257,7 +257,7 @@ describe('telinha doctor', () => {
     expect(
       await run(args, c.ctx, { ...noPhone, out: c.out, control: ctl.client, checks: [fakeCheck('a', 'ok')] }),
     ).toBe(0);
-    expect(ctl.calls.slice(0, 3)).toEqual(['available', 'session', 'wait abc 8000']);
+    expect(ctl.calls.slice(0, 3)).toEqual(['available', 'link', 'wait abc 8000']);
     expect(phoneSection(c.text())).toBe(
       [
         '▸ Phone test',
