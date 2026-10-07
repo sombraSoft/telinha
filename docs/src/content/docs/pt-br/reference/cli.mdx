@@ -114,6 +114,16 @@ unidade de usuário (`~/.config/systemd/user/telinha.service`,
 tarefa do Agendador de Tarefas roda, que a instalação elevada passa junto com
 `--sid`.
 
+## telinha tray
+
+<HelpText locale="pt-BR" topic="helpTray" />
+
+<FlagTable locale="pt-BR" command="tray" actions />
+
+Só no Windows: no Linux e no macOS toda ação sai com 1 e
+`o ícone na bandeja só existe no Windows`. Recebe só as opções globais. O
+ícone em si está descrito em [Ícone na bandeja](/telinha/pt-br/guides/tray/).
+
 ## Teclas
 
 As telas do setup e a lista do doctor leem estas teclas. A ajuda de teclas na
@@ -170,7 +180,7 @@ NO_COLOR=1 telinha doctor
 | Código | Significado |
 | --- | --- |
 | `0` | ok |
-| `1` | erro; também o `doctor` com uma verificação falha, e o `service status` quando o serviço não está instalado ou não está rodando |
+| `1` | erro; também o `doctor` com uma verificação falha, o `service status` quando o serviço não está instalado ou não está rodando, e o `tray status` quando o ícone não está rodando |
 | `2` | uso: uma opção inválida, um comando desconhecido, uma resposta não interativa faltando |
 | `3` | reinício pedido: o `run` pedindo ao laço do serviço para iniciá-lo de novo, depois de uma atualização |
 

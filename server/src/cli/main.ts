@@ -1,5 +1,5 @@
 // The command line: `telinha [run] | setup | doctor | update | service <action>
-// | --version | help [command]`. Global flags (--lang, --home, --yes) work
+// | tray <action> | --version | help [command]`. Global flags (--lang, --home, --yes) work
 // anywhere; a command's own flags go after it. Exit codes: 0 ok, 1 error,
 // 2 usage, 3 restart requested (run under `service run`); doctor exits 1 when
 // a check failed.
@@ -10,9 +10,9 @@ import { buildContext, GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, typ
 import type { SetupUi } from './setup/ui.ts';
 import { pickLocale, ts, type Key } from './strings.ts';
 
-export type Command = 'run' | 'setup' | 'doctor' | 'update' | 'service';
-const COMMANDS: readonly Command[] = ['run', 'setup', 'doctor', 'update', 'service'];
-const HELP: Record<Command, Key> = { run: 'helpRun', setup: 'helpSetup', doctor: 'helpDoctor', update: 'helpUpdate', service: 'helpService' };
+export type Command = 'run' | 'setup' | 'doctor' | 'update' | 'service' | 'tray';
+const COMMANDS: readonly Command[] = ['run', 'setup', 'doctor', 'update', 'service', 'tray'];
+const HELP: Record<Command, Key> = { run: 'helpRun', setup: 'helpSetup', doctor: 'helpDoctor', update: 'helpUpdate', service: 'helpService', tray: 'helpTray' };
 
 type Runner = (args: ParsedArgs, ctx: CliContext) => Promise<number>;
 type SetupModule = Pick<typeof import('./setup.ts'), 'run' | 'offerSetup'>;
@@ -100,6 +100,8 @@ async function defaultRunner(command: Exclude<Command, 'run'>, deps: MainDeps): 
       return (await import('./update.ts')).run;
     case 'service':
       return (await import('./service.ts')).run;
+    case 'tray':
+      return (await import('./tray.ts')).run;
   }
 }
 

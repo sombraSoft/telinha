@@ -1,6 +1,7 @@
 # release-please keeps a Release PR open on main; merging it creates a draft
 # GitHub release for vX.Y.Z (no tag yet). The jobs below build the native
-# binaries, our Caddy build per os/arch (native installs fetch it and verify it
+# binaries (the Windows exes Authenticode-signed when SignPath is configured),
+# our Caddy build per os/arch (native installs fetch it and verify it
 # through SHA256SUMS) and the image from that commit, upload every asset, then
 # publish the release, which creates the tag. So releases/latest never points at a
 # release without its assets, and a failed run leaves only a draft to finish
@@ -57,7 +58,7 @@ jobs:
           TAG: ${{ steps.release.outputs.tag_name }}
         run: gh release edit "$TAG" --prerelease --repo "$GITHUB_REPOSITORY"
 
-  # Windows targets build on Windows: Bun writes the version resource only there.
+  # Windows targets build in binaries-windows: they are signed before packing.
   binaries:
     name: binaries (${{ matrix.os }})
     needs: release-please
@@ -67,8 +68,6 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux
-          - os: windows-latest
-            target: windows
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -97,6 +96,148 @@ jobs:
           path: |
             dist-bin/telinha-*.tar.gz
             dist-bin/telinha-*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # Windows targets build on Windows: Bun writes the version resource only
+  # there. The bare exes go to sign-windows, which signs and zips them.
+  binaries-windows:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    # No caches: release builds start from a clean runner.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      # Tests first: dotnet test rebuilds the tray without -p:Version.
+      - name: tray
+        shell: bash
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          dotnet test tray/tests/telinha-tray.tests.csproj -c Release -nologo
+          dotnet build tray/telinha-tray.csproj -c Release -nologo -p:Version="${TAG#v}"
+      # --smoke runs the host binary's --version against the release version.
+      - name: compile
+        shell: bash
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          bun scripts/build-binary.ts --target windows --version "${TAG#v}" --smoke --no-pack
+          mkdir -p dist-bin/tray
+          cp tray/bin/Release/net48/telinha-tray.exe dist-bin/tray/
+      # The artifact drops the common dist-bin/ prefix: these are the paths
+      # .signpath/artifact-configuration.xml names.
+      - id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-unsigned
+          path: |
+            dist-bin/windows-x64/telinha.exe
+            dist-bin/windows-arm64/telinha.exe
+            dist-bin/tray/telinha-tray.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  # Signs the Windows exes through SignPath, then zips them, so SHA256SUMS and
+  # the attestation cover the signed files. Missing SignPath configuration
+  # skips signing (the release ships unsigned) and names what is missing; a
+  # denied, failed or timed-out signing request fails the release.
+  # The SignPath token and variables live in the `release` environment, whose
+  # deployment branches allow main only: a run from any other branch (a
+  # workflow_dispatch, or a copy of this file) cannot read them.
+  sign-windows:
+    needs: [release-please, binaries-windows]
+    if: github.ref == 'refs/heads/main' && needs.release-please.outputs.release_created == 'true'
+    environment: release
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      # The SignPath action downloads the artifact through the API with this token.
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-unsigned
+          path: unsigned
+      # A job-level if: cannot read secrets, so this step decides. Names only:
+      # the token itself is never printed.
+      - id: gate
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          ORG: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          POLICY: ${{ vars.SIGNPATH_POLICY_SLUG }}
+        run: |
+          missing=()
+          [ -n "$SIGNPATH_API_TOKEN" ] || missing+=("secret SIGNPATH_API_TOKEN")
+          [ -n "$ORG" ] || missing+=("variable SIGNPATH_ORGANIZATION_ID")
+          [ -n "$PROJECT" ] || missing+=("variable SIGNPATH_PROJECT_SLUG")
+          [ -n "$POLICY" ] || missing+=("variable SIGNPATH_POLICY_SLUG")
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo enabled=true >>"$GITHUB_OUTPUT"
+          else
+            list=$(printf '%s, ' "${missing[@]}")
+            echo "::notice title=Code signing skipped::the Windows exes ship unsigned; the release environment lacks ${list%, }"
+            echo enabled=false >>"$GITHUB_OUTPUT"
+          fi
+      - if: steps.gate.outputs.enabled == 'true'
+        # Pinned to a commit: this step holds the signing token and returns the
+        # files that ship. Renovate proposes bumps, reviewed by hand.
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2.3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          github-artifact-id: ${{ needs.binaries-windows.outputs.artifact-id }}
+          wait-for-completion: true
+          # Every release is approved by hand on SignPath.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+      - name: verify signatures
+        if: steps.gate.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          foreach ($f in 'windows-x64/telinha.exe', 'windows-arm64/telinha.exe', 'tray/telinha-tray.exe') {
+            $sig = Get-AuthenticodeSignature (Join-Path signed $f)
+            "${f}: $($sig.Status) ($($sig.SignerCertificate.Subject))"
+            if ($sig.Status -ne 'Valid') { Write-Error "$f is not validly signed: $($sig.StatusMessage)" -ErrorAction Continue; exit 1 }
+          }
+      - name: pack
+        shell: bash
+        env:
+          SIGNED: ${{ steps.gate.outputs.enabled }}
+        run: |
+          src=unsigned
+          if [ "$SIGNED" = true ]; then src=signed; fi
+          bun scripts/build-binary.ts pack --target windows --from "$src" --out dist-bin
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binaries-windows
+          path: dist-bin/telinha-windows-*.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -224,7 +365,7 @@ jobs:
 
   # Uploads every asset to the draft, then publishes it.
   release-assets:
-    needs: [release-please, binaries, caddy, image]
+    needs: [release-please, binaries, sign-windows, caddy, image]
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:

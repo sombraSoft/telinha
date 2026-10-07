@@ -16,6 +16,7 @@ import { mergeEnv, parseEnvFile } from '../envfile.ts';
 import { probe } from '../nat/index.ts';
 import { lookupPublicIp, resolveA, tlsInfo } from '../netinfo.ts';
 import { defaultSpawn, serviceManager } from '../service/index.ts';
+import { autostartEnabled, defaultTrayLauncher, trayDistPath, trayExePath } from '../service/tray.ts';
 import { assertOneStdin, GLOBAL_FLAGS, parseArgs, readSecretSource, UsageError, type ArgSpec, type CliContext, type ParsedArgs } from './args.ts';
 import { createControlClient } from './control.ts';
 import { at } from './setup/apply-strings.ts';
@@ -23,9 +24,9 @@ import { planTasks, runApply, silentOut, TASKS, todoLines, type ApplyHooks, type
 import { createDiscordSetup } from './setup/discord.ts';
 import { MANAGED_KEYS } from './setup/envwrite.ts';
 import { defaultOsName, detectHost, routerLabel, type HostInfo } from './setup/host.ts';
-import type { ModelEnv, Text } from './setup/model.ts';
+import { trayHere, type ModelEnv, type Text, type TrayState } from './setup/model.ts';
 import { q } from './setup/qstrings.ts';
-import { answersFromFlags, resolveValues, type ResolveBase } from './setup/resolve.ts';
+import { answersFromFlags, resolveValues, trayFromFlags, type ResolveBase } from './setup/resolve.ts';
 import { SetupSession } from './setup/session.ts';
 import { nextSteps, SetupAbort, UNPRIVILEGED_PORT_START, validateValues, type SetupDeps, type SetupFs, type Values, type Wizard } from './setup/steps.ts';
 import { t, type SKey } from './setup/strings.ts';
@@ -60,6 +61,8 @@ export const SETUP_FLAGS = {
   upnp: 'string',
   'auto-update': 'string',
   'no-service': 'boolean',
+  'no-tray': 'boolean',
+  'tray-autostart': 'boolean',
   'no-firewall': 'boolean',
   'no-upnp': 'boolean',
   'no-doctor': 'boolean',
@@ -185,6 +188,7 @@ export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
     execPath: process.execPath,
     which: (cmd) => Bun.which(cmd),
     certReady: async (host, port) => (await tlsInfo(host, port, 5000, '127.0.0.1')).authorized,
+    tray: defaultTrayLauncher,
   };
 }
 
@@ -248,16 +252,27 @@ async function readSecrets(ctx: CliContext, flags: Flags, stdin?: () => Promise<
 }
 
 /** What the questions may look at besides the answers (the machine comes later). */
-function modelEnv(ctx: CliContext, deps: SetupDeps, flags: Flags, file: Values, o: { docker: boolean; portStart: number | null }): Omit<ModelEnv, 'lookups' | 'host'> {
+function modelEnv(ctx: CliContext, deps: SetupDeps, flags: Flags, file: Values, o: { docker: boolean; portStart: number | null; tray?: TrayState }): Omit<ModelEnv, 'lookups' | 'host'> {
   return {
     platform: deps.platform, isRoot: deps.isRoot, docker: o.docker, compiled: ctx.compiled,
     offline: !!flags['no-discord-check'], langFlag: !!flags.lang,
     flags: { noService: !!flags['no-service'], noUpnp: !!flags['no-upnp'], noFirewall: !!flags['no-firewall'], noDoctor: !!flags['no-doctor'] },
     file, unprivilegedPortStart: o.portStart, locale: ctx.locale,
+    ...(o.tray && { tray: o.tray }),
   };
 }
 
-function applyOptions(ctx: CliContext, flags: Flags, docker: boolean, o: Pick<ApplyOptions, 'sysctl' | 'rotateCookie' | 'doctorMode' | 'secrets'>): ApplyOptions {
+/** The tray icon as this machine has it, for the tray questions' defaults (native Windows only). */
+async function trayState(ctx: CliContext, deps: SetupDeps, docker: boolean): Promise<TrayState | undefined> {
+  if (!trayHere({ platform: deps.platform, compiled: ctx.compiled, docker })) return undefined;
+  const exe = trayExePath(ctx.paths);
+  const [installed, optedOut, autostart] = await Promise.all([
+    deps.fs.exists(exe), deps.fs.exists(trayDistPath(ctx.paths)), autostartEnabled(deps.spawn, exe).catch(() => false),
+  ]);
+  return { installed, optedOut, autostart };
+}
+
+function applyOptions(ctx: CliContext, flags: Flags, docker: boolean, o: Pick<ApplyOptions, 'sysctl' | 'rotateCookie' | 'doctorMode' | 'secrets' | 'tray'>): ApplyOptions {
   return {
     docker, compiled: ctx.compiled,
     flags: { noService: !!flags['no-service'], noFirewall: !!flags['no-firewall'], noUpnp: !!flags['no-upnp'], noDoctor: !!flags['no-doctor'], offline: !!flags['no-discord-check'] },
@@ -304,7 +319,7 @@ async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o:
   const values = resolveValues(r.answers, env, { file: l.values, host, locale: ctx.locale, langFlag: !!flags.lang, docker, compiled: ctx.compiled });
   const w = makeWizard(ctx, deps, ctx.locale, host, { docker, out: deps.term(ctx.locale) });
   w.out.info(hostLine(w));
-  const opts = applyOptions(ctx, flags, docker, { sysctl: 'auto', rotateCookie: false, doctorMode: 'cli' });
+  const opts = applyOptions(ctx, flags, docker, { sysctl: 'auto', rotateCookie: false, doctorMode: 'cli', tray: trayFromFlags(flags, env) });
   const result = await runApply(w, l, values, planTasks(values, opts), opts, plainHooks(w));
   if (result.kind !== 'done') return 1;
   nextSteps(w, values, { file: l.shown });
@@ -396,7 +411,7 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
   // Detection takes seconds offline: the first question shows while it runs.
   const detecting = detect(ctx, deps, docker);
   const secrets = await readSecrets(ctx, flags, o.stdin);
-  const envBase = modelEnv(ctx, deps, flags, l.values, { docker, portStart: await portStart(deps) });
+  const envBase = modelEnv(ctx, deps, flags, l.values, { docker, portStart: await portStart(deps), tray: await trayState(ctx, deps, docker) });
   // Flags next to a terminal are the questions' defaults; a rule they break is a notice on the first card, not an exit.
   const pre = answersFromFlags(flags, { ...envBase, host: null, lookups: {} }, { secrets, locale: ctx.locale, lenient: true, advanced: !!flags.advanced, env: ctx.env });
   const base: ResolveBase = { file: l.values, host: null, locale: ctx.locale, langFlag: !!flags.lang, docker, compiled: ctx.compiled };
@@ -418,7 +433,8 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
   const apply = async (a: { rotateCookie: boolean }, hooks: ApplyHooks): Promise<ApplyResult> => {
     const h = await host;
     const values = session.values();
-    const opts = applyOptions(ctx, flags, docker, { sysctl: session.applyOptions().sysctl ?? 'auto', rotateCookie: a.rotateCookie, doctorMode: 'data', secrets: memo });
+    const chosen = session.applyOptions();
+    const opts = applyOptions(ctx, flags, docker, { sysctl: chosen.sysctl ?? 'auto', rotateCookie: a.rotateCookie, doctorMode: 'data', secrets: memo, tray: chosen.tray });
     const plan = planTasks(values, opts);
     const record = track(plan);
     applied = values;

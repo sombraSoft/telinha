@@ -43,6 +43,14 @@ Get-Content "$env:LOCALAPPDATA\Telinha\logs\telinha.log" -Tail 50 -Wait
 The firewall rules are described in
 [Port forwarding](/telinha/guides/port-forwarding/#firewalls).
 
+The [tray icon](/telinha/guides/tray/) next to the clock is a front end for
+the same task: its *Start* and *Stop* run `telinha service start` and
+`telinha service stop`, and *Restart* asks Telinha to exit so the loop starts
+it again. While the loop is bringing Telinha back (after a restart, an update
+or a crash) the icon shows `Telinha: starting…`, not *not running*.
+`telinha service uninstall` also closes the icon and removes its
+*Start with Windows* entry.
+
 A console run works as well: `telinha run` in a terminal, or a double-click on
 `telinha.exe`; Ctrl+C stops it. Only one `telinha run` per Telinha folder: a
 second one (a console run while the service is up, a second double-click)

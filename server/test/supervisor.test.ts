@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createSupervisor, redactLine, type ChildHandle, type ChildSpec, type SupervisorDeps } from '../src/supervisor.ts';
+import { createSupervisor, RECENT_RESTART_WINDOW_MS, redactLine, type ChildHandle, type ChildSpec, type SupervisorDeps } from '../src/supervisor.ts';
 
 const T0 = 1_700_000_000_000;
 // Not a pid anywhere: Windows pids are multiples of 4, Linux pid_max is <= 4194304.
@@ -321,14 +321,14 @@ describe('crash restarts', () => {
     const f = fakes();
     const sup = f.create([f.spec('a')]);
     await sup.start();
-    expect(sup.status()[0]).toEqual({ name: 'a', state: 'up', pid: 1001, restarts: 0, since: T0 });
+    expect(sup.status()[0]).toEqual({ name: 'a', state: 'up', pid: 1001, restarts: 0, recentRestarts: 0, since: T0 });
     f.advance(10);
     f.last().exit(1);
     await settle();
-    expect(sup.status()[0]).toEqual({ name: 'a', state: 'restarting', pid: null, restarts: 0, since: T0 + 10 });
+    expect(sup.status()[0]).toEqual({ name: 'a', state: 'restarting', pid: null, restarts: 0, recentRestarts: 0, since: T0 + 10 });
     f.fire();
     await settle();
-    expect(sup.status()[0]).toEqual({ name: 'a', state: 'up', pid: 1002, restarts: 1, since: T0 + 10 });
+    expect(sup.status()[0]).toEqual({ name: 'a', state: 'up', pid: 1002, restarts: 1, recentRestarts: 1, since: T0 + 10 });
     await sup.stop();
     expect(sup.status()[0]!.state).toBe('stopped');
   });
@@ -511,6 +511,58 @@ describe('stop', () => {
     await expect(started).rejects.toThrow('stopped during start');
     await stopping;
     expect(f.handles.map((h) => h.name)).toEqual(['a']);
+  });
+});
+
+describe('recentRestarts', () => {
+  test('counts respawn attempts inside the window and drops older ones', async () => {
+    const f = fakes();
+    const sup = f.create([f.spec('a')]);
+    await sup.start();
+    const crash = async () => {
+      f.last().exit(1);
+      await settle();
+      f.fire();
+      await settle();
+    };
+    await crash();
+    f.advance(RECENT_RESTART_WINDOW_MS / 2);
+    await crash();
+    expect(sup.status()[0]).toMatchObject({ restarts: 2, recentRestarts: 2 });
+    f.advance(RECENT_RESTART_WINDOW_MS / 2 + 1);
+    expect(sup.status()[0]).toMatchObject({ restarts: 2, recentRestarts: 1 });
+    f.advance(RECENT_RESTART_WINDOW_MS);
+    expect(sup.status()[0]).toMatchObject({ restarts: 2, recentRestarts: 0 });
+    await sup.stop();
+  });
+
+  test('a prepare that keeps throwing counts every attempt, restarts stays 0', async () => {
+    const f = fakes();
+    let fail = false;
+    const sup = f.create([f.spec('a', { prepare: async () => { if (fail) throw new Error('no disk'); } })]);
+    await sup.start();
+    fail = true;
+    f.last().exit(1);
+    await settle();
+    f.fire();
+    await settle();
+    f.fire();
+    await settle();
+    f.fire();
+    await settle();
+    expect(f.logs.filter((l) => l.includes('restart failed'))).toHaveLength(3);
+    expect(sup.status()[0]).toMatchObject({ restarts: 0, recentRestarts: 3 });
+    await sup.stop();
+  });
+
+  test('restart() and stop() do not count', async () => {
+    const f = fakes();
+    const sup = f.create([f.spec('a')]);
+    await sup.start();
+    await sup.restart('a');
+    expect(sup.status()[0]).toMatchObject({ restarts: 0, recentRestarts: 0 });
+    await sup.stop();
+    expect(sup.status()[0]).toMatchObject({ restarts: 0, recentRestarts: 0 });
   });
 });
 

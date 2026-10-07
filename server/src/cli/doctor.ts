@@ -5,11 +5,12 @@
 // On a terminal it is an interactive checklist (loaded on demand, so plain
 // runs and the docs generator never load the UI); otherwise, and with --json,
 // a plain table.
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadConfig, type Config } from '../config.ts';
 import { CHECKS, checkTitle, runChecks } from '../doctor/checks.ts';
 import { renderQr } from '../doctor/qr.ts';
-import type { Check, CheckContext, CheckResult, CheckStatus, NatProberLike, ServiceStatusFn, UpdateStateLike } from '../doctor/types.ts';
+import type { Check, CheckContext, CheckResult, CheckStatus, NatProberLike, ServiceStatusFn, TrayStateLike, UpdateStateLike } from '../doctor/types.ts';
 import { loadEnvFile, mergeEnv } from '../envfile.ts';
 import * as nat from '../nat/index.ts';
 import { serviceManager } from '../service/index.ts';
@@ -74,6 +75,17 @@ function readUpdateState(path: string): Promise<UpdateStateLike | null> {
   return readState(nodeFs(), path).then((s) => (Object.keys(s).length ? (s as UpdateStateLike) : null));
 }
 
+/** The tray writes this at start and removes it at a clean exit; anything unreadable counts as absent. */
+function readTrayState(path: string): TrayStateLike | null {
+  try {
+    const j = JSON.parse(readFileSync(path, 'utf8')) as Partial<TrayStateLike> | null;
+    if (!j || typeof j.version !== 'string' || typeof j.pid !== 'number' || typeof j.exe !== 'string') return null;
+    return { version: j.version, pid: j.pid, startedAt: typeof j.startedAt === 'number' ? j.startedAt : 0, exe: j.exe };
+  } catch {
+    return null;
+  }
+}
+
 /** The checks' context from the merged environment (telinha.env, then the process environment over it). */
 export async function buildCheckContext(ctx: CliContext, o: { local: boolean; control: DoctorControl }): Promise<CheckContext> {
   let fileVars: Record<string, string> = {};
@@ -103,6 +115,7 @@ export async function buildCheckContext(ctx: CliContext, o: { local: boolean; co
     nat: natProbe, service, control: o.control, compiled: ctx.compiled, version: ctx.version,
     latestTag: () => latestStable(),
     updateState: await readUpdateState(statePath(ctx.paths)),
+    trayState: readTrayState(join(ctx.paths.run, 'tray.json')),
   };
 }
 

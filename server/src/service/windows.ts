@@ -8,6 +8,7 @@
 import { win32 } from 'node:path';
 import { sameExe } from '../supervisor.ts';
 import { applyFirewallRules, loadFirewallPorts, firewallRules, removeFirewallRules } from './firewall.ts';
+import { setAutostart, stopTray, trayExePath } from './tray.ts';
 import {
   attempt, errorMessage, must, NotElevatedError, ServiceInstallError,
   type InstallOptions, type InstallResult, type ServiceDeps, type ServiceManager, type SpawnFn,
@@ -135,6 +136,32 @@ export async function isElevated(spawn: SpawnFn): Promise<boolean> {
   return (await spawn(['net', 'session'])).code === 0;
 }
 
+/**
+ * The token's TokenElevationType (18): 1 default (a standard user, UAC off, or
+ * the built-in Administrator), 2 full (elevated through UAC), 3 limited.
+ */
+export const ELEVATION_TYPE_PS =
+  `Add-Type -Namespace TelinhaProbe -Name Token -MemberDefinition '[DllImport("advapi32.dll")] public static extern bool GetTokenInformation(IntPtr token, int cls, out int value, int len, out int ret);'; ` +
+  '$v = 0; $r = 0; if ([TelinhaProbe.Token]::GetTokenInformation([Security.Principal.WindowsIdentity]::GetCurrent().Token, 18, [ref]$v, 4, [ref]$r)) { $v }';
+
+/** Encoded: the script's double quotes never meet Windows command-line quoting. */
+export const elevationTypeCommand = (): string[] =>
+  ['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ELEVATION_TYPE_PS, 'utf16le').toString('base64')];
+
+/**
+ * Elevated through UAC, the only case where a program started from here would
+ * run at a higher integrity than the user's desktop (and UIPI would cut it
+ * off from the shell). With UAC off, or as the built-in Administrator, nothing
+ * runs any lower, so that is no reason to refuse. When the probe gives no
+ * answer, the Administrators check decides.
+ */
+export async function isSplitElevated(spawn: SpawnFn): Promise<boolean> {
+  const r = await spawn(elevationTypeCommand());
+  const answer = r.stdout.trim();
+  if (r.code === 0 && /^[123]$/.test(answer)) return answer === '2';
+  return isElevated(spawn);
+}
+
 export function createWindowsTask(d: ServiceDeps): ServiceManager {
   const { spawn, fs, paths, log } = d;
   const pidfile = join(paths.run, 'service.pid');
@@ -207,6 +234,17 @@ export function createWindowsTask(d: ServiceDeps): ServiceManager {
         log(`service: stop before uninstall: ${errorMessage(e)}`);
       }
       await unregister();
+      // The tray icon would only report a service that is gone; its file goes with the folder.
+      try {
+        if ((await stopTray(d)) === 'stopped') log('service: tray icon stopped');
+      } catch (e) {
+        log(`service: stopping the tray icon: ${errorMessage(e)}`);
+      }
+      try {
+        await setAutostart(spawn, trayExePath(paths), false);
+      } catch (e) {
+        log(`service: tray autostart: ${errorMessage(e)}`);
+      }
       if (o.firewall) await removeFirewallRules(spawn);
     },
 

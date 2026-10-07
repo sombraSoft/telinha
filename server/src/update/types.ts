@@ -3,9 +3,9 @@
 // in tests on either host), the GitHub release reader, and the two error kinds
 // that tell "not available yet, try later" from "this build is bad".
 import { chmod, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import type { UpdateFailed, UpdatePending, UpdateStaged } from '../cli/control.ts';
+import type { UpdateApplied, UpdateFailed, UpdatePending, UpdateStaged } from '../cli/control.ts';
 
-export type { UpdateAction, UpdateCheck, UpdateFailed, UpdateMode, UpdatePending, UpdateResult, UpdateStaged, UpdateStatus } from '../cli/control.ts';
+export type { UpdateAction, UpdateApplied, UpdateCheck, UpdateFailed, UpdateMode, UpdatePending, UpdateResult, UpdateStaged, UpdateStatus } from '../cli/control.ts';
 
 export interface FileStat { size: number; mtimeMs: number }
 export interface WriteSink { write(chunk: Uint8Array): Promise<void>; close(): Promise<void> }
@@ -80,6 +80,8 @@ export function nodeFs(): UpdateFs {
 /** data/run/update.json. */
 export interface UpdateState {
   staged?: UpdateStaged;
+  /** The last staged update that started fine; kept until the next one replaces it. */
+  applied?: UpdateApplied;
   failed?: UpdateFailed;
   pending?: UpdatePending;
   lastCheck?: number;

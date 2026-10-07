@@ -50,7 +50,7 @@ export interface Supervisor {
   stop(): Promise<void>;                   // stops all; idempotent
   /** Last resort for process.on('exit'): kills without waiting (Linux SIGKILL, Windows taskkill), skips reaped children. */
   stopSync(): void;
-  status(): { name: string; state: ChildState; pid: number | null; restarts: number; since: number }[];
+  status(): { name: string; state: ChildState; pid: number | null; restarts: number; recentRestarts: number; since: number }[];
 }
 
 /** Is `pid` alive, and which executable runs there (basename; Linux comm may be cut at 15 chars). */
@@ -75,6 +75,8 @@ export interface SupervisorDeps {
 export interface ChildHandle { pid: number; exited: Promise<number | null>; stdout: ReadableStream<Uint8Array> | null; stderr: ReadableStream<Uint8Array> | null; kill(signal?: NodeJS.Signals): void }
 
 const DEFAULT_RESTART = { minMs: 1000, maxMs: 60_000, resetAfterMs: 60_000 };
+/** Window of `recentRestarts`: respawn attempts older than this stop counting. */
+export const RECENT_RESTART_WINDOW_MS = 10 * 60_000;
 const DEFAULT_GRACE_MS = 5000;
 const PROBE_EVERY_MS = 250;
 /** After killing a stale child: how often and how many times to check it is gone (ports freed) before prepare() probes them. */
@@ -95,6 +97,8 @@ interface Child {
   shortRuns: number;
   /** Crash respawns so far (restart() does not count). */
   restarts: number;
+  /** When each recent respawn attempt began, failed ones included (crash-loop signal); pruned to RECENT_RESTART_WINDOW_MS. */
+  restartTimes: number[];
   /** Bumped by stop() and restart(): a respawn from an older generation never spawns. */
   generation: number;
   /** Backoff sleep of a scheduled crash-restart, aborted by stop()/restart(). */
@@ -247,7 +251,7 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
   const processInfo = deps.processInfo ?? defaultProcessInfo(platform);
   const children: Child[] = deps.specs.map((spec) => ({
     spec, state: 'stopped', since: now(), handle: null, exitCode: undefined, startedAt: 0,
-    shortRuns: 0, restarts: 0, generation: 0, pending: null, op: Promise.resolve(), restarting: false,
+    shortRuns: 0, restarts: 0, restartTimes: [], generation: 0, pending: null, op: Promise.resolve(), restarting: false,
   }));
   const byName = new Map(children.map((c) => [c.spec.name, c]));
   let started = false;
@@ -358,6 +362,11 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     void restartAfter(child, delay);
   }
 
+  function pruneRestartTimes(child: Child) {
+    const cutoff = now() - RECENT_RESTART_WINDOW_MS;
+    child.restartTimes = child.restartTimes.filter((t) => t > cutoff);
+  }
+
   function nextDelay(child: Child): number {
     const { minMs, maxMs } = child.spec.restart ?? DEFAULT_RESTART;
     const delay = Math.min(maxMs, minMs * 2 ** child.shortRuns);
@@ -380,6 +389,9 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     if (cancelled()) return log(`[${name}] restart cancelled`);
     await enqueue(child, async () => {
       if (cancelled()) return log(`[${name}] restart cancelled`);
+      // Counted before prepare: an attempt that keeps failing is a crash loop too.
+      child.restartTimes.push(now());
+      pruneRestartTimes(child);
       try {
         await child.spec.prepare?.();
         // Rule 2: stop()/restart() moved the generation while prepare ran.
@@ -530,13 +542,17 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     },
 
     status() {
-      return children.map((c) => ({
+      return children.map((c) => {
+        pruneRestartTimes(c);
+        return {
         name: c.spec.name,
         state: c.state,
         pid: c.handle && c.exitCode === undefined ? c.handle.pid : null,
         restarts: c.restarts,
+        recentRestarts: c.restartTimes.length,
         since: c.since,
-      }));
+        };
+      });
     },
   };
 }

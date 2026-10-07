@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirrors the artifact configuration of the SignPath project that signs the release's Windows exes (release.yml, sign-windows). -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <directory path="windows-x64">
+      <pe-file path="telinha.exe" product-name="Telinha"><authenticode-sign /></pe-file>
+    </directory>
+    <directory path="windows-arm64">
+      <pe-file path="telinha.exe" product-name="Telinha"><authenticode-sign /></pe-file>
+    </directory>
+    <directory path="tray">
+      <pe-file path="telinha-tray.exe" product-name="Telinha"><authenticode-sign /></pe-file>
+    </directory>
+  </zip-file>
+</artifact-configuration>

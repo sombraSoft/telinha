@@ -11,6 +11,7 @@ import { SETUP_FLAGS } from '../../server/src/cli/setup.ts';
 import { DOCTOR_FLAGS } from '../../server/src/cli/doctor.ts';
 import { UPDATE_FLAGS } from '../../server/src/cli/update.ts';
 import { ACTIONS, serviceSpec } from '../../server/src/cli/service.ts';
+import { TRAY_ACTIONS } from '../../server/src/cli/tray.ts';
 import { dicts } from '../../server/src/cli/strings.ts';
 import { CHECKS, checkTitle } from '../../server/src/doctor/checks.ts';
 import { RULE_NAMES } from '../../server/src/service/firewall.ts';
@@ -20,7 +21,7 @@ import pkg from '../../package.json' with { type: 'json' };
 import { CONFIG_KEYS } from '../src/data/reference.ts';
 
 export type Locale = 'en' | 'pt-BR';
-export type HelpKey = 'help' | 'helpRun' | 'helpSetup' | 'helpDoctor' | 'helpUpdate' | 'helpService';
+export type HelpKey = 'help' | 'helpRun' | 'helpSetup' | 'helpDoctor' | 'helpUpdate' | 'helpService' | 'helpTray';
 export interface FlagSpec { kind: FlagKind; short?: string }
 export interface Generated {
   version: string;
@@ -36,6 +37,8 @@ export interface Generated {
     update: Record<string, FlagSpec>;
     /** Without the global flags; `user` is a switch on Linux and takes the account on Windows. */
     service: { actions: string[]; linux: Record<string, FlagSpec>; windows: Record<string, FlagSpec> };
+    /** Windows only; global flags only. */
+    tray: { actions: string[] };
     /** flag -> telinha.env key. */
     secretFlags: Record<string, string>;
     help: Record<Locale, Record<HelpKey, string>>;
@@ -87,7 +90,7 @@ export function generate(): Generated {
   const help = {} as Record<Locale, Record<HelpKey, string>>;
   for (const locale of LOCALES) {
     const d = dicts[locale];
-    help[locale] = { help: d.help, helpRun: d.helpRun, helpSetup: d.helpSetup, helpDoctor: d.helpDoctor, helpUpdate: d.helpUpdate, helpService: d.helpService };
+    help[locale] = { help: d.help, helpRun: d.helpRun, helpSetup: d.helpSetup, helpDoctor: d.helpDoctor, helpUpdate: d.helpUpdate, helpService: d.helpService, helpTray: d.helpTray };
   }
 
   return {
@@ -105,6 +108,7 @@ export function generate(): Generated {
         linux: specOf(serviceSpec('linux').flags, GLOBAL_FLAGS),
         windows: specOf(serviceSpec('win32').flags, GLOBAL_FLAGS),
       },
+      tray: { actions: [...TRAY_ACTIONS] },
       secretFlags: { ...SECRET_FLAGS },
       help,
     },

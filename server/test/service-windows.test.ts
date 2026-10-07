@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { ServiceInstallError, serviceManager, type ServiceFs, type SpawnFn, type SpawnOutcome } from '../src/service/index.ts';
-import { encodeTaskXml, formatLastResult, IS_ADMIN_PS, isElevated, parseTaskQuery, parseWhoami, taskXml, whoamiExe } from '../src/service/windows.ts';
+import {
+  ELEVATION_TYPE_PS, elevationTypeCommand, encodeTaskXml, formatLastResult, IS_ADMIN_PS, isElevated, isSplitElevated, parseTaskQuery, parseWhoami, taskXml, whoamiExe,
+} from '../src/service/windows.ts';
 
 const HOME = 'C:\\Users\\ana\\AppData\\Local\\Telinha';
 const EXE = `${HOME}\\bin\\telinha.exe`;
@@ -141,6 +143,20 @@ describe('parsing', () => {
     expect(await isElevated(viaNet.spawn)).toBe(true);
     expect(viaNet.calls.map((c) => c[0])).toEqual(['powershell', 'fltmc', 'net']);
     expect(await isElevated(noPs(1, 2).spawn)).toBe(false);
+  });
+
+  test('isSplitElevated refuses only a UAC elevation; no answer falls back to the Administrators check', async () => {
+    const cmd = elevationTypeCommand();
+    expect(cmd.slice(0, 4)).toEqual(['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand']);
+    expect(Buffer.from(cmd[4]!, 'base64').toString('utf16le')).toBe(ELEVATION_TYPE_PS);
+    const probe = (answer: string, admin = 'False') => recorder((c) => (c[3] === '-EncodedCommand' ? { stdout: answer } : c[4] === IS_ADMIN_PS ? { stdout: admin } : { code: 1 }));
+    expect(await isSplitElevated(probe('2\r\n').spawn)).toBe(true);
+    // UAC off or the built-in Administrator: no less privileged session exists to run it from.
+    expect(await isSplitElevated(probe('1\r\n', 'True').spawn)).toBe(false);
+    expect(await isSplitElevated(probe('3\r\n').spawn)).toBe(false);
+    const silent = probe('', 'True');
+    expect(await isSplitElevated(silent.spawn)).toBe(true);
+    expect(silent.calls.map((c) => c[3])).toEqual(['-EncodedCommand', '-Command']);
   });
 });
 
@@ -284,13 +300,36 @@ describe('stop, status, uninstall', () => {
     h.files.set(`${HOME}\\service\\telinha-task.xml`, 'xml');
     await h.manager.uninstall({ firewall: true });
     expect(h.names()).toEqual([
-      'schtasks /End', 'powershell -NoProfile', 'schtasks /Delete',
+      'schtasks /End', 'powershell -NoProfile', 'schtasks /Delete', 'reg delete',
       'netsh advfirewall', 'netsh advfirewall', 'netsh advfirewall', 'netsh advfirewall',
     ]);
     expect(h.calls[1]![4]).toBe("Unregister-ScheduledTask -TaskName 'Telinha' -Confirm:$false");
     expect(h.calls[2]).toEqual(['schtasks', '/Delete', '/TN', 'Telinha', '/F']);
-    expect(h.calls.slice(3).map((c) => c[5])).toEqual(['name=Telinha LiveKit TCP', 'name=Telinha LiveKit UDP', 'name=Telinha HTTPS', 'name=Telinha HTTP']);
+    // No tray.json: nothing to stop; the sign-in Run value goes either way.
+    expect(h.calls[3]).toEqual(['reg', 'delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'Telinha', '/f']);
+    expect(h.calls.slice(4).map((c) => c[5])).toEqual(['name=Telinha LiveKit TCP', 'name=Telinha LiveKit UDP', 'name=Telinha HTTPS', 'name=Telinha HTTP']);
     expect(h.files.has(`${HOME}\\service\\telinha-task.xml`)).toBe(true);
+  });
+
+  test('uninstall: a running tray icon is closed (taskkill, then /F when it stays) and its Run value removed', async () => {
+    const h = host({ available: false, procs: new Map([[777, 'telinha-tray.exe']]) });
+    h.files.set(`${HOME}\\data\\run\\tray.json`, JSON.stringify({ version: '0.7.0', pid: 777, startedAt: 1, exe: `${HOME}\\bin\\telinha-tray.exe` }));
+    const t0 = h.clock.t;
+    await h.manager.uninstall({ firewall: false });
+    expect(h.calls.slice(2)).toEqual([
+      ['taskkill', '/PID', '777'],
+      ['taskkill', '/F', '/PID', '777'],
+      ['reg', 'delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'Telinha', '/f'],
+    ]);
+    expect(h.clock.t - t0).toBe(5000);
+    expect(h.files.has(`${HOME}\\data\\run\\tray.json`)).toBe(false);
+    expect(h.logs).toContain('service: tray icon stopped');
+  });
+
+  test('uninstall: tray trouble is logged, never fatal', async () => {
+    const h = host({ available: false, respond: (cmd) => (cmd[1] === 'delete' ? { code: 1, stderr: 'ERROR: Access is denied.' } : undefined) });
+    await h.manager.uninstall({ firewall: false });
+    expect(h.logs.some((l) => l.startsWith('service: tray autostart: reg delete exited with code 1: ERROR: Access is denied.'))).toBe(true);
   });
 
   test('restart is stop then start', async () => {

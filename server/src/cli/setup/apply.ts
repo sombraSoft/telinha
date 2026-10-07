@@ -1,5 +1,5 @@
 // The install as a list of tasks: Discord, DuckDNS, the file, the programs,
-// the service, the router, the start, the certificate and doctor. One runner
+// the service, the tray icon, the router, the start, the certificate and doctor. One runner
 // for the setup screens (a live task list with retry, skip or back) and for
 // the plain run (lines as they come). A task's lines are the steps' own
 // output, captured per task; what happens after a failure is the caller's
@@ -15,8 +15,9 @@ import {
   doctorCli, downloadBinaries, generateSecrets, routerStep, serviceStep, startService, validateValues, waitForCertificate, writeConfig,
   type StartOutcome, type Values, type WithTerminal, type Wizard,
 } from './steps.ts';
+import { trayStep, type TrayChoice } from './tray.ts';
 
-export type TaskId = 'discord' | 'duckdns' | 'config' | 'binaries' | 'service' | 'router' | 'start' | 'cert' | 'doctor';
+export type TaskId = 'discord' | 'duckdns' | 'config' | 'binaries' | 'service' | 'tray' | 'router' | 'start' | 'cert' | 'doctor';
 export type TaskStatus = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skipped';
 export interface TaskLine { kind: 'info' | 'ok' | 'warn' | 'fail'; text: string }
 export interface TaskEvent {
@@ -45,6 +46,8 @@ export interface ApplyOptions {
   doctorMode: 'data' | 'cli';
   /** Kept by the caller across re-applies; a fresh one per run when absent. */
   secrets?: SecretMemo;
+  /** The tray icon (native Windows only); null: no tray task. */
+  tray: TrayChoice | null;
 }
 
 export interface ApplyHooks {
@@ -67,6 +70,7 @@ export const TASKS: Record<TaskId, { label: AKey; hint: AKey; backTo: QuestionId
   config: { label: 'taskConfig', hint: 'hintConfig', backTo: 'review' },
   binaries: { label: 'taskBinaries', hint: 'hintBinaries', backTo: 'review' },
   service: { label: 'taskService', hint: 'hintService', backTo: 'sysctl' },
+  tray: { label: 'taskTray', hint: 'hintTray', backTo: 'tray' },
   router: { label: 'taskRouter', hint: 'hintRouter', backTo: 'upnp' },
   start: { label: 'taskStart', hint: 'hintStart', backTo: 'review' },
   cert: { label: 'taskCert', hint: 'hintCert', backTo: 'review' },
@@ -109,6 +113,8 @@ export function planTasks(values: Values, o: ApplyOptions): TaskId[] {
   if (o.docker) return plan;
   plan.push('binaries');
   if (!o.flags.noService) plan.push('service');
+  // Early, so the icon shows the service coming up while the rest runs.
+  if (o.tray) plan.push('tray');
   if (!o.flags.noUpnp) plan.push('router');
   plan.push('start');
   if (!o.flags.noDoctor) {
@@ -275,6 +281,10 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
       installed = await serviceStep(tw, values, { firewall: !o.flags.noFirewall, sysctl: o.sysctl, withTerminal: hooks.withTerminal });
       if (!ctx.compiled) return { status: 'skipped' };
       return { status: installed ? 'ok' : 'fail' };
+    },
+    async tray(tw) {
+      await trayStep(tw, o.tray!);
+      return { status: 'ok' };
     },
     async router(tw) {
       await routerStep(tw, values, values.HOSTING === 'vps' ? 'vps' : 'home');

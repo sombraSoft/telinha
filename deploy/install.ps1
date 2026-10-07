@@ -66,12 +66,31 @@
         $new = Join-Path $bin 'telinha.new.exe'
         Copy-Item -Force (Join-Path $out 'telinha.exe') $new
 
+        # An existing install without the tray opted out of it: only a fresh one gets it installed unasked.
+        $fresh = -not (Test-Path $exe)
+        $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
         if (Test-Path $exe) {
             # A running exe cannot be overwritten but can be renamed; the updater sweeps telinha.old-*.
-            $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
             Move-Item -Force $exe (Join-Path $bin "telinha.old-manual-$stamp.exe")
         }
         Move-Item -Force $new $exe
+
+        $trayNew = Join-Path $out 'telinha-tray.exe'
+        $tray = Join-Path $bin 'telinha-tray.exe'
+        # An opted-out install keeps the tray uninstalled under this name, so a
+        # later `telinha setup` (without --no-tray) can install it from bin.
+        $trayDist = Join-Path $bin 'telinha-tray.dist.exe'
+        if (Test-Path $trayNew) {
+            if ($fresh -or (Test-Path $tray)) {
+                # Same rename-aside as telinha.exe: the tray may be running. Setup starts it.
+                if (Test-Path $tray) { Move-Item -Force $tray (Join-Path $bin "telinha-tray.old-manual-$stamp.exe") }
+                Copy-Item -Force $trayNew $tray
+                if (Test-Path $trayDist) { Remove-Item -Force $trayDist }
+            }
+            else {
+                Copy-Item -Force $trayNew $trayDist
+            }
+        }
     }
     finally {
         Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue

@@ -4,6 +4,9 @@
 // replaced file gets a unique name (telinha.old-<version>, telinha.failed-<tag>)
 // so a busy leftover from the last update never blocks the next one; sweeps are
 // best effort and the file in use simply survives until the service restarts.
+// The Windows tray rides along and never fails an update: it is replaced and
+// rolled back best effort. An installed tray is telinha-tray.exe; an opted-out
+// one is kept as telinha-tray.dist.exe, so setup can install it again offline.
 import { join } from 'node:path';
 import type { UpdateFailed, UpdateStaged } from '../cli/control.ts';
 import { readState, writeState } from './state.ts';
@@ -11,12 +14,15 @@ import { errorMessage, type UpdateFs } from './types.ts';
 
 export const exeName = (platform: NodeJS.Platform): string => (platform === 'win32' ? 'telinha.exe' : 'telinha');
 const ext = (platform: NodeJS.Platform) => (platform === 'win32' ? '.exe' : '');
-const LEFTOVER_RE = /^telinha\.(old|failed)-/;
+const LEFTOVER_RE = /^telinha(-tray)?\.(old|failed)-/;
+const TRAY = 'telinha-tray.exe';
+const TRAY_NEW = 'telinha-tray.new.exe';
+const TRAY_DIST = 'telinha-tray.dist.exe';
 
 type Log = (...a: unknown[]) => void;
 const quiet: Log = () => {};
 
-/** Removes every telinha.old-* / telinha.failed-* it can; a busy one (EBUSY/EPERM on Windows) stays. Returns the names removed. */
+/** Removes every telinha[-tray].old-* / telinha[-tray].failed-* it can; a busy one (EBUSY/EPERM on Windows) stays. Returns the names removed. */
 export async function sweep(fs: UpdateFs, bin: string, log: Log = quiet): Promise<string[]> {
   const removed: string[] = [];
   for (const name of await fs.readdir(bin)) {
@@ -83,7 +89,49 @@ export async function stage(o: StageOptions): Promise<UpdateStaged> {
     throw e;
   }
   log(`update: ${o.tag} installed as ${exe} (previous ${o.current} kept as ${oldName})`);
-  return { tag: o.tag, previous: o.current, previousFile: oldName, at: o.now(), failedStarts: 0 };
+  const trayPreviousFile = await stageTray(o, log);
+  return { tag: o.tag, previous: o.current, previousFile: oldName, at: o.now(), failedStarts: 0, ...(trayPreviousFile ? { trayPreviousFile } : {}) };
+}
+
+/**
+ * telinha-tray.exe -> telinha-tray.old-<current>.exe, telinha-tray.new.exe ->
+ * telinha-tray.exe when a tray is installed; otherwise the same into
+ * telinha-tray.dist.exe, the copy an opted-out install keeps uninstalled (the
+ * opt-out survives updates, and `telinha setup` can still install the tray).
+ * A running tray lets the rename through and only refuses deletion, so its
+ * .old waits for a later sweep. Never throws: the staged .new is removed
+ * whatever happens. Returns the .old name when a file was replaced.
+ */
+async function stageTray(o: StageOptions, log: Log): Promise<string | undefined> {
+  const fresh = join(o.bin, TRAY_NEW);
+  const drop = () => o.fs.rm(fresh).catch((e: unknown) => log(`update: ${TRAY_NEW} not removed (${errorMessage(e)})`));
+  try {
+    if (!(await o.fs.stat(fresh))) return undefined;
+    const installed = !!(await o.fs.stat(join(o.bin, TRAY)));
+    const name = installed ? TRAY : TRAY_DIST;
+    const current = join(o.bin, name);
+    const what = installed ? `tray installed as ${TRAY}` : `tray not installed; kept as ${TRAY_DIST}`;
+    if (!installed && !(await o.fs.stat(current))) {
+      await o.fs.rename(fresh, current);
+      log(`update: ${o.tag} ${what}`);
+      return undefined;
+    }
+    const oldName = await freeName(o.fs, o.bin, `telinha-tray.old-${o.current}`, '.exe', o.now());
+    const old = join(o.bin, oldName);
+    await o.fs.rename(current, old);
+    try {
+      await o.fs.rename(fresh, current);
+    } catch (e) {
+      await o.fs.rename(old, current).catch((undo: unknown) => log(`update: could not restore ${name}: ${errorMessage(undo)}`));
+      throw e;
+    }
+    log(`update: ${o.tag} ${what} (previous kept as ${oldName})`);
+    return oldName;
+  } catch (e) {
+    log(`update: tray not replaced: ${errorMessage(e)}`);
+    await drop();
+    return undefined;
+  }
 }
 
 export interface RollbackOptions {
@@ -128,15 +176,57 @@ export async function rollback(o: RollbackOptions): Promise<UpdateFailed> {
     return failed;
   }
   log(`update: rolled back to ${o.staged.previous} (${previous}); ${o.staged.tag} kept as ${failedName}`);
+  // Only once the executable went back, so the tray matches the version that runs.
+  await rollbackTray(o, log);
   return failed;
 }
 
-/** A started version proved itself: forget the staged record and sweep the leftovers. */
-export async function finish(o: { fs: UpdateFs; bin: string; statePath: string; log?: Log }): Promise<void> {
+/**
+ * The tray file -> telinha-tray.failed-<tag>.exe, the recorded previous tray
+ * back. The file is wherever the tray is now: telinha-tray.exe, or
+ * telinha-tray.dist.exe when it was opted out (before or after the update).
+ * Best effort, never throws.
+ */
+async function rollbackTray(o: RollbackOptions, log: Log): Promise<void> {
+  const previousName = o.staged.trayPreviousFile;
+  if (!previousName) return;
+  try {
+    const previous = join(o.bin, previousName);
+    if (!(await o.fs.stat(previous))) {
+      log(`update: ${previousName} is gone; tray left as is`);
+      return;
+    }
+    let name = TRAY;
+    if (!(await o.fs.stat(join(o.bin, name)))) name = TRAY_DIST;
+    const current = join(o.bin, name);
+    if (!(await o.fs.stat(current))) {
+      log(`update: no tray file; ${previousName} not restored`);
+      return;
+    }
+    const failedName = await freeName(o.fs, o.bin, `telinha-tray.failed-${o.staged.tag}`, '.exe', o.now());
+    const aside = join(o.bin, failedName);
+    await o.fs.rename(current, aside);
+    try {
+      await o.fs.rename(previous, current);
+    } catch (e) {
+      await o.fs.rename(aside, current).catch(() => {});
+      throw e;
+    }
+    log(`update: tray rolled back (${previousName}); ${o.staged.tag} tray kept as ${failedName}`);
+  } catch (e) {
+    log(`update: tray not rolled back: ${errorMessage(e)}`);
+  }
+}
+
+/** A started version proved itself: record it as applied, forget the staged record and sweep the leftovers. */
+export async function finish(o: { fs: UpdateFs; bin: string; statePath: string; now?: () => number; log?: Log }): Promise<void> {
   const state = await readState(o.fs, o.statePath);
-  if (state.staged) {
-    (o.log ?? quiet)(`update: ${state.staged.tag} started fine`);
-    await writeState(o.fs, o.statePath, { ...state, staged: undefined });
+  const { staged } = state;
+  if (staged) {
+    (o.log ?? quiet)(`update: ${staged.tag} started fine`);
+    // Kept until the next applied update overwrites it, so the tray can announce it once.
+    const applied = { tag: staged.tag, previous: staged.previous, at: (o.now ?? Date.now)() };
+    await writeState(o.fs, o.statePath, { ...state, staged: undefined, applied });
   }
   await sweep(o.fs, o.bin, o.log);
 }

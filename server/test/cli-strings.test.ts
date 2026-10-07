@@ -21,9 +21,14 @@ describe('ts', () => {
   test('help lists every command and never says "phase"', () => {
     for (const l of ['en', 'pt-BR'] as const) {
       const help = ts(l, 'help');
-      for (const cmd of ['run', 'setup', 'doctor', 'update', 'service', '--lang', '--home', '--yes', '--version', '--help']) expect(help).toContain(cmd);
+      for (const cmd of ['run', 'setup', 'doctor', 'update', 'service', 'tray <', '--lang', '--home', '--yes', '--version', '--help']) expect(help).toContain(cmd);
       for (const v of Object.values(dicts[l])) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b/);
     }
+  });
+
+  test('tray help: the actions, then what the icon is', () => {
+    expect(ts('en', 'helpTray')).toBe('Usage: telinha tray start | stop | status | autostart on|off\n\nThe Windows tray icon next to the clock: start or stop it, see whether it runs and whether it starts when you sign in. Windows only.');
+    expect(ts('pt-BR', 'helpTray')).toBe('Uso: telinha tray start | stop | status | autostart on|off\n\nO ícone da Telinha na bandeja, ao lado do relógio: inicia ou para ele, mostra se está rodando e se inicia quando você entra no Windows. Só no Windows.');
   });
 
   test('setup help names the non-interactive home rules', () => {

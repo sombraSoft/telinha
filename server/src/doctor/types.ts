@@ -83,6 +83,14 @@ export interface UpdateStateLike {
   pending?: { tag: string; since: number };
 }
 
+/** data/run/tray.json, written by the tray at start. */
+export interface TrayStateLike {
+  version: string;
+  pid: number;
+  startedAt: number;
+  exe: string;
+}
+
 /** The network probes, injectable so tests never touch the network. */
 export interface NetLike {
   lookupPublicIp(fetch: typeof globalThis.fetch, timeoutMs?: number): Promise<string>;
@@ -112,6 +120,12 @@ export interface SysLike {
    * (setup ends with it) while bin/ belongs to the service user.
    */
   readBytes?(path: string, maxBytes: number): Promise<Uint8Array | null>;
+  /** Is `pid` alive, and which executable runs there. */
+  processInfo?(pid: number): { alive: boolean; exe: string | null };
+  /** A string value under HKCU (key without the hive), or null when absent or unreadable. */
+  registryValue?(key: string, name: string): Promise<string | null>;
+  /** Authenticode state of an executable, or null when it cannot be asked. */
+  signature?(path: string): Promise<{ status: string; signer: string | null } | null>;
 }
 
 export interface CheckContext {
@@ -135,6 +149,8 @@ export interface CheckContext {
   latestTag: (() => Promise<string | null>) | null;
   /** data/run/update.json; null when absent. */
   updateState: UpdateStateLike | null;
+  /** data/run/tray.json; null when absent or unreadable. */
+  trayState: TrayStateLike | null;
   /** Defaults to netinfo.ts. */
   net?: NetLike;
   /** Defaults to the real host. */

@@ -13,7 +13,7 @@ let n = 0;
 
 const TOKEN = 'f'.repeat(64);
 const STATUS: ControlStatus = {
-  version: '9.9.9', startedAt: 1, pid: 42, ingress: 'direct', media: 'self', rooms: 0, children: { livekit: 'up' },
+  version: '9.9.9', startedAt: 1, pid: 42, ingress: 'direct', media: 'self', rooms: 0, children: { livekit: 'up' }, childStatus: { livekit: { state: 'up', pid: 7, restarts: 0, recentRestarts: 0, since: 1 } },
   publicIp: null, upnp: null, ddns: null, update: null, supervised: false,
 };
 const RESULT = { action: 'none', message: 'up to date' } as UpdateResult;

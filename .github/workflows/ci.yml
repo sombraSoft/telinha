@@ -79,6 +79,8 @@ jobs:
             target: linux
           - os: windows-latest
             target: windows
+            # The Windows zips carry the tray icon, built below.
+            args: --tray tray/bin/Release/net48/telinha-tray.exe
     runs-on: ${{ matrix.os }}
     # The run smoke: DEV_USER mode, no Discord, no ingress, no router.
     env:
@@ -130,11 +132,24 @@ jobs:
       # cross builds embed the target's, not the runner's.
       - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - run: bun run build
+      - if: runner.os == 'Windows'
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      # Tests first: dotnet test rebuilds the tray without -p:Version.
+      - name: tray
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          dotnet test tray/tests/telinha-tray.tests.csproj -c Release -nologo
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet build tray/telinha-tray.csproj -c Release -nologo -p:Version=$v
       # --smoke runs the host binary's --version and its terminal UI smoke, and
       # checks the binary sizes and that Babel was not bundled.
       - name: compile
         shell: bash
-        run: bun scripts/build-binary.ts --target ${{ matrix.target }} --smoke
+        run: bun scripts/build-binary.ts --target ${{ matrix.target }} --smoke ${{ matrix.args }}
       - uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.target }}
@@ -257,15 +272,173 @@ jobs:
           if ($p.ExitCode -ne 0) { Fail "exit $($p.ExitCode) after /internal/shutdown" }
           Get-Content $log
           'ok'
-      # The version resource is why the Windows targets build here.
+      - name: zip contents
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          foreach ($t in 'windows-x64', 'windows-arm64') {
+            $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path "dist-bin/telinha-$t.zip").Path)
+            try { $names = @($zip.Entries.FullName) -join ', ' } finally { $zip.Dispose() }
+            "telinha-${t}.zip: $names"
+            if ($names -ne 'telinha.exe, telinha-tray.exe, LICENSE') { Write-Error "telinha-$t.zip holds $names" -ErrorAction Continue; exit 1 }
+          }
+      # The version resource is why the Windows targets build here. Both exes
+      # carry the same ProductName and release version (code signing wants that).
       - name: version resource
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          function Fail($why) { Write-Error "FAIL: $why" -ErrorAction Continue; exit 1 }
           foreach ($t in 'windows-x64', 'windows-arm64') {
             $info = (Get-Item "dist-bin/$t/telinha.exe").VersionInfo
             "${t}: $($info.ProductName) $($info.FileVersion) ($($info.CompanyName))"
-            if ($info.ProductName -ne 'Telinha') { Write-Error "$t has no version resource" -ErrorAction Continue; exit 1 }
+            if ($info.ProductName -ne 'Telinha') { Fail "$t has no version resource" }
+          }
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          # cmd needs backslashes, and waits for the GUI exe and captures what it prints.
+          $tray = (Resolve-Path tray/bin/Release/net48/telinha-tray.exe).Path
+          $info = (Get-Item $tray).VersionInfo
+          "telinha-tray: $($info.ProductName) $($info.ProductVersion) $($info.FileVersion) ($($info.CompanyName))"
+          if ($info.ProductName -ne 'Telinha') { Fail "telinha-tray ProductName is '$($info.ProductName)'" }
+          if ($info.ProductVersion -ne $v) { Fail "telinha-tray ProductVersion is '$($info.ProductVersion)', want '$v'" }
+          # Four numbers, prerelease dropped: 0.7.0-rc.1 -> 0.7.0.0.
+          $file = "$($v.Split('-')[0]).0"
+          if ($info.FileVersion -ne $file) { Fail "telinha-tray FileVersion is '$($info.FileVersion)', want '$file'" }
+          $line = "$(cmd /c "`"$tray`" --version")".Trim()
+          $line
+          if ($line -ne "telinha-tray $v") { Fail "telinha-tray --version printed '$line', want 'telinha-tray $v'" }
+      # Start, status and stop through the CLI, against the run step's home.
+      - name: tray smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TELINHA_HOME: ${{ runner.temp }}/th
+        run: |
+          $tray = Join-Path $env:TELINHA_HOME 'bin/telinha-tray.exe'
+          $state = Join-Path $env:TELINHA_HOME 'data/run/tray.json'
+          $trayLog = Join-Path $env:TELINHA_HOME 'logs/telinha-tray.log'
+          $cli = 'dist-bin/windows-x64/telinha.exe'
+          # `tray status` only reports a tray installed in <home>\bin.
+          $null = New-Item -ItemType Directory -Force (Split-Path $tray)
+          Copy-Item tray/bin/Release/net48/telinha-tray.exe $tray -Force
+          # The runner is elevated and the tray refuses to run that way: start it
+          # with a normal-user token (Administrators deny-only), as runas /trustlevel does.
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.ComponentModel;
+          using System.Runtime.InteropServices;
+          using System.Text;
+          public static class NormalUser {
+            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+            struct StartupInfo {
+              public int cb; public string reserved, desktop, title;
+              public int x, y, xSize, ySize, xChars, yChars, fill, flags;
+              public short show, reserved2; public IntPtr reserved3, stdin, stdout, stderr;
+            }
+            [StructLayout(LayoutKind.Sequential)]
+            struct ProcessInfo { public IntPtr process, thread; public int pid, tid; }
+            [DllImport("advapi32.dll", SetLastError = true)]
+            static extern bool SaferCreateLevel(int scope, int level, int flags, out IntPtr handle, IntPtr reserved);
+            [DllImport("advapi32.dll", SetLastError = true)]
+            static extern bool SaferComputeTokenFromLevel(IntPtr level, IntPtr token, out IntPtr result, int flags, IntPtr reserved);
+            [DllImport("advapi32.dll")]
+            static extern bool SaferCloseLevel(IntPtr level);
+            [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+            static extern bool CreateProcessAsUser(IntPtr token, string app, StringBuilder cmd, IntPtr pa, IntPtr ta, bool inherit,
+              int flags, IntPtr env, string cwd, ref StartupInfo si, out ProcessInfo pi);
+            [DllImport("kernel32.dll")]
+            static extern bool CloseHandle(IntPtr handle);
+            public static int Start(string exe) {
+              IntPtr level, token;
+              // SAFER_SCOPEID_USER, SAFER_LEVELID_NORMALUSER, SAFER_LEVEL_OPEN
+              if (!SaferCreateLevel(2, 0x20000, 1, out level, IntPtr.Zero)) throw new Win32Exception();
+              try { if (!SaferComputeTokenFromLevel(level, IntPtr.Zero, out token, 0, IntPtr.Zero)) throw new Win32Exception(); }
+              finally { SaferCloseLevel(level); }
+              try {
+                var si = new StartupInfo();
+                si.cb = Marshal.SizeOf(si);
+                ProcessInfo pi;
+                // A null environment: the tray inherits this one (TELINHA_HOME).
+                if (!CreateProcessAsUser(token, exe, new StringBuilder("\"" + exe + "\""), IntPtr.Zero, IntPtr.Zero, false, 0, IntPtr.Zero, null, ref si, out pi))
+                  throw new Win32Exception();
+                CloseHandle(pi.thread);
+                CloseHandle(pi.process);
+                return pi.pid;
+              } finally { CloseHandle(token); }
+            }
+          }
+          '@
+          function Fail($why) {
+            Get-Content $trayLog -ErrorAction SilentlyContinue
+            Write-Error "FAIL: $why" -ErrorAction Continue
+            exit 1
+          }
+          $trayPid = 0
+          try {
+            $trayPid = [NormalUser]::Start((Resolve-Path $tray).Path)
+            $st = $null
+            foreach ($i in 1..50) {
+              if (Test-Path $state) { $st = Get-Content $state -Raw | ConvertFrom-Json }
+              if ($st.pid -eq $trayPid) { break }
+              if (-not (Get-Process -Id $trayPid -ErrorAction SilentlyContinue)) { Fail 'telinha-tray exited' }
+              Start-Sleep -Milliseconds 200
+            }
+            if ($st.pid -ne $trayPid) { Fail "no tray.json with pid $trayPid within 10 s" }
+            "tray.json: $($st | ConvertTo-Json -Compress)"
+            $out = & $cli tray status
+            "$out"
+            if ($LASTEXITCODE -ne 0) { Fail "tray status exited $LASTEXITCODE" }
+            if ("$out" -notlike "*$trayPid*") { Fail "tray status does not name pid $trayPid" }
+            & $cli tray stop
+            if ($LASTEXITCODE -ne 0) { Fail "tray stop exited $LASTEXITCODE" }
+            if (Get-Process -Id $trayPid -ErrorAction SilentlyContinue) { Fail 'telinha-tray still running after tray stop' }
+            if (Test-Path $state) { Fail 'tray.json left behind' }
+            'ok'
+          } finally {
+            if ($trayPid) { Stop-Process -Id $trayPid -Force -ErrorAction SilentlyContinue }
+            # bin/ is cached for livekit-server; keep the tray out of it.
+            Remove-Item $tray -Force -ErrorAction SilentlyContinue
+          }
+      # A Bun --compile exe keeps its bundle in PE sections, so signing must
+      # leave it runnable: sign copies with a throwaway certificate and run them.
+      - name: authenticode
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          function Fail($why) { Write-Error "FAIL: $why" -ErrorAction Continue; exit 1 }
+          $dir = Join-Path $env:RUNNER_TEMP 'signed'
+          $null = New-Item -ItemType Directory -Force $dir
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Telinha CI signing check' `
+            -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
+          try {
+            $checks = @(
+              @{ src = 'dist-bin/windows-x64/telinha.exe'; want = "telinha $v" },
+              @{ src = 'tray/bin/Release/net48/telinha-tray.exe'; want = "telinha-tray $v" }
+            )
+            foreach ($c in $checks) {
+              $copy = Join-Path $dir (Split-Path $c.src -Leaf)
+              Copy-Item $c.src $copy -Force
+              $null = Set-AuthenticodeSignature -FilePath $copy -Certificate $cert -HashAlgorithm SHA256
+              $sig = Get-AuthenticodeSignature $copy
+              $size = (Get-Item $c.src).Length
+              $signed = (Get-Item $copy).Length
+              "$(Split-Path $copy -Leaf): $($sig.Status), $size -> $signed bytes"
+              if ($sig.SignerCertificate.Thumbprint -ne $cert.Thumbprint) { Fail "$copy is not signed by the test certificate" }
+              # The self-signed root is untrusted: UnknownError, with the right signer.
+              if ($sig.Status -notin 'Valid', 'UnknownError') { Fail "$copy signature status $($sig.Status)" }
+              if ($signed -le $size) { Fail "$copy did not grow when signed" }
+              $line = "$(cmd /c "`"$copy`" --version")".Trim()
+              $line
+              if ($line -ne $c.want -and -not $line.StartsWith("$($c.want) ")) { Fail "signed $copy --version printed '$line', want '$($c.want)'" }
+            }
+          } finally {
+            # The store API, never Remove-Item on the Cert: drive.
+            $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('My', 'CurrentUser')
+            $store.Open('ReadWrite')
+            $store.Remove($cert)
+            $store.Close()
           }
 
   lint:

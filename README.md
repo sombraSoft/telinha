@@ -16,12 +16,14 @@ changes, asks the router to forward its ports (UPnP / NAT-PMP / PCP) and keeps
 a DuckDNS name current. It runs as a native program on Windows and Linux (one
 executable that downloads `livekit-server` and `cloudflared` from upstream and
 Telinha's own Caddy build from the release, all pinned by sha256, and updates
-itself) or as one Docker container that bundles them.
+itself, with a tray icon next to the clock on Windows) or as one Docker
+container that bundles them.
 
 **Docs:** https://sombrasoft.github.io/telinha/ (English and Portuguese):
 installing, choosing a setup, Discord app, domains, port forwarding
-(including pages for common Brazilian ISP routers), doctor, updates and the
-configuration and command-line reference.
+(including pages for common Brazilian ISP routers), doctor, updates, the
+Windows tray icon, code signing and the configuration and command-line
+reference.
 
 ## Install
 
@@ -208,12 +210,15 @@ those are served without a login (hashed build output, no data).
 
 | Path | What |
 | --- | --- |
-| `server/` | Bun TypeScript server, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` plain output (colours, spinner, tables, links; no prompts), `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` the entry (flags, the file, the machine, the screens or the plain run) and `setup/` what it runs: `model.ts` the questions as data, `resolve.ts` answers to `telinha.env` values and flags to answers, `lookups.ts` the read-only Discord, DNS and port lookups, `session.ts` the navigation state, `apply.ts` the install tasks with their retry/skip/back decisions, `steps.ts` their side effects, `ui.ts` the contract the screens implement, `qstrings.ts` and `apply-strings.ts` the texts, plus `discord.ts`, `domain.ts`, `host.ts` and `envwrite.ts`; `doctor.ts` and `doctor-strings.ts`, `update.ts`, `service.ts`), `tui/` the OpenTUI + Solid screens of setup and doctor (`runtime.tsx` the renderer and terminal safety, `theme.ts`, `keys.ts`, `ui/` the widgets, `setup/` and `doctor/` the screens, `load.ts`, `smoke.tsx`; loaded only on a terminal, through a dynamic import, so `run` never pulls it in), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` home dirs and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile, `lock.ts` one run per home, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall and the `service run` loop, `update/` release lookup, download, swap, rollback, `proxy.ts` `/livekit/*` relay, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `codes.ts` room codes, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
+| `server/` | Bun TypeScript server, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` plain output (colours, spinner, tables, links; no prompts), `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` the entry (flags, the file, the machine, the screens or the plain run) and `setup/` what it runs: `model.ts` the questions as data, `resolve.ts` answers to `telinha.env` values and flags to answers, `lookups.ts` the read-only Discord, DNS and port lookups, `session.ts` the navigation state, `apply.ts` the install tasks with their retry/skip/back decisions, `steps.ts` their side effects, `ui.ts` the contract the screens implement, `qstrings.ts` and `apply-strings.ts` the texts, plus `discord.ts`, `domain.ts`, `host.ts` and `envwrite.ts`; `doctor.ts` and `doctor-strings.ts`, `update.ts`, `service.ts`, `tray.ts` the `tray` command; `setup/tray.ts` the install's tray task), `tui/` the OpenTUI + Solid screens of setup and doctor (`runtime.tsx` the renderer and terminal safety, `theme.ts`, `keys.ts`, `ui/` the widgets, `setup/` and `doctor/` the screens, `load.ts`, `smoke.tsx`; loaded only on a terminal, through a dynamic import, so `run` never pulls it in), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` home dirs and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile, `lock.ts` one run per home, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall, the `service run` loop and `tray.ts` (the tray's file, Run value, launch and stop), `update/` release lookup, download, swap, rollback, `proxy.ts` `/livekit/*` relay, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `codes.ts` room codes, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
 | `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`), served under `/r/`, plus the doctor page (`doctor.html`, `src/doctor/`, plain TypeScript); `bun run build` writes `web/dist` |
 | `versions.json` | Pinned `livekit-server` and `cloudflared` versions with the sha256 of every asset (linux amd64/arm64, windows amd64/arm64; cloudflared has no windows arm64 build, the amd64 one is used), and the `caddy` build recipe: Caddy `version`, `xcaddy` and `modules` (no hashes: each release's `SHA256SUMS` pins its Caddy) |
 | `scripts/bins.ts` | `bun run bins`: downloads and verifies the helper binaries (dev, the Docker build): `livekit-server` and `cloudflared` against `versions.json`, `caddy` from a Telinha release (`--release vX.Y.Z`, default the latest) against its `SHA256SUMS` |
 | `scripts/caddy-build.ts` | `bun run caddy`: builds Telinha's Caddy with xcaddy (needs Go), cross-compiling with `--os`/`--arch`; on the host's own platform it asserts the version and the `dns.providers.duckdns` and `layer4` modules. Imports only `node:*`, so the Docker Go stage needs just it and `versions.json` |
-| `scripts/build-binary.ts` | Native binaries: compile, package, `SHA256SUMS`; `pack-caddy` packs a built Caddy as its release archive |
+| `tray/` | The Windows tray icon: C# on .NET Framework 4.8 (WinForms), one `telinha-tray.exe` (`Program.cs` start-up, `TrayApp.cs` icon and menu, `Monitor.cs` the state machine behind the dot and the notifications, `ControlClient.cs` the control endpoint, `Actions.cs`, `Autostart.cs` the Run value, `Relaunch.cs` the hand-over after an update, `Strings.cs` EN/pt-BR), MSTest tests in `tray/tests/`, `telinha.ico` |
+| `.signpath/` | `artifact-configuration.xml`: which files of the Windows release artifact SignPath signs (`telinha.exe` for x64 and arm64, `telinha-tray.exe`) and the product name they must carry |
+| `scripts/build-binary.ts` | Native binaries: compile, package (the Windows zips with the tray), `SHA256SUMS`; `pack` archives binaries built earlier (the release signs them in between); `pack-caddy` packs a built Caddy as its release archive |
+| `scripts/tray-icon.ts` | Draws `tray/telinha.ico` from the favicon's shapes (16 to 256 px); deterministic |
 | `scripts/versions.ts` | `check` (CI) and `refresh` (after a version bump) for `versions.json`; the caddy recipe is validated, never hashed |
 | `scripts/dev.ts`, `stack.ts` | Local dev: fetches `livekit-server`, starts the Bun server (which supervises it) and Vite, cleans up on exit; `stack.ts --e2e` is Playwright's web server |
 | `scripts/image.ts`, `smoke.sh` | `bun run image`: local container build plus the smoke test (`smoke.sh` ships in the image; it also checks the Caddy version and modules and has Caddy validate the DNS-01 Caddyfile) |
@@ -240,6 +245,10 @@ bun run bins               # download all three helper binaries for this host in
 bun run caddy              # build Telinha's Caddy with xcaddy into .cache/telinha/bin (needs Go on PATH)
 bun run versions check     # validate versions.json (refresh: recompute the livekit and cloudflared hashes)
 bun run compile --smoke    # native binaries for this OS into dist-bin/ (needs bun run build first); --smoke also runs the terminal UI smoke
+dotnet test tray/tests/telinha-tray.tests.csproj -c Release           # the tray's unit tests (Windows, .NET SDK 8+)
+dotnet build tray/telinha-tray.csproj -c Release -p:Version=X.Y.Z     # tray/bin/Release/net48/telinha-tray.exe
+bun run compile --tray tray/bin/Release/net48/telinha-tray.exe   # the same, with the tray in the Windows zips
+bun scripts/tray-icon.ts   # rewrite tray/telinha.ico
 bun run docs:dev           # the docs site at http://localhost:4321/telinha/
 bun run docs:build         # docs/dist; the link validator fails the build on a broken link
 ```
@@ -295,7 +304,8 @@ break, and the terminal smokes are not part of the required checks.
 JSX) and `web/dist` embedded (run `bun run build` first) and writes
 `dist-bin/<target>/telinha[.exe]` plus the release archives
 `dist-bin/telinha-linux-{x64,arm64}.tar.gz` and
-`dist-bin/telinha-windows-{x64,arm64}.zip` (each with `LICENSE`) and
+`dist-bin/telinha-windows-{x64,arm64}.zip` (each with `LICENSE`, the Windows
+ones also with `telinha-tray.exe` given `--tray PATH`) and
 `dist-bin/SHA256SUMS`. `--target` takes `linux-x64`, `linux-arm64`,
 `windows-x64`, `windows-arm64`, `linux`, `windows` or `host` (repeatable;
 default: this OS's two targets), `--version X.Y.Z` (default `package.json`),
@@ -303,6 +313,9 @@ default: this OS's two targets), `--version X.Y.Z` (default `package.json`),
 `TELINHA_SMOKE_TUI=1`, which renders a tiny OpenTUI screen, presses a key and checks it
 re-rendered, so a binary without OpenTUI's native library or without a reactive Solid
 fails; it also checks the binary sizes and that Babel was not bundled).
+`--no-pack` compiles only. `bun run compile pack --target <t> --from DIR` archives
+binaries built earlier (`DIR/<target>/telinha[.exe]`, and for Windows
+`DIR/tray/telinha-tray.exe` or `--tray`) without compiling.
 `bun run compile sums` rewrites `SHA256SUMS` for whatever archives
 are in `dist-bin/`, the `caddy-<target>` ones included, and
 `bun run compile pack-caddy --target <t> --from DIR` packs a built Caddy as the
@@ -312,6 +325,18 @@ a cross build embeds the target's: install them all with
 build only on Windows, where Bun can write their version resource (product
 name, publisher, version). The x64 targets are Bun's baseline builds. The
 binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
+
+**Tray icon.** `tray/` is an SDK-style project targeting `net48` with the
+`Microsoft.NETFramework.ReferenceAssemblies` package, so `dotnet build` on
+Windows needs only the .NET SDK (no Visual Studio, no targeting pack). Run the
+tests before the versioned build: `dotnet test` rebuilds the exe without
+`-p:Version`. `-p:Version=X.Y.Z[-rc.N]` makes `ProductVersion` (and
+`telinha-tray --version`) the release version and `FileVersion` `X.Y.Z.0`.
+The tray only reads the home (`data\run\service.pid`, `control.token`,
+`telinha.env`) and talks to the control endpoint and `telinha.exe`; it writes
+`data\run\tray.json` and `logs\telinha-tray.log`. It refuses to run elevated,
+so try a build with `telinha tray start` from a normal terminal after copying
+it into `<home>\bin`.
 
 **Image.** `bun run image` picks docker, else podman (starting the podman
 machine if it is stopped). Caddy is compiled inside the build by the
@@ -425,17 +450,32 @@ members' presences are cached.
    `release-please-config.json`). A draft has no tag and is never `latest`, so
    `releases/latest/download/*`, the installers and both updaters never see a
    release without its assets. Every later job checks out the release commit.
-4. `binaries` (matrix: `ubuntu-latest` builds `linux-x64` and `linux-arm64`,
-   `windows-latest` builds `windows-x64` and `windows-arm64`, where Bun writes
-   the Windows version resource) runs `bun scripts/build-binary.ts --target
-   linux|windows --version X.Y.Z --smoke`. In parallel `caddy` (matrix:
+4. `binaries` (`ubuntu-latest`) runs `bun scripts/build-binary.ts --target
+   linux --version X.Y.Z --smoke` for `linux-x64` and `linux-arm64`.
+   `binaries-windows` (`windows-latest`, where Bun writes the Windows version
+   resource) runs the tray's tests, builds `telinha-tray.exe` with
+   `-p:Version=X.Y.Z`, compiles `windows-x64` and `windows-arm64` with
+   `--smoke --no-pack`, and uploads the three exes as one artifact. Then
+   `sign-windows` has SignPath sign them (Authenticode, product name Telinha;
+   a SignPath Foundation policy is approved by hand per release), checks that
+   every signature is `Valid`, and packs `telinha-windows-x64.zip` and
+   `telinha-windows-arm64.zip` (`telinha.exe`, `telinha-tray.exe`, `LICENSE`)
+   with `build-binary.ts pack`. When signing is not configured for the
+   repository the step is skipped with a notice naming what is missing, and
+   the zips carry the unsigned exes; a denied, failed or timed-out signing
+   request fails the job instead. Free code signing provided by SignPath.io,
+   certificate by SignPath Foundation; see
+   [Code signing](https://sombrasoft.github.io/telinha/guides/code-signing/)
+   for the policy. In parallel `caddy` (matrix:
    `linux-x64`, `linux-arm64`, `windows-x64`, `windows-arm64`, all on
    `ubuntu-latest`, since Go cross-compiles) builds our Caddy through the
    Dockerfile's `caddy-export` target and packs it as `caddy-<target>.tar.gz`
    or `.zip`, and `image` builds `linux/amd64` and `linux/arm64` and pushes
    `ghcr.io/sombrasoft/telinha` tagged `X.Y.Z`, `X.Y` and `latest`, with a
    provenance attestation on the index digest.
-5. `release-assets` writes `SHA256SUMS` for the four telinha archives, the
+5. `release-assets` (after `binaries`, `sign-windows`, `caddy` and `image`)
+   writes `SHA256SUMS` for the four telinha archives (so the sums and the
+   attestation cover the signed Windows exes), the
    four `caddy-*` archives, `telinha-deploy.tar.gz` and `telinha-image.digest`,
    attests all of them and `SHA256SUMS` (one GitHub build provenance
    attestation), uploads
@@ -485,7 +525,14 @@ Telinha) of both Windows binaries. The `image` job runs the same two checks on
 `docker run [-it] ... setup --docker`, which needs the target's musl OpenTUI
 library selected by `OPENTUI_LIBC=musl`. The binaries jobs
 install every OS and CPU package (`bun install --os='*' --cpu='*'`) so each target
-embeds its own OpenTUI library.
+embeds its own OpenTUI library. On
+Windows that job also runs the tray's MSTest tests and builds it with the
+version, checks its version resource and `--version`, that each zip holds
+exactly `telinha.exe`, `telinha-tray.exe` and `LICENSE`, a tray smoke test
+(started without elevation: `tray.json`, `telinha tray status`,
+`telinha tray stop`), and an Authenticode check that signs copies of
+`telinha.exe` and `telinha-tray.exe` with a throwaway self-signed certificate
+and runs them, so a signature never breaks either.
 
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
 Dockerfile (its `golang` and bun images included), `deploy/compose.yml`,
@@ -519,7 +566,6 @@ only happens when a commit carries a `Release-As: 1.0.0` footer.
 
 ## Roadmap
 
-- Windows: a tray app, and code-signed binaries.
 - Media: LiveKit Cloud (`MEDIA=cloud`) for hosts that cannot open ports, and
   TURN over TLS on 443 via caddy-l4 (the module is already in our Caddy build).
 

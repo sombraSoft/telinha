@@ -3,30 +3,37 @@
 // specs joined with the hand-written docs. `service` shows the union of the
 // Linux and Windows specs (a flag that is a switch on one and takes a value on
 // the other gets a per-platform value cell); internal flags get a muted row. With `actions`,
-// the service actions (Action | Meaning) instead of its flags.
+// the command's actions (Action | Meaning) instead of its flags. `tray` has
+// actions only (it takes just the global flags).
 import generated from '../data/generated.json';
 import {
-  DOCTOR_FLAG_DOCS, GLOBAL_FLAG_DOCS, SERVICE_ACTION_DOCS, SERVICE_FLAG_DOCS, SETUP_FLAG_DOCS, UPDATE_FLAG_DOCS, UI, codeSegments,
+  DOCTOR_FLAG_DOCS, GLOBAL_FLAG_DOCS, SERVICE_ACTION_DOCS, SERVICE_FLAG_DOCS, SETUP_FLAG_DOCS, TRAY_ACTION_DOCS, UPDATE_FLAG_DOCS, UI,
+  codeSegments,
   type FlagDoc, type Locale,
 } from '../data/reference.ts';
 
-type Command = 'global' | 'setup' | 'doctor' | 'update' | 'service';
-interface Props { locale: Locale; command: Command; actions?: boolean }
+type FlagCommand = 'global' | 'setup' | 'doctor' | 'update' | 'service';
+type Props =
+  | { locale: Locale; command: FlagCommand; actions?: boolean }
+  | { locale: Locale; command: 'tray'; actions: true };
 const { locale, command, actions = false } = Astro.props;
 
 interface Spec { kind: string; short?: string }
 const cli = generated.cli as unknown as {
   global: Record<string, Spec>; setup: Record<string, Spec>; doctor: Record<string, Spec>; update: Record<string, Spec>;
   service: { actions: string[]; linux: Record<string, Spec>; windows: Record<string, Spec> };
+  tray: { actions: string[] };
 };
 const t = (k: string) => UI[k]![locale];
+const actionDocs: Record<string, { en: string; 'pt-BR': string; internal?: boolean }> = command === 'tray' ? TRAY_ACTION_DOCS : SERVICE_ACTION_DOCS;
 const actionRows = actions
-  ? cli.service.actions.map((a) => ({ action: a, meaning: SERVICE_ACTION_DOCS[a]?.[locale] ?? '', internal: !!SERVICE_ACTION_DOCS[a]?.internal }))
+  ? cli[command === 'tray' ? 'tray' : 'service'].actions.map((a) => ({ action: a, meaning: actionDocs[a]?.[locale] ?? '', internal: !!actionDocs[a]?.internal }))
   : [];
-const specs: Record<string, Spec> = command === 'service' ? { ...cli.service.linux, ...cli.service.windows } : cli[command];
+const flagCommand: FlagCommand = command === 'tray' ? 'global' : command;
+const specs: Record<string, Spec> = flagCommand === 'service' ? { ...cli.service.linux, ...cli.service.windows } : cli[flagCommand];
 const docs: Record<string, FlagDoc> = {
   global: GLOBAL_FLAG_DOCS, setup: SETUP_FLAG_DOCS, doctor: DOCTOR_FLAG_DOCS, update: UPDATE_FLAG_DOCS, service: SERVICE_FLAG_DOCS,
-}[command];
+}[flagCommand];
 
 const rows = Object.entries(specs).map(([name, spec]) => {
   const doc = docs[name] ?? { en: '', 'pt-BR': '' };

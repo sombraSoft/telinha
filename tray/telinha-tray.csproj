@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Windows tray icon: one exe on the .NET Framework that ships with Windows 10/11. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>telinha-tray</AssemblyName>
+    <RootNamespace>Telinha.Tray</RootNamespace>
+    <ApplicationIcon>telinha.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>Telinha</Product>
+    <Company>sombraSoft</Company>
+    <Description>Telinha tray icon</Description>
+    <Copyright>MIT</Copyright>
+    <!-- CI passes -p:Version=X.Y.Z[-rc.N]: FileVersion becomes X.Y.Z.0, InformationalVersion (ProductVersion) the release version. -->
+    <Version>0.0.0</Version>
+    <!-- Otherwise the SDK appends +<commit sha> and ProductVersion no longer equals the release version. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Net.Http" />
+    <EmbeddedResource Include="telinha.ico" LogicalName="telinha.ico" />
+  </ItemGroup>
+</Project>

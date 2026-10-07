@@ -63,7 +63,7 @@ The setup and doctor screens under `server/src/tui` are `.tsx` files (OpenTUI wi
 
 ## Native binaries
 
-`bun run compile` (`scripts/build-binary.ts`) compiles with `Bun.build` (its `compile` option, plus the Solid plugin for the terminal screens) with `web/dist` embedded (run `bun run build` first). It writes `dist-bin/<target>/telinha[.exe]`, the release archives `dist-bin/telinha-linux-{x64,arm64}.tar.gz` and `dist-bin/telinha-windows-{x64,arm64}.zip` (each with `LICENSE`) and `dist-bin/SHA256SUMS`.
+`bun run compile` (`scripts/build-binary.ts`) compiles with `Bun.build` (its `compile` option, plus the Solid plugin for the terminal screens) with `web/dist` embedded (run `bun run build` first). It writes `dist-bin/<target>/telinha[.exe]`, the release archives `dist-bin/telinha-linux-{x64,arm64}.tar.gz` and `dist-bin/telinha-windows-{x64,arm64}.zip` (each with `LICENSE`, the Windows ones also with `telinha-tray.exe` when given `--tray`) and `dist-bin/SHA256SUMS`.
 
 | Option | Meaning |
 | --- | --- |
@@ -71,8 +71,30 @@ The setup and doctor screens under `server/src/tui` are `.tsx` files (OpenTUI wi
 | `--version X.Y.Z` | Version to embed, default from `package.json` |
 | `--out DIR` | Output directory |
 | `--smoke` | Runs the host binary's `--version`, then its terminal UI smoke, and checks each binary's size and that no Babel got bundled |
+| `--tray PATH` | The `telinha-tray.exe` to put into the Windows zips |
+| `--no-pack` | Compiles only: no archives, no `SHA256SUMS` |
 
-`bun run compile sums` rewrites `SHA256SUMS` for whatever archives are in `dist-bin/`, the `caddy-<target>` ones included. `bun run compile pack-caddy --target <t> --from DIR` packs a built `caddy` as the release archive for that target; the release workflow builds each one through the `Dockerfile`'s `caddy-export` stage. Linux targets cross-compile from any host once `bun install --os='*' --cpu='*'` has fetched every target's OpenTUI native package. Windows targets build only on Windows, where Bun can write their version resource. The x64 targets are Bun's baseline builds. The binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
+`bun run compile pack --target windows --from DIR` archives binaries built earlier, `DIR/<target>/telinha.exe` and `DIR/tray/telinha-tray.exe` (or `--tray PATH`), without compiling; the release workflow uses it to pack the Windows programs after they are signed. `bun run compile sums` rewrites `SHA256SUMS` for whatever archives are in `dist-bin/`, the `caddy-<target>` ones included. `bun run compile pack-caddy --target <t> --from DIR` packs a built `caddy` as the release archive for that target; the release workflow builds each one through the `Dockerfile`'s `caddy-export` stage. Linux targets cross-compile from any host once `bun install --os='*' --cpu='*'` has fetched every target's OpenTUI native package. Windows targets build only on Windows, where Bun can write their version resource. The x64 targets are Bun's baseline builds. The binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
+
+## Tray icon
+
+The [Windows tray icon](/telinha/guides/tray/) lives in `tray/`: C# on the .NET Framework 4.8 (WinForms), one `telinha-tray.exe` with no DLL next to it. It builds on Windows with the .NET SDK (8 or newer) and no Visual Studio:
+
+```
+dotnet test tray/tests/telinha-tray.tests.csproj -c Release
+dotnet build tray/telinha-tray.csproj -c Release -p:Version=0.7.0
+bun scripts/tray-icon.ts
+bun run compile --tray tray/bin/Release/net48/telinha-tray.exe
+```
+
+| Command | What it does |
+| --- | --- |
+| `dotnet test …` | Builds the tray and runs its MSTest unit tests (`tray/tests/`) |
+| `dotnet build …` | Writes `tray/bin/Release/net48/telinha-tray.exe`. `-p:Version` sets the version (default `0.0.0`), so its `ProductVersion` and `telinha-tray --version` match `telinha --version`; run it after the tests, which rebuild without it |
+| `bun scripts/tray-icon.ts` | Draws `tray/telinha.ico` from the site's favicon shapes; the output is the same every run |
+| `bun run compile --tray …` | The native binaries, with the tray in the Windows zips |
+
+To try a build against a running Telinha, copy `telinha-tray.exe` into `<home>\bin` and start it with `telinha tray start` from a normal terminal; the tray refuses to run elevated.
 
 ## This site
 
@@ -101,7 +123,9 @@ The site is [Starlight](https://starlight.astro.build) in the `docs/` workspace,
 - deploy/ The installers, the Docker host files and `telinha-update`
 - scripts/ Dev stack, helper-binary download, the Caddy build, native build, image build and smoke test
 - e2e/ Playwright specs
+- tray/ The Windows tray icon (C#, .NET Framework 4.8) and its tests in `tray/tests/`
 - .github/ CI and release workflows
+- .signpath/ The artifact configuration the release's code signing uses
 - Dockerfile Multi-stage, multi-arch image build, with a Go stage that builds Caddy
 - versions.json Pinned `livekit-server` and `cloudflared` with their hashes, and the `caddy` build recipe: version, xcaddy, modules
 - package.json Workspaces and the scripts above

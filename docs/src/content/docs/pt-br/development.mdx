@@ -63,7 +63,7 @@ As telas do setup e do doctor em `server/src/tui` são arquivos `.tsx` (OpenTUI 
 
 ## Binários nativos
 
-O `bun run compile` (`scripts/build-binary.ts`) compila com o `Bun.build` (a opção `compile`, mais o plugin do Solid para as telas do terminal) com o `web/dist` embutido (rode `bun run build` antes). Ele escreve `dist-bin/<target>/telinha[.exe]`, os pacotes de release `dist-bin/telinha-linux-{x64,arm64}.tar.gz` e `dist-bin/telinha-windows-{x64,arm64}.zip` (cada um com `LICENSE`) e `dist-bin/SHA256SUMS`.
+O `bun run compile` (`scripts/build-binary.ts`) compila com o `Bun.build` (a opção `compile`, mais o plugin do Solid para as telas do terminal) com o `web/dist` embutido (rode `bun run build` antes). Ele escreve `dist-bin/<target>/telinha[.exe]`, os pacotes de release `dist-bin/telinha-linux-{x64,arm64}.tar.gz` e `dist-bin/telinha-windows-{x64,arm64}.zip` (cada um com `LICENSE`, os do Windows também com o `telinha-tray.exe` quando recebe `--tray`) e `dist-bin/SHA256SUMS`.
 
 | Opção | Significado |
 | --- | --- |
@@ -71,8 +71,30 @@ O `bun run compile` (`scripts/build-binary.ts`) compila com o `Bun.build` (a op�
 | `--version X.Y.Z` | Versão a embutir, por padrão a do `package.json` |
 | `--out DIR` | Pasta de saída |
 | `--smoke` | Roda o `--version` do binário deste computador, depois o smoke da interface do terminal, e confere o tamanho de cada binário e que nenhum Babel foi embutido |
+| `--tray PATH` | O `telinha-tray.exe` que vai nos zips do Windows |
+| `--no-pack` | Só compila: sem pacotes, sem `SHA256SUMS` |
 
-O `bun run compile sums` reescreve o `SHA256SUMS` para os pacotes que estiverem em `dist-bin/`, incluindo os `caddy-<target>`. O `bun run compile pack-caddy --target <t> --from DIR` empacota um `caddy` já compilado como o pacote de release daquele alvo; o workflow de release compila cada um pelo estágio `caddy-export` do `Dockerfile`. Os alvos Linux compilam de qualquer sistema depois que o `bun install --os='*' --cpu='*'` baixou o pacote nativo do OpenTUI de cada alvo. Os alvos Windows só compilam no Windows, onde o Bun consegue escrever o recurso de versão. Os alvos x64 são os builds baseline do Bun. O binário nunca lê um `.env` ou `bunfig.toml` da pasta onde roda.
+O `bun run compile pack --target windows --from DIR` empacota binários compilados antes, `DIR/<target>/telinha.exe` e `DIR/tray/telinha-tray.exe` (ou `--tray PATH`), sem compilar; o workflow de release usa isso para empacotar os programas do Windows depois de assinados. O `bun run compile sums` reescreve o `SHA256SUMS` para os pacotes que estiverem em `dist-bin/`, incluindo os `caddy-<target>`. O `bun run compile pack-caddy --target <t> --from DIR` empacota um `caddy` já compilado como o pacote de release daquele alvo; o workflow de release compila cada um pelo estágio `caddy-export` do `Dockerfile`. Os alvos Linux compilam de qualquer sistema depois que o `bun install --os='*' --cpu='*'` baixou o pacote nativo do OpenTUI de cada alvo. Os alvos Windows só compilam no Windows, onde o Bun consegue escrever o recurso de versão. Os alvos x64 são os builds baseline do Bun. O binário nunca lê um `.env` ou `bunfig.toml` da pasta onde roda.
+
+## Ícone na bandeja
+
+O [ícone na bandeja do Windows](/telinha/pt-br/guides/tray/) fica em `tray/`: C# sobre o .NET Framework 4.8 (WinForms), um único `telinha-tray.exe` sem DLL ao lado. Ele compila no Windows com o .NET SDK (8 ou mais novo), sem Visual Studio:
+
+```
+dotnet test tray/tests/telinha-tray.tests.csproj -c Release
+dotnet build tray/telinha-tray.csproj -c Release -p:Version=0.7.0
+bun scripts/tray-icon.ts
+bun run compile --tray tray/bin/Release/net48/telinha-tray.exe
+```
+
+| Comando | O que faz |
+| --- | --- |
+| `dotnet test …` | Compila o ícone e roda os testes de unidade em MSTest (`tray/tests/`) |
+| `dotnet build …` | Escreve `tray/bin/Release/net48/telinha-tray.exe`. O `-p:Version` define a versão (padrão `0.0.0`), para o `ProductVersion` e o `telinha-tray --version` baterem com o `telinha --version`; rode depois dos testes, que recompilam sem ele |
+| `bun scripts/tray-icon.ts` | Desenha o `tray/telinha.ico` a partir das formas do favicon do site; a saída é a mesma a cada execução |
+| `bun run compile --tray …` | Os binários nativos, com o ícone nos zips do Windows |
+
+Para testar um build com uma Telinha rodando, copie o `telinha-tray.exe` para `<home>\bin` e inicie com `telinha tray start` num terminal normal; o ícone se recusa a rodar elevado.
 
 ## Este site
 
@@ -101,7 +123,9 @@ O `release.yml` chama o `.github/workflows/docs.yml` depois de publicar uma vers
 - deploy/ Os instaladores, os arquivos do host Docker e o `telinha-update`
 - scripts/ Ambiente de desenvolvimento, download dos binários auxiliares, o build do Caddy, build nativo, build da imagem e teste de fumaça
 - e2e/ Testes do Playwright
+- tray/ O ícone na bandeja do Windows (C#, .NET Framework 4.8) e os testes dele em `tray/tests/`
 - .github/ Workflows de CI e de release
+- .signpath/ A configuração de artefatos que a assinatura de código da release usa
 - Dockerfile Build da imagem em vários estágios e várias arquiteturas, com um estágio Go que compila o Caddy
 - versions.json Versões fixadas de `livekit-server` e `cloudflared` com seus hashes, e a receita de build do `caddy`: versão, xcaddy, módulos
 - package.json Workspaces e os scripts acima

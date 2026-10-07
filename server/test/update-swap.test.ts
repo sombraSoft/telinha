@@ -8,10 +8,15 @@ const T0 = 1_700_000_000_000;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-/** In-memory UpdateFs: paths normalized to /, busy paths refuse rm/rename like a running exe on Windows. */
+/**
+ * In-memory UpdateFs: paths normalized to /, busy paths refuse rm/rename;
+ * running paths (a running exe on Windows) allow the rename, refuse rm, and the
+ * lock follows the file to its new name.
+ */
 function memFs() {
   const files = new Map<string, { data: Uint8Array; mtimeMs: number }>();
   const busy = new Set<string>();
+  const running = new Set<string>();
   const ops: string[] = [];
   let clock = 1;
   const n = (p: string) => p.replace(/\\/g, '/');
@@ -29,10 +34,11 @@ function memFs() {
       if (!e) throw err('ENOENT', f);
       files.delete(f);
       files.set(t, e);
+      if (running.delete(f)) running.add(t);
       ops.push(`rename ${basename(f)} -> ${basename(t)}`);
     },
     async rm(p) {
-      if (busy.has(n(p))) throw err('EBUSY', p);
+      if (busy.has(n(p)) || running.has(n(p))) throw err('EBUSY', p);
       if (files.delete(n(p))) ops.push(`rm ${basename(p)}`);
     },
     async stat(p) {
@@ -70,7 +76,7 @@ function memFs() {
     return e ? dec.decode(e.data) : null;
   };
   const names = () => [...files.keys()].map((k) => basename(k)).sort();
-  return { fs, files, busy, ops, put, text, names };
+  return { fs, files, busy, running, ops, put, text, names };
 }
 
 const BIN = '/t/bin';
@@ -136,8 +142,189 @@ describe('stage', () => {
   });
 });
 
+describe('tray', () => {
+  const winStage = (m: ReturnType<typeof memFs>, logs: string[] = []) =>
+    stage({ fs: m.fs, bin: BIN, platform: 'win32', tag: 'v0.8.0', current: '0.7.0', now, log: (...a) => logs.push(a.join(' ')) });
+  const install = (m: ReturnType<typeof memFs>) => {
+    m.put(`${BIN}/telinha.exe`, 'v0.7.0');
+    m.put(`${BIN}/telinha.new.exe`, 'v0.8.0');
+  };
+
+  test('staged alongside telinha.exe: the installed tray becomes telinha-tray.old-<current>.exe', async () => {
+    const m = memFs();
+    install(m);
+    m.put(`${BIN}/telinha-tray.exe`, 'tray v0.7.0');
+    m.put(`${BIN}/telinha-tray.new.exe`, 'tray v0.8.0');
+    m.put(`${BIN}/telinha-tray.old-0.6.0.exe`, 'leftover');
+    const logs: string[] = [];
+    const staged = await winStage(m, logs);
+    expect(m.ops).toEqual([
+      'rm telinha-tray.old-0.6.0.exe',
+      'rename telinha.exe -> telinha.old-0.7.0.exe', 'rename telinha.new.exe -> telinha.exe',
+      'rename telinha-tray.exe -> telinha-tray.old-0.7.0.exe', 'rename telinha-tray.new.exe -> telinha-tray.exe',
+    ]);
+    expect(staged).toEqual({
+      tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0.exe', trayPreviousFile: 'telinha-tray.old-0.7.0.exe', at: T0, failedStarts: 0,
+    });
+    expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray v0.8.0');
+    expect(m.text(`${BIN}/telinha-tray.old-0.7.0.exe`)).toBe('tray v0.7.0');
+    expect(logs.join('\n')).toContain('tray installed as telinha-tray.exe (previous kept as telinha-tray.old-0.7.0.exe)');
+  });
+
+  test('a running tray is renamed aside, survives the sweep as .old and goes once it has exited', async () => {
+    const m = memFs();
+    install(m);
+    m.put(`${BIN}/telinha-tray.exe`, 'tray v0.7.0');
+    m.put(`${BIN}/telinha-tray.new.exe`, 'tray v0.8.0');
+    m.running.add(`${BIN}/telinha.exe`);
+    m.running.add(`${BIN}/telinha-tray.exe`);
+    const staged = await winStage(m);
+    expect(staged.trayPreviousFile).toBe('telinha-tray.old-0.7.0.exe');
+    expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray v0.8.0');
+    expect(await sweep(m.fs, BIN)).toEqual([]);
+    expect(m.text(`${BIN}/telinha-tray.old-0.7.0.exe`)).toBe('tray v0.7.0');
+    // The tray relaunched from the new file: the next sweep removes its old one.
+    m.running.delete(`${BIN}/telinha-tray.old-0.7.0.exe`);
+    expect(await sweep(m.fs, BIN)).toEqual(['telinha-tray.old-0.7.0.exe']);
+  });
+
+  test('no staged telinha-tray.new.exe (older release): the installed tray is left alone', async () => {
+    const m = memFs();
+    install(m);
+    m.put(`${BIN}/telinha-tray.exe`, 'tray v0.7.0');
+    const staged = await winStage(m);
+    expect(staged.trayPreviousFile).toBeUndefined();
+    expect(m.ops).toEqual(['rename telinha.exe -> telinha.old-0.7.0.exe', 'rename telinha.new.exe -> telinha.exe']);
+    expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray v0.7.0');
+  });
+
+  test('tray not installed: the staged .new is kept uninstalled as telinha-tray.dist.exe, for a later setup', async () => {
+    const m = memFs();
+    install(m);
+    m.put(`${BIN}/telinha-tray.new.exe`, 'tray v0.8.0');
+    const logs: string[] = [];
+    const staged = await winStage(m, logs);
+    expect(staged.trayPreviousFile).toBeUndefined();
+    expect(m.ops).toEqual(['rename telinha.exe -> telinha.old-0.7.0.exe', 'rename telinha.new.exe -> telinha.exe', 'rename telinha-tray.new.exe -> telinha-tray.dist.exe']);
+    expect(m.names()).toEqual(['telinha-tray.dist.exe', 'telinha.exe', 'telinha.old-0.7.0.exe']);
+    expect(m.text(`${BIN}/telinha-tray.dist.exe`)).toBe('tray v0.8.0');
+    expect(logs).toContain('update: v0.8.0 tray not installed; kept as telinha-tray.dist.exe');
+  });
+
+  test('opted out with a kept copy: it is replaced like an installed tray, never installed', async () => {
+    const m = memFs();
+    install(m);
+    m.put(`${BIN}/telinha-tray.dist.exe`, 'tray v0.7.0');
+    m.put(`${BIN}/telinha-tray.new.exe`, 'tray v0.8.0');
+    const staged = await winStage(m);
+    expect(staged.trayPreviousFile).toBe('telinha-tray.old-0.7.0.exe');
+    expect(m.names()).toEqual(['telinha-tray.dist.exe', 'telinha-tray.old-0.7.0.exe', 'telinha.exe', 'telinha.old-0.7.0.exe']);
+    expect(m.text(`${BIN}/telinha-tray.dist.exe`)).toBe('tray v0.8.0');
+    expect(m.text(`${BIN}/telinha-tray.old-0.7.0.exe`)).toBe('tray v0.7.0');
+  });
+
+  test('a tray that cannot be replaced is logged, its .new removed, and the update still stages', async () => {
+    const m = memFs();
+    install(m);
+    m.put(`${BIN}/telinha-tray.exe`, 'tray v0.7.0');
+    m.put(`${BIN}/telinha-tray.new.exe`, 'tray v0.8.0');
+    m.busy.add(`${BIN}/telinha-tray.exe`);
+    const logs: string[] = [];
+    const staged = await winStage(m, logs);
+    expect(staged.trayPreviousFile).toBeUndefined();
+    expect(m.text(`${BIN}/telinha.exe`)).toBe('v0.8.0');
+    expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray v0.7.0');
+    expect(m.names()).toEqual(['telinha-tray.exe', 'telinha.exe', 'telinha.old-0.7.0.exe']);
+    expect(logs.some((l) => l.startsWith('update: tray not replaced: EBUSY'))).toBe(true);
+  });
+
+  test('the second tray rename failing puts the installed tray back', async () => {
+    const m = memFs();
+    install(m);
+    m.put(`${BIN}/telinha-tray.exe`, 'tray v0.7.0');
+    m.put(`${BIN}/telinha-tray.new.exe`, 'tray v0.8.0');
+    m.busy.add(`${BIN}/telinha-tray.new.exe`);
+    const logs: string[] = [];
+    const staged = await winStage(m, logs);
+    expect(staged.trayPreviousFile).toBeUndefined();
+    expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray v0.7.0');
+    expect(m.ops.slice(2)).toEqual(['rename telinha-tray.exe -> telinha-tray.old-0.7.0.exe', 'rename telinha-tray.old-0.7.0.exe -> telinha-tray.exe']);
+    expect(logs.some((l) => l.startsWith('update: tray not replaced'))).toBe(true);
+  });
+
+  const staged = { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0.exe', trayPreviousFile: 'telinha-tray.old-0.7.0.exe', at: T0, failedStarts: 2 };
+
+  test('rollback restores the previous tray and keeps the bad one as telinha-tray.failed-<tag>.exe', async () => {
+    const m = memFs();
+    m.put(`${BIN}/telinha.exe`, 'bad');
+    m.put(`${BIN}/telinha.old-0.7.0.exe`, 'good');
+    m.put(`${BIN}/telinha-tray.exe`, 'tray bad');
+    m.put(`${BIN}/telinha-tray.old-0.7.0.exe`, 'tray good');
+    // The new tray is running: renaming it aside still works.
+    m.running.add(`${BIN}/telinha-tray.exe`);
+    const logs: string[] = [];
+    await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now, log: (...a) => logs.push(a.join(' ')) });
+    expect(m.ops).toEqual([
+      'rename telinha.exe -> telinha.failed-v0.8.0.exe', 'rename telinha.old-0.7.0.exe -> telinha.exe',
+      'rename telinha-tray.exe -> telinha-tray.failed-v0.8.0.exe', 'rename telinha-tray.old-0.7.0.exe -> telinha-tray.exe',
+    ]);
+    expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray good');
+    expect(m.text(`${BIN}/telinha-tray.failed-v0.8.0.exe`)).toBe('tray bad');
+    expect(logs.join('\n')).toContain('tray rolled back (telinha-tray.old-0.7.0.exe)');
+  });
+
+  test('rollback of the tray is best effort: a failure is logged, the executable rollback stands', async () => {
+    const m = memFs();
+    m.put(`${BIN}/telinha.exe`, 'bad');
+    m.put(`${BIN}/telinha.old-0.7.0.exe`, 'good');
+    m.put(`${BIN}/telinha-tray.exe`, 'tray bad');
+    m.put(`${BIN}/telinha-tray.old-0.7.0.exe`, 'tray good');
+    m.busy.add(`${BIN}/telinha-tray.old-0.7.0.exe`);
+    const logs: string[] = [];
+    const failed = await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now, log: (...a) => logs.push(a.join(' ')) });
+    expect(failed.tag).toBe('v0.8.0');
+    expect(m.text(`${BIN}/telinha.exe`)).toBe('good');
+    expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray bad');
+    expect(logs.some((l) => l.startsWith('update: tray not rolled back'))).toBe(true);
+  });
+
+  test('rollback puts the previous tray back where the tray is now: the kept copy of an opted-out install', async () => {
+    const m = memFs();
+    m.put(`${BIN}/telinha.exe`, 'bad');
+    m.put(`${BIN}/telinha.old-0.7.0.exe`, 'good');
+    m.put(`${BIN}/telinha-tray.dist.exe`, 'tray bad');
+    m.put(`${BIN}/telinha-tray.old-0.7.0.exe`, 'tray good');
+    await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now });
+    expect(m.names()).toEqual(['telinha-tray.dist.exe', 'telinha-tray.failed-v0.8.0.exe', 'telinha.exe', 'telinha.failed-v0.8.0.exe']);
+    expect(m.text(`${BIN}/telinha-tray.dist.exe`)).toBe('tray good');
+  });
+
+  test('rollback leaves an uninstalled tray uninstalled and skips the tray when the executable stayed', async () => {
+    const m = memFs();
+    m.put(`${BIN}/telinha.exe`, 'bad');
+    m.put(`${BIN}/telinha.old-0.7.0.exe`, 'good');
+    m.put(`${BIN}/telinha-tray.old-0.7.0.exe`, 'tray good');
+    await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now });
+    expect(m.names()).toEqual(['telinha-tray.old-0.7.0.exe', 'telinha.exe', 'telinha.failed-v0.8.0.exe']);
+
+    const kept = memFs();
+    kept.put(`${BIN}/telinha.exe`, 'bad');
+    kept.put(`${BIN}/telinha-tray.exe`, 'tray bad');
+    kept.put(`${BIN}/telinha-tray.old-0.7.0.exe`, 'tray good');
+    await rollback({ fs: kept.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now });
+    expect(kept.ops).toEqual([]);
+  });
+
+  test('newestOld never picks a tray file', async () => {
+    const m = memFs();
+    m.put(`${BIN}/telinha-tray.old-0.9.0.exe`, 'tray', 99);
+    m.put(`${BIN}/telinha.old-0.6.0.exe`, 'old', 10);
+    expect(await newestOld(m.fs, BIN, 'win32')).toBe('telinha.old-0.6.0.exe');
+  });
+});
+
 describe('rollback', () => {
-  const staged = { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: T0, failedStarts: 2 };
+  const staged ={ tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: T0, failedStarts: 2 };
 
   test('puts the recorded previous file back and keeps the bad one as telinha.failed-<tag>', async () => {
     const m = memFs();
@@ -199,18 +386,32 @@ describe('sweep and finish', () => {
     expect(m.names()).toEqual(['livekit-server', 'telinha', 'telinha.old-0.7.0']);
   });
 
-  test('finish clears staged in update.json and sweeps', async () => {
+  test('sweep removes tray leftovers too, never the tray or its staged .new', async () => {
+    const m = memFs();
+    for (const name of ['telinha-tray.exe', 'telinha-tray.new.exe', 'telinha-tray.old-0.6.0.exe', 'telinha-tray.failed-v0.6.1.exe', 'telinha-tray.old-manual-1700000000.exe']) {
+      m.put(`${BIN}/${name}`, 'x');
+    }
+    expect((await sweep(m.fs, BIN)).sort()).toEqual(['telinha-tray.failed-v0.6.1.exe', 'telinha-tray.old-0.6.0.exe', 'telinha-tray.old-manual-1700000000.exe']);
+    expect(m.names()).toEqual(['telinha-tray.exe', 'telinha-tray.new.exe']);
+  });
+
+  test('finish records the staged update as applied, clears staged in update.json and sweeps', async () => {
     const m = memFs();
     const statePath = '/t/data/run/update.json';
-    m.put(statePath, JSON.stringify({ staged: { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: 1, failedStarts: 1 }, lastCheck: 5 }));
+    const applied = { tag: 'v0.8.0', previous: '0.7.0', at: T0 };
+    m.put(statePath, JSON.stringify({
+      staged: { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: 1, failedStarts: 1 },
+      applied: { tag: 'v0.7.0', previous: '0.6.0', at: 1 },
+      lastCheck: 5,
+    }));
     m.put(`${BIN}/telinha`, 'x');
     m.put(`${BIN}/telinha.old-0.7.0`, 'x');
-    await finish({ fs: m.fs, bin: BIN, statePath });
-    expect(await readState(m.fs, statePath)).toEqual({ lastCheck: 5 });
+    await finish({ fs: m.fs, bin: BIN, statePath, now });
+    expect(await readState(m.fs, statePath)).toEqual({ applied, lastCheck: 5 });
     expect(m.names()).toEqual(['telinha', 'update.json']);
-    // Idempotent without a staged record.
-    await finish({ fs: m.fs, bin: BIN, statePath });
-    expect(await readState(m.fs, statePath)).toEqual({ lastCheck: 5 });
+    // Idempotent without a staged record: applied stays until the next update replaces it.
+    await finish({ fs: m.fs, bin: BIN, statePath, now: () => T0 + 1 });
+    expect(await readState(m.fs, statePath)).toEqual({ applied, lastCheck: 5 });
   });
 
   test('readState tolerates a missing or corrupt file', async () => {

@@ -55,9 +55,9 @@ mantém tudo rodando desde a inicialização, com ou sem alguém logado.
 
 3. O script baixa o `telinha-windows-x64.zip` (ou o `telinha-windows-arm64.zip`)
    e o `SHA256SUMS` da versão estável mais nova, e para se o sha256 não bater.
-   Ele coloca o `telinha.exe` em `%LOCALAPPDATA%\Telinha\bin`, adiciona essa
-   pasta ao `PATH` do seu usuário, mostra o `telinha --version` e abre o
-   `telinha setup`.
+   Ele coloca o `telinha.exe` e o ícone na bandeja `telinha-tray.exe` em
+   `%LOCALAPPDATA%\Telinha\bin`, adiciona essa pasta ao `PATH` do seu usuário,
+   mostra o `telinha --version` e abre o `telinha setup`.
 
 </Steps>
 
@@ -80,9 +80,12 @@ outra pasta (guardada como variável do usuário, para os próximos terminais
 acharem) e `TELINHA_NO_SETUP` instala sem abrir o setup. Também dá para
 baixar o zip na página de releases: descompacte onde quiser e dê dois cliques no
 `telinha.exe`, que oferece o setup quando ainda não existe configuração.
-O Windows pode barrar com a tela do SmartScreen *O Windows protegeu o
-computador*, porque a versão ainda não tem assinatura de código: clique em
-*Mais informações* e depois em *Executar assim mesmo*.
+Uma versão com assinatura de código mostra o editor quando o Windows pergunta
+sobre ela; um build sem assinatura pode ser barrado pela tela do SmartScreen
+*O Windows protegeu o computador*: clique em *Mais informações* e depois em
+*Executar assim mesmo*.
+[Assinatura de código](/telinha/pt-br/guides/code-signing/) mostra como saber
+qual você tem.
 
 :::note
 No Windows on ARM a Telinha roda a versão arm64. A Cloudflare não publica um
@@ -153,23 +156,32 @@ teclas. Num PC com Windows em casa, o caminho é este:
 5. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
    sozinhas quando nenhuma sala está aberta.
 
-6. **Revisão.** Todas as respostas numa tela só, agrupadas por passo, com o
+6. **Ícone na bandeja.** *Mostrar um ícone da Telinha ao lado do relógio?*
+   Diga que sim: o [ícone na bandeja](/telinha/pt-br/guides/tray/) mostra se
+   a Telinha está rodando e abre a página da sala, o log e as atualizações.
+   Quando você diz que sim, *Iniciar o ícone quando você entrar no Windows?*
+   decide se ele volta sozinho depois de reiniciar (não, por padrão; o
+   `telinha tray start` mostra ele a qualquer hora).
+
+7. **Revisão.** Todas as respostas numa tela só, agrupadas por passo, com o
    endereço web em destaque e os segredos aparecendo apenas como definido,
    mantido ou gerado. Role com PgUp e PgDn quando a lista for longa. Escolha
    *Aplicar* (ou *Aplicar com um novo segredo de cookie*, oferecido numa nova
    rodada, que desconecta todo mundo das páginas), *Voltar pras perguntas* ou
    *Sair sem gravar*. Nada mudou neste PC até você aplicar.
 
-7. **Instalação.** Uma lista ao vivo: o app do Discord (conferido, com os
+8. **Instalação.** Uma lista ao vivo: o app do Discord (conferido, com os
    intents ligados), o endereço do DuckDNS se você escolheu um, o
    `telinha.env`, os programas auxiliares (com uma barra para cada download), o
-   serviço, o roteador e firewall, o início, o certificado HTTPS (com um
+   serviço, o ícone na bandeja, o roteador e firewall, o início, o certificado HTTPS (com um
    endereço do DuckDNS) e as verificações finais. O arquivo vai para
    `%LOCALAPPDATA%\Telinha\config\telinha.env`, que só você, o SYSTEM e os
    Administradores conseguem ler. A linha do serviço é onde o Windows pede
    permissão de administrador uma vez (o Controle de Conta de Usuário, UAC),
    para registrar a tarefa em segundo plano e criar as regras de firewall; a
-   linha diz que está esperando você. A linha do roteador olha o roteador
+   linha diz que está esperando você. O ícone na bandeja aparece ao lado do
+   relógio logo depois (ele só inicia quando o setup roda num terminal normal,
+   não num de administrador). A linha do roteador olha o roteador
    (avisando de CGNAT ou NAT duplo e listando as portas para encaminhar na mão
    quando não há UPnP), aí a Telinha sobe e o certificado chega. No fim a tela
    mostra o seu endereço web, e *Ver o diagnóstico* abre a lista de
@@ -193,10 +205,11 @@ deixar uma instalação pela metade.
 
 :::note[O pedido de administrador]
 O Windows mostra um aviso do Controle de Conta de Usuário para o
-`telinha.exe` com *Editor: Desconhecido*. Isso é esperado: a versão ainda não
-tem assinatura de código. Confira se o programa é o que está em
-`%LOCALAPPDATA%\Telinha\bin` (*Mostrar mais detalhes* mostra o caminho) e
-clique em **Sim**.
+`telinha.exe`. Uma versão com assinatura de código mostra o editor; um build
+sem assinatura mostra *Editor: Desconhecido*, o que é esperado nele (veja
+[Assinatura de código](/telinha/pt-br/guides/code-signing/)). Nos dois casos,
+confira se o programa é o que está em `%LOCALAPPDATA%\Telinha\bin`
+(*Mostrar mais detalhes* mostra o caminho) e clique em **Sim**.
 :::
 
 :::note[Vai encaminhar as portas na mão?]
@@ -307,6 +320,13 @@ O `telinha run` roda a Telinha no console (Ctrl+C para), mas só uma cópia roda
 por pasta: com o serviço no ar, uma execução no console avisa
 `A Telinha já está rodando` e sai.
 
+**O ícone na bandeja**, ao lado do relógio, mostra se a Telinha está rodando,
+inicia, para e reinicia ela, procura atualizações e abre a página e o log. Ele
+não volta quando você entra no Windows, a menos que você ligue
+*Iniciar com o Windows* no menu dele (ou rode `telinha tray autostart on`);
+depois de *Sair*, o `telinha tray start` traz ele de volta. Veja
+[Ícone na bandeja](/telinha/pt-br/guides/tray/).
+
 **As atualizações** acontecem sozinhas: a Telinha confere alguns minutos depois
 de iniciar e depois a cada poucas horas, espera enquanto há salas abertas,
 confere o sha256 e volta para a versão anterior se a nova não subir.
@@ -319,6 +339,7 @@ arquivo novo. Editar o `telinha.env` na mão também funciona, seguido de
 `telinha service restart`.
 
 **Para remover**: `telinha service uninstall --firewall` tira a tarefa e as
-regras de firewall; depois apague `%LOCALAPPDATA%\Telinha`.
+regras de firewall, fecha o ícone na bandeja e remove a entrada de
+*Iniciar com o Windows* dele; depois apague `%LOCALAPPDATA%\Telinha`.
 
 [Rodando como serviço](/telinha/pt-br/guides/service/) tem os detalhes.

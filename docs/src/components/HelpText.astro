@@ -3,7 +3,7 @@
 import generated from '../data/generated.json';
 import type { Locale } from '../data/reference.ts';
 
-type HelpKey = 'help' | 'helpRun' | 'helpSetup' | 'helpDoctor' | 'helpUpdate' | 'helpService';
+type HelpKey = 'help' | 'helpRun' | 'helpSetup' | 'helpDoctor' | 'helpUpdate' | 'helpService' | 'helpTray';
 // `topic`, not `key`: JSX runtimes treat `key` as their own.
 interface Props { locale: Locale; topic: HelpKey }
 const { locale, topic } = Astro.props;
