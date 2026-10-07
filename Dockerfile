@@ -7,7 +7,11 @@
 # (pure JS) and the downloads are arch-neutral, Go cross-compiles, so emulation
 # only runs apk/setcap.
 
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS build
+# The one Bun image every Bun stage uses, so Renovate and the version checks
+# see a single line.
+ARG BUN_IMAGE=oven/bun:1.4.2-alpine
+
+FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS build
 WORKDIR /app
 # Manifests first so the install layer is cached until dependencies change.
 COPY package.json bun.lock bunfig.toml ./
@@ -21,7 +25,7 @@ RUN bun run build
 
 # Runtime dependencies only (discord.js, livekit-server-sdk, OpenTUI + Solid):
 # every web dependency is a devDependency, bundled into web/dist by Vite.
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS prod-deps
+FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS prod-deps
 ARG TARGETARCH
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
@@ -42,7 +46,7 @@ RUN cpu=$([ "$TARGETARCH" = amd64 ] && echo x64 || echo "$TARGETARCH") \
 # versions.json. Repo layout kept (versions.json, scripts/, server/src/):
 # server/src/bins.ts imports ../../versions.json, archive.ts, footprint.ts,
 # version.ts and releasetag.ts and nothing else of server/.
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS bins
+FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS bins
 # Set by buildx and podman from --platform (default: the host's).
 ARG TARGETOS TARGETARCH
 WORKDIR /b
@@ -54,7 +58,7 @@ RUN bun scripts/bins.ts --os "$TARGETOS" --arch "$TARGETARCH" --out /out livekit
 # The bun binary for stages whose base image has none. A stage, not a bare
 # `COPY --from=<image>`: that form resolves the image for the target platform,
 # while this stage follows $BUILDPLATFORM like every other build stage here.
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS bun-tool
+FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS bun-tool
 
 # Our Caddy: upstream Caddy plus the DuckDNS DNS module (home certificates
 # without ports 80/443) and layer4, built from versions.json by scripts/caddy-build.ts.
@@ -79,7 +83,7 @@ FROM scratch AS caddy-export
 COPY --from=caddy-build /out/ /
 
 # Same base as the build: busybox wget stays available for the compose healthcheck.
-FROM oven/bun:1.4.2-alpine
+FROM ${BUN_IMAGE}
 # OPENTUI_LIBC: OpenTUI does not detect musl; unset, `setup --docker` would load
 # its glibc library, which Alpine cannot run.
 ENV NODE_ENV=production TELINHA_HOME=/telinha OPENTUI_LIBC=musl
