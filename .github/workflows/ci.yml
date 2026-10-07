@@ -529,7 +529,9 @@ jobs:
           deploy/telinha-update
           scripts/smoke.sh
       # The runner's pwsh parses it; Write-Host is how the bootstrap talks to
-      # the person running it.
+      # the person running it. PSScriptAnalyzer is pinned here (Renovate bumps
+      # it) and loaded at that exact version over whatever the image ships; a
+      # failed install fails the job.
       - name: install.ps1
         shell: pwsh
         run: |
@@ -537,10 +539,9 @@ jobs:
           $errs = $null
           $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errs)
           if ($errs) { $errs; exit 1 }
-          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
-            try { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop }
-            catch { Write-Warning "PSScriptAnalyzer not installable, parse check only: $_"; exit 0 }
-          }
+          $psa = Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser -PassThru -ErrorAction Stop
+          $loaded = Import-Module PSScriptAnalyzer -RequiredVersion $psa.Version -PassThru -ErrorAction Stop
+          Write-Host "PSScriptAnalyzer $($loaded.Version)"
           $issues = Invoke-ScriptAnalyzer -Path $path -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
           if ($issues) { $issues | Format-Table -AutoSize | Out-String -Width 200; exit 1 }
       # The image bundles shellcheck, so run: blocks are checked too.
