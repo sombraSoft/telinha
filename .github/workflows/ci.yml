@@ -537,6 +537,30 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # mise only, no tools yet: a --locked install of a tool mise.lock lacks
+      # would fail before the freshness check below can say why.
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          version: 2026.10.3
+          install: false
+          install_args: bun github:jdx/jactionlint shellcheck editorconfig-checker
+          cache_save: ${{ github.event_name == 'push' }}
+      # mise lock keeps every locked version and rewrites only what mise.toml
+      # no longer matches, so a diff means mise.lock was not refreshed with it.
+      # The token lifts the anonymous GitHub API limit for the release lookups.
+      - name: mise.lock
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mise lock
+          git diff --exit-code -- mise.lock || { echo '::error file=mise.lock::mise.lock is stale: run mise lock and commit the result'; exit 1; }
+      # The linters at the versions mise.toml pins (mise.lock has their URLs and
+      # checksums), the same binaries `mise install` gives a dev machine. bun
+      # runs the versions.json check below.
+      - name: install tools
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: mise install --locked bun github:jdx/jactionlint shellcheck editorconfig-checker
       # Listed explicitly: telinha-update has no extension, and a missing file
       # should fail the job rather than be silently skipped.
       - name: shellcheck
@@ -562,33 +586,14 @@ jobs:
           Write-Host "PSScriptAnalyzer $($loaded.Version)"
           $issues = Invoke-ScriptAnalyzer -Path $path -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
           if ($issues) { $issues | Format-Table -AutoSize | Out-String -Width 200; exit 1 }
-      # The image bundles shellcheck, so run: blocks are checked too.
+      # jactionlint finds the shellcheck above on PATH and runs it on every
+      # run: block too. .github/jactionlint.yaml lists what it ignores.
       - name: actionlint
-        uses: docker://rhysd/actionlint:1.7.12
-        with:
-          args: -color
-      # mise only, no tools yet: a --locked install of a tool mise.lock lacks
-      # would fail before the freshness check below can say why. install_args
-      # still names bun so the cache key matches the other jobs' and restores.
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
-        with:
-          version: 2026.10.3
-          install: false
-          install_args: bun
-          cache_save: ${{ github.event_name == 'push' }}
-      # mise lock keeps every locked version and rewrites only what mise.toml
-      # no longer matches, so a diff means mise.lock was not refreshed with it.
-      # The token lifts the anonymous GitHub API limit for the release lookups.
-      - name: mise.lock
-        env:
-          MISE_GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          mise lock
-          git diff --exit-code -- mise.lock || { echo '::error file=mise.lock::mise.lock is stale: run mise lock and commit the result'; exit 1; }
-      - name: install tools
-        env:
-          MISE_GITHUB_TOKEN: ${{ github.token }}
-        run: mise install --locked bun
+        run: jactionlint -color
+      # Every tracked text file against .editorconfig; .editorconfig says which
+      # check is off and why.
+      - name: editorconfig
+        run: editorconfig-checker
       # Structure and every asset hash present; a stale hash fails the image job.
       - name: versions.json
         run: bun scripts/versions.ts check
@@ -610,23 +615,42 @@ jobs:
       # The link validator runs inside the build and fails it on a broken link.
       - run: bun run docs:build
 
+  # The commits a PR adds, or a push to main adds, scanned with the gitleaks
+  # mise.toml pins. Same range and git log options gitleaks-action used, which
+  # is what this replaces: the action pinned its own older gitleaks.
   gitleaks:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      # The action lists the PR's commits to scan only those.
-      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: gitleaks/gitleaks-action@v3
+      # bun too: mise install runs mise.toml's postinstall hook, which is a bun
+      # script (a no-op in CI).
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          version: 2026.10.3
+          install_args: bun gitleaks
+          cache_save: ${{ github.event_name == 'push' }}
+      # A push whose previous tip is unknown here (zeros, or rewritten away)
+      # scans the whole history rather than guess a range. Findings print
+      # redacted; `gitleaks:allow` on a line still exempts it.
+      - name: gitleaks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Commenting needs pull-requests: write; the failed check and job
-          # summary are enough.
-          GITLEAKS_ENABLE_COMMENTS: "false"
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            range="$BASE..$HEAD"
+          elif git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$BEFORE..$GITHUB_SHA"
+          else
+            range="$GITHUB_SHA"
+          fi
+          echo "scanning $range"
+          gitleaks git --redact -v --no-banner --log-opts="--no-merges --first-parent $range"
 
   # The image build also compiles our Caddy (xcaddy + DuckDNS + layer4), and the
   # smoke test checks its version and modules and validates the DNS-01 and TURN

@@ -38,9 +38,9 @@ COPY docs/package.json docs/
 # which Bun installs as a required peer of bun-ffi-structs (an @opentui/core
 # dependency) and nothing loads at runtime.
 RUN cpu=$([ "$TARGETARCH" = amd64 ] && echo x64 || echo "$TARGETARCH") \
-	&& bun install --frozen-lockfile --production --os=linux --cpu="$cpu" \
-	&& test -d "node_modules/@opentui/core-linux-$cpu-musl" \
-	&& rm -rf node_modules/typescript "node_modules/@opentui/core-linux-$cpu"
+  && bun install --frozen-lockfile --production --os=linux --cpu="$cpu" \
+  && test -d "node_modules/@opentui/core-linux-$cpu-musl" \
+  && rm -rf node_modules/typescript "node_modules/@opentui/core-linux-$cpu"
 
 # Downloaded child binaries for the target arch, sha256-checked against
 # versions.json. Repo layout kept (versions.json, scripts/, server/src/):

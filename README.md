@@ -551,9 +551,12 @@ passes only when the jobs it `needs` pass: `test (ubuntu-24.04)`,
 `test (windows-2025)` (which also runs the tray's MSTest suite), `lint`
 (shellcheck of `deploy/install-docker.sh`, `deploy/install.sh`,
 `deploy/telinha-update` and `scripts/smoke.sh`, a PowerShell parse and pinned
-PSScriptAnalyzer run of `deploy/install.ps1`, actionlint,
-`bun scripts/versions.ts check`), `gitleaks` and `image` (builds both
-architectures, smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the
+PSScriptAnalyzer run of `deploy/install.ps1`, jactionlint (the maintained
+actionlint fork; shellcheck on `run:` blocks too), editorconfig-checker, a
+`mise.lock` freshness check and `bun scripts/versions.ts check`; the linters
+are the ones `mise.toml` pins), `gitleaks` (the commits a PR or push adds,
+with the gitleaks `mise.toml` pins) and `image` (builds both architectures,
+smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the
 PR title is a Conventional Commit with one of the types `feat`, `fix`, `docs`,
 `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; it runs again
 when the title is edited. Four jobs also run on every PR but are not
