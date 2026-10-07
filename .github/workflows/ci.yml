@@ -16,7 +16,7 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Every job has a timeout-minutes of about three to four times its usual run,
+# Every job has a timeout-minutes well above its slowest cold-cache run so far,
 # so a hung step (an apt mirror that stops answering) fails within minutes
 # instead of holding the runner for the 6-hour default.
 jobs:
@@ -726,7 +726,7 @@ jobs:
   # is what this replaces: the action pinned its own older gitleaks.
   gitleaks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -766,7 +766,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
