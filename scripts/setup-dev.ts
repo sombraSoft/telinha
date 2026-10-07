@@ -10,6 +10,17 @@ for (const cmd of [
   [process.execPath, 'install'],
   ['lefthook', 'install'],
 ]) {
-  const { exitCode } = Bun.spawnSync(cmd, { stdio: ['inherit', 'inherit', 'inherit'] });
-  if (exitCode !== 0) process.exit(exitCode);
+  // spawnSync throws when the program is not on PATH (lefthook outside mise).
+  const run = (() => {
+    try {
+      return Bun.spawnSync(cmd, { stdio: ['inherit', 'inherit', 'inherit'] });
+    } catch {
+      return null;
+    }
+  })();
+  if (!run) {
+    console.error(`setup-dev: ${cmd[0]} is not on PATH; run \`mise install\` from the repository`);
+    process.exit(1);
+  }
+  if (run.exitCode !== 0) process.exit(run.exitCode);
 }

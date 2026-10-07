@@ -20,6 +20,9 @@ describe('checkMessage', () => {
     'chore(main)!: release 1.0.0',
     'ci: time out hung jobs\n\nA body after a blank line.',
     '# Please enter the commit message\nbuild: lint with Biome',
+    'fix: windows line endings\r\n\r\nBody.\r\n',
+    // `git commit -v` with an empty message: git aborts it, the hook stays out of the way.
+    '\n# ------------------------ >8 ------------------------\n# Do not modify or remove the line above.\ndiff --git a/x b/x',
     "Merge branch 'main' into build/lefthook",
     'Revert "feat: something"',
     'fixup! feat: card says who is in the room',
