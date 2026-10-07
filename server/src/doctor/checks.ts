@@ -72,7 +72,7 @@ const en = {
   needConfig: 'Skipped: fix the configuration first.',
   devLogin: 'Skipped: DEV_USER fake login does not use Discord.',
   needToken: 'Skipped: the bot token check did not pass.',
-  needGuild: 'Skipped: the bot is not in the server yet.',
+  needGuild: 'Skipped: the bot is not in the Discord server yet.',
   discordUnreachable: 'Could not reach Discord: {error}',
   discordHttp: 'Discord answered HTTP {status}.',
   rerunSetup: 'Run telinha setup.',
@@ -120,16 +120,16 @@ const en = {
   intentMembers: 'Server Members',
 
   guildOk: 'The bot is in "{name}".',
-  guildMissing: 'The bot is not in the server GUILD_ID {id}.',
+  guildMissing: 'The bot is not in the Discord server GUILD_ID {id}.',
   guildMissingFix: 'Invite it: {url}',
 
   roleOk: 'Role "{name}" exists.',
-  roleMissing: 'ROLE_ID {id} is not a role in this server.',
-  roleFix: "Run telinha setup again: it lists the server's roles to pick from.",
+  roleMissing: 'ROLE_ID {id} is not a role in this Discord server.',
+  roleFix: "Run telinha setup again: it lists the Discord server's roles to pick from.",
 
   channelsAll: 'No CHANNEL_IDS: the command works in every channel.',
   channelsOk: 'Command channels: {list}.',
-  channelMissing: 'CHANNEL_IDS has {id}, which is not a channel in this server.',
+  channelMissing: 'CHANNEL_IDS has {id}, which is not a channel in this Discord server.',
   channelWrongType: 'Channel #{name} ({id}) is not a text or announcement channel.',
   channelsFix: 'Run telinha setup again: it lists the channels the bot can see to pick from.',
 
@@ -329,7 +329,7 @@ const ptBR: Dict = {
   needConfig: 'Pulado: arruma a configuração primeiro.',
   devLogin: 'Pulado: o login falso DEV_USER não usa o Discord.',
   needToken: 'Pulado: o teste do token do bot não passou.',
-  needGuild: 'Pulado: o bot ainda não está no servidor.',
+  needGuild: 'Pulado: o bot ainda não está no servidor do Discord.',
   discordUnreachable: 'Não deu pra falar com o Discord: {error}',
   discordHttp: 'O Discord respondeu HTTP {status}.',
   rerunSetup: 'Roda o telinha setup.',
@@ -377,16 +377,16 @@ const ptBR: Dict = {
   intentMembers: 'Server Members',
 
   guildOk: 'O bot está em "{name}".',
-  guildMissing: 'O bot não está no servidor GUILD_ID {id}.',
+  guildMissing: 'O bot não está no servidor do Discord GUILD_ID {id}.',
   guildMissingFix: 'Convida ele: {url}',
 
   roleOk: 'O cargo "{name}" existe.',
-  roleMissing: 'ROLE_ID {id} não é um cargo deste servidor.',
-  roleFix: 'Roda o telinha setup de novo: ele lista os cargos do servidor pra escolher.',
+  roleMissing: 'ROLE_ID {id} não é um cargo deste servidor do Discord.',
+  roleFix: 'Roda o telinha setup de novo: ele lista os cargos do servidor do Discord pra escolher.',
 
   channelsAll: 'Sem CHANNEL_IDS: o comando funciona em qualquer canal.',
   channelsOk: 'Canais do comando: {list}.',
-  channelMissing: 'CHANNEL_IDS tem {id}, que não é um canal deste servidor.',
+  channelMissing: 'CHANNEL_IDS tem {id}, que não é um canal deste servidor do Discord.',
   channelWrongType: 'O canal #{name} ({id}) não é de texto nem de anúncios.',
   channelsFix: 'Roda o telinha setup de novo: ele lista os canais que o bot vê pra escolher.',
 

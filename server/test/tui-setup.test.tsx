@@ -136,7 +136,7 @@ describe('answering with keys writes telinha.env', () => {
   test('VPS, own domain: the DNS answer is a note, the file serves 80/443', async () => {
     const r = await startSetup(QUIET, { nat: VPS_NAT });
     // Detected as a VPS: that is the highlighted answer now.
-    expect(await at(r, 'hosting')).toContain('❯ 2. A rented server (VPS)');
+    expect(await at(r, 'hosting')).toContain('❯ 2. A rented machine (VPS)');
     await press(r.s, 'enter');
     await at(r, 'vpsAddress');
     await press(r.s, '1');
@@ -658,15 +658,15 @@ describe('lookups on the cards', () => {
     await paste(r.s, SECRET);
     await press(r.s, 'enter');
     let f = await at(r, 'guild');
-    expect(f).toContain('! The bot is not in any server yet.');
+    expect(f).toContain('! The bot is not in any Discord server yet.');
     expect(f).toContain('https://discord.com/oauth2/authorize?client_id=111111111111111111');
     expect(f).toContain('❯ 1. Open the link in the browser');
     expect(f).toContain('2. I added the bot: check again');
-    expect(f).toContain('Add the bot to your server with this link');
+    expect(f).toContain('Add the bot to your Discord server with this link');
     r.world.guilds = [{ id: GUILD, name: 'Gurizada' }];
     await press(r.s, '2');
     f = await until(r.s, '1. Gurizada');
-    expect(f).toContain('2. Another server (add the bot)');
+    expect(f).toContain('2. Another Discord server (add the bot)');
     expect(f).not.toContain('Open the link');
     await press(r.s, 'enter');
     await at(r, 'role');
@@ -826,12 +826,12 @@ describe('small terminals, Docker and progress', () => {
     await discordKeys(r);
     let f = await defaultsToReview(r);
     expect(f).toContain('They go to /srv/telinha/config/telinha.env.');
-    expect(f).toContain('Write telinha.env; the host starts the container');
+    expect(f).toContain('Write telinha.env; the machine starts the container');
     await press(r.s, 'enter');
-    f = await until(r.s, 'Start it on the host:');
+    f = await until(r.s, 'Start it on the machine:');
     expect(f).toContain('Writing the configuration');
     expect(f).toContain('✔ Wrote /srv/telinha/config/telinha.env');
-    expect(f).toContain('Start it on the host:  cd /opt/telinha && docker compose up -d');
+    expect(f).toContain('Start it on the machine:  cd /opt/telinha && docker compose up -d');
     expect(f).not.toContain('Download the programs');
     expect(f).not.toContain('Show the doctor report');
     expect(await exit(r, f)).toBe(0);
