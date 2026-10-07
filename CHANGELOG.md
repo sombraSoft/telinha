@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/sombraSoft/telinha/compare/v0.6.0...v0.7.0) (2026-10-07)
+
+
+### Features
+
+* home installs get HTTPS without ports 80 and 443 ([#33](https://github.com/sombraSoft/telinha/issues/33)) ([572080d](https://github.com/sombraSoft/telinha/commit/572080d37c707f8878f8a33765d6ee9b4dfaee9a))
+* LiveKit Cloud media and TURN over TLS on port 443 ([#35](https://github.com/sombraSoft/telinha/issues/35)) ([d5c4c0e](https://github.com/sombraSoft/telinha/commit/d5c4c0efb790ac511b4797e52925971f7dd830db))
+* native binaries, setup wizard, doctor and self-update ([#30](https://github.com/sombraSoft/telinha/issues/30)) ([eb8f1c8](https://github.com/sombraSoft/telinha/commit/eb8f1c8f669b9c4c5cd2454b6233067de251164d))
+* run telinha as one supervised service with rendered configs ([#29](https://github.com/sombraSoft/telinha/issues/29)) ([d18269f](https://github.com/sombraSoft/telinha/commit/d18269f2bc4618deb94a97af3a109d529426bef3))
+* terminal UI for setup and doctor ([#36](https://github.com/sombraSoft/telinha/issues/36)) ([e4b1a30](https://github.com/sombraSoft/telinha/commit/e4b1a303b73b099671d4405f67929420e6d07296))
+* Windows tray icon and SignPath code signing ([#34](https://github.com/sombraSoft/telinha/issues/34)) ([8751771](https://github.com/sombraSoft/telinha/commit/8751771755e9d9b107f4ab0d16aa5cf117cc7b52))
+
 ## [0.6.0](https://github.com/sombraSoft/telinha/compare/v0.5.1...v0.6.0) (2026-10-05)
 
 
