@@ -324,7 +324,7 @@ Solid transform: `bun test` loads it from the `[test]` preload in `bunfig.toml` 
 `server/bunfig.toml` (without it Solid's server build renders the first frame but
 never reacts to a key), and a run from source (dev, the Docker image) registers it at
 runtime with `prepareTui()` in `server/src/tui/load.ts`, a no-op in the native binary,
-which the build plugin already transformed. The model, session, lookups and apply
+which the build plugin already transformed. The model, state, lookups and apply
 modules under `cli/setup/` are plain TypeScript with no Solid, tested without a
 terminal; `server/test/tui-*.test.tsx` render the screens in a test terminal with frame
 snapshots (`bun test server/test/tui-setup-frames.test.tsx -u` rewrites them after an
