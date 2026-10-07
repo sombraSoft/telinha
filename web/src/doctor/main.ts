@@ -1,9 +1,9 @@
 // The phone test page (/doctor), opened from the one-time link `telinha doctor`
 // shows. Runs from outside the network (mobile data): HTTPS, LiveKit signaling
-// through telinha's /livekit relay, publishing a tiny canvas track, which path
-// ICE picked, then TCP forced, then TURN over TLS when the server offers it;
+// through Telinha's /livekit signaling proxy, publishing a tiny canvas track, which path
+// ICE picked, then TCP forced, then TURN over TLS when the install offers it;
 // posts the result for the terminal. No login: the
-// link's cookie opens only these routes and the relay.
+// link's cookie opens only these routes and the signaling proxy.
 import { type LocalTrackPublication, Room, RoomEvent, Track } from 'livekit-client';
 import '../styles/themes.css';
 import '../styles/base.css';
@@ -83,7 +83,7 @@ function addRow(id: StepId, before?: HTMLElement) {
   rows.set(id, { icon, label, detail, li });
   mark(id, 'wait');
 }
-// The TURN row only exists once the token says the server offers it.
+// The TURN row only exists once the token says the install offers it.
 for (const id of Object.keys(LABELS) as StepId[]) if (id !== 'turn') addRow(id);
 
 function mark(id: StepId, status: Status, detail?: string) {
