@@ -14,6 +14,9 @@ playwright-report/
 deploy/.env
 .tunnel_id.local
 *.log
+# Personal mise overrides and their lock; mise.toml and mise.lock are the shared toolchain.
+mise.local.toml
+mise.local.lock
 # Release CI drops the image digest here for the deploy bundle.
 deploy/telinha-image.digest
 # Docs site build output; generated.json is rebuilt from the code on every build.
