@@ -1,33 +1,33 @@
-// Solid's view of the setup: the session is framework-free, so a version
-// signal bumped by session.subscribe() makes every read below reactive. The
+// Solid's view of the setup: the setup state is framework-free, so a version
+// signal bumped by state.subscribe() makes every read below reactive. The
 // install has its own store, its rows copied from the task list on every
 // change; decide() waits for the user's Retry / Skip / Back pick.
 import { batch, createMemo, createSignal, onCleanup } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import type { ApplyResult, TaskId, TaskRow } from '../../cli/setup/apply.ts';
-import type { SetupSession } from '../../cli/setup/session.ts';
+import type { SetupState } from '../../cli/setup/state.ts';
 import type { SetupUiContext } from '../../cli/setup/ui.ts';
 
-export function createSessionStore(session: SetupSession) {
+export function createStateStore(state: SetupState) {
   const [version, setVersion] = createSignal(0);
-  onCleanup(session.subscribe(() => setVersion((n) => n + 1)));
+  onCleanup(state.subscribe(() => setVersion((n) => n + 1)));
   const read =
     <T>(fn: () => T) =>
     () => (version(), fn());
   return {
     version,
-    locale: read(() => session.locale),
-    screen: read(() => session.screen()),
-    view: createMemo(() => (version(), session.screen() === 'question' ? session.current() : null)),
-    steps: createMemo(() => (version(), session.steps())),
-    notice: read(() => session.notice()),
-    reviewRows: read(() => session.reviewRows()),
-    reviewNotes: read(() => session.reviewNotes()),
-    applyOptions: read(() => session.applyOptions()),
+    locale: read(() => state.locale),
+    screen: read(() => state.screen()),
+    view: createMemo(() => (version(), state.screen() === 'question' ? state.current() : null)),
+    steps: createMemo(() => (version(), state.steps())),
+    notice: read(() => state.notice()),
+    reviewRows: read(() => state.reviewRows()),
+    reviewNotes: read(() => state.reviewNotes()),
+    applyOptions: read(() => state.applyOptions()),
   };
 }
 
-export type SessionStore = ReturnType<typeof createSessionStore>;
+export type StateStore = ReturnType<typeof createStateStore>;
 
 export type Decision = 'retry' | 'skip' | 'back' | 'abort';
 export type ApplyStage = 'running' | 'failed' | 'done';

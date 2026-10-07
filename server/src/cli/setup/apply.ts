@@ -63,7 +63,7 @@ export interface ApplyTarget {
   previous: PreviousEnv | null;
 }
 
-/** Secrets a run of this session generated: a retry or a re-apply writes the same ones. */
+/** Secrets this setup run generated: a retry or a re-apply writes the same ones. */
 export interface SecretMemo {
   made: Values;
   rotated?: string;
@@ -188,7 +188,7 @@ function headline(r: Row): TaskLine | null {
 
 /**
  * The install's tasks as rows, kept across re-applies: each run starts the
- * rows over with its plan. Shaped like SetupSession and PhoneTest: subscribe()
+ * rows over with its plan. Shaped like SetupState and PhoneTest: subscribe()
  * hears every change, the getters read the current state.
  */
 export class TaskList {
@@ -380,7 +380,7 @@ function taskOut(sink: Out, id: TaskId, tell: (e: TaskEvent) => void, seen: Task
   };
 }
 
-/** Fills in the generated secrets, reusing what this session made before. */
+/** Fills in the generated secrets, reusing what this setup run made before. */
 function applySecrets(values: Values, random: (n: number) => Uint8Array, rotate: boolean, memo: SecretMemo): void {
   const reuse = (key: string, need: boolean) => {
     if (need && memo.made[key]) values[key] = memo.made[key]!;

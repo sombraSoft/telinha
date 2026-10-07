@@ -1,12 +1,12 @@
 // The setup screens and --non-interactive end in the same file: the same
-// answers given through the session and given as flags (secrets from the
+// answers given through the setup state and given as flags (secrets from the
 // environment) write byte-identical telinha.env files.
 import { describe, expect, test } from 'bun:test';
 import { posix } from 'node:path';
 import type { CliContext } from '../src/cli/args.ts';
 import { createDiscordSetup } from '../src/cli/setup/discord.ts';
 import type { QuestionId } from '../src/cli/setup/model.ts';
-import type { SetupSession } from '../src/cli/setup/session.ts';
+import type { SetupState } from '../src/cli/setup/state.ts';
 import type { SetupDeps, SetupFs } from '../src/cli/setup/steps.ts';
 import type { SetupUi, SetupUiContext, SetupUiResult } from '../src/cli/setup/ui.ts';
 import { run } from '../src/cli/setup.ts';
@@ -180,18 +180,18 @@ function ctxFor(argv: string[], o: { tty: boolean; env?: Record<string, string> 
   };
 }
 
-async function settle(s: SetupSession): Promise<void> {
+async function settle(s: SetupState): Promise<void> {
   for (let i = 0; i < 100; i++) {
     await Bun.sleep(1);
     if (s.screen() !== 'question' || s.current().lookup.state !== 'running') return;
   }
 }
 
-/** Answers through the session (unscripted questions take what the card shows), then applies. */
+/** Answers through the setup state (unscripted questions take what the card shows), then applies. */
 class AnswerUi implements SetupUi {
   constructor(private answers: Partial<Record<QuestionId, string | string[]>>) {}
   async run(c: SetupUiContext): Promise<SetupUiResult> {
-    const s = c.session;
+    const s = c.state;
     while (s.screen() === 'question') {
       await settle(s);
       const v = s.current();
