@@ -10,7 +10,7 @@ type Stat = Record<string, any> & { id: string; type: string };
 export type Path = {
   /** 'udp' | 'tcp' (the local candidate's transport). */
   protocol: string;
-  /** The server's advertised address (remote candidate), so a wrong node IP shows. */
+  /** The SFU's advertised address (remote candidate), so a wrong node IP shows. */
   candidateIp: string | null;
   rttMs: number | null;
   /** Went through a TURN relay. */
@@ -50,7 +50,7 @@ export function selectedPath(report: StatsLike): Path | null {
 
 export type StepResult = { ok: boolean; rttMs?: number; error?: string };
 
-/** What the page posts to /doctor/api/report (the server validates every field). */
+/** What the page posts to /doctor/api/report (Telinha validates every field). */
 export type Report = {
   https: { ok: boolean; latencyMs: number | null };
   signaling: { ok: boolean; error?: string };
@@ -58,7 +58,7 @@ export type Report = {
   tcp: StepResult;
   udp: StepResult;
   publish: { ok: boolean; error?: string };
-  /** null when the server offers no TURN over TLS. */
+  /** null when the install offers no TURN over TLS. */
   turn: StepResult | null;
   client: { ua: string };
   startedAt: number;

@@ -73,13 +73,13 @@ export interface LiveRoom {
   startAudio(): Promise<void>;
 }
 
-/** Where the room name and the LiveKit tokens come from: the page URL and the server, or fixed answers in tests. */
+/** Where the room name and the LiveKit tokens come from: the page URL and Telinha, or fixed answers in tests. */
 export interface TokenSource {
   /** The room this page is for; null when it names none. */
   readonly room: string | null;
   /** This page's link, for Copy link. */
   readonly link: string;
-  /** The server's HTTP status, with the token when it gave one. */
+  /** Telinha's HTTP status, with the token when it gave one. */
   request(room: string): Promise<{ status: number; token?: TokenResponse }>;
   /** Off to the Discord login, which comes back to this page. */
   login(): void;
@@ -116,7 +116,7 @@ export const browserClock: Clock = {
   frame: (fn) => void requestAnimationFrame(fn),
 };
 
-/** Rooms only come from the slash command: the URL is /r/<room>. Tokens come from the server. */
+/** Rooms only come from the slash command: the URL is /r/<room>. Tokens come from Telinha. */
 export function serverTokens(): TokenSource {
   return {
     get room() {
@@ -315,10 +315,10 @@ export class RoomSession {
   }
 
   async #disconnected(room: LiveRoom, reason?: DisconnectReason) {
-    // The server deletes a room when it closes it.
+    // Telinha deletes a room when it closes it.
     if (reason === DisconnectReason.ROOM_DELETED) return this.#fail({ key: 'notice.closed', params: CMD }, false);
     // A LiveKit restart forgets every room, and with auto_create off the SDK's
-    // own reconnect is refused. A fresh token makes the server bring the room
+    // own reconnect is refused. A fresh token makes Telinha bring the room
     // back (or says it has closed). Once a minute at most, so it can't loop.
     const now = this.#deps.clock.now();
     if (reason === DisconnectReason.CLIENT_INITIATED || now - this.#rejoinedAt < 60_000) {
@@ -471,7 +471,7 @@ export class RoomSession {
     if (this.share && me) this.#publishStream(streamLabel(next[me.identity]));
   }
 
-  // Tell the server what this stream looks like (for the room's card): only
+  // Tell Telinha what this stream looks like (for the room's card): only
   // on change, at most every 5 s. setAttributes only touches the given key,
   // so "watching" is left alone.
   #publishStream(value: string, now = false) {
