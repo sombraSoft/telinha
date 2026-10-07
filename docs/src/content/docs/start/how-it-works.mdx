@@ -63,8 +63,9 @@ login itself under `/auth/`, and the one-time phone test link of
 Only the slash command creates rooms. Each room gets a short pronounceable
 code, such as `lamo-futi`, and lives at `<PUBLIC_URL>/r/lamo-futi`. The card
 the bot posts is live: it shows who is streaming, who else is in the room while
-someone streams, and since when. A room closes for good after `CLOSE_EMPTY_SECONDS` with nobody in it
-(five minutes by default), and the card turns into a summary.
+someone streams, and since when. A room closes for good after
+`CLOSE_EMPTY_SECONDS` with nobody in it (five minutes by default), and the card
+turns into a summary.
 
 Beside the people in the room, the page lists everyone else with the role,
 online and offline, Discord style. That list is why the bot needs two
