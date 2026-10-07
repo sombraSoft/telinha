@@ -8,7 +8,7 @@ import {
   HELPERS, PLATFORMS, assetSpec, caddyRelease, download, ensureBinaries, ensureBinariesForConfig, isPinned, loadVersions, resolveCaddyRelease, sha256,
   type Versions,
 } from '../src/bins.ts';
-import { releaseAssetUrl } from '../src/releasetag.ts';
+import { releaseAssetUrl } from '../src/release.ts';
 import { version } from '../src/version.ts';
 
 const enc = new TextEncoder();

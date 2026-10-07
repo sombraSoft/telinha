@@ -3,7 +3,7 @@
 // release (verified against that release's SHA256SUMS). Every asset is verified
 // before anything is extracted. Used by the native `run`/`setup`, dev/E2E
 // (scripts/stack.ts) and the Docker build. The image's bins stage copies only
-// this file, archive.ts, footprint.ts, version.ts, releasetag.ts and
+// this file, archive.ts, footprint.ts, version.ts, release.ts and
 // versions.json, so other server modules are imported as types only.
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, rename, rm } from 'node:fs/promises';
@@ -13,7 +13,7 @@ import { readTarGz, readZip } from './archive.ts';
 import type { Config } from './config.ts';
 import { helpersOf } from './footprint.ts';
 import type { Paths } from './paths.ts';
-import { REPO, caddyAssetName, latestReleaseTag, parseSums, releaseAssetUrl } from './releasetag.ts';
+import { REPO, SUMS, caddyAssetName, caddyExeName, latestReleaseTag, parseSums, releaseAssetUrl } from './release.ts';
 import { isCompiled, version } from './version.ts';
 
 export const HELPERS = ['livekit', 'caddy', 'cloudflared'] as const;
@@ -64,8 +64,9 @@ export function assetSpec(helper: Helper, version: string, os: Os, arch: Arch): 
       return { url: `${GH}/livekit/livekit/releases/download/v${version}/${asset}`, asset, archive, member: `livekit-server${exe}`, hashKey: `${os}-${arch}`, verify: 'pinned' };
     }
     case 'caddy': {
-      const asset = caddyAssetName(os, arch);
-      return { url: releaseAssetUrl(version, asset), asset, archive, member: `caddy${exe}`, hashKey: `${os}-${arch}`, verify: 'release-sums' };
+      // Named after Telinha's targets, which say x64 where Go says amd64.
+      const asset = caddyAssetName(`${os}-${arch === 'amd64' ? 'x64' : arch}`);
+      return { url: releaseAssetUrl(version, asset), asset, archive, member: caddyExeName(os), hashKey: `${os}-${arch}`, verify: 'release-sums' };
     }
     case 'cloudflared': {
       // No windows-arm64 build upstream; Windows 11 on ARM runs the x64 one emulated.
@@ -94,8 +95,8 @@ export function caddyRelease(tag: string, fetchFn: FetchFn): CaddyRelease {
   return {
     tag,
     sums: () => (sums ??= (async () => {
-      const res = await fetchFn(releaseAssetUrl(tag, 'SHA256SUMS'), { signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS) });
-      if (!res.ok) throw new Error(`SHA256SUMS of ${tag}: HTTP ${res.status}`);
+      const res = await fetchFn(releaseAssetUrl(tag, SUMS), { signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`${SUMS} of ${tag}: HTTP ${res.status}`);
       return parseSums(await res.text());
     })()),
   };

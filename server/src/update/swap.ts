@@ -9,15 +9,11 @@
 // one is kept as telinha-tray.dist.exe, so setup can install it again offline.
 import { join } from 'node:path';
 import type { UpdateFailed, UpdateStaged } from '../cli/control.ts';
+import { ASIDE_RE, TRAY_DIST, TRAY_EXE, TRAY_NEW, asideBase, exeName, newExeName } from '../release.ts';
 import { readState, writeState } from './state.ts';
 import { errorMessage, type UpdateFs } from './types.ts';
 
-export const exeName = (platform: NodeJS.Platform): string => (platform === 'win32' ? 'telinha.exe' : 'telinha');
 const ext = (platform: NodeJS.Platform) => (platform === 'win32' ? '.exe' : '');
-const LEFTOVER_RE = /^telinha(-tray)?\.(old|failed)-/;
-const TRAY = 'telinha-tray.exe';
-const TRAY_NEW = 'telinha-tray.new.exe';
-const TRAY_DIST = 'telinha-tray.dist.exe';
 
 type Log = (...a: unknown[]) => void;
 const quiet: Log = () => {};
@@ -26,7 +22,7 @@ const quiet: Log = () => {};
 export async function sweep(fs: UpdateFs, bin: string, log: Log = quiet): Promise<string[]> {
   const removed: string[] = [];
   for (const name of await fs.readdir(bin)) {
-    if (!LEFTOVER_RE.test(name)) continue;
+    if (!ASIDE_RE.test(name)) continue;
     try {
       await fs.rm(join(bin, name));
       removed.push(name);
@@ -40,9 +36,10 @@ export async function sweep(fs: UpdateFs, bin: string, log: Log = quiet): Promis
 /** The newest telinha.old-* for this platform by mtime, or null. */
 export async function newestOld(fs: UpdateFs, bin: string, platform: NodeJS.Platform): Promise<string | null> {
   const suffix = ext(platform);
+  const prefix = asideBase('telinha', 'old', '');
   let best: { name: string; mtimeMs: number } | null = null;
   for (const name of await fs.readdir(bin)) {
-    if (!name.startsWith('telinha.old-') || !name.endsWith(suffix) || (!suffix && name.endsWith('.exe'))) continue;
+    if (!name.startsWith(prefix) || !name.endsWith(suffix) || (!suffix && name.endsWith('.exe'))) continue;
     const s = await fs.stat(join(bin, name));
     if (s && (!best || s.mtimeMs > best.mtimeMs)) best = { name, mtimeMs: s.mtimeMs };
   }
@@ -74,10 +71,10 @@ export interface StageOptions {
 export async function stage(o: StageOptions): Promise<UpdateStaged> {
   const log = o.log ?? quiet;
   const exe = exeName(o.platform);
-  const fresh = join(o.bin, `telinha.new${ext(o.platform)}`);
+  const fresh = join(o.bin, newExeName(o.platform));
   if (!(await o.fs.stat(fresh))) throw new Error(`nothing to install: ${fresh} is missing`);
   await sweep(o.fs, o.bin, log);
-  const oldName = await freeName(o.fs, o.bin, `telinha.old-${o.current}`, ext(o.platform), o.now());
+  const oldName = await freeName(o.fs, o.bin, asideBase('telinha', 'old', o.current), ext(o.platform), o.now());
   const current = join(o.bin, exe);
   const old = join(o.bin, oldName);
   const hadCurrent = !!(await o.fs.stat(current));
@@ -107,16 +104,16 @@ async function stageTray(o: StageOptions, log: Log): Promise<string | undefined>
   const drop = () => o.fs.rm(fresh).catch((e: unknown) => log(`update: ${TRAY_NEW} not removed (${errorMessage(e)})`));
   try {
     if (!(await o.fs.stat(fresh))) return undefined;
-    const installed = !!(await o.fs.stat(join(o.bin, TRAY)));
-    const name = installed ? TRAY : TRAY_DIST;
+    const installed = !!(await o.fs.stat(join(o.bin, TRAY_EXE)));
+    const name = installed ? TRAY_EXE : TRAY_DIST;
     const current = join(o.bin, name);
-    const what = installed ? `tray installed as ${TRAY}` : `tray not installed; kept as ${TRAY_DIST}`;
+    const what = installed ? `tray installed as ${TRAY_EXE}` : `tray not installed; kept as ${TRAY_DIST}`;
     if (!installed && !(await o.fs.stat(current))) {
       await o.fs.rename(fresh, current);
       log(`update: ${o.tag} ${what}`);
       return undefined;
     }
-    const oldName = await freeName(o.fs, o.bin, `telinha-tray.old-${o.current}`, '.exe', o.now());
+    const oldName = await freeName(o.fs, o.bin, asideBase('telinha-tray', 'old', o.current), '.exe', o.now());
     const old = join(o.bin, oldName);
     await o.fs.rename(current, old);
     try {
@@ -160,7 +157,7 @@ export async function rollback(o: RollbackOptions): Promise<UpdateFailed> {
     log(`update: ${o.staged.tag} failed to start twice and no previous executable exists; keeping it`);
     return failed;
   }
-  const failedName = await freeName(o.fs, o.bin, `telinha.failed-${o.staged.tag}`, ext(o.platform), o.now());
+  const failedName = await freeName(o.fs, o.bin, asideBase('telinha', 'failed', o.staged.tag), ext(o.platform), o.now());
   const aside = join(o.bin, failedName);
   try {
     await o.fs.rename(current, aside);
@@ -196,14 +193,14 @@ async function rollbackTray(o: RollbackOptions, log: Log): Promise<void> {
       log(`update: ${previousName} is gone; tray left as is`);
       return;
     }
-    let name = TRAY;
+    let name = TRAY_EXE;
     if (!(await o.fs.stat(join(o.bin, name)))) name = TRAY_DIST;
     const current = join(o.bin, name);
     if (!(await o.fs.stat(current))) {
       log(`update: no tray file; ${previousName} not restored`);
       return;
     }
-    const failedName = await freeName(o.fs, o.bin, `telinha-tray.failed-${o.staged.tag}`, '.exe', o.now());
+    const failedName = await freeName(o.fs, o.bin, asideBase('telinha-tray', 'failed', o.staged.tag), '.exe', o.now());
     const aside = join(o.bin, failedName);
     await o.fs.rename(current, aside);
     try {

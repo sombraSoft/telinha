@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { basename } from 'node:path';
 import { writeTarGz, writeZip } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
-import { parseSums } from '../src/update/github.ts';
+import { parseSums } from '../src/release.ts';
 import { PendingError, type GitHubReleases, type UpdateFs } from '../src/update/types.ts';
 import { compareVersions, createUpdater, type UpdaterOptions } from '../src/update/updater.ts';
 

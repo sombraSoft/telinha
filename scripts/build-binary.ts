@@ -20,8 +20,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { writeTarGz, writeZip, type Entry } from '../server/src/archive.ts';
-import { caddyAssetName } from '../server/src/releasetag.ts';
-import { TRAY_EXE } from '../server/src/service/tray.ts';
+import { SUMS, archiveContents, archiveType, assetName, caddyAssetName, caddyExeName, exeName, formatSums } from '../server/src/release.ts';
 import { TARGETS, hostTarget, type Target } from '../server/src/version.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -47,16 +46,12 @@ const SIZE_MARGIN = 20_000_000;
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
 
 const isWindows = (t: Target) => t.startsWith('windows-');
-export const exeName = (t: Target) => (isWindows(t) ? 'telinha.exe' : 'telinha');
-// Linux gets tar.gz: minimal Debian/Alpine have tar but no unzip.
-export const assetName = (t: Target) => `telinha-${t}.${isWindows(t) ? 'zip' : 'tar.gz'}`;
-/** Our Caddy for a target, named by releasetag.ts so the fetcher and this packer agree. */
-export const caddyAsset = (t: Target) => caddyAssetName(isWindows(t) ? 'windows' : 'linux', t.endsWith('-arm64') ? 'arm64' : 'amd64');
+// Every name comes from release.ts, so the fetchers and this packer agree.
 // The binary archives; the sums also cover the caddy archives, the Docker
 // bundle and the image digest when they sit next to them (the release job puts
 // them there): every download is verified the way the native one verifies a binary.
 const ASSETS = new Set(TARGETS.map(assetName));
-const CADDY_ASSETS = new Set(TARGETS.map(caddyAsset));
+const CADDY_ASSETS = new Set(TARGETS.map(caddyAssetName));
 const EXTRA_SUMMED = ['telinha-deploy.tar.gz', 'telinha-image.digest'];
 
 const step = (s: string) => console.log(`\n==> ${s}`);
@@ -139,16 +134,21 @@ export function parseArgs(argv: string[], platform: string = process.platform): 
 /** Where `pack` reads a target's binaries: compile's layout under DIR, the tray in DIR/tray unless given. */
 export function packSources(t: Target, from: string, tray?: string): { exe: string; tray?: string } {
   const exe = join(from, t, exeName(t));
-  return isWindows(t) ? { exe, tray: tray ?? join(from, 'tray', TRAY_EXE) } : { exe };
+  const inArchive = archiveContents(t).tray;
+  return inArchive ? { exe, tray: tray ?? join(from, 'tray', inArchive) } : { exe };
 }
 
 /** A target's archive contents (name inside, mode, file on disk); only Windows zips carry the tray. */
 export function archiveFiles(t: Target, files: { exe: string; tray?: string; license: string }): { path: string; mode: number; source: string }[] {
-  const out = [{ path: exeName(t), mode: 0o755, source: files.exe }];
-  if (isWindows(t) && files.tray) out.push({ path: TRAY_EXE, mode: 0o755, source: files.tray });
-  out.push({ path: 'LICENSE', mode: 0o644, source: files.license });
+  const names = archiveContents(t);
+  const out = [{ path: names.exe, mode: 0o755, source: files.exe }];
+  if (names.tray && files.tray) out.push({ path: names.tray, mode: 0o755, source: files.tray });
+  out.push({ path: names.license, mode: 0o644, source: files.license });
   return out;
 }
+
+/** The archive bytes, zip or tar.gz as the target's asset name says. */
+export const writeArchive = (t: Target, entries: Entry[]): Uint8Array => (archiveType(t) === 'zip' ? writeZip(entries) : writeTarGz(entries));
 
 function shortCommit(): string {
   const r = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'], { cwd: ROOT, stderr: 'ignore' });
@@ -210,21 +210,18 @@ async function pack(t: Target, files: { exe: string; tray?: string }, out: strin
     entries.push({ path: f.path, mode: f.mode, data: await Bun.file(f.source).bytes() });
   }
   const file = join(out, assetName(t));
-  await Bun.write(file, isWindows(t) ? writeZip(entries) : writeTarGz(entries));
+  await Bun.write(file, writeArchive(t, entries));
   console.log(`${file} (${mb(statSync(file).size)}; ${exeName(t)} ${mb(statSync(files.exe).size)})`);
   return file;
 }
 
-/** `sha256sum -c` format: "<hex>  <name>", sorted by name. */
 async function writeSums(out: string, names: string[]): Promise<string> {
-  const lines: string[] = [];
-  for (const name of [...names].sort()) {
-    const hex = new Bun.CryptoHasher('sha256').update(await Bun.file(join(out, name)).bytes()).digest('hex');
-    lines.push(`${hex}  ${name}`);
-  }
-  const file = join(out, 'SHA256SUMS');
-  await Bun.write(file, lines.map((l) => `${l}\n`).join(''));
-  console.log(`${file}\n${lines.join('\n')}`);
+  const sums: Record<string, string> = {};
+  for (const name of names) sums[name] = new Bun.CryptoHasher('sha256').update(await Bun.file(join(out, name)).bytes()).digest('hex');
+  const file = join(out, SUMS);
+  const text = formatSums(sums);
+  await Bun.write(file, text);
+  console.log(`${file}\n${text.trimEnd()}`);
   return file;
 }
 
@@ -264,13 +261,12 @@ async function smoke(o: Options): Promise<void> {
 
 /** The buildx export's caddy[.exe] as caddy-<target>.tar.gz|.zip, the one file inside named like the binary. */
 async function packCaddy(t: Target, from: string, out: string): Promise<string> {
-  const name = isWindows(t) ? 'caddy.exe' : 'caddy';
+  const name = caddyExeName(t);
   const exe = join(from, name);
   if (!existsSync(exe)) throw new Error(`no ${name} in ${from}`);
   await mkdir(out, { recursive: true });
-  const file = join(out, caddyAsset(t));
-  const entries: Entry[] = [{ path: name, mode: 0o755, data: await Bun.file(exe).bytes() }];
-  await Bun.write(file, isWindows(t) ? writeZip(entries) : writeTarGz(entries));
+  const file = join(out, caddyAssetName(t));
+  await Bun.write(file, writeArchive(t, [{ path: name, mode: 0o755, data: await Bun.file(exe).bytes() }]));
   console.log(file);
   return file;
 }

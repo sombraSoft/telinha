@@ -12,6 +12,7 @@ import { parseEnvFile } from '../envfile.ts';
 import { footprintOf } from '../footprint.ts';
 import type { Locale } from '../i18n.ts';
 import * as netinfo from '../netinfo.ts';
+import { TRAY_EXE } from '../release.ts';
 import { SYSCTL_SCRIPT } from '../service/systemd.ts';
 import { defaultProcessInfo, sameExe } from '../supervisor.ts';
 import { compareVersions as compareSemver } from '../update/updater.ts';
@@ -1271,8 +1272,6 @@ const service: Check = {
     return make(ctx, 'service', 'ok', tr(L, 'serviceOk'), { detail });
   },
 };
-
-const TRAY_EXE = 'telinha-tray.exe';
 
 const tray: Check = {
   id: 'tray',

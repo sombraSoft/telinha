@@ -1,11 +1,11 @@
 // `bun run bins`: downloads the child binaries into a directory. Used by dev/E2E
 // and the Docker build (which copies server/src/bins.ts, archive.ts,
-// footprint.ts, version.ts, releasetag.ts and versions.json next to this file,
+// footprint.ts, version.ts, release.ts and versions.json next to this file,
 // so nothing else of server/ is needed). caddy is Telinha's own build, taken
 // from a release: --release picks which one, the latest by default.
 import { join } from 'node:path';
 import { HELPERS, ROOT, caddyRelease, ensureBinaries, hostArch, hostOs, type Arch, type Helper, type Os } from '../server/src/bins.ts';
-import { latestReleaseTag } from '../server/src/releasetag.ts';
+import { latestReleaseTag } from '../server/src/release.ts';
 
 const USAGE = `usage: bun scripts/bins.ts [--os linux|windows] [--arch amd64|arm64] [--out DIR] [--release vX.Y.Z] [${HELPERS.join(' ')}]
   --release  the Telinha release whose caddy to fetch (default: the latest one; only read when caddy is asked for)`;

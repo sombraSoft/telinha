@@ -5,8 +5,9 @@
 // the icon started. autostart sets the sign-in Run value: on, off, or null to
 // keep what it is (a plain re-run without --tray-autostart).
 import { win32 } from 'node:path';
+import { TRAY_EXE } from '../../release.ts';
 import {
-  defaultTrayLauncher, readTrayState, removeTray, setAutostart, stopTray, TRAY_EXE, trayDistPath, trayEnv, trayExePath, trayRunning,
+  defaultTrayLauncher, readTrayState, removeTray, setAutostart, stopTray, trayDistPath, trayEnv, trayExePath, trayRunning,
 } from '../../service/tray.ts';
 import { isSplitElevated } from '../../service/windows.ts';
 import { defaultProcessInfo } from '../../supervisor.ts';

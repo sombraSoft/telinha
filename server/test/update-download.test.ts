@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { basename, join } from 'node:path';
 import { writeTarGz, writeZip, type Entry } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
-import { downloadRelease, newExeName, trayNewExeName } from '../src/update/download.ts';
-import { parseSums } from '../src/update/github.ts';
+import { assetName, parseSums } from '../src/release.ts';
+import { downloadRelease } from '../src/update/download.ts';
 import { FailedError, type GitHubReleases, type UpdateFs } from '../src/update/types.ts';
 import type { Target } from '../src/version.ts';
 
@@ -70,7 +70,7 @@ function memFs() {
 /** One release of one target: its archive (zip on Windows, tar.gz on Linux) and a SHA256SUMS that matches it. */
 function github(target: Target, members: Record<string, string>): GitHubReleases {
   const windows = target.startsWith('windows');
-  const asset = windows ? `telinha-${target}.zip` : `telinha-${target}.tar.gz`;
+  const asset = assetName(target);
   const entries: Entry[] = Object.entries(members).map(([path, content]) => ({ path, mode: 0o755, data: enc.encode(content) }));
   const bytes = windows ? writeZip(entries) : writeTarGz(entries);
   return {
@@ -115,11 +115,5 @@ describe('downloadRelease', () => {
     const r = await download(m, 'linux-x64', { telinha: 'telinha v0.8.0', 'telinha-tray.exe': 'tray', 'x/telinha-tray.exe': 'tray' });
     expect(r).toEqual({ exe: join(BIN, 'telinha.new'), tray: null });
     expect(m.names()).toEqual(['telinha.new']);
-  });
-
-  test('staged names', () => {
-    expect(newExeName('windows-x64')).toBe('telinha.new.exe');
-    expect(trayNewExeName('windows-x64')).toBe('telinha-tray.new.exe');
-    expect(newExeName('linux-arm64')).toBe('telinha.new');
   });
 });
