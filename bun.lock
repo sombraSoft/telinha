@@ -6,7 +6,7 @@
       "name": "telinha",
       "devDependencies": {
         "@playwright/test": "^1.63.0",
-        "@types/bun": "^1.4.2",
+        "@types/bun": "1.4.2",
         "typescript": "^6.0.3",
       },
     },
@@ -14,7 +14,7 @@
       "name": "@telinha/docs",
       "devDependencies": {
         "@astrojs/starlight": "^0.42.5",
-        "@types/bun": "^1.4.2",
+        "@types/bun": "1.4.2",
         "astro": "^7.3.5",
         "starlight-links-validator": "^0.26.0",
         "typescript": "^6.0.3",
@@ -31,7 +31,7 @@
         "uqr": "^0.1.3",
       },
       "devDependencies": {
-        "@types/bun": "^1.4.2",
+        "@types/bun": "1.4.2",
         "typescript": "^6.0.3",
       },
     },
@@ -39,7 +39,7 @@
       "name": "@telinha/web",
       "devDependencies": {
         "@sveltejs/vite-plugin-svelte": "^7.3.1",
-        "@types/bun": "^1.4.2",
+        "@types/bun": "1.4.2",
         "livekit-client": "2.22.3",
         "svelte": "^5.57.1",
         "svelte-check": "^4.7.6",

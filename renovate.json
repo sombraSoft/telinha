@@ -107,14 +107,30 @@
       "automerge": false
     },
     {
+      "description": "Bun is one version everywhere: mise.toml, packageManager, every @types/bun (pinned exactly, since a range lets bun.lock run ahead of the runtime), and the Dockerfile's oven/bun image. scripts/toolchain.test.ts fails while they differ, so they move in one PR, which waits for the last registry to publish",
+      "matchDepNames": ["bun", "oven/bun", "@types/bun"],
+      "groupName": "bun"
+    },
+    {
+      "description": "Go is one version in mise.toml and the Dockerfile's golang image, which builds Caddy; scripts/toolchain.test.ts fails while they differ, so they move in one PR",
+      "matchDepNames": ["go", "golang"],
+      "groupName": "go"
+    },
+    {
       "description": "Majors are reviewed by hand",
       "matchUpdateTypes": ["major"],
       "automerge": false
     },
     {
-      "description": "The Dockerfile (its golang and bun images too) and compose.yml ship in the image or the release tag, so their bumps must cut a release",
+      "description": "The Dockerfile (its golang and bun images too) and compose.yml ship in the image or the release tag, so their bumps must cut a release. A group PR takes its highest-priority type, so the bun and go groups are fix: whenever they carry the image",
       "matchManagers": ["dockerfile", "docker-compose"],
       "semanticCommitType": "fix"
+    },
+    {
+      "description": "A digest-only refresh rebuilds the same image versions, so it is chore: and cuts no release on its own",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "semanticCommitType": "chore"
     },
     {
       "description": "versions.json pins the binaries baked into the image, so its bumps must cut a release",
