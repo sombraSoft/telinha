@@ -567,9 +567,13 @@ jobs:
         uses: docker://rhysd/actionlint:1.7.12
         with:
           args: -color
+      # mise only, no tools yet: a --locked install of a tool mise.lock lacks
+      # would fail before the freshness check below can say why. install_args
+      # still names bun so the cache key matches the other jobs' and restores.
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.3
+          install: false
           install_args: bun
           cache_save: ${{ github.event_name == 'push' }}
       # mise lock keeps every locked version and rewrites only what mise.toml
@@ -581,6 +585,10 @@ jobs:
         run: |
           mise lock
           git diff --exit-code -- mise.lock || { echo '::error file=mise.lock::mise.lock is stale: run mise lock and commit the result'; exit 1; }
+      - name: install tools
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: mise install --locked bun
       # Structure and every asset hash present; a stale hash fails the image job.
       - name: versions.json
         run: bun scripts/versions.ts check

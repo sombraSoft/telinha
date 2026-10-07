@@ -5,21 +5,21 @@
 // against fakes; every line goes through Wizard.out.
 import { randomBytes } from 'node:crypto';
 import { posix, win32 } from 'node:path';
-import { toolsFor } from '../../bins.ts';
 import { loadConfig, type Config } from '../../config.ts';
 import type { Ddns } from '../../ddns.ts';
 import { firewallCommands } from '../../doctor/checks.ts';
 import type { CheckResult } from '../../doctor/types.ts';
 import { parseEnvFile } from '../../envfile.ts';
+import { helpersOf } from '../../footprint.ts';
 import type { NatProbe } from '../../nat/index.ts';
 import { isCgnatIpv4, isPrivateIpv4 } from '../../netinfo.ts';
 import type { Paths } from '../../paths.ts';
+import { exeName } from '../../release.ts';
 import { must, ServiceInstallError, type InstallResult, type ServiceManager, type SpawnFn } from '../../service/index.ts';
 import { SERVICE_USER, SYSCTL_SCRIPT } from '../../service/systemd.ts';
 import type { TrayLauncher } from '../../service/tray.ts';
 import { parseWhoami, whoamiExe } from '../../service/windows.ts';
 import type { ProcessInfo } from '../../supervisor.ts';
-import { exeName } from '../../update/swap.ts';
 import type { CliContext } from '../args.ts';
 import type { ControlClient } from '../control.ts';
 import type { Locale, Params } from '../strings.ts';
@@ -211,24 +211,24 @@ export async function writeConfig(w: Wizard, file: string, text: string, shown =
 
 // --- binaries
 
-const TOOL_NAMES = { livekit: 'LiveKit', caddy: 'Caddy', cloudflared: 'cloudflared' } as const;
+const HELPER_NAMES = { livekit: 'LiveKit', caddy: 'Caddy', cloudflared: 'cloudflared' } as const;
 /** The programs this config runs, by name ("LiveKit, Caddy"). */
-const toolNames = (config: Pick<Config, 'media' | 'ingress'>) => toolsFor(config).map((t) => TOOL_NAMES[t]).join(', ');
+const helperNames = (config: Pick<Config, 'media' | 'ingress'>) => helpersOf(config).map((t) => HELPER_NAMES[t]).join(', ');
 
 export async function downloadBinaries(w: Wizard, config: Pick<Config, 'media' | 'ingress'>): Promise<boolean> {
   const { out, s } = w;
-  if (!toolsFor(config).length) return true; // LiveKit Cloud behind an external proxy runs no child
+  if (!helpersOf(config).length) return true; // LiveKit Cloud behind an external proxy runs no child
   // A root install's bin/ belongs to the service user: root writing there could
   // be steered onto any file through a planted symlink. The service fetches
   // them itself at start, as that user.
   if (w.deps.platform === 'linux' && w.deps.isRoot && !w.docker) {
     const bin = await w.deps.fs.stat(w.ctx.paths.bin);
     if (bin && bin.uid !== 0) {
-      out.info(s('binsByService', { tools: toolNames(config) }));
+      out.info(s('binsByService', { tools: helperNames(config) }));
       return true;
     }
   }
-  const spin = out.spinner(s('binsChecking', { tools: toolNames(config) }));
+  const spin = out.spinner(s('binsChecking', { tools: helperNames(config) }));
   try {
     await w.deps.bins(config, w.ctx.paths, (m) => spin.update(m.replace(/^\[bins\]\s*/, '')), (tool, received, total) => out.progress?.(received, total, tool));
     spin.stop(s('binsOk', { dir: w.ctx.paths.bin }));

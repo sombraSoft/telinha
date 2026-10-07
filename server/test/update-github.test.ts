@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { assetName, createGitHubReleases, isStableTag, latestStable, parseSums, tagFromRedirect } from '../src/update/github.ts';
-import * as releasetag from '../src/releasetag.ts';
-import { caddyAssetName, latestReleaseTag, releaseAssetUrl } from '../src/releasetag.ts';
+import { createGitHubReleases, latestStable } from '../src/update/github.ts';
 import { PendingError } from '../src/update/types.ts';
 
 type Call = { url: string; redirect: RequestInit['redirect'] };
@@ -17,44 +15,6 @@ function fakeFetch(respond: (url: string) => Response | Error) {
 }
 
 const redirect = (to: string) => new Response(null, { status: 302, headers: { location: to } });
-
-describe('github release URLs and parsing', () => {
-  test('assetName: tar.gz on Linux, zip on Windows', () => {
-    expect(assetName('linux-x64')).toBe('telinha-linux-x64.tar.gz');
-    expect(assetName('linux-arm64')).toBe('telinha-linux-arm64.tar.gz');
-    expect(assetName('windows-x64')).toBe('telinha-windows-x64.zip');
-    expect(assetName('windows-arm64')).toBe('telinha-windows-arm64.zip');
-  });
-
-  test('a tag with - is a prerelease', () => {
-    expect(isStableTag('v0.8.0')).toBe(true);
-    expect(isStableTag('v0.8.0-rc.1')).toBe(false);
-  });
-
-  test('tagFromRedirect reads the tag out of Location, decoded', () => {
-    expect(tagFromRedirect(redirect('https://github.com/sombraSoft/telinha/releases/tag/v0.8.0'))).toBe('v0.8.0');
-    expect(tagFromRedirect(redirect('/sombraSoft/telinha/releases/tag/v0.8.0-rc.1?x=1'))).toBe('v0.8.0-rc.1');
-    expect(tagFromRedirect(redirect('https://github.com/sombraSoft/telinha/releases/tag/v0.8.0%2Bbuild'))).toBe('v0.8.0+build');
-    expect(tagFromRedirect(new Response('page', { status: 200 }))).toBeNull();
-    expect(tagFromRedirect(new Response('', { status: 404 }))).toBeNull();
-    expect(tagFromRedirect(redirect('https://github.com/sombraSoft/telinha/releases'))).toBeNull();
-  });
-
-  test('parseSums: sha256sum format, binary marker, CRLF, junk ignored', () => {
-    const text = [
-      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  telinha-linux-x64.tar.gz',
-      'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB *telinha-windows-x64.zip',
-      'not a sum line',
-      '',
-      'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  with space.zip',
-    ].join('\r\n');
-    expect(parseSums(text)).toEqual({
-      'telinha-linux-x64.tar.gz': 'a'.repeat(64),
-      'telinha-windows-x64.zip': 'b'.repeat(64),
-      'with space.zip': 'c'.repeat(64),
-    });
-  });
-});
 
 describe('createGitHubReleases', () => {
   test('latestTag follows nothing: manual redirect, Location is the answer', async () => {
@@ -101,33 +61,5 @@ describe('createGitHubReleases', () => {
     expect(await latestStable(fakeFetch(() => redirect('/r/releases/tag/v0.8.0')).fetch)).toBe('v0.8.0');
     expect(await latestStable(fakeFetch(() => redirect('/r/releases/tag/v0.9.0-rc.1')).fetch)).toBeNull();
     expect(await latestStable(fakeFetch(() => new Error('offline')).fetch)).toBeNull();
-  });
-});
-
-describe('releasetag', () => {
-  test('github.ts re-exports the shared helpers unchanged', () => {
-    expect(isStableTag).toBe(releasetag.isStableTag);
-    expect(parseSums).toBe(releasetag.parseSums);
-    expect(tagFromRedirect).toBe(releasetag.tagFromRedirect);
-  });
-
-  test('releaseAssetUrl: encoded tag, other repos', () => {
-    expect(releaseAssetUrl('v0.6.0', 'SHA256SUMS')).toBe('https://github.com/sombraSoft/telinha/releases/download/v0.6.0/SHA256SUMS');
-    expect(releaseAssetUrl('v1+b', 'x', 'me/fork')).toBe('https://github.com/me/fork/releases/download/v1%2Bb/x');
-  });
-
-  test('caddyAssetName follows the telinha target names', () => {
-    expect(caddyAssetName('linux', 'amd64')).toBe('caddy-linux-x64.tar.gz');
-    expect(caddyAssetName('linux', 'arm64')).toBe('caddy-linux-arm64.tar.gz');
-    expect(caddyAssetName('windows', 'amd64')).toBe('caddy-windows-x64.zip');
-    expect(caddyAssetName('windows', 'arm64')).toBe('caddy-windows-arm64.zip');
-  });
-
-  test('latestReleaseTag: the redirect target; offline or no release -> null', async () => {
-    const f = fakeFetch(() => redirect('https://github.com/me/fork/releases/tag/v2.0.0'));
-    expect(await latestReleaseTag(f.fetch, 'me/fork')).toBe('v2.0.0');
-    expect(f.calls).toEqual([{ url: 'https://github.com/me/fork/releases/latest', redirect: 'manual' }]);
-    expect(await latestReleaseTag(fakeFetch(() => new Error('ENOTFOUND')).fetch)).toBeNull();
-    expect(await latestReleaseTag(fakeFetch(() => new Response('', { status: 404 })).fetch)).toBeNull();
   });
 });

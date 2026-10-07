@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { posix, win32 } from 'node:path';
-import { toolsFor } from '../src/bins.ts';
 import { loadConfig } from '../src/config.ts';
 import type { Ddns } from '../src/ddns.ts';
 import type { CheckResult } from '../src/doctor/types.ts';
 import { parseEnvFile } from '../src/envfile.ts';
+import { helpersOf } from '../src/footprint.ts';
 import type { NatProbe } from '../src/nat/index.ts';
 import { resolvePaths } from '../src/paths.ts';
 import type { InstallResult, ServiceManager, SpawnOutcome } from '../src/service/index.ts';
@@ -1201,7 +1201,7 @@ describe('non-interactive', () => {
       expect(c.media).toBe('cloud');
       expect(c.warnings).toEqual([]);
       expect(rec.bins).toEqual([{ media: 'cloud', ingress: 'direct' }]);
-      expect(toolsFor(c)).toEqual(['caddy']);
+      expect(helpersOf(c)).toEqual(['caddy']);
       const out = term.text_();
       expect(out).toContain("Open these ports in your provider's firewall (security group / security list) and in this machine's own firewall: TCP 443, TCP 80");
       expect(out).toContain('ufw is installed; if it is active: sudo ufw allow 443/tcp && sudo ufw allow 80/tcp');

@@ -3,7 +3,7 @@ import { MessageFlags } from 'discord.js';
 import { buildCommand, commandDenied, handleCommand, type CommandDeps, type CommandInput, type CommandPayload } from '../src/bot.ts';
 import { renderCard, type Card } from '../src/card.ts';
 import type { Locale } from '../src/i18n.ts';
-import { openRegistry } from '../src/rooms.ts';
+import { createRooms } from '../src/rooms.ts';
 
 const NOW = 1_700_000_000_000;
 const group = (l: Locale) => (l === 'pt-BR' ? 'Galera' : 'Crew');
@@ -13,19 +13,26 @@ const base: CommandInput = {
   userId: '7', who: 'Zé', what: 'Elden Ring',
 };
 
+// The real Room module on :memory: with a fake LiveKit (rooms.test.ts covers open itself).
 function setup(o: { ensureFails?: boolean; replyFails?: boolean } = {}) {
-  const registry = openRegistry(':memory:');
   const calls: string[] = [];
   const replies: CommandPayload[] = [];
-  const deps: CommandDeps = {
-    registry,
-    rooms: {
+  const logs: unknown[][] = [];
+  const rooms = createRooms({
+    path: ':memory:',
+    livekit: {
       ensureRoom: async (room) => {
         calls.push(`ensureRoom ${room}`);
         if (o.ensureFails) throw new Error('livekit down');
       },
       deleteRoom: async (room) => void calls.push(`deleteRoom ${room}`),
+      listParticipants: async () => [],
     },
+    closeEmptySeconds: 300,
+    now: () => NOW,
+  });
+  const deps: CommandDeps = {
+    rooms,
     render: (rec) => renderCard(rec, { streamers: [], viewers: [] }, { publicUrl: 'https://tela.example.com', group: group(rec.locale) }),
     reply: async (p) => {
       calls.push(p.flags ? 'reply ephemeral' : 'reply card');
@@ -34,11 +41,10 @@ function setup(o: { ensureFails?: boolean; replyFails?: boolean } = {}) {
       return p.flags ? null : { channelId: '300', messageId: '999' };
     },
     newRoom: () => 'lamo-futi',
-    now: () => NOW,
     group,
-    log: () => {},
+    log: (...a) => void logs.push(a),
   };
-  return { deps, registry, calls, replies };
+  return { deps, rooms, calls, replies, logs };
 }
 
 test('command: configured name, English base with pt-BR localizations', () => {
@@ -80,7 +86,8 @@ describe('handleCommand', () => {
     const s = setup();
     await handleCommand(base, s.deps);
     expect(s.calls).toEqual(['ensureRoom lamo-futi', 'reply card']);
-    expect(s.registry.get('lamo-futi')).toMatchObject({
+    expect(s.logs).toEqual([['tela', '7', 'lamo-futi']]);
+    expect(s.rooms.get('lamo-futi')).toMatchObject({
       guildId: '100', channelId: '300', messageId: '999', locale: 'pt-BR', openerId: '7', openerName: 'Zé',
       what: 'Elden Ring', createdAt: NOW, closedAt: null,
     });
@@ -101,30 +108,31 @@ describe('handleCommand', () => {
     await handleCommand({ ...base, guildLocale: 'en-US', what: null }, s.deps);
     expect(s.replies[0]!.content).toStartWith('📺 **Zé** opened a Telinha\n');
     expect(s.replies[0]!.content).toContain('Only Crew can join');
-    expect(s.registry.get('lamo-futi')!.locale).toBe('en');
+    expect(s.rooms.get('lamo-futi')!.locale).toBe('en');
   });
 
   test('denied: ephemeral only, no room', async () => {
     const s = setup();
     await handleCommand({ ...base, allowed: false }, s.deps);
     expect(s.calls).toEqual(['reply ephemeral']);
-    expect(s.registry.open()).toEqual([]);
+    expect(s.rooms.openRooms()).toEqual([]);
   });
 
-  test('LiveKit failure: room closed, ephemeral error in the caller locale', async () => {
+  test('LiveKit failure: no open room, ephemeral error in the caller locale', async () => {
     const s = setup({ ensureFails: true });
     await handleCommand({ ...base, locale: 'pt-BR' }, s.deps);
     expect(s.calls).toEqual(['ensureRoom lamo-futi', 'deleteRoom lamo-futi', 'reply ephemeral']);
-    expect(s.registry.get('lamo-futi')!.closedAt).toBe(NOW);
+    expect(s.rooms.openRooms()).toEqual([]);
+    expect(s.logs).toEqual([['tela failed', 'lamo-futi', 'livekit down']]);
     expect(s.replies[0]!.content).toBe('Não deu pra abrir a telinha agora. Tenta de novo daqui a pouco.');
     expect(s.replies[0]!.flags).toBe(MessageFlags.Ephemeral);
   });
 
-  test('reply failure: room closed and LiveKit room deleted', async () => {
+  test('reply failure: no open room, ephemeral error', async () => {
     const s = setup({ replyFails: true });
     await handleCommand(base, s.deps);
     expect(s.calls).toEqual(['ensureRoom lamo-futi', 'reply card', 'deleteRoom lamo-futi', 'reply ephemeral']);
-    expect(s.registry.get('lamo-futi')).toMatchObject({ closedAt: NOW, messageId: null });
+    expect(s.rooms.openRooms()).toEqual([]);
     expect(s.replies[0]!.content).toBe('Could not open a Telinha right now. Try again in a moment.');
   });
 

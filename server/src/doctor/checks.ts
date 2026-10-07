@@ -9,8 +9,10 @@ import versionsJson from '../../../versions.json' with { type: 'json' };
 import { KNOWN_KEYS, turnIneligibility, upnpMappings, type Config } from '../config.ts';
 import { createDuckDns, DUCKDNS_REJECTED } from '../ddns.ts';
 import { parseEnvFile } from '../envfile.ts';
+import { footprintOf } from '../footprint.ts';
 import type { Locale } from '../i18n.ts';
 import * as netinfo from '../netinfo.ts';
+import { TRAY_EXE } from '../release.ts';
 import { SYSCTL_SCRIPT } from '../service/systemd.ts';
 import { defaultProcessInfo, sameExe } from '../supervisor.ts';
 import { compareVersions as compareSemver } from '../update/updater.ts';
@@ -715,19 +717,11 @@ export function inviteUrl(clientId: string, guildId: string): string {
 
 interface NeededPort { protocol: 'tcp' | 'udp'; external: number; internal: number }
 
-/** Inbound ports the router must forward for this config. */
+/** Inbound ports the router must forward for this config: the footprint's exposures, web ports first. */
 export function neededPorts(c: Config): NeededPort[] {
-  const out: NeededPort[] = [];
-  if (c.ingress === 'direct') {
-    const url = new URL(c.publicUrl);
-    out.push({ protocol: 'tcp', external: Number(url.port || 443), internal: c.httpsPort });
-    if (c.httpPort) out.push({ protocol: 'tcp', external: 80, internal: c.httpPort });
-  }
-  if (c.media === 'self') {
-    out.push({ protocol: 'tcp', external: c.mediaTcpPort, internal: c.mediaTcpPort });
-    out.push({ protocol: 'udp', external: c.mediaUdpPort, internal: c.mediaUdpPort });
-  }
-  return out;
+  const { exposures } = footprintOf(c);
+  return [...exposures.filter((e) => e.helper === 'caddy'), ...exposures.filter((e) => e.helper !== 'caddy')]
+    .map((e) => ({ protocol: e.protocol, external: e.externalPort ?? e.port, internal: e.port }));
 }
 
 const portLabel = (p: NeededPort) => `${p.protocol.toUpperCase()} ${p.external}${p.internal !== p.external ? ` → ${p.internal}` : ''}`;
@@ -827,8 +821,6 @@ const PINNED: Record<string, { version: string }> = {
   livekit: versionsJson.livekit, caddy: versionsJson.caddy, cloudflared: versionsJson.cloudflared,
 };
 
-const MEMBERS: Record<string, string> = { livekit: 'livekit-server', caddy: 'caddy', cloudflared: 'cloudflared' };
-
 /** Far above any Caddy build (~50 MB); a bigger file is not read whole. */
 const CADDY_MAX_BYTES = 256 * 1024 * 1024;
 // A Go binary carries its module IDs and its build info as plain strings.
@@ -855,16 +847,12 @@ const binaries: Check = {
     if (!c) return make(ctx, 'binaries', 'skip', tr(L, 'needConfig'));
     const s = sys(ctx);
     const versions = ctx.versions ?? PINNED;
-    const tools: string[] = [];
-    if (c.media === 'self') tools.push('livekit');
-    if (c.ingress === 'direct') tools.push('caddy');
-    if (c.ingress === 'tunnel') tools.push('cloudflared');
-    if (!tools.length) return make(ctx, 'binaries', 'ok', tr(L, 'binNone'));
+    const { helpers } = footprintOf(c);
+    if (!helpers.length) return make(ctx, 'binaries', 'ok', tr(L, 'binNone'));
     const exe = s.platform === 'win32' ? '.exe' : '';
     const findings: Finding[] = [];
     const detail: string[] = [];
-    for (const tool of tools) {
-      const member = MEMBERS[tool]!;
+    for (const { name: tool, binary: member } of helpers) {
       // Our caddy ships with each Telinha release, so its sidecar holds that release's tag; from
       // source any release's caddy does.
       const want = tool === 'caddy' ? (ctx.compiled ? `v${ctx.version}` : null) : (versions[tool]?.version ?? '?');
@@ -1240,28 +1228,28 @@ const listeners: Check = {
     ];
     const down = children.filter(([, state]) => state !== 'up').map(([name]) => name);
     if (down.length) findings.push({ status: 'warn', summary: tr(L, 'childDown', { list: down.join(', ') }), fix: tr(L, 'listenDownFix') });
-    if (c.media === 'self') {
-      let lk = false;
-      try {
-        lk = (await ctx.fetch(`http://127.0.0.1:${c.livekitPort}/`, { signal: AbortSignal.timeout(3000) })).status === 200;
-      } catch {
-        // stays false
-      }
-      if (!lk) findings.push({ status: 'warn', summary: tr(L, 'livekitDown', { port: c.livekitPort }) });
-      if (!(await net(ctx).tcpOpen('127.0.0.1', c.mediaTcpPort, 2000))) {
-        findings.push({ status: 'warn', summary: tr(L, 'mediaTcpDown', { port: c.mediaTcpPort }) });
-      }
-      if (c.turn) {
+    // The ports run binds, helper by helper; UDP and the HTTP redirect go unprobed.
+    for (const { key, port } of footprintOf(c).helpers.flatMap((h) => h.ports)) {
+      if (key === 'LIVEKIT_PORT') {
+        let lk = false;
+        try {
+          lk = (await ctx.fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(3000) })).status === 200;
+        } catch {
+          // stays false
+        }
+        if (!lk) findings.push({ status: 'warn', summary: tr(L, 'livekitDown', { port }) });
+      } else if (key === 'MEDIA_TCP_PORT') {
+        if (!(await net(ctx).tcpOpen('127.0.0.1', port, 2000))) findings.push({ status: 'warn', summary: tr(L, 'mediaTcpDown', { port }) });
+      } else if (key === 'TURN_PORT') {
         // Reachability only (no PROXY header, so LiveKit drops it): shown here so --local sees it too.
-        const up = await net(ctx).tcpOpen('127.0.0.1', c.turn.port, 2000);
-        detail.push(tr(L, up ? 'listenTurnUp' : 'listenTurnDown', { port: c.turn.port }));
-        if (!up) findings.push({ status: 'warn', summary: tr(L, 'turnLocalDown', { port: c.turn.port }), fix: tr(L, 'listenDownFix') });
+        const up = await net(ctx).tcpOpen('127.0.0.1', port, 2000);
+        detail.push(tr(L, up ? 'listenTurnUp' : 'listenTurnDown', { port }));
+        if (!up) findings.push({ status: 'warn', summary: tr(L, 'turnLocalDown', { port }), fix: tr(L, 'listenDownFix') });
+      } else if (key === 'HTTPS_PORT' && !(await net(ctx).tcpOpen('127.0.0.1', port, 2000))) {
+        const lowPorts = c.httpsPort < 1024 || (c.httpPort > 0 && c.httpPort < 1024);
+        const hint = s.platform === 'linux' && !s.isRoot && lowPorts;
+        findings.push({ status: 'warn', summary: tr(L, 'httpsDown', { port }), fix: hint ? tr(L, 'lowPortFix', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }) : undefined });
       }
-    }
-    if (c.ingress === 'direct' && !(await net(ctx).tcpOpen('127.0.0.1', c.httpsPort, 2000))) {
-      const lowPorts = c.httpsPort < 1024 || (c.httpPort > 0 && c.httpPort < 1024);
-      const hint = s.platform === 'linux' && !s.isRoot && lowPorts;
-      findings.push({ status: 'warn', summary: tr(L, 'httpsDown', { port: c.httpsPort }), fix: hint ? tr(L, 'lowPortFix', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }) : undefined });
     }
     return combine(ctx, 'listeners', findings, tr(L, 'listenOk', { url: base }), [...detail, ...fw]);
   },
@@ -1284,8 +1272,6 @@ const service: Check = {
     return make(ctx, 'service', 'ok', tr(L, 'serviceOk'), { detail });
   },
 };
-
-const TRAY_EXE = 'telinha-tray.exe';
 
 const tray: Check = {
   id: 'tray',
