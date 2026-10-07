@@ -315,7 +315,7 @@ describe('a fresh home install', () => {
       ['', 'Web address', DUCK_URL, 'url'],
       ['Discord', 'Discord bot token', 'set', 'secret'],
       ['', 'Client secret', 'set', 'secret'],
-      ['', 'Which server?', 'Gurizada', 'plain'],
+      ['', 'Which Discord server?', 'Gurizada', 'plain'],
       ['', 'Who may enter the rooms?', '@Membro', 'plain'],
       ['', 'Where does the command work?', '#geral', 'plain'],
       ['', 'Command name', 'telinha', 'plain'],
@@ -612,9 +612,9 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
       id: 'guild',
       options: [],
       link: inviteUrl(APP),
-      lookup: { state: 'warn', note: 'The bot is not in any server yet.' },
+      lookup: { state: 'warn', note: 'The bot is not in any Discord server yet.' },
     });
-    expect(card.hint).toContain('Add the bot to your server with this link (you need Manage Server there):');
+    expect(card.hint).toContain('Add the bot to your Discord server with this link (you need Manage Server there):');
     expect(card.actions).toEqual([
       { id: 'open', label: 'Open the link in the browser' },
       { id: 'check', label: 'I added the bot: check again' },
@@ -628,14 +628,14 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     expect(s.current()).toMatchObject({ link: undefined, lookup: { state: 'idle' } });
     expect(s.current().options.map((o) => [o.value, o.label, o.subtle])).toEqual([
       [GUILD, 'Gurizada', false],
-      ['+invite', 'Another server (add the bot)', true],
+      ['+invite', 'Another Discord server (add the bot)', true],
     ]);
     // "Another server" opens the same card without leaving the question.
     expect(await s.submit('+invite')).toBe('stayed');
     expect(s.current().link).toBe(inviteUrl(APP));
     await answer(s, 'guild', GUILD);
     expect(s.current().id).toBe('role');
-    expect(s.current().options.map((o) => o.label)).toEqual(['@Membro', 'Everyone in the server (@everyone)']);
+    expect(s.current().options.map((o) => o.label)).toEqual(['@Membro', 'Everyone in the Discord server (@everyone)']);
   });
 
   test('a --guild the bot is not in: the invite goes straight to that server', async () => {
@@ -646,7 +646,7 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     expect(s.current()).toMatchObject({
       id: 'guild',
       link: inviteUrl(APP, GUILD2),
-      lookup: { state: 'warn', note: `The bot is not in server ${GUILD2}.` },
+      lookup: { state: 'warn', note: `The bot is not in Discord server ${GUILD2}.` },
     });
   });
 
@@ -768,7 +768,7 @@ describe('starts', () => {
     expect(s.current().options.map((o) => [o.label, o.chosen])).toEqual([
       ['Gurizada', true],
       ['Outro', false],
-      ['Another server (add the bot)', false],
+      ['Another Discord server (add the bot)', false],
     ]);
     await answer(s, 'guild', GUILD2);
     expect(s.current().id).toBe('role');
@@ -863,7 +863,7 @@ describe('hidden answers and apply options', () => {
     expect(s.applyOptions()).toEqual({ sysctl: 'manual', canRotateCookie: false, tray: null });
     expect(s.values().AUTO_UPDATE).toBe('off');
     expect(s.steps().map((x) => x.summary)).toEqual([
-      'Rented server (VPS)',
+      'Rented machine (VPS)',
       'sslip.io',
       '/telinha · Gurizada',
       'this computer, 443 too',
@@ -941,7 +941,7 @@ describe('hidden answers and apply options', () => {
     await settle();
     expect(s.current().id).toBe('mediaPorts');
     expect(s.values().TURN).toBe('on');
-    expect(s.reviewNotes().join('\n')).toContain('turn.t.example.com does not resolve to this server yet');
+    expect(s.reviewNotes().join('\n')).toContain('turn.t.example.com does not resolve to this machine yet');
   });
 
   test('custom media ports are checked against the HTTPS port and written', async () => {
