@@ -9,7 +9,7 @@ import { cookie, parseCookies, SESSION, type Session, STATE, safeNext, sign, ver
 import { ROOM_RE } from './codes.ts';
 import type { Config } from './config.ts';
 import type { Control } from './control.ts';
-import { DOCTOR_COOKIE } from './doctor/session.ts';
+import { DOCTOR_COOKIE } from './doctor/phone-test-store.ts';
 import { fromAcceptLanguage, type Locale, resolveLocale } from './i18n.ts';
 import { createToken, newIdentity } from './livekit.ts';
 import { type DirMember, devMembers } from './members.ts';

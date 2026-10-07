@@ -344,8 +344,8 @@ function fakeDeps(term: FakeTerm, o: Opts = {}) {
       available: async () => o.available ?? false,
       shutdown: async () => {},
       status: async () => ({ supervised: true }) as Awaited<ReturnType<SetupDeps['control']['status']>>,
-      doctorSession: async () => ({ id: 's', url: 'https://telinha.example.com/doctor/s', expiresAt: 0 }),
-      doctorWait: async () => ({ state: 'expired' }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://telinha.example.com/doctor/s', expiresAt: 0 }),
+      phoneTestWait: async () => ({ state: 'expired' }),
     },
     bins: async (config) => void rec.bins.push({ media: config.media, ingress: config.ingress }),
     spawn: async (cmd) => {

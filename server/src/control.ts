@@ -79,12 +79,12 @@ export function createControl(deps: ControlDeps): Control {
       if (path === '/internal/doctor/sessions' && method === 'POST' && deps.doctor) {
         return json(200, deps.doctor.create());
       }
-      const session = /^\/internal\/doctor\/sessions\/([^/]+)$/.exec(path);
-      if (session && method === 'GET' && deps.doctor) {
-        if (!ID_RE.test(session[1]!)) return notFound();
+      const phoneTest = /^\/internal\/doctor\/sessions\/([^/]+)$/.exec(path);
+      if (phoneTest && method === 'GET' && deps.doctor) {
+        if (!ID_RE.test(phoneTest[1]!)) return notFound();
         const wait = Number(url.searchParams.get('wait') ?? 0);
         const ms = Number.isFinite(wait) ? Math.max(0, Math.min(MAX_WAIT_MS, wait)) : 0;
-        return json(200, await deps.doctor.wait(session[1]!, ms));
+        return json(200, await deps.doctor.wait(phoneTest[1]!, ms));
       }
 
       if (path === '/internal/update' && method === 'POST' && deps.update) {
