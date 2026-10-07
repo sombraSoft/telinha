@@ -71,15 +71,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
-    # No caches: release builds start from a clean runner.
+    # No caches, mise-action's included: release builds start from a clean runner.
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          bun-version: 1.4.2
+          version: 2026.10.3
+          install_args: bun
+          cache: false
       # Every OS/CPU's native packages: the cross builds embed the target's OpenTUI library.
       - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - run: bun run build
@@ -109,15 +111,17 @@ jobs:
       contents: read
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
-    # No caches: release builds start from a clean runner.
+    # No caches, mise-action's included: release builds start from a clean runner.
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          bun-version: 1.4.2
+          version: 2026.10.3
+          install_args: bun
+          cache: false
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
@@ -175,9 +179,11 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          bun-version: 1.4.2
+          version: 2026.10.3
+          install_args: bun
+          cache: false
       # build-binary.ts imports the Solid plugin: install it from the lockfile
       # rather than letting Bun auto-install whatever npm has today.
       - run: bun install --frozen-lockfile
@@ -278,9 +284,11 @@ jobs:
             CADDY_ARCH=${{ matrix.arch }}
           outputs: type=local,dest=dist-caddy
           push: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          bun-version: 1.4.2
+          version: 2026.10.3
+          install_args: bun
+          cache: false
       - run: bun install --frozen-lockfile
       - run: bun scripts/build-binary.ts pack-caddy --target "${{ matrix.target }}" --from dist-caddy
       - uses: actions/upload-artifact@v7
@@ -382,9 +390,11 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          bun-version: 1.4.2
+          version: 2026.10.3
+          install_args: bun
+          cache: false
       - uses: actions/download-artifact@v8
         with:
           pattern: binaries-*

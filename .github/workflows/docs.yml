@@ -26,9 +26,13 @@ jobs:
           # Empty on workflow_dispatch: checkout then uses the run's own ref.
           ref: ${{ inputs.ref }}
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
+      # No cache: this deploys the site, and release.yml calls it, so it starts
+      # from a clean runner like the release builds.
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          bun-version: 1.4.2
+          version: 2026.10.3
+          install_args: bun
+          cache: false
       - run: bun install --frozen-lockfile
       # The link validator runs inside the build and fails it on a broken link.
       - run: bun run docs:build
