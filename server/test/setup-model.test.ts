@@ -8,6 +8,7 @@ import {
   answered,
   cloudUrl,
   flowIds,
+  groupFallback,
   kindOf,
   lowPorts,
   type ModelEnv,
@@ -568,6 +569,41 @@ describe('the address', () => {
     expect(answered({ group: '' }, 'group')).toBe(true);
     expect(answered({ pinnedIp: '' }, 'pinnedIp')).toBe(true);
     expect(answered({}, 'group')).toBe(false);
+  });
+});
+
+describe('the group name', () => {
+  const G = '111111111111111111';
+  const lookups = {
+    guilds: [{ id: G, name: 'Galera' }],
+    roles: { [G]: [{ id: '222222222222222222', name: 'amigos', position: 1, managed: false }] },
+  } as ModelEnv['lookups'];
+  const env = envOf({ lookups });
+  const group = question('group');
+
+  test("empty means the gate role's name: hint and placeholder show it", () => {
+    const a: Answers = { guild: G, role: '222222222222222222' };
+    expect(groupFallback(a, env)).toBe('amigos');
+    expect(group.hint!(a, env)).toEqual([{ key: 'groupHint', params: { name: 'amigos' } }]);
+    expect(group.placeholderFor!(a, env)).toEqual({ raw: 'amigos' });
+  });
+
+  test("@everyone (the guild's id), or a role Discord no longer lists: the Discord server's name", () => {
+    expect(groupFallback({ guild: G, role: G }, env)).toBe('Galera');
+    expect(groupFallback({ guild: G, role: '333333333333333333' }, env)).toBe('Galera');
+  });
+
+  test('roles not loaded (or offline): no guess', () => {
+    const a: Answers = { guild: G, role: '222222222222222222' };
+    expect(groupFallback(a, envOf({ lookups: { guilds: lookups.guilds } }))).toBe('');
+    expect(group.placeholderFor!(a, envOf())).toBeUndefined();
+    expect(group.hint!(a, envOf())).toEqual([{ key: 'groupHint', params: { name: '-' } }]);
+  });
+
+  test("the file's GROUP_NAME stays the default; none leaves it empty", () => {
+    const a: Answers = { guild: G, role: '222222222222222222' };
+    expect(group.default(a, envOf({ lookups, file: { GROUP_NAME: 'Crew' } }))).toBe('Crew');
+    expect(group.default(a, env)).toBe('');
   });
 });
 

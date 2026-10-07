@@ -33,7 +33,7 @@ ROLE_ID=
 CHANNEL_IDS=
 # Slash command name: lowercase, 1-32 letters, digits, - or _
 #COMMAND_NAME=telinha
-# Group name shown in pages and the command's replies; default = the Discord server's name
+# Group name shown in pages and the command's replies; default = the role's name, or the Discord server's for @everyone
 #GROUP_NAME=
 # Random, generated on the server: openssl rand -base64 48
 COOKIE_SECRET=''

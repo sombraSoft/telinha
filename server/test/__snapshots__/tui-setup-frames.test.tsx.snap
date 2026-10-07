@@ -403,7 +403,7 @@ exports[`setup frames, en 120x34 a home install from the first question to the l
  │   UDP 7882             │ │             Who may enter the rooms?              @Membro                               │
  │                        │ │             Where does the command work?          #telinha                              │
  │ ✔ Updates              │ │             Command name                          telinha                               │
- │   automatic            │ │             Group name                            Gurizada                              │
+ │   automatic            │ │             Group name                            Membro                                │
  │                        │ │  Video      Video                                 This computer                         │
  │ ❯ Review               │ │    ↓ 3 more                                                                             │
  │                        │ │                                                                                         │
@@ -1011,7 +1011,7 @@ exports[`setup frames, pt-BR 120x34 a home install from the first question to th
  │   UDP 7882             │ │               Quem pode entrar nas salas?           @Membro                             │
  │                        │ │               Onde o comando funciona?              #telinha                            │
  │ ✔ Atualizações         │ │               Nome do comando                       telinha                             │
- │   automáticas          │ │               Nome do grupo                         Gurizada                            │
+ │   automáticas          │ │               Nome do grupo                         Membro                              │
  │                        │ │  Vídeo        Vídeo                                 Este computador                     │
  │ ❯ Revisão              │ │    ↓ mais 3                                                                             │
  │                        │ │                                                                                         │

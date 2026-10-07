@@ -141,7 +141,7 @@ export interface QuestionDef {
   hint?(a: Answers, env: ModelEnv): Text[];
   options?(a: Answers, env: ModelEnv): OptionDef[];
   placeholder?: Text;
-  /** A placeholder that depends on the answers (the group name shows the server's). */
+  /** A placeholder that depends on the answers (the group name shows the name the bot falls back to). */
   placeholderFor?(a: Answers, env: ModelEnv): Text | undefined;
   default(a: Answers, env: ModelEnv): string | string[] | undefined;
   /** Sync check of a typed value; null = fine. */
@@ -795,9 +795,9 @@ export const QUESTIONS: readonly QuestionDef[] = [
     optional: true,
     title: txt('groupTitle'),
     question: txt('groupQ'),
-    hint: (a, env) => [txt('groupHint', { name: guildName(a, env) || '-' })],
+    hint: (a, env) => [txt('groupHint', { name: groupFallback(a, env) || '-' })],
     placeholderFor: (a, env) => {
-      const name = guildName(a, env);
+      const name = groupFallback(a, env);
       return name ? raw(name) : undefined;
     },
     default: (_a, env) => env.file.GROUP_NAME ?? '',
@@ -1038,6 +1038,19 @@ function highPortOk(p: string | undefined): boolean {
 /** The chosen server's name as Discord lists it; '' when not loaded (or offline). */
 export function guildName(a: Answers, env: Pick<ModelEnv, 'lookups'>): string {
   return env.lookups.guilds?.find((g) => g.id === a.guild)?.name ?? '';
+}
+
+/**
+ * The name the bot gives the group when GROUP_NAME is empty: the gate role's, or
+ * the Discord server's for @everyone (a role id equal to the guild's); '' while
+ * the lists it needs are not loaded (or offline).
+ */
+export function groupFallback(a: Answers, env: Pick<ModelEnv, 'lookups'>): string {
+  const guild = str(a.guild);
+  if (str(a.role) === guild) return guildName(a, env);
+  const roles = env.lookups.roles?.[guild];
+  if (!roles) return '';
+  return roles.find((r) => r.id === a.role)?.name || guildName(a, env);
 }
 
 const BY_ID = new Map(QUESTIONS.map((q) => [q.id, q]));

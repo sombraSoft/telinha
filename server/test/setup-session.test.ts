@@ -319,7 +319,7 @@ describe('a fresh home install', () => {
       ['', 'Who may enter the rooms?', '@Membro', 'plain'],
       ['', 'Where does the command work?', '#geral', 'plain'],
       ['', 'Command name', 'telinha', 'plain'],
-      ['', 'Group name', 'Gurizada', 'plain'],
+      ['', 'Group name', 'Membro', 'plain'],
       ['Video', 'Video', 'This computer', 'plain'],
       ['Ports', 'Media ports', 'Keep TCP 7881 and UDP 7882', 'plain'],
       ['', 'Ask the router?', 'Yes, ask the router', 'plain'],

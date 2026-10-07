@@ -6,6 +6,7 @@ import {
   type CommandInput,
   type CommandPayload,
   commandDenied,
+  defaultGroupName,
   handleCommand,
 } from '../src/bot.ts';
 import { type Card, renderCard } from '../src/card.ts';
@@ -173,5 +174,25 @@ describe('handleCommand', () => {
     const s = setup();
     await handleCommand({ ...base, who: '{group}', what: '{what}' }, s.deps);
     expect(s.replies[0]!.content).toStartWith('📺 **{group}** abriu uma telinha: {what}\n');
+  });
+});
+
+describe('defaultGroupName', () => {
+  const guild = { id: '100', name: 'Galera', roles: { cache: new Map([['200', { name: 'amigos' }]]) } };
+
+  test("the gate role's name", () => {
+    expect(defaultGroupName(guild, '200')).toBe('amigos');
+  });
+
+  test("@everyone (the guild's id): the Discord server's name", () => {
+    expect(defaultGroupName(guild, '100')).toBe('Galera');
+  });
+
+  test("a role not in the cache: the Discord server's name", () => {
+    expect(defaultGroupName(guild, '999')).toBe('Galera');
+  });
+
+  test('guild not seen yet: undefined', () => {
+    expect(defaultGroupName(undefined, '200')).toBeUndefined();
   });
 });

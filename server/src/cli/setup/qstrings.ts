@@ -216,8 +216,8 @@ export const q = defineStrings(
     commandBad: 'Lowercase letters, digits, - or _, at most 32.',
     groupTitle: 'Group name',
     groupQ: "Shown in the pages and in the command's replies.",
-    groupHint: "Leave it empty to use the server's name ({name}).",
-    groupDefault: "the server's name",
+    groupHint: "Leave it empty to use the role's name, or the Discord server's name when everyone may join ({name}).",
+    groupDefault: "the role's name, or the Discord server's",
 
     // ports
     // media
@@ -568,8 +568,9 @@ export const q = defineStrings(
     commandBad: 'Letras minúsculas, dígitos, - ou _, no máximo 32.',
     groupTitle: 'Nome do grupo',
     groupQ: 'Aparece nas páginas e nas respostas do comando.',
-    groupHint: 'Deixe vazio pra usar o nome do servidor ({name}).',
-    groupDefault: 'o nome do servidor',
+    groupHint:
+      'Deixe vazio pra usar o nome do cargo, ou o do servidor do Discord quando todo mundo pode entrar ({name}).',
+    groupDefault: 'o nome do cargo, ou o do servidor do Discord',
 
     // media
     mediaChoiceTitle: 'Vídeo',
