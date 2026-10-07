@@ -1,9 +1,10 @@
-// The install as a list of tasks: Discord, DuckDNS, the file, the programs,
+// Apply, the install as a list of tasks: Discord, DuckDNS, the file, the programs,
 // the service, the tray icon, the router, the start, the certificate and doctor. One runner
 // for the setup screens (a live task list with retry, skip or back) and for
 // the plain run (lines as they come). A task's lines are the steps' own
 // output, captured per task; what happens after a failure is the caller's
-// decide().
+// decide(). What the run did is a TaskList: one row per task, which the
+// screens and the summary after them only render.
 import type { Config } from '../../config.ts';
 import type { CheckResult } from '../../doctor/types.ts';
 import { helpersOf } from '../../footprint.ts';
@@ -16,21 +17,14 @@ import {
   doctorCli, downloadBinaries, generateSecrets, publicPorts, routerStep, serviceStep, startService, validateValues, waitForCertificate, writeConfig,
   type StartOutcome, type Values, type WithTerminal, type Wizard,
 } from './steps.ts';
+import type { SKey } from './strings.ts';
 import { trayStep, type TrayChoice } from './tray.ts';
 
 export type TaskId = 'discord' | 'duckdns' | 'config' | 'binaries' | 'service' | 'tray' | 'router' | 'start' | 'cert' | 'doctor';
 export type TaskStatus = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skipped';
 export interface TaskLine { kind: 'info' | 'ok' | 'warn' | 'fail'; text: string }
-export interface TaskEvent {
-  id: TaskId; status: TaskStatus;
-  /** One-line detail for the row (spinner label, path, "3 of 18 checks"…). */
-  detail?: string;
-  /** Appended lines (what the plain output prints for this task). */
-  lines?: TaskLine[];
-  progress?: { done: number; total: number | null; unit: 'bytes' | 'items' | 'ms'; label?: string };
-  /** The doctor task: the results so far. */
-  checks?: CheckResult[];
-}
+/** A download's bytes, the certificate wait's milliseconds or the doctor's checks. */
+export interface TaskProgress { done: number; total: number | null; unit: 'bytes' | 'items' | 'ms'; label?: string }
 
 /** Where the file goes: inside the image `shown` is the host's path (install-docker.sh passes it). */
 export interface ApplyTarget { file: string; shown: string; previous: PreviousEnv | null }
@@ -52,7 +46,6 @@ export interface ApplyOptions {
 }
 
 export interface ApplyHooks {
-  emit(e: TaskEvent): void;
   /** A task failed: what now. Plain: abort before the file, skip after it. Setup screens: the user's pick. */
   decide(id: TaskId, error: string): Promise<'retry' | 'skip' | 'back' | 'abort'>;
   /** Runs fn with the real terminal (setup screens suspended); intro: lines to show there first. Plain: fn(). */
@@ -64,18 +57,22 @@ export type ApplyResult =
   | { kind: 'back'; to: TaskId }
   | { kind: 'aborted'; wrote: boolean };
 
-/** Task row label, the hint shown when it fails, and the question a "Back to questions" from it lands on. */
-export const TASKS: Record<TaskId, { label: AKey; hint: AKey; backTo: QuestionId | 'review' }> = {
-  discord: { label: 'taskDiscord', hint: 'hintDiscord', backTo: 'discordToken' },
-  duckdns: { label: 'taskDuckdns', hint: 'hintDuckdns', backTo: 'duckToken' },
-  config: { label: 'taskConfig', hint: 'hintConfig', backTo: 'review' },
-  binaries: { label: 'taskBinaries', hint: 'hintBinaries', backTo: 'review' },
-  service: { label: 'taskService', hint: 'hintService', backTo: 'sysctl' },
-  tray: { label: 'taskTray', hint: 'hintTray', backTo: 'tray' },
-  router: { label: 'taskRouter', hint: 'hintRouter', backTo: 'upnp' },
-  start: { label: 'taskStart', hint: 'hintStart', backTo: 'review' },
-  cert: { label: 'taskCert', hint: 'hintCert', backTo: 'review' },
-  doctor: { label: 'taskDoctor', hint: 'hintDoctor', backTo: 'review' },
+/**
+ * Task row label, the hint shown when it fails, the question a "Back to
+ * questions" from it lands on, and the header the plain run prints when it
+ * starts (null: its lines say enough).
+ */
+export const TASKS: Record<TaskId, { label: AKey; hint: AKey; backTo: QuestionId | 'review'; header: SKey | null }> = {
+  discord: { label: 'taskDiscord', hint: 'hintDiscord', backTo: 'discordToken', header: 'discordTitle' },
+  duckdns: { label: 'taskDuckdns', hint: 'hintDuckdns', backTo: 'duckToken', header: null },
+  config: { label: 'taskConfig', hint: 'hintConfig', backTo: 'review', header: null },
+  binaries: { label: 'taskBinaries', hint: 'hintBinaries', backTo: 'review', header: 'binsTitle' },
+  service: { label: 'taskService', hint: 'hintService', backTo: 'sysctl', header: 'serviceTitle' },
+  tray: { label: 'taskTray', hint: 'hintTray', backTo: 'tray', header: null },
+  router: { label: 'taskRouter', hint: 'hintRouter', backTo: 'upnp', header: 'routerTitle' },
+  start: { label: 'taskStart', hint: 'hintStart', backTo: 'review', header: 'startTitle' },
+  cert: { label: 'taskCert', hint: 'hintCert', backTo: 'review', header: null },
+  doctor: { label: 'taskDoctor', hint: 'hintDoctor', backTo: 'review', header: 'doctorTitle' },
 };
 
 /**
@@ -83,7 +80,7 @@ export const TASKS: Record<TaskId, { label: AKey; hint: AKey; backTo: QuestionId
  * warning and failure with the info lines right after it (a hint's why, the
  * manual command), and every router line (the ports to open or forward by hand).
  */
-export function todoLines(id: TaskId, lines: readonly TaskLine[]): TaskLine[] {
+function todoLines(id: TaskId, lines: readonly TaskLine[]): TaskLine[] {
   if (id === 'router') return [...lines];
   const out: TaskLine[] = [];
   let explaining = false;
@@ -93,6 +90,130 @@ export function todoLines(id: TaskId, lines: readonly TaskLine[]): TaskLine[] {
     explaining = loud || (explaining && l.kind === 'info');
   }
   return out;
+}
+
+/** One task as its row shows it: its latest attempt (a retry starts the row over). */
+export interface TaskRow {
+  id: TaskId;
+  status: TaskStatus;
+  /** The running step's one-liner (spinner label, the UAC wait, "3 of 18 checks"). */
+  detail: string;
+  /** A spinner is up: its next line is the result. */
+  spinning: boolean;
+  /** What the plain output printed for this attempt. */
+  lines: TaskLine[];
+  progress: TaskProgress | null;
+  /** The line that ended the task's spinner ("Service installed"): what a finished row shows. */
+  result: TaskLine | null;
+  /** What is left to do by hand once it is over (todoLines). */
+  todo: TaskLine[];
+}
+
+/** A finished task as the summary prints it: the line that says it all, then what else is left to do. */
+export interface SummaryRow { id: TaskId; status: 'ok' | 'warn' | 'fail' | 'skipped'; headline: TaskLine | null; todo: TaskLine[] }
+
+/** What runApply tells its TaskList. */
+type TaskEvent =
+  | { kind: 'plan'; plan: readonly TaskId[] }
+  | { kind: 'attempt'; id: TaskId }
+  | { kind: 'detail'; id: TaskId; text: string }
+  | { kind: 'line'; id: TaskId; line: TaskLine }
+  | { kind: 'progress'; id: TaskId; progress: TaskProgress }
+  | { kind: 'end'; id: TaskId; status: TaskStatus };
+
+/** runApply's way in: nothing else changes a TaskList. */
+let feed!: (list: TaskList, e: TaskEvent) => void;
+
+type Row = Omit<TaskRow, 'todo'>;
+const fresh = (id: TaskId, status: TaskStatus): Row => ({ id, status, detail: '', spinning: false, lines: [], progress: null, result: null });
+
+/** The line a finished task's summary row shows: what its spinner ended with, the failure, or the line that says it all. */
+function headline(r: Row): TaskLine | null {
+  // The router's lines are a list to read top down (what was found, what is left to do).
+  if (r.id === 'router') return r.lines[0] ?? null;
+  if (r.status === 'fail') return r.lines.findLast((l) => l.kind === 'fail') ?? r.lines.at(-1) ?? null;
+  return r.result ?? r.lines.find((l) => l.kind === 'ok') ?? r.lines.at(-1) ?? null;
+}
+
+/**
+ * The install's tasks as rows, kept across re-applies: each run starts the
+ * rows over with its plan. Shaped like SetupSession and PhoneTest: subscribe()
+ * hears every change, the getters read the current state.
+ */
+export class TaskList {
+  static {
+    feed = (list, e) => list.#fold(e);
+  }
+
+  readonly #listeners = new Set<() => void>();
+  #rows: Row[] = [];
+  #wroteAny = false;
+
+  subscribe(fn: () => void): () => void {
+    this.#listeners.add(fn);
+    return () => void this.#listeners.delete(fn);
+  }
+
+  /** The latest run's tasks in plan order; a copy, safe to keep. */
+  get rows(): TaskRow[] {
+    const copy = (l: TaskLine) => ({ ...l });
+    return this.#rows.map((r) => ({
+      ...r, lines: r.lines.map(copy), progress: r.progress && { ...r.progress }, result: r.result && copy(r.result), todo: todoLines(r.id, r.lines).map(copy),
+    }));
+  }
+
+  /** The latest run's finished tasks in plan order: each one's headline, and what is left to do besides it. */
+  summary(): SummaryRow[] {
+    return this.#rows.flatMap((r) => {
+      if (r.status === 'pending' || r.status === 'running') return [];
+      const head = headline(r);
+      return [{ id: r.id, status: r.status, headline: head, todo: todoLines(r.id, r.lines).filter((l) => l !== head) }];
+    });
+  }
+
+  /** The latest run wrote telinha.env. */
+  get wrote(): boolean {
+    const status = this.#rows.find((r) => r.id === 'config')?.status;
+    return status === 'ok' || status === 'warn';
+  }
+
+  /** Some run wrote telinha.env: it stays on disk whatever a later one did. */
+  get wroteAny(): boolean {
+    return this.#wroteAny;
+  }
+
+  #fold(e: TaskEvent): void {
+    if (e.kind === 'plan') this.#rows = e.plan.map((id) => fresh(id, 'pending'));
+    else {
+      const i = this.#rows.findIndex((r) => r.id === e.id);
+      const r = this.#rows[i];
+      if (!r) return;
+      switch (e.kind) {
+        case 'attempt':
+          // A retry's row starts clean.
+          this.#rows[i] = fresh(e.id, 'running');
+          break;
+        case 'detail':
+          r.detail = e.text;
+          r.spinning = true;
+          break;
+        case 'line':
+          // The first line after a spinner is how it ended.
+          if (r.spinning) r.result = e.line;
+          r.spinning = false;
+          r.lines.push(e.line);
+          break;
+        case 'progress':
+          r.progress = { ...e.progress };
+          break;
+        case 'end':
+          r.status = e.status;
+          if (e.id === 'config' && (e.status === 'ok' || e.status === 'warn')) this.#wroteAny = true;
+          break;
+      }
+    }
+    for (const fn of [...this.#listeners]) fn();
+  }
 }
 
 /** Where "Back to questions" lands: the task's question while it is asked, else the Review (sysctl and UPnP are not always). */
@@ -139,14 +260,14 @@ export function silentOut(): Out {
   };
 }
 
-/** Prints through sink and reports every line, spinner and progress of one task as events. */
-function taskOut(sink: Out, id: TaskId, emit: ApplyHooks['emit'], seen: TaskLine[]): Out {
-  const running = (e: Omit<TaskEvent, 'id' | 'status'>) => emit({ id, status: 'running', ...e });
+/** Prints through sink and tells the list every line, spinner and progress of one task. */
+function taskOut(sink: Out, id: TaskId, tell: (e: TaskEvent) => void, seen: TaskLine[]): Out {
   const add = (kind: TaskLine['kind'], text: string) => {
-    const l = { kind, text };
-    seen.push(l);
-    running({ lines: [l] });
+    const line = { kind, text };
+    seen.push(line);
+    tell({ kind: 'line', id, line });
   };
+  const detail = (text: string) => tell({ kind: 'detail', id, text });
   return {
     colors: sink.colors,
     style: sink.style,
@@ -168,12 +289,12 @@ function taskOut(sink: Out, id: TaskId, emit: ApplyHooks['emit'], seen: TaskLine
     spinner(label) {
       const spin = sink.spinner(label);
       let current = label;
-      running({ detail: label });
+      detail(label);
       return {
         update(l) {
           current = l;
           spin.update(l);
-          running({ detail: l });
+          detail(l);
         },
         stop(l) {
           spin.stop(l);
@@ -187,11 +308,11 @@ function taskOut(sink: Out, id: TaskId, emit: ApplyHooks['emit'], seen: TaskLine
     },
     progress(done, total, label) {
       sink.progress?.(done, total, label);
-      running({ progress: { done, total, unit: 'bytes', label } });
+      tell({ kind: 'progress', id, progress: { done, total, unit: 'bytes', label } });
     },
     detail(text) {
       sink.detail?.(text);
-      running({ detail: text });
+      detail(text);
     },
   };
 }
@@ -219,12 +340,14 @@ type Outcome = { status: 'ok' | 'warn' | 'fail' | 'skipped'; error?: string };
 /**
  * Runs `plan` in order. A failure asks hooks.decide: retry runs the task
  * again, skip marks it skipped and goes on, back and abort stop. values gets
- * what the install learns (the client id from Discord, the generated secrets).
+ * what the install learns (the client id from Discord, the generated secrets);
+ * tasks gets the rows (the plain run needs none: its lines are the output).
  */
-export async function runApply(w: Wizard, target: ApplyTarget, values: Values, plan: TaskId[], o: ApplyOptions, hooks: ApplyHooks): Promise<ApplyResult> {
+export async function runApply(w: Wizard, target: ApplyTarget, values: Values, plan: TaskId[], o: ApplyOptions, hooks: ApplyHooks, tasks = new TaskList()): Promise<ApplyResult> {
   const { deps, ctx, s } = w;
+  const tell = (e: TaskEvent) => feed(tasks, e);
   const memo = o.secrets ?? { made: {} };
-  const tasks = Object.fromEntries((Object.keys(TASKS) as TaskId[]).map((id) => [id, 'skipped'])) as Record<TaskId, TaskStatus>;
+  const status = Object.fromEntries((Object.keys(TASKS) as TaskId[]).map((id) => [id, 'skipped'])) as Record<TaskId, TaskStatus>;
   let config: Config | null = null;
   let wrote = false;
   let installed = false;
@@ -234,7 +357,7 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
   // Asked before the install starts the service: a running one restarts to read the new file.
   const running = async () => (wasRunning ??= await deps.control.available().catch(() => false));
 
-  /** A task that does not run at all (no 'running' event, no header), with the line saying why; null = it runs. */
+  /** A task that does not run at all (no attempt, no header), with the line saying why; null = it runs. */
   const skip = (id: TaskId): { why?: string } | null => {
     if (id === 'discord' || id === 'duckdns' || id === 'config') return null;
     if (!wrote) return { why: at(w.locale, 'notWritten') };
@@ -299,20 +422,16 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
       return { status: started === 'notAnswering' ? 'fail' : 'warn' };
     },
     async cert(tw) {
-      const ok = await waitForCertificate(tw, values, (waited, limit) => hooks.emit({ id: 'cert', status: 'running', progress: { done: waited, total: limit, unit: 'ms' } }));
+      const ok = await waitForCertificate(tw, values, (waited, limit) => tell({ kind: 'progress', id: 'cert', progress: { done: waited, total: limit, unit: 'ms' } }));
       return { status: ok ? 'ok' : 'warn' };
     },
     async doctor(tw) {
       if (o.doctorMode === 'cli') return { status: (await doctorCli(tw)) ? 'ok' : 'warn' };
-      const got: CheckResult[] = [];
       let results: CheckResult[];
       try {
-        results = await deps.doctorChecks({ ...ctx, locale: w.locale }, (r, done, total) => {
-          got.push(r);
-          hooks.emit({
-            id: 'doctor', status: 'running', detail: at(w.locale, 'checksProgress', { done, total }),
-            progress: { done, total, unit: 'items' }, checks: [...got],
-          });
+        results = await deps.doctorChecks({ ...ctx, locale: w.locale }, (_r, done, total) => {
+          tell({ kind: 'detail', id: 'doctor', text: at(w.locale, 'checksProgress', { done, total }) });
+          tell({ kind: 'progress', id: 'doctor', progress: { done, total, unit: 'items' } });
         });
       } catch (e) {
         tw.out.warn(s('doctorFailed', { error: errMsg(e) }));
@@ -334,21 +453,22 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
     },
   };
 
-  for (const id of plan) {
-    tasks[id] = 'pending';
-    hooks.emit({ id, status: 'pending' });
-  }
+  for (const id of plan) status[id] = 'pending';
+  tell({ kind: 'plan', plan });
   for (const id of plan) {
     const skipped = skip(id);
     if (skipped) {
-      tasks[id] = 'skipped';
-      hooks.emit({ id, status: 'skipped', ...(skipped.why ? { lines: [{ kind: 'info', text: skipped.why }] } : {}) });
+      status[id] = 'skipped';
+      tell({ kind: 'end', id, status: 'skipped' });
+      if (skipped.why) tell({ kind: 'line', id, line: { kind: 'info', text: skipped.why } });
       continue;
     }
+    const header = TASKS[id].header;
+    if (header) w.out.step(s(header));
     for (;;) {
       const seen: TaskLine[] = [];
-      hooks.emit({ id, status: 'running' });
-      const tw: Wizard = { ...w, out: taskOut(w.out, id, hooks.emit, seen) };
+      tell({ kind: 'attempt', id });
+      const tw: Wizard = { ...w, out: taskOut(w.out, id, tell, seen) };
       let r: Outcome;
       try {
         r = await body[id](tw);
@@ -357,20 +477,20 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
         r = { status: 'fail', error: errMsg(e) };
       }
       // Warnings on the way (hints, a skipped redirect, a busy router) make an ok task a warning.
-      const status = r.status === 'ok' && seen.some((l) => l.kind === 'warn' || l.kind === 'fail') ? 'warn' : r.status;
-      tasks[id] = status;
-      hooks.emit({ id, status });
-      if (status !== 'fail') break;
+      const ended = r.status === 'ok' && seen.some((l) => l.kind === 'warn' || l.kind === 'fail') ? 'warn' : r.status;
+      status[id] = ended;
+      tell({ kind: 'end', id, status: ended });
+      if (ended !== 'fail') break;
       const error = r.error ?? [...seen].reverse().find((l) => l.kind === 'fail' || l.kind === 'warn')?.text ?? at(w.locale, TASKS[id].hint);
       const next = await hooks.decide(id, error);
       if (next === 'retry') continue;
       if (next === 'back') return { kind: 'back', to: id };
       // Without the file nothing after it can run: skipping it is stopping.
       if (next === 'abort' || id === 'config') return { kind: 'aborted', wrote };
-      tasks[id] = 'skipped';
-      hooks.emit({ id, status: 'skipped' });
+      status[id] = 'skipped';
+      tell({ kind: 'end', id, status: 'skipped' });
       break;
     }
   }
-  return { kind: 'done', code: 0, values, tasks, doctor };
+  return { kind: 'done', code: 0, values, tasks: status, doctor };
 }

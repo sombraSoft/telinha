@@ -35,7 +35,7 @@ export interface SetupAppProps {
 
 export function SetupApp(p: SetupAppProps) {
   const store = createSessionStore(p.c.session);
-  const apply = createApplyStore();
+  const apply = createApplyStore(p.c.tasks);
   const chrome = createChrome();
   createEffect(() => p.setLocale?.(store.locale()));
   return (
@@ -94,7 +94,6 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
     setFocus('card');
     setPlace('apply');
     const hooks: ApplyHooks = {
-      emit: (e) => apply.emit(e),
       decide: (id, error) => apply.decide(id, error),
       withTerminal: p.withTerminal ?? ((fn) => fn()),
     };
@@ -103,7 +102,7 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
     if (r.kind === 'done') return apply.finish(r);
     if (r.kind === 'back') {
       // The file stays written whatever comes next: the Review must not say nothing changed.
-      if (apply.rows.some((x) => x.id === 'config' && (x.status === 'ok' || x.status === 'warn'))) setAppliedBefore(true);
+      if (p.c.tasks.wroteAny) setAppliedBefore(true);
       return backTo(r.to);
     }
     finish({ kind: 'applied', result: r });

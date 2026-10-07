@@ -2,6 +2,8 @@
 // real setup (session, lookups, apply, file write) on a fake machine.
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { run } from '../src/cli/setup.ts';
+import type { TaskId, TaskRow } from '../src/cli/setup/apply.ts';
+import type { SetupUiContext } from '../src/cli/setup/ui.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import { frame, paste, press, typeText, until } from './tui-harness.tsx';
 import {
@@ -751,14 +753,22 @@ describe('small terminals, Docker and progress', () => {
   test('task rows: downloads without a size, the UAC wait, the certificate wait and the checks count', async () => {
     let finish!: () => void;
     const gate = new Promise<void>((res) => (finish = res));
+    const row = (id: TaskId, o: Partial<TaskRow>): TaskRow => ({ id, status: 'running', detail: '', spinning: false, lines: [], progress: null, result: null, todo: [], ...o });
+    let changed = () => {};
+    const tasks: SetupUiContext['tasks'] = {
+      wroteAny: false,
+      rows: [
+        row('binaries', { progress: { done: 5 * 1024 * 1024, total: null, unit: 'bytes', label: 'caddy' } }),
+        row('service', { detail: 'Approve the Windows administrator prompt…', spinning: true }),
+        row('cert', { detail: 'Waiting for the HTTPS certificate', spinning: true, progress: { done: 45_000, total: 90_000, unit: 'ms' } }),
+        row('doctor', { detail: '3 of 18 checks', spinning: true, progress: { done: 3, total: 18, unit: 'items' } }),
+      ],
+      subscribe: (fn) => ((changed = fn), () => {}),
+    };
     const r = await startSetup(QUIET, {
-      apply: async (_o, hooks) => {
-        for (const id of ['binaries', 'service', 'cert', 'doctor'] as const) hooks.emit({ id, status: 'pending' });
-        hooks.emit({ id: 'binaries', status: 'running' });
-        hooks.emit({ id: 'binaries', status: 'running', progress: { done: 5 * 1024 * 1024, total: null, unit: 'bytes', label: 'caddy' } });
-        hooks.emit({ id: 'service', status: 'running', detail: 'Approve the Windows administrator prompt…' });
-        hooks.emit({ id: 'cert', status: 'running', detail: 'Waiting for the HTTPS certificate', progress: { done: 45_000, total: 90_000, unit: 'ms' } });
-        hooks.emit({ id: 'doctor', status: 'running', detail: '3 of 18 checks', progress: { done: 3, total: 18, unit: 'items' } });
+      tasks,
+      apply: async () => {
+        changed();
         await gate;
         return { kind: 'done', code: 0, values: {}, tasks: {} as never, doctor: null };
       },

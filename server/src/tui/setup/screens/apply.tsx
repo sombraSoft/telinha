@@ -5,14 +5,14 @@
 import type { KeyEvent, RGBA } from '@opentui/core';
 import { createEffect, createMemo, createSignal, Index, Match, on, Show, Switch, type Accessor } from 'solid-js';
 import { at } from '../../../cli/setup/apply-strings.ts';
-import { TASKS, todoLines, type TaskId, type TaskLine } from '../../../cli/setup/apply.ts';
+import { TASKS, type TaskId, type TaskLine, type TaskRow } from '../../../cli/setup/apply.ts';
 import { t as st } from '../../../cli/setup/strings.ts';
 import { isDown, isEnter, isSpace, isUp, useKeys } from '../../keys.ts';
 import { useLocale, useT } from '../../strings.ts';
 import { c } from '../../theme.ts';
 import { CARD_CHROME, fit, pad, useLayout, windowStart, wrap } from '../../ui/layout.ts';
 import { Bar, Bold, Card, Picker, StatusIcon, type PickOption } from '../../ui/widgets.tsx';
-import type { ApplyStore, TaskRow } from '../store.ts';
+import type { ApplyStore } from '../store.ts';
 import { useS } from '../strings.ts';
 import { Lines, marked, paint, pickerRows, type Line } from './question.tsx';
 
@@ -61,16 +61,15 @@ export function ApplyScreen(p: ApplyProps) {
   const selectable = () => p.store.rows.map((r, i) => (openable(r) ? i : -1)).filter((i) => i >= 0);
   const failed = () => p.store.failure()?.id ?? null;
   const expanded = (r: TaskRow) => r.id === failed() || open().includes(r.id);
-  // The last card opens what is left to do by hand (todoLines): the router's
+  // The last card opens what is left to do by hand (the row's todo): the router's
   // lines, a warning's with its explanation when the row cannot say it all.
   // Opened that way a row shows only those lines; Enter shows all of them.
   const [brief, setBrief] = createSignal<TaskId[]>([]);
   createEffect(on(p.store.stage, (stage) => {
     if (stage !== 'done') return;
     const todo = p.store.rows.filter((r) => {
-      const lines = todoLines(r.id, r.lines);
-      if (r.id === 'router') return lines.length > 0;
-      return r.status === 'warn' && (lines.length > 1 || (lines.length === 1 && Bun.stringWidth(lines[0]!.text) > detailW()));
+      if (r.id === 'router') return r.todo.length > 0;
+      return r.status === 'warn' && (r.todo.length > 1 || (r.todo.length === 1 && Bun.stringWidth(r.todo[0]!.text) > detailW()));
     }).map((r) => r.id);
     setBrief(todo.filter((id) => !open().includes(id)));
     setOpen((o) => [...new Set([...o, ...todo])]);
@@ -143,7 +142,7 @@ export function ApplyScreen(p: ApplyProps) {
       out.push({ kind: 'row', row, index });
       if (!expanded(row)) return;
       const bad = row.lines.filter((l) => l.kind === 'warn' || l.kind === 'fail');
-      const lines = errorsOnly && row.id === failed() && bad.length ? bad : brief().includes(row.id) ? todoLines(row.id, row.lines) : row.lines;
+      const lines = errorsOnly && row.id === failed() && bad.length ? bad : brief().includes(row.id) ? row.todo : row.lines;
       for (const l of lines) {
         // The mark on the first line, its width of spaces before the others.
         const mark = lineMark(l.kind);
@@ -329,7 +328,7 @@ function TaskRowView(p: { row: TaskRow; sel: boolean; width: number }) {
         return { text: w?.text ?? r.detail, fg: c.warn };
       }
       default:
-        return { text: r.result ?? last()?.text ?? r.detail, fg: c.muted };
+        return { text: r.result?.text ?? last()?.text ?? r.detail, fg: c.muted };
     }
   };
   const text = () => (detail().text.split('\n')[0] ?? '');
