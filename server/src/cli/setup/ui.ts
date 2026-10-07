@@ -3,14 +3,11 @@
 // own the terminal until they return. Types only, so nothing here pulls the
 // screens (or Solid) into a plain run.
 import type { Config } from '../../config.ts';
+import type { DoctorControl } from '../../doctor/phone-test.ts';
 import type { CheckContext } from '../../doctor/types.ts';
 import type { CliContext } from '../args.ts';
-import type { ControlClient } from '../control.ts';
 import type { ApplyHooks, ApplyResult } from './apply.ts';
 import type { SetupSession } from './session.ts';
-
-/** What the doctor screen's phone test needs from the running service. */
-export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'doctorSession' | 'doctorWait'>;
 
 export interface SetupUiContext {
   ctx: CliContext; version: string; docker: boolean;

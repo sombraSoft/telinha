@@ -7,8 +7,9 @@
 // otherwise, and with --json, a plain table.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig, type Config, type Media } from '../config.ts';
+import { loadConfig, type Config } from '../config.ts';
 import { CHECKS, checkTitle, runChecks } from '../doctor/checks.ts';
+import { PhoneTest, type DoctorControl, type PhoneOutcome, type PhoneTestState } from '../doctor/phone-test.ts';
 import { renderQr } from '../doctor/qr.ts';
 import type { Check, CheckContext, CheckResult, CheckStatus, NatProberLike, ServiceStatusFn, TrayStateLike, UpdateStateLike } from '../doctor/types.ts';
 import { loadEnvFile, mergeEnv } from '../envfile.ts';
@@ -18,24 +19,17 @@ import { latestStable } from '../update/github.ts';
 import { readState, statePath } from '../update/state.ts';
 import { nodeFs } from '../update/types.ts';
 import { GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, type ParsedArgs } from './args.ts';
-import { createControlClient, type ControlClient, type DoctorReport, type DoctorSessionState } from './control.ts';
+import { createControlClient } from './control.ts';
 import { doctorStrings, type DoctorStrKey } from './doctor-strings.ts';
-import { ts } from './strings.ts';
+import { ts, type Locale } from './strings.ts';
 import { createTerm, type Term, type TermOut } from './term.ts';
 
 // --no-phone is the parser's --no-<boolean>.
 export const DOCTOR_FLAGS = { json: 'boolean', phone: 'boolean', local: 'boolean' } as const;
 export const DOCTOR_SPEC = { flags: { ...GLOBAL_FLAGS, ...DOCTOR_FLAGS } } as const;
 
-/** How long the CLI waits for the phone. */
-export const PHONE_WAIT_MS = 10 * 60_000;
-// Under Bun.serve's 10 s idle timeout: the service lifts it for control calls (http.ts), this is the margin.
-export const PHONE_POLL_MS = 8_000;
-
 const t = doctorStrings;
 type StrKey = DoctorStrKey;
-
-export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'doctorSession' | 'doctorWait'>;
 
 export interface DoctorCliDeps {
   checks?: readonly Check[];
@@ -62,11 +56,6 @@ const tuiRunner: DoctorTuiRunner = async (o) => {
   const { runDoctorTui } = await import('../tui/doctor/index.tsx');
   return runDoctorTui(o);
 };
-
-export interface PhoneOutcome {
-  status: CheckStatus;
-  report?: DoctorReport;
-}
 
 const ICON: Record<CheckStatus, string> = { ok: '✓', warn: '!', fail: '✗', skip: '–' };
 
@@ -117,69 +106,6 @@ export async function buildCheckContext(ctx: CliContext, o: { local: boolean; co
     updateState: await readUpdateState(statePath(ctx.paths)),
     trayState: readTrayState(join(ctx.paths.run, 'tray.json')),
   };
-}
-
-export type PhoneHint = { key: StrKey; params: Record<string, string | number> };
-
-/**
- * Plain-language hints for a phone report (keys of this file's dictionary with their params).
- * ports is null with LiveKit Cloud: its ports are not the user's to open.
- */
-export function phoneHints(
-  r: DoctorReport, ports: { tcp: number; udp: number } | null, publicIp?: string | null, media: Media = 'self',
-  turnHost?: string | null,
-): PhoneHint[] {
-  const p: Record<string, number> = ports ? { tcp: ports.tcp, udp: ports.udp } : {};
-  const cloud = media === 'cloud';
-  // In cloud mode the page already loaded from PUBLIC_URL: signaling goes straight to Cloud.
-  if (!r.signaling.ok) return [{ key: cloud ? 'hintCloudSignaling' : 'hintSignaling', params: p }];
-  const out: PhoneHint[] = [];
-  if (!r.tcp.ok && !r.udp.ok) out.push({ key: cloud ? 'hintCloudBoth' : 'hintBoth', params: p });
-  else if (!r.udp.ok) out.push({ key: cloud ? 'hintCloudUdp' : 'hintUdp', params: p });
-  else if (!r.tcp.ok) out.push({ key: cloud ? 'hintCloudTcp' : 'hintTcp', params: p });
-  // In cloud mode the candidate is Cloud's address, never this network's.
-  const ip = r.initial?.candidateIp;
-  if (!cloud && ip && publicIp && ip !== publicIp && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) out.push({ key: 'hintIp', params: { ip, publicIp } });
-  if (r.turn && !r.turn.ok) out.push({ key: 'hintTurn', params: { turnHost: turnHost ?? 'turn.<host>' } });
-  return out;
-}
-
-export interface PhoneRow {
-  id: 'https' | 'signaling' | 'publish' | 'initial' | 'udp' | 'tcp' | 'turn';
-  ok: boolean;
-  label: string;
-  value: string;
-}
-
-/** The media ports the phone tested; null with LiveKit Cloud, whose ports are not the user's to open. */
-export function mediaPorts(config: Config | null): { tcp: number; udp: number } | null {
-  if (config?.media === 'cloud') return null;
-  return { tcp: config?.mediaTcpPort ?? 7881, udp: config?.mediaUdpPort ?? 7882 };
-}
-
-/** The phone report as labelled rows, in the order both renderers show them. */
-export function phoneRows(r: DoctorReport, ports: { tcp: number; udp: number } | null, s: (key: StrKey, params?: Record<string, string | number>) => string): PhoneRow[] {
-  const ok = (v: boolean, rtt?: number) => (v ? (rtt !== undefined ? s('worksRtt', { ms: rtt }) : s('works')) : s('failed'));
-  const why = (v: { ok: boolean; error?: string }) => (!v.ok && v.error ? `: ${v.error}` : '');
-  return [
-    { id: 'https', ok: r.https.ok, label: s('rowHttps'), value: r.https.ok ? (r.https.latencyMs !== null ? s('latency', { ms: r.https.latencyMs }) : s('works')) : s('failed') },
-    { id: 'signaling', ok: r.signaling.ok, label: s('rowSignaling'), value: r.signaling.ok ? s('works') : `${s('failed')}${why(r.signaling)}` },
-    { id: 'publish', ok: r.publish.ok, label: s('rowPublish'), value: r.publish.ok ? s('works') : `${s('failed')}${why(r.publish)}` },
-    {
-      id: 'initial', ok: !!r.initial, label: s('rowInitial'),
-      value: r.initial ? s('initialPath', { protocol: r.initial.protocol.toUpperCase(), ip: r.initial.candidateIp ?? '?', ms: r.initial.rttMs ?? '?' }) : s('initialNone'),
-    },
-    { id: 'udp', ok: r.udp.ok, label: ports ? s('rowUdp', { port: ports.udp }) : s('rowUdpCloud'), value: `${ok(r.udp.ok, r.udp.rttMs)}${why(r.udp)}` },
-    { id: 'tcp', ok: r.tcp.ok, label: ports ? s('rowTcp', { port: ports.tcp }) : s('rowTcpCloud'), value: `${ok(r.tcp.ok, r.tcp.rttMs)}${why(r.tcp)}` },
-    ...(r.turn ? [{ id: 'turn' as const, ok: r.turn.ok, label: s('rowTurn'), value: `${ok(r.turn.ok, r.turn.rttMs)}${why(r.turn)}` }] : []),
-  ];
-}
-
-export function phoneStatus(r: DoctorReport): CheckStatus {
-  if (!r.signaling.ok || !r.https.ok || (!r.tcp.ok && !r.udp.ok)) return 'fail';
-  // TURN is the fallback for strict networks: its failure alone never fails the run.
-  if (!r.tcp.ok || !r.udp.ok || !r.publish.ok || (r.turn && !r.turn.ok)) return 'warn';
-  return 'ok';
 }
 
 export async function run(args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps = {}): Promise<number> {
@@ -234,7 +160,7 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps
     if (!ctx.tty) {
       if (!json) term.info(s('phoneNoTty'));
     } else {
-      phone = await phoneTest({ term, s, control, now, qr: deps.qr ?? ((u) => renderQr(u, { env: ctx.env })), onInterrupt: deps.onInterrupt ?? sigint, config: checkCtx.config });
+      phone = await phoneTest({ term, s, locale: L, control, now, qr: deps.qr ?? ((u) => renderQr(u, { env: ctx.env })), onInterrupt: deps.onInterrupt ?? sigint, config: checkCtx.config });
     }
   }
 
@@ -258,77 +184,66 @@ function sigint(fn: () => void): () => void {
   return () => void process.off('SIGINT', fn);
 }
 
+type Say = (key: StrKey, params?: Record<string, string | number>) => string;
+
 async function phoneTest(o: {
   term: Term;
-  s: (key: StrKey, params?: Record<string, string | number>) => string;
+  s: Say;
+  locale: Locale;
   control: DoctorControl;
   now: () => number;
   qr: (url: string) => string;
   onInterrupt: (fn: () => void) => () => void;
   config: Config | null;
-}): Promise<PhoneOutcome | null> {
-  const { term, s, control } = o;
-  term.step(s('phoneTitle'));
-  if (!(await control.available())) {
-    term.warn(s('phoneNotRunning'));
-    return null;
-  }
-  let session: { id: string; url: string; expiresAt: number };
-  try {
-    session = await control.doctorSession();
-  } catch (e) {
-    term.warn(s('phoneError', { error: (e as Error).message }));
-    return null;
-  }
-  term.line(s('phoneOpen'));
-  term.line(`  ${term.link(session.url)}`);
-  term.line();
-  term.line(o.qr(session.url));
-  term.info(s('phoneWaiting'));
-
-  let skipped = false;
-  let wake: () => void = () => {};
-  const interrupted = new Promise<null>((resolve) => {
-    wake = () => resolve(null);
+}): Promise<PhoneOutcome> {
+  o.term.step(o.s('phoneTitle'));
+  const test = new PhoneTest({ control: o.control, config: o.config, locale: o.locale, now: o.now });
+  let shown: PhoneTestState | null = null;
+  test.subscribe(() => {
+    const st = test.state;
+    if (st) printPhone(o.term, o.s, o.qr, st, shown);
+    shown = st;
   });
-  const remove = o.onInterrupt(() => {
-    skipped = true;
-    wake();
-  });
-  const deadline = o.now() + PHONE_WAIT_MS;
-  let state: DoctorSessionState = { state: 'pending' };
+  const remove = o.onInterrupt(() => test.skip());
   try {
-    while (!skipped && o.now() < deadline) {
-      const next = await Promise.race([control.doctorWait(session.id, Math.min(PHONE_POLL_MS, deadline - o.now())), interrupted]);
-      if (!next) break;
-      if (next.state === 'opened' && state.state === 'pending') term.info(s('phoneOpened'));
-      state = next;
-      if (state.state === 'done' || state.state === 'expired') break;
-    }
-  } catch (e) {
-    term.warn(s('phoneError', { error: (e as Error).message }));
-    return null;
+    void test.start();
+    return await test.finished();
   } finally {
     remove();
+    test.dispose();
   }
+}
 
-  if (state.state !== 'done' || !state.report) {
-    if (skipped || state.state !== 'expired') term.info(s('phoneSkipped'));
-    else term.warn(s('phoneExpired'));
-    return { status: skipped ? 'skip' : 'warn' };
+/** Prints what changed since the last state; the rows as the checks' table draws them, each hint under the row it explains. */
+function printPhone(term: Term, s: Say, qr: (url: string) => string, st: PhoneTestState, prev: PhoneTestState | null) {
+  switch (st.kind) {
+    case 'notRunning':
+      return term.warn(s('phoneNotRunning'));
+    case 'error':
+      return term.warn(s('phoneError', { error: st.message }));
+    case 'waiting':
+      if (prev?.kind !== 'waiting') {
+        term.line(s('phoneOpen'));
+        term.line(`  ${term.link(st.url)}`);
+        term.line();
+        term.line(qr(st.url));
+        term.info(s('phoneWaiting'));
+      }
+      if (st.opened && !(prev?.kind === 'waiting' && prev.opened)) term.info(s('phoneOpened'));
+      return;
+    case 'done': {
+      const w = Math.max(...st.rows.map((row) => row.label.length));
+      st.rows.forEach((row, i) => {
+        // UDP and TCP share the hint when both are closed: once, under the second.
+        const hint = row.hint && st.rows[i + 1]?.hint !== row.hint ? { fix: row.hint } : {};
+        printResult(term, { id: row.id, title: row.label, status: row.status, summary: row.value, ...hint }, w);
+      });
+      if (st.status === 'ok') term.ok(s('phoneAllGood'));
+      return;
+    }
+    case 'expired':
+      return term.warn(s('phoneExpired'));
+    case 'skipped':
+      return term.info(s('phoneSkipped'));
   }
-  const r = state.report;
-  const media = o.config?.media ?? 'self';
-  const ports = mediaPorts(o.config);
-  const rows = phoneRows(r, ports, s);
-  const w = Math.max(...rows.map((row) => row.label.length));
-  for (const row of rows) {
-    term.line(`${row.ok ? term.style.green('✓') : term.style.red('✗')} ${row.label.padEnd(w)}  ${row.value}`);
-  }
-  const hints = phoneHints(r, ports, o.config?.livekitNodeIp ?? null, media, o.config?.turn?.host);
-  const status = phoneStatus(r);
-  if (!hints.length && status === 'ok') term.ok(s('phoneAllGood'));
-  // A TURN failure stays a warning even next to a failed media path.
-  for (const h of hints) (status === 'fail' && h.key !== 'hintTurn' ? term.fail : term.warn)(s(h.key, h.params));
-  return { status, report: r };
 }

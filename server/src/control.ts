@@ -7,7 +7,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { ControlStatus, DoctorSession, DoctorSessionState, UpdateMode, UpdateResult } from './cli/control.ts';
+import type { ControlStatus, PhoneTestLink, PhoneTestPoll, UpdateMode, UpdateResult } from './cli/control.ts';
 import { FORWARDED } from './http.ts';
 
 export interface ControlDeps {
@@ -16,8 +16,8 @@ export interface ControlDeps {
   status: () => ControlStatus;
   /** Doctor sessions; null when the service has none (the routes then 404). */
   doctor?: {
-    create(): DoctorSession;
-    wait(id: string, maxMs: number): Promise<DoctorSessionState>;
+    create(): PhoneTestLink;
+    wait(id: string, maxMs: number): Promise<PhoneTestPoll>;
   } | null;
   update?: ((mode: UpdateMode) => Promise<UpdateResult>) | null;
   /** Called after the 202 is on its way. */

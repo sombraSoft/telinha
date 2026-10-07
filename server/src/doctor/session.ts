@@ -4,9 +4,9 @@
 // the CLI is long-polling for. Everything is in memory: a restart forgets them.
 import { createHmac, randomBytes } from 'node:crypto';
 import { sign, verify } from '../auth.ts';
-import type { DoctorReport, DoctorSessionState } from '../cli/control.ts';
+import type { DoctorReport, PhoneTestPoll } from '../cli/control.ts';
 
-export type { DoctorReport, DoctorSessionState };
+export type { DoctorReport, PhoneTestPoll };
 
 export const DOCTOR_COOKIE = 'telinha_doctor';
 /** An unopened link dies after this. */
@@ -44,9 +44,9 @@ export interface DoctorStore {
   takeGrant(id: string): boolean;
   /** Gives the grant back (the room could not be created). */
   returnGrant(id: string): void;
-  state(id: string, now?: number): DoctorSessionState;
+  state(id: string, now?: number): PhoneTestPoll;
   /** Resolves on report or expiry, else after maxMs (long-poll). */
-  wait(id: string, maxMs: number): Promise<DoctorSessionState>;
+  wait(id: string, maxMs: number): Promise<PhoneTestPoll>;
   gc(now?: number): void;
 }
 

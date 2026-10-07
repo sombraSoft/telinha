@@ -106,7 +106,8 @@ detalhes esmaecidos e a correção depois de uma seta:
 
 Os ícones são `✓`, `!`, `✗` e `–`, com os mesmos significados de cima. O teste
 pelo celular é pulado sem terminal (o link precisa de alguém para abrir),
-a menos que o `--json` rode num.
+a menos que o `--json` rode num; aí as linhas dele saem do mesmo jeito, cada
+dica embaixo da linha que ela explica.
 
 Duas linhas dependem de como a mídia está configurada. **LiveKit Cloud**
 (`livekit-cloud`) só roda com `MEDIA=cloud`: ela lista as salas do projeto com
