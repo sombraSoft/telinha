@@ -197,7 +197,7 @@ Whenever you pull.
 
 ```
 git pull
-bun install --frozen-lockfile
+mise install
 bun run build
 ```
 
@@ -209,7 +209,8 @@ them.
 ### Rollback
 
 Check out the previous release tag (`git checkout v0.6.0`), then install,
-build and restart as above.
+build and restart as above. Tags up to v0.7.0 have no `mise.toml`: run
+`bun install --frozen-lockfile` there instead of `mise install`.
 
 ### Commands
 

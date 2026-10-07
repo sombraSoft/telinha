@@ -277,7 +277,7 @@ bun run build              # web/dist
 bun run e2e                # Playwright; needs bun run build first, and a Chromium (bunx playwright install chromium)
 bun run image              # build telinha:dev with docker or podman, then run the smoke test
 bun run bins               # download all three helper binaries for this host into .cache/telinha/bin (caddy from the latest release; a warning if it has none)
-bun run caddy              # build Telinha's Caddy with xcaddy into .cache/telinha/bin (uses the Go mise installs)
+bun run caddy              # build Telinha's Caddy with xcaddy into .cache/telinha/bin (uses the Go that mise installs)
 bun run versions check     # validate versions.json (refresh: recompute the livekit and cloudflared hashes)
 bun run compile --smoke    # native binaries for this OS into dist-bin/ (needs bun run build first); --smoke also runs the terminal UI smoke
 dotnet test tray/tests/telinha-tray.tests.csproj -c Release           # the tray's unit tests (Windows, .NET SDK 8+)
