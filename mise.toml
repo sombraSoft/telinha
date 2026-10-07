@@ -20,6 +20,15 @@ lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
 bun = "1.4.2"
 # Must equal the Dockerfile's golang image, which builds Caddy.
 go = "1.25.14"
+# The linters the CI lint and gitleaks jobs run, at the same versions locally.
+# jactionlint is the maintained actionlint fork the mise registry points to:
+# upstream actionlint has stopped releasing and does not know newer workflow
+# keys such as cache-mode. It runs shellcheck on run: blocks when shellcheck is
+# on PATH, so the two belong together.
+jactionlint = "1.8.2"
+shellcheck = "0.11.0"
+gitleaks = "8.30.1"
+editorconfig-checker = "4.0.2"
 
 [hooks]
 postinstall = "bun scripts/setup-dev.ts"

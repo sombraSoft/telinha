@@ -1,3 +1,7 @@
+# CI's lint job runs editorconfig-checker against these rules. Its indent_size
+# check is off (.editorconfig-checker.json): Markdown list continuations,
+# comment continuation lines and test fixtures align to the text above them,
+# not to steps of indent_size. The indent style (tabs or spaces) is checked.
 root = true
 
 [*]
