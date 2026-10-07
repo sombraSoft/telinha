@@ -58,10 +58,18 @@ describe('command name', () => {
   });
   test('room notices name the configured command in both locales', () => {
     expect(format('en', 'notice.noRoom', { cmd: 'tela' })).toBe('Open a Telinha with /tela on Discord.');
-    expect(format('en', 'notice.unknown', { cmd: 'tela' })).toBe('This Telinha does not exist. Open one with /tela on Discord.');
-    expect(format('en', 'notice.closed', { cmd: 'tela' })).toBe('This Telinha has ended. Open another with /tela on Discord.');
+    expect(format('en', 'notice.unknown', { cmd: 'tela' })).toBe(
+      'This Telinha does not exist. Open one with /tela on Discord.',
+    );
+    expect(format('en', 'notice.closed', { cmd: 'tela' })).toBe(
+      'This Telinha has ended. Open another with /tela on Discord.',
+    );
     expect(format('pt-BR', 'notice.noRoom', { cmd: 'tela' })).toBe('Abra uma telinha com /tela no Discord.');
-    expect(format('pt-BR', 'notice.unknown', { cmd: 'tela' })).toBe('Essa telinha não existe. Abra uma com /tela no Discord.');
-    expect(format('pt-BR', 'notice.closed', { cmd: 'tela' })).toBe('Essa telinha foi encerrada. Abra outra com /tela no Discord.');
+    expect(format('pt-BR', 'notice.unknown', { cmd: 'tela' })).toBe(
+      'Essa telinha não existe. Abra uma com /tela no Discord.',
+    );
+    expect(format('pt-BR', 'notice.closed', { cmd: 'tela' })).toBe(
+      'Essa telinha foi encerrada. Abra outra com /tela no Discord.',
+    );
   });
 });

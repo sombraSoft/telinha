@@ -2,8 +2,8 @@
 // key help. Which card shows comes from the session (a question or the
 // Review) or from here (the welcome card, the install, the doctor report).
 // Keys no screen used end here: Tab (sidebar), Esc / ← (back), Ctrl+C.
-import { createEffect, createSignal, Match, on, Show, Switch, useContext, type Accessor } from 'solid-js';
-import { TASKS, type ApplyHooks, type TaskId } from '../../cli/setup/apply.ts';
+import { type Accessor, createEffect, createSignal, Match, on, Show, Switch, useContext } from 'solid-js';
+import { type ApplyHooks, TASKS, type TaskId } from '../../cli/setup/apply.ts';
 import type { StepId } from '../../cli/setup/model.ts';
 import type { WithTerminal } from '../../cli/setup/steps.ts';
 import type { SetupUiContext, SetupUiResult } from '../../cli/setup/ui.ts';
@@ -19,7 +19,7 @@ import { ApplyScreen } from './screens/apply.tsx';
 import { QuestionScreen } from './screens/question.tsx';
 import { ReviewScreen, stepBadge } from './screens/review.tsx';
 import { WelcomeScreen } from './screens/welcome.tsx';
-import { createApplyStore, createSessionStore, type ApplyStore, type SessionStore } from './store.ts';
+import { type ApplyStore, createApplyStore, createSessionStore, type SessionStore } from './store.ts';
 import { useS } from './strings.ts';
 
 export interface SetupAppProps {
@@ -83,7 +83,12 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
     if (at === 'apply' || at === 'doctor') {
       const ph = apply.stage();
       const install = ph === 'done' ? 'done' : ph === 'failed' ? 'failed' : 'running';
-      return steps.map((x) => ({ id: x.id, label: x.label, summary: x.summary, state: x.id === 'install' ? install : 'done' }));
+      return steps.map((x) => ({
+        id: x.id,
+        label: x.label,
+        summary: x.summary,
+        state: x.id === 'install' ? install : 'done',
+      }));
     }
     return steps.map((x) => ({ id: x.id, label: x.label, summary: x.summary, state: x.state }));
   };
@@ -147,7 +152,12 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
       if (k.ctrl || k.meta) return false;
       if (k.name === 'tab' && asking()) {
         if (focus() === 'card') {
-          setCursor(Math.max(0, sideSteps().findIndex((x) => x.state === 'current')));
+          setCursor(
+            Math.max(
+              0,
+              sideSteps().findIndex((x) => x.state === 'current'),
+            ),
+          );
           setFocus('sidebar');
         } else setFocus('card');
         return true;
@@ -180,9 +190,11 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
     if (sc === 'doctor') return doctorKeys();
     const v = store.view();
     const kind = v && v.actions.length && (v.kind === 'text' || v.kind === 'secret') ? 'select' : v?.kind;
-    if (kind === 'multi') return [move, ['space', t('keys.toggle')], ['a', t('keys.all')], ['enter', t('keys.confirm')], back, steps];
+    if (kind === 'multi')
+      return [move, ['space', t('keys.toggle')], ['a', t('keys.all')], ['enter', t('keys.confirm')], back, steps];
     if (kind === 'text') return [['enter', t('keys.confirm')], ['ctrl+u', t('keys.clear')], back, steps, quit];
-    if (kind === 'secret') return [['ctrl+v', t('keys.paste')], ['enter', t('keys.confirm')], ['ctrl+r', t('keys.reveal')], back, steps];
+    if (kind === 'secret')
+      return [['ctrl+v', t('keys.paste')], ['enter', t('keys.confirm')], ['ctrl+r', t('keys.reveal')], back, steps];
     return [move, ['1-9', s('keys.pick')], select, back, steps, quit];
   };
 
@@ -213,7 +225,16 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
         <Header mode="setup" version={p.c.version} />
       </Show>
       {/* Exactly the rows between header and footer: nothing taller can paint over the key help. */}
-      <box flexDirection="row" height={L.bodyRows()} flexShrink={0} gap={1} paddingLeft={1} paddingRight={1} alignItems="flex-start" overflow="hidden">
+      <box
+        flexDirection="row"
+        height={L.bodyRows()}
+        flexShrink={0}
+        gap={1}
+        paddingLeft={1}
+        paddingRight={1}
+        alignItems="flex-start"
+        overflow="hidden"
+      >
         <Show when={L.sidebar()}>{sidebar()}</Show>
         <Show
           when={!L.sidebar() && focus() === 'sidebar'}
@@ -228,7 +249,12 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
                 />
               </Match>
               <Match when={screen() === 'question'}>
-                <QuestionScreen session={session} store={store} active={cardActive} quit={() => finish({ kind: 'quit', reason: 'review' })} />
+                <QuestionScreen
+                  session={session}
+                  store={store}
+                  active={cardActive}
+                  quit={() => finish({ kind: 'quit', reason: 'review' })}
+                />
               </Match>
               <Match when={screen() === 'review'}>
                 <ReviewScreen
@@ -266,7 +292,11 @@ function Root(p: SetupAppProps & { store: SessionStore; apply: ApplyStore }) {
                     checks={p.checks ?? CHECKS}
                     buildContext={() => doctor().buildContext()}
                     initial={result()?.doctor ?? undefined}
-                    phone={result()?.tasks.start === 'ok' ? { control: doctor().control, env: p.c.ctx.env, config: doctor().config() } : null}
+                    phone={
+                      result()?.tasks.start === 'ok'
+                        ? { control: doctor().control, env: p.c.ctx.env, config: doctor().config() }
+                        : null
+                    }
                     onFooter={setDoctorKeys}
                     onExit={() => setPlace('apply')}
                   />

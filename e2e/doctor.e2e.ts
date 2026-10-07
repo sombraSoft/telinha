@@ -4,8 +4,9 @@
 //
 // Needs the local control endpoint (/internal/*, token in <data>/run/control.token)
 // in the server the stack runs; without it the spec skips itself.
-import { expect, test } from '@playwright/test';
+
 import { join } from 'node:path';
+import { expect, test } from '@playwright/test';
 import { createControlClient } from '../server/src/cli/control.ts';
 
 // scripts/stack.ts --e2e: DATA_DIR=.cache/e2e-data, LISTEN=127.0.0.1:8081.

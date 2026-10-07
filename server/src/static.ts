@@ -4,7 +4,11 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { esc } from './pages.ts';
 
-export interface StaticFile { body: Uint8Array; type: string; cache: string }
+export interface StaticFile {
+  body: Uint8Array;
+  type: string;
+  cache: string;
+}
 export type StaticFiles = Map<string, StaticFile>;
 export interface StaticOptions {
   /** Slash command name, written into index.html for the page's notices. */

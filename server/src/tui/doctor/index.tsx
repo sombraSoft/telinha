@@ -5,7 +5,7 @@ import { createControlClient } from '../../cli/control.ts';
 import { buildCheckContext, type DoctorCliDeps } from '../../cli/doctor.ts';
 import { CHECKS } from '../../doctor/checks.ts';
 import type { CheckContext } from '../../doctor/types.ts';
-import { runTui, type RuntimeDeps } from '../runtime.tsx';
+import { type RuntimeDeps, runTui } from '../runtime.tsx';
 import { DoctorScreen } from './screen.tsx';
 
 export { DoctorScreen, type DoctorScreenProps } from './screen.tsx';
@@ -18,7 +18,11 @@ export async function runDoctorTui(
   const { ctx, deps } = o;
   const local = !!o.flags.local;
   const control = deps.control ?? createControlClient({ paths: ctx.paths, envFile: ctx.envFile, env: ctx.env });
-  const build = async (): Promise<CheckContext> => ({ ...(await buildCheckContext(ctx, { local, control })), ...deps.context, local });
+  const build = async (): Promise<CheckContext> => ({
+    ...(await buildCheckContext(ctx, { local, control })),
+    ...deps.context,
+    local,
+  });
   // The first context also gives the phone test its ports; every re-run builds a fresh one.
   let first: Promise<CheckContext> | null = build();
   const firstCtx = await first;
@@ -27,9 +31,10 @@ export async function runDoctorTui(
     first = null;
     return ready ?? build();
   };
-  const phone = o.flags.phone !== false && !local
-    ? { control, env: ctx.env, config: firstCtx.config, ...(deps.now ? { now: deps.now } : {}) }
-    : null;
+  const phone =
+    o.flags.phone !== false && !local
+      ? { control, env: ctx.env, config: firstCtx.config, ...(deps.now ? { now: deps.now } : {}) }
+      : null;
   return runTui<number>({
     locale: ctx.locale,
     env: ctx.env,

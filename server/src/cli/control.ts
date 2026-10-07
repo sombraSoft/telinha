@@ -38,10 +38,21 @@ export interface UpdateStaged {
   failedStarts: number;
 }
 /** The last staged update that proved itself (its version started fine). */
-export interface UpdateApplied { tag: string; previous: string; at: number }
-export interface UpdateFailed { tag: string; at: number; reason: string }
+export interface UpdateApplied {
+  tag: string;
+  previous: string;
+  at: number;
+}
+export interface UpdateFailed {
+  tag: string;
+  at: number;
+  reason: string;
+}
 /** Seen as latest but its assets were not downloadable yet (404/network): retried, never failed. */
-export interface UpdatePending { tag: string; since: number }
+export interface UpdatePending {
+  tag: string;
+  since: number;
+}
 
 export interface UpdateStatus {
   /** AUTO_UPDATE on (and compiled). */
@@ -138,7 +149,11 @@ export interface PhoneTestPoll {
 }
 
 /** The phone test's one-time link. */
-export interface PhoneTestLink { id: string; url: string; expiresAt: number }
+export interface PhoneTestLink {
+  id: string;
+  url: string;
+  expiresAt: number;
+}
 
 // ---------------------------------------------------------------- client
 
@@ -205,17 +220,25 @@ export function createControlClient(o: {
     }
   };
 
-  async function call<T>(method: 'GET' | 'POST', path: string, o2: { body?: unknown; timeoutMs: number; expect?: number }): Promise<T> {
+  async function call<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    o2: { body?: unknown; timeoutMs: number; expect?: number },
+  ): Promise<T> {
     const tok = token();
     if (!tok) throw new ControlUnavailableError();
     const url = `${controlBaseUrl(o.envFile, o.env)}${path}`;
     const res = await fetchFn(url, {
       method,
-      headers: { authorization: `Bearer ${tok}`, ...(o2.body === undefined ? {} : { 'content-type': 'application/json' }) },
+      headers: {
+        authorization: `Bearer ${tok}`,
+        ...(o2.body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
       body: o2.body === undefined ? undefined : JSON.stringify(o2.body),
       signal: AbortSignal.timeout(o2.timeoutMs),
     });
-    if (o2.expect ? res.status !== o2.expect : !res.ok) throw new Error(`control: ${method} ${path}: ${res.status} ${res.statusText}`.trim());
+    if (o2.expect ? res.status !== o2.expect : !res.ok)
+      throw new Error(`control: ${method} ${path}: ${res.status} ${res.statusText}`.trim());
     if (res.status === 202 || res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
@@ -234,7 +257,9 @@ export function createControlClient(o: {
     doctorSession: () => call<PhoneTestLink>('POST', '/internal/doctor/sessions', { body: {}, timeoutMs: 5000 }),
     doctorWait(id, waitMs) {
       const wait = Math.max(0, Math.min(30_000, Math.round(waitMs)));
-      return call<PhoneTestPoll>('GET', `/internal/doctor/sessions/${encodeURIComponent(id)}?wait=${wait}`, { timeoutMs: wait + 10_000 });
+      return call<PhoneTestPoll>('GET', `/internal/doctor/sessions/${encodeURIComponent(id)}?wait=${wait}`, {
+        timeoutMs: wait + 10_000,
+      });
     },
     // The service downloads and stages synchronously: allow a slow link.
     update: (mode) => call<UpdateResult>('POST', '/internal/update', { body: { mode }, timeoutMs: 6 * 60_000 }),

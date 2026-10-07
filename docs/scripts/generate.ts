@@ -5,24 +5,27 @@
 // Pure extraction: the prose lives in src/data/reference.ts.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { KNOWN_KEYS, loadConfig } from '../../server/src/config.ts';
-import { GLOBAL_FLAGS, SECRET_FLAGS, type FlagDef, type FlagKind } from '../../server/src/cli/args.ts';
-import { SETUP_FLAGS } from '../../server/src/cli/setup.ts';
-import { DOCTOR_FLAGS } from '../../server/src/cli/doctor.ts';
-import { UPDATE_FLAGS } from '../../server/src/cli/update.ts';
-import { ACTIONS, serviceSpec } from '../../server/src/cli/service.ts';
-import { TRAY_ACTIONS } from '../../server/src/cli/tray.ts';
-import { dicts } from '../../server/src/cli/strings.ts';
-import { CHECKS, checkTitle } from '../../server/src/doctor/checks.ts';
-import { RULE_NAMES } from '../../server/src/service/firewall.ts';
-import { resolvePaths, type Paths } from '../../server/src/paths.ts';
-import versions from '../../versions.json' with { type: 'json' };
 import pkg from '../../package.json' with { type: 'json' };
+import { type FlagDef, type FlagKind, GLOBAL_FLAGS, SECRET_FLAGS } from '../../server/src/cli/args.ts';
+import { DOCTOR_FLAGS } from '../../server/src/cli/doctor.ts';
+import { ACTIONS, serviceSpec } from '../../server/src/cli/service.ts';
+import { SETUP_FLAGS } from '../../server/src/cli/setup.ts';
+import { dicts } from '../../server/src/cli/strings.ts';
+import { TRAY_ACTIONS } from '../../server/src/cli/tray.ts';
+import { UPDATE_FLAGS } from '../../server/src/cli/update.ts';
+import { KNOWN_KEYS, loadConfig } from '../../server/src/config.ts';
+import { CHECKS, checkTitle } from '../../server/src/doctor/checks.ts';
+import { type Paths, resolvePaths } from '../../server/src/paths.ts';
+import { RULE_NAMES } from '../../server/src/service/firewall.ts';
+import versions from '../../versions.json' with { type: 'json' };
 import { CONFIG_KEYS } from '../src/data/reference.ts';
 
 export type Locale = 'en' | 'pt-BR';
 export type HelpKey = 'help' | 'helpRun' | 'helpSetup' | 'helpDoctor' | 'helpUpdate' | 'helpService' | 'helpTray';
-export interface FlagSpec { kind: FlagKind; short?: string }
+export interface FlagSpec {
+  kind: FlagKind;
+  short?: string;
+}
 export interface Generated {
   version: string;
   /** In the code's order (the tables keep it). */
@@ -45,7 +48,11 @@ export interface Generated {
   };
   doctor: { checks: { id: string; title: Record<Locale, string> }[] };
   /** caddy is a build recipe (versions.json): Caddy plus the modules compiled into it. */
-  versions: { livekit: string; caddy: { version: string; xcaddy: string; modules: Record<string, string> }; cloudflared: string };
+  versions: {
+    livekit: string;
+    caddy: { version: string; xcaddy: string; modules: Record<string, string> };
+    cloudflared: string;
+  };
   /** Default layouts with LOCALAPPDATA / HOME left as placeholders. */
   paths: { windows: Paths; linuxRoot: Paths; linuxUser: Paths };
   firewallRules: string[];
@@ -69,14 +76,17 @@ export const BASE_ENV: Record<string, string> = {
 
 /** `run, setup, ...` from the per-command help strings; main.ts keeps its list private and the test pins the two together. */
 export function derivedCommands(): string[] {
-  return Object.keys(dicts.en).filter((k) => /^help[A-Z]/.test(k)).map((k) => k.slice(4).toLowerCase());
+  return Object.keys(dicts.en)
+    .filter((k) => /^help[A-Z]/.test(k))
+    .map((k) => k.slice(4).toLowerCase());
 }
 
 function specOf(flags: Record<string, FlagDef>, skip: Record<string, unknown> = {}): Record<string, FlagSpec> {
   const out: Record<string, FlagSpec> = {};
   for (const [name, def] of Object.entries(flags)) {
     if (Object.hasOwn(skip, name)) continue;
-    out[name] = typeof def === 'string' ? { kind: def } : def.short ? { kind: def.type, short: def.short } : { kind: def.type };
+    out[name] =
+      typeof def === 'string' ? { kind: def } : def.short ? { kind: def.type, short: def.short } : { kind: def.type };
   }
   return out;
 }
@@ -90,7 +100,15 @@ export function generate(): Generated {
   const help = {} as Record<Locale, Record<HelpKey, string>>;
   for (const locale of LOCALES) {
     const d = dicts[locale];
-    help[locale] = { help: d.help, helpRun: d.helpRun, helpSetup: d.helpSetup, helpDoctor: d.helpDoctor, helpUpdate: d.helpUpdate, helpService: d.helpService, helpTray: d.helpTray };
+    help[locale] = {
+      help: d.help,
+      helpRun: d.helpRun,
+      helpSetup: d.helpSetup,
+      helpDoctor: d.helpDoctor,
+      helpUpdate: d.helpUpdate,
+      helpService: d.helpService,
+      helpTray: d.helpTray,
+    };
   }
 
   return {
@@ -113,7 +131,10 @@ export function generate(): Generated {
       help,
     },
     doctor: {
-      checks: CHECKS.map((c) => ({ id: c.id, title: { en: checkTitle(c.id, 'en'), 'pt-BR': checkTitle(c.id, 'pt-BR') } })),
+      checks: CHECKS.map((c) => ({
+        id: c.id,
+        title: { en: checkTitle(c.id, 'en'), 'pt-BR': checkTitle(c.id, 'pt-BR') },
+      })),
     },
     versions: {
       livekit: versions.livekit.version,

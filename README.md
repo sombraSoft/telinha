@@ -272,6 +272,7 @@ your shell. Works on Windows and Linux. `mise install` installs the versions
 mise install               # the toolchain mise.toml pins, then bun install
 bun run dev                # http://localhost:5173/r/ (Vite HMR + Bun server, which runs LiveKit)
 bun run typecheck          # tsc and svelte-check in every workspace
+bun run lint               # Biome: formatting, lint rules and import order (bun run format fixes what it can)
 bun run test               # bun test: server, web, docs and scripts unit tests (the screens render in a test terminal)
 bun run build              # web/dist
 bun run e2e                # Playwright; needs bun run build first, and a Chromium (bunx playwright install chromium)
@@ -558,7 +559,8 @@ passes only when the jobs it `needs` pass: `test (ubuntu-24.04)`,
 PSScriptAnalyzer run of `deploy/install.ps1`, jactionlint (the maintained
 actionlint fork; shellcheck on `run:` blocks too), hadolint of the
 `Dockerfile` (`.hadolint.yaml` lists the rules it ignores and why),
-editorconfig-checker, a `mise.lock` freshness check and
+editorconfig-checker, Biome (`biome ci`: formatting, lint rules, import
+order), a `mise.lock` freshness check and
 `bun scripts/versions.ts check`; the linters are the ones `mise.toml` pins), `gitleaks` (the commits a PR or push adds,
 with the gitleaks `mise.toml` pins) and `image` (builds both architectures,
 smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the

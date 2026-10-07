@@ -73,7 +73,8 @@ export type Report = {
 export function udpFromInitial(initial: Path | null, signalingOk: boolean): StepResult {
   if (!signalingOk) return { ok: false, error: 'no connection' };
   if (!initial) return { ok: false, error: 'no media path' };
-  if (initial.protocol === 'udp' && !initial.relay) return { ok: true, ...(initial.rttMs !== null ? { rttMs: initial.rttMs } : {}) };
+  if (initial.protocol === 'udp' && !initial.relay)
+    return { ok: true, ...(initial.rttMs !== null ? { rttMs: initial.rttMs } : {}) };
   return { ok: false, error: `fell back to ${initial.protocol.toUpperCase()}` };
 }
 
@@ -81,7 +82,8 @@ export function udpFromInitial(initial: Path | null, signalingOk: boolean): Step
 export function tcpFromForced(path: Path | null, reconnected: boolean, error?: string): StepResult {
   if (!reconnected) return { ok: false, error: error ?? 'did not reconnect over TCP' };
   if (!path) return { ok: false, error: 'no media path' };
-  if (path.protocol !== 'tcp') return { ok: false, error: `could not force TCP (still ${path.protocol.toUpperCase()})` };
+  if (path.protocol !== 'tcp')
+    return { ok: false, error: `could not force TCP (still ${path.protocol.toUpperCase()})` };
   return { ok: true, ...(path.rttMs !== null ? { rttMs: path.rttMs } : {}) };
 }
 
@@ -94,14 +96,24 @@ export function turnFromForced(path: Path | null, reconnected: boolean): StepRes
   if (!reconnected) return { ok: false, error: 'did not reconnect through TURN' };
   if (!path) return { ok: false, error: 'no media path' };
   if (!path.relay) return { ok: false, error: 'not relayed' };
-  if (path.relayProtocol !== null && path.relayProtocol !== 'tls') return { ok: false, error: `relayed over ${path.relayProtocol}, not TLS` };
+  if (path.relayProtocol !== null && path.relayProtocol !== 'tls')
+    return { ok: false, error: `relayed over ${path.relayProtocol}, not TLS` };
   return { ok: true, ...(path.rttMs !== null ? { rttMs: path.rttMs } : {}) };
 }
 
 export type Media = 'self' | 'cloud';
 export type HintKey =
-  | 'hintSignaling' | 'hintBoth' | 'hintUdp' | 'hintTcp' | 'hintHttp' | 'hintAllGood'
-  | 'hintCloudSignaling' | 'hintCloudBoth' | 'hintCloudUdp' | 'hintCloudTcp' | 'hintTurn';
+  | 'hintSignaling'
+  | 'hintBoth'
+  | 'hintUdp'
+  | 'hintTcp'
+  | 'hintHttp'
+  | 'hintAllGood'
+  | 'hintCloudSignaling'
+  | 'hintCloudBoth'
+  | 'hintCloudUdp'
+  | 'hintCloudTcp'
+  | 'hintTurn';
 export type Hint = { key: HintKey; params: Record<string, string | number> };
 
 /** Plain-language explanation of a finished report, most important first. */

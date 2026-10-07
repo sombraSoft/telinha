@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import type { Ddns } from '../src/ddns.ts';
-import type { NatProbe } from '../src/nat/index.ts';
-import type { Locale } from '../src/cli/strings.ts';
 import { createDiscordSetup, inviteUrl } from '../src/cli/setup/discord.ts';
 import type { HostInfo } from '../src/cli/setup/host.ts';
 import type { LookupDeps } from '../src/cli/setup/lookups.ts';
 import type { Answers, QuestionId, Text, TrayState } from '../src/cli/setup/model.ts';
 import { SetupSession } from '../src/cli/setup/session.ts';
 import type { Values } from '../src/cli/setup/steps.ts';
+import type { Locale } from '../src/cli/strings.ts';
+import type { Ddns } from '../src/ddns.ts';
+import type { NatProbe } from '../src/nat/index.ts';
 
 const APP = '111111111111111111';
 const GUILD = '222222222222222222';
@@ -23,10 +23,30 @@ const TUNNEL = Buffer.from(JSON.stringify({ a: 'acct', t: 'tunnel-id', s: 'c2Vjc
 const DUCK_URL = 'https://my-group.duckdns.org:8443';
 
 const NAT: NatProbe = {
-  gateway: { kind: 'igd', version: 2, location: 'http://192.168.0.1:49152/d.xml', controlUrl: 'http://192.168.0.1/c', serviceType: 'x', localIp: '192.168.0.10', gatewayIp: '192.168.0.1', name: 'Fritz!Box' },
-  externalIp: '203.0.113.9', localIp: '192.168.0.10', errors: [],
+  gateway: {
+    kind: 'igd',
+    version: 2,
+    location: 'http://192.168.0.1:49152/d.xml',
+    controlUrl: 'http://192.168.0.1/c',
+    serviceType: 'x',
+    localIp: '192.168.0.10',
+    gatewayIp: '192.168.0.1',
+    name: 'Fritz!Box',
+  },
+  externalIp: '203.0.113.9',
+  localIp: '192.168.0.10',
+  errors: [],
 };
-const HOME: HostInfo = { kind: 'linux-root', platform: 'linux', arch: 'x64', isRoot: true, docker: false, osName: 'Debian GNU/Linux 12 (bookworm)', publicIp: '203.0.113.9', nat: NAT };
+const HOME: HostInfo = {
+  kind: 'linux-root',
+  platform: 'linux',
+  arch: 'x64',
+  isRoot: true,
+  docker: false,
+  osName: 'Debian GNU/Linux 12 (bookworm)',
+  publicIp: '203.0.113.9',
+  nat: NAT,
+};
 const VPS: HostInfo = { ...HOME, nat: { gateway: null, externalIp: null, localIp: '203.0.113.9', errors: [] } };
 
 /** Discord as one bot sees it; tests change it between checks (the bot joins a server, a redirect gets saved). */
@@ -41,14 +61,27 @@ interface World {
   calls: string[];
 }
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 function world(o: Partial<World> = {}): World {
   return {
     guilds: [{ id: GUILD, name: 'Gurizada' }],
-    channels: [{ id: CHANNEL, name: 'geral', type: 0, position: 0 }, { id: CHANNEL2, name: 'telinha', type: 0, position: 1, parent_id: '444444444444444440' }, { id: '444444444444444440', name: 'Salas', type: 4, position: 0 }],
-    redirects: [`${DUCK_URL}/auth/callback`, 'https://t.example.com/auth/callback', 'https://telinha.example.com/auth/callback', 'https://203-0-113-9.sslip.io/auth/callback'],
-    flags: (1 << 13) | (1 << 15), down: false, gate: null, calls: [],
+    channels: [
+      { id: CHANNEL, name: 'geral', type: 0, position: 0 },
+      { id: CHANNEL2, name: 'telinha', type: 0, position: 1, parent_id: '444444444444444440' },
+      { id: '444444444444444440', name: 'Salas', type: 4, position: 0 },
+    ],
+    redirects: [
+      `${DUCK_URL}/auth/callback`,
+      'https://t.example.com/auth/callback',
+      'https://telinha.example.com/auth/callback',
+      'https://203-0-113-9.sslip.io/auth/callback',
+    ],
+    flags: (1 << 13) | (1 << 15),
+    down: false,
+    gate: null,
+    calls: [],
     ...o,
   };
 }
@@ -60,21 +93,44 @@ function discordFetch(w: World) {
     if (w.gate) await w.gate;
     if (w.down) return json({ message: 'Service Unavailable' }, 503);
     const auth = new Headers(init?.headers).get('authorization');
-    if (url === '/oauth2/token') return auth === `Basic ${Buffer.from(`${APP}:${SECRET}`).toString('base64')}` ? json({}) : json({ error: 'invalid_client' }, 401);
+    if (url === '/oauth2/token')
+      return auth === `Basic ${Buffer.from(`${APP}:${SECRET}`).toString('base64')}`
+        ? json({})
+        : json({ error: 'invalid_client' }, 401);
     if (auth !== `Bot ${TOKEN}`) return json({ message: '401: Unauthorized' }, 401);
-    if (url === '/applications/@me') return json({ id: APP, name: 'Telinha Bot', flags: w.flags, redirect_uris: w.redirects });
+    if (url === '/applications/@me')
+      return json({ id: APP, name: 'Telinha Bot', flags: w.flags, redirect_uris: w.redirects });
     if (url === '/users/@me/guilds') return json(w.guilds);
-    if (url === `/guilds/${GUILD}/roles`) return json([{ id: GUILD, name: '@everyone', position: 0 }, { id: ROLE, name: 'Membro', position: 1 }, { id: '333333333333333334', name: 'Bot', position: 2, managed: true }]);
+    if (url === `/guilds/${GUILD}/roles`)
+      return json([
+        { id: GUILD, name: '@everyone', position: 0 },
+        { id: ROLE, name: 'Membro', position: 1 },
+        { id: '333333333333333334', name: 'Bot', position: 2, managed: true },
+      ]);
     if (url === `/guilds/${GUILD}/channels`) return json(w.channels);
     return json({ message: 'Unknown' }, 404);
   }) as unknown as typeof fetch;
 }
 
 interface Opts {
-  file?: Values; host?: HostInfo | null; preset?: Answers; acceptDefaults?: boolean; rerun?: boolean; presetErrors?: Text[];
-  offline?: boolean; compiled?: boolean; docker?: boolean; isRoot?: boolean; langFlag?: boolean; locale?: Locale;
-  world?: World; duckOk?: boolean; dns?: string[]; unprivilegedPortStart?: number | null;
-  platform?: NodeJS.Platform; tray?: TrayState;
+  file?: Values;
+  host?: HostInfo | null;
+  preset?: Answers;
+  acceptDefaults?: boolean;
+  rerun?: boolean;
+  presetErrors?: Text[];
+  offline?: boolean;
+  compiled?: boolean;
+  docker?: boolean;
+  isRoot?: boolean;
+  langFlag?: boolean;
+  locale?: Locale;
+  world?: World;
+  duckOk?: boolean;
+  dns?: string[];
+  unprivilegedPortStart?: number | null;
+  platform?: NodeJS.Platform;
+  tray?: TrayState;
 }
 
 function make(o: Opts = {}) {
@@ -90,7 +146,10 @@ function make(o: Opts = {}) {
       return {
         async update(ip) {
           ddns.push(`${domain} ${ip}`);
-          last = o.duckOk === false ? { ip, at: 1, ok: false, error: 'DuckDNS rejected the domain/token' } : { ip, at: 1, ok: true };
+          last =
+            o.duckOk === false
+              ? { ip, at: 1, ok: false, error: 'DuckDNS rejected the domain/token' }
+              : { ip, at: 1, ok: true };
         },
         last: () => last,
       };
@@ -101,13 +160,27 @@ function make(o: Opts = {}) {
     openUrl: async (url) => void opened.push(url),
   };
   const env = {
-    platform: o.platform ?? 'linux', isRoot: o.isRoot ?? true, docker: !!o.docker, compiled: !!o.compiled, offline: !!o.offline, langFlag: o.langFlag ?? true,
-    flags: { noService: false, noUpnp: false, noFirewall: false, noDoctor: false }, file, unprivilegedPortStart: o.unprivilegedPortStart ?? null,
+    platform: o.platform ?? 'linux',
+    isRoot: o.isRoot ?? true,
+    docker: !!o.docker,
+    compiled: !!o.compiled,
+    offline: !!o.offline,
+    langFlag: o.langFlag ?? true,
+    flags: { noService: false, noUpnp: false, noFirewall: false, noDoctor: false },
+    file,
+    unprivilegedPortStart: o.unprivilegedPortStart ?? null,
     ...(o.tray && { tray: o.tray }),
   };
   const s = new SetupSession({
-    env, host, base: { file, host, locale: o.locale ?? 'en', langFlag: env.langFlag, docker: env.docker, compiled: env.compiled },
-    locale: o.locale ?? 'en', deps, preset: o.preset ?? {}, acceptDefaults: !!o.acceptDefaults, rerun: !!o.rerun, presetErrors: o.presetErrors ?? [],
+    env,
+    host,
+    base: { file, host, locale: o.locale ?? 'en', langFlag: env.langFlag, docker: env.docker, compiled: env.compiled },
+    locale: o.locale ?? 'en',
+    deps,
+    preset: o.preset ?? {},
+    acceptDefaults: !!o.acceptDefaults,
+    rerun: !!o.rerun,
+    presetErrors: o.presetErrors ?? [],
   });
   return { s, w, opened, ddns };
 }
@@ -141,16 +214,43 @@ async function discord(s: SetupSession) {
   await answer(s, 'group', '');
 }
 
-const D = { DISCORD_TOKEN: TOKEN, DISCORD_CLIENT_ID: APP, DISCORD_CLIENT_SECRET: SECRET, GUILD_ID: GUILD, ROLE_ID: ROLE, CHANNEL_IDS: CHANNEL, COMMAND_NAME: 'telinha' };
-const VPS_FILE: Values = { ...D, COOKIE_SECRET: COOKIE, PUBLIC_URL: 'https://telinha.example.com', HOSTING: 'vps', INGRESS: 'direct', HTTP_PORT: '80', HTTPS_PORT: '443', UPNP: 'off', LOCALE: 'en' };
+const D = {
+  DISCORD_TOKEN: TOKEN,
+  DISCORD_CLIENT_ID: APP,
+  DISCORD_CLIENT_SECRET: SECRET,
+  GUILD_ID: GUILD,
+  ROLE_ID: ROLE,
+  CHANNEL_IDS: CHANNEL,
+  COMMAND_NAME: 'telinha',
+};
+const VPS_FILE: Values = {
+  ...D,
+  COOKIE_SECRET: COOKIE,
+  PUBLIC_URL: 'https://telinha.example.com',
+  HOSTING: 'vps',
+  INGRESS: 'direct',
+  HTTP_PORT: '80',
+  HTTPS_PORT: '443',
+  UPNP: 'off',
+  LOCALE: 'en',
+};
 const clean = (v: Values) => Object.fromEntries(Object.entries(v).filter(([, x]) => x));
 
 describe('a fresh home install', () => {
   test('question by question to the Review: the file of a home DuckDNS setup', async () => {
     const { s, ddns } = make();
     expect(s.screen()).toBe('question');
-    expect(s.current()).toMatchObject({ id: 'hosting', title: 'Where will Telinha run?', kind: 'select', initial: 'home', badge: 'Where · Step 1 of 7' });
-    expect(s.current().hint).toEqual(['This machine: Debian GNU/Linux 12 (bookworm), x64, public IP 203.0.113.9.', 'Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).']);
+    expect(s.current()).toMatchObject({
+      id: 'hosting',
+      title: 'Where will Telinha run?',
+      kind: 'select',
+      initial: 'home',
+      badge: 'Where · Step 1 of 7',
+    });
+    expect(s.current().hint).toEqual([
+      'This machine: Debian GNU/Linux 12 (bookworm), x64, public IP 203.0.113.9.',
+      'Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).',
+    ]);
     await homeDuck(s);
     expect(ddns).toEqual(['my-group 203.0.113.9']);
     await discord(s);
@@ -162,8 +262,18 @@ describe('a fresh home install', () => {
     expect(s.screen()).toBe('review');
     expect(s.allAnswered()).toBe(true);
     expect(clean(s.values())).toEqual({
-      ...D, HOSTING: 'home', INGRESS: 'direct', PUBLIC_URL: DUCK_URL, HTTP_PORT: '0', HTTPS_PORT: '8443', ACME_DNS: 'duckdns',
-      DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'my-group', DUCKDNS_TOKEN: DUCK, UPNP: 'auto', LOCALE: 'en',
+      ...D,
+      HOSTING: 'home',
+      INGRESS: 'direct',
+      PUBLIC_URL: DUCK_URL,
+      HTTP_PORT: '0',
+      HTTPS_PORT: '8443',
+      ACME_DNS: 'duckdns',
+      DDNS_PROVIDER: 'duckdns',
+      DUCKDNS_DOMAIN: 'my-group',
+      DUCKDNS_TOKEN: DUCK,
+      UPNP: 'auto',
+      LOCALE: 'en',
     });
     expect(s.webAddress()).toBe(DUCK_URL);
     expect(s.steps().map((x) => [x.id, x.state, x.jumpable, x.summary])).toEqual([
@@ -234,7 +344,8 @@ describe('a fresh home install', () => {
     for (const secret of [TOKEN, SECRET, DUCK]) {
       for (let i = 0; i + 4 <= secret.length; i++) {
         const part = secret.slice(i, i + 4);
-        for (const frame of seen) if (frame.includes(part)) throw new Error(`"${part}" of a secret on screen: ${frame.slice(0, 200)}`);
+        for (const frame of seen)
+          if (frame.includes(part)) throw new Error(`"${part}" of a secret on screen: ${frame.slice(0, 200)}`);
       }
     }
     // The values keep them for the file.
@@ -264,7 +375,11 @@ describe('navigation', () => {
     s.back();
     const cf = s.current();
     expect(cf.id).toBe('homeCf');
-    expect(cf.options.map((o) => [o.value, o.chosen, o.subtle])).toEqual([['yes', false, false], ['no', true, false], ['advanced', false, true]]);
+    expect(cf.options.map((o) => [o.value, o.chosen, o.subtle])).toEqual([
+      ['yes', false, false],
+      ['no', true, false],
+      ['advanced', false, true],
+    ]);
     await answer(s, 'homeCf', 'yes');
     expect(s.current().id).toBe('tunnelToken');
     s.back();
@@ -294,7 +409,13 @@ describe('navigation', () => {
     await answer(s, 'homeCf', 'yes');
     expect(s.notice()).toBeNull();
     expect(s.steps().map((x) => [x.id, x.state, x.jumpable])).toEqual([
-      ['where', 'done', true], ['address', 'current', true], ['discord', 'pending', false], ['media', 'pending', false], ['ports', 'pending', false], ['review', 'pending', false], ['install', 'pending', false],
+      ['where', 'done', true],
+      ['address', 'current', true],
+      ['discord', 'pending', false],
+      ['media', 'pending', false],
+      ['ports', 'pending', false],
+      ['review', 'pending', false],
+      ['install', 'pending', false],
     ]);
     expect(s.jump('where')).toBe(true);
     expect(s.current().id).toBe('hosting');
@@ -324,7 +445,11 @@ describe('navigation', () => {
     expect(s.current()).toMatchObject({ id: 'lang', initial: 'en' });
     await answer(s, 'lang', 'pt-BR');
     expect(s.locale).toBe('pt-BR');
-    expect(s.current()).toMatchObject({ id: 'hosting', title: 'Onde a Telinha vai rodar?', badge: 'Onde · Passo 1 de 7' });
+    expect(s.current()).toMatchObject({
+      id: 'hosting',
+      title: 'Onde a Telinha vai rodar?',
+      badge: 'Onde · Passo 1 de 7',
+    });
     expect(s.values().LOCALE).toBe('pt-BR');
     s.setLocale('en');
     expect(s.current().title).toBe('Where will Telinha run?');
@@ -345,7 +470,11 @@ describe('navigation', () => {
     b.setHost(VPS);
     // The IP is known now: the question is gone and the flow moves on.
     expect(b.current().id).toBe('discordToken');
-    expect(b.values()).toMatchObject({ PUBLIC_URL: 'https://203-0-113-9.sslip.io', LIVEKIT_NODE_IP: '203.0.113.9', HOSTING: 'vps' });
+    expect(b.values()).toMatchObject({
+      PUBLIC_URL: 'https://203-0-113-9.sslip.io',
+      LIVEKIT_NODE_IP: '203.0.113.9',
+      HOSTING: 'vps',
+    });
   });
 });
 
@@ -354,7 +483,11 @@ describe('lookups', () => {
     const { s } = make();
     await homeDuck(s);
     expect(await s.submit('Bw2xQ8rLk5vN9mZp3Tc7')).toBe('stayed'); // gitleaks:allow
-    expect(s.current()).toMatchObject({ id: 'discordToken', lookup: { state: 'rejected', error: 'Discord rejected the token; copy it again and paste it here.' }, error: 'Discord rejected the token; copy it again and paste it here.' });
+    expect(s.current()).toMatchObject({
+      id: 'discordToken',
+      lookup: { state: 'rejected', error: 'Discord rejected the token; copy it again and paste it here.' },
+      error: 'Discord rejected the token; copy it again and paste it here.',
+    });
     await answer(s, 'discordToken', TOKEN);
     expect(s.values().DISCORD_TOKEN).toBe(TOKEN);
   });
@@ -366,7 +499,10 @@ describe('lookups', () => {
     expect(await s.submit(TOKEN)).toBe('stayed');
     const v = s.current();
     expect(v.lookup).toEqual({ state: 'error', error: 'Discord could not be reached: Service Unavailable (HTTP 503)' });
-    expect(v.actions).toEqual([{ id: 'retry', label: 'Try again' }, { id: 'quit', label: 'Quit setup' }]);
+    expect(v.actions).toEqual([
+      { id: 'retry', label: 'Try again' },
+      { id: 'quit', label: 'Quit setup' },
+    ]);
     w.down = false;
     await s.action('retry');
     expect(s.current().id).toBe('clientSecret');
@@ -402,15 +538,23 @@ describe('lookups', () => {
     await answer(s, 'homeCf', 'no');
     await answer(s, 'duckName', 'my-group');
     expect(await s.submit(DUCK)).toBe('stayed');
-    expect(s.current().lookup).toEqual({ state: 'error', error: 'DuckDNS did not accept it: DuckDNS rejected the domain/token' });
-    expect(s.current().actions).toEqual([{ id: 'retry', label: 'Type the token again' }, { id: 'keep', label: 'Keep it anyway (the running service retries)' }]);
+    expect(s.current().lookup).toEqual({
+      state: 'error',
+      error: 'DuckDNS did not accept it: DuckDNS rejected the domain/token',
+    });
+    expect(s.current().actions).toEqual([
+      { id: 'retry', label: 'Type the token again' },
+      { id: 'keep', label: 'Keep it anyway (the running service retries)' },
+    ]);
     await s.action('retry');
     expect(s.current()).toMatchObject({ id: 'duckToken', lookup: { state: 'idle' }, actions: [] });
     expect(await s.submit(DUCK)).toBe('stayed');
     await s.action('keep');
     expect(s.current().id).toBe('httpsPort');
     expect(s.values().DUCKDNS_TOKEN).toBe(DUCK);
-    expect(s.reviewNotes()).toEqual(['DuckDNS did not accept the token for my-group.duckdns.org yet; the running service keeps trying.']);
+    expect(s.reviewNotes()).toEqual([
+      'DuckDNS did not accept the token for my-group.duckdns.org yet; the running service keeps trying.',
+    ]);
   });
 
   test('the redirect: asked only when missing; check again until it is there, or skip with a note', async () => {
@@ -433,7 +577,9 @@ describe('lookups', () => {
     await answer(other, 'discordToken', TOKEN);
     await answer(other, 'clientSecret', SECRET);
     await answer(other, 'redirect', 'skip');
-    expect(other.reviewNotes()).toEqual([`Login will fail until ${DUCK_URL}/auth/callback is a redirect of the app (telinha doctor checks it).`]);
+    expect(other.reviewNotes()).toEqual([
+      `Login will fail until ${DUCK_URL}/auth/callback is a redirect of the app (telinha doctor checks it).`,
+    ]);
   });
 
   test('intents off: noted for the Review (the install switches them on)', async () => {
@@ -442,7 +588,9 @@ describe('lookups', () => {
     await answer(s, 'discordToken', TOKEN);
     expect(s.notice()?.text).toBe(`Bot: Telinha Bot (app id ${APP})
 Server Members Intent and Presence Intent are off: Telinha switches them on during the install.`);
-    expect(s.reviewNotes()).toEqual(['Server Members Intent and Presence Intent are off: Telinha switches them on during the install.']);
+    expect(s.reviewNotes()).toEqual([
+      'Server Members Intent and Presence Intent are off: Telinha switches them on during the install.',
+    ]);
   });
 
   test('a wrong client secret stays', async () => {
@@ -460,9 +608,17 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     await answer(s, 'discordToken', TOKEN);
     await answer(s, 'clientSecret', SECRET);
     const card = s.current();
-    expect(card).toMatchObject({ id: 'guild', options: [], link: inviteUrl(APP), lookup: { state: 'warn', note: 'The bot is not in any server yet.' } });
+    expect(card).toMatchObject({
+      id: 'guild',
+      options: [],
+      link: inviteUrl(APP),
+      lookup: { state: 'warn', note: 'The bot is not in any server yet.' },
+    });
     expect(card.hint).toContain('Add the bot to your server with this link (you need Manage Server there):');
-    expect(card.actions).toEqual([{ id: 'open', label: 'Open the link in the browser' }, { id: 'check', label: 'I added the bot: check again' }]);
+    expect(card.actions).toEqual([
+      { id: 'open', label: 'Open the link in the browser' },
+      { id: 'check', label: 'I added the bot: check again' },
+    ]);
     await s.action('open');
     await s.action('open');
     expect(opened).toEqual([inviteUrl(APP)]);
@@ -470,7 +626,10 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     w.guilds = [{ id: GUILD, name: 'Gurizada' }];
     await s.action('check');
     expect(s.current()).toMatchObject({ link: undefined, lookup: { state: 'idle' } });
-    expect(s.current().options.map((o) => [o.value, o.label, o.subtle])).toEqual([[GUILD, 'Gurizada', false], ['+invite', 'Another server (add the bot)', true]]);
+    expect(s.current().options.map((o) => [o.value, o.label, o.subtle])).toEqual([
+      [GUILD, 'Gurizada', false],
+      ['+invite', 'Another server (add the bot)', true],
+    ]);
     // "Another server" opens the same card without leaving the question.
     expect(await s.submit('+invite')).toBe('stayed');
     expect(s.current().link).toBe(inviteUrl(APP));
@@ -484,7 +643,11 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     await homeDuck(s);
     await answer(s, 'discordToken', TOKEN);
     await answer(s, 'clientSecret', SECRET);
-    expect(s.current()).toMatchObject({ id: 'guild', link: inviteUrl(APP, GUILD2), lookup: { state: 'warn', note: `The bot is not in server ${GUILD2}.` } });
+    expect(s.current()).toMatchObject({
+      id: 'guild',
+      link: inviteUrl(APP, GUILD2),
+      lookup: { state: 'warn', note: `The bot is not in server ${GUILD2}.` },
+    });
   });
 
   test('channels: at least one; none visible is a dead end until checked again', async () => {
@@ -511,7 +674,14 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     await answer(t, 'clientSecret', SECRET);
     await answer(t, 'guild', GUILD);
     await answer(t, 'role', ROLE);
-    expect(t.current()).toMatchObject({ id: 'channels', lookup: { state: 'rejected', error: 'The bot sees no text channel in Gurizada; give it access to one, then check again.' }, actions: [{ id: 'check', label: 'Check again' }] });
+    expect(t.current()).toMatchObject({
+      id: 'channels',
+      lookup: {
+        state: 'rejected',
+        error: 'The bot sees no text channel in Gurizada; give it access to one, then check again.',
+      },
+      actions: [{ id: 'check', label: 'Check again' }],
+    });
     none.channels = [{ id: CHANNEL, name: 'geral', type: 0, position: 0 }];
     await t.action('check');
     expect(t.current().options.map((o) => o.value)).toEqual([CHANNEL]);
@@ -522,7 +692,9 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     await answer(s, 'hosting', 'vps');
     await answer(s, 'vpsAddress', 'domain');
     await answer(s, 'domain', 'telinha.example.com');
-    expect(s.notice()?.text).toBe('telinha.example.com points at 198.51.100.1, not at 203.0.113.9: set its A record to 203.0.113.9 (it can take a few minutes).');
+    expect(s.notice()?.text).toBe(
+      'telinha.example.com points at 198.51.100.1, not at 203.0.113.9: set its A record to 203.0.113.9 (it can take a few minutes).',
+    );
     expect(s.reviewNotes()).toHaveLength(1);
     // Answering differently later takes the note away.
     s.back();
@@ -545,7 +717,11 @@ Server Members Intent and Presence Intent are off: Telinha switches them on duri
     await answer(s, 'role', ROLE);
     await answer(s, 'channels', `${CHANNEL}, ${CHANNEL2}`);
     expect(w.calls).toEqual([]);
-    expect(s.values()).toMatchObject({ DISCORD_CLIENT_ID: APP, GUILD_ID: GUILD, CHANNEL_IDS: `${CHANNEL},${CHANNEL2}` });
+    expect(s.values()).toMatchObject({
+      DISCORD_CLIENT_ID: APP,
+      GUILD_ID: GUILD,
+      CHANNEL_IDS: `${CHANNEL},${CHANNEL2}`,
+    });
   });
 });
 
@@ -558,7 +734,12 @@ describe('starts', () => {
     expect(s.jump('ports')).toBe(true);
     expect(s.toReview()).toBe(true);
     expect(clean(s.values())).toEqual(clean(VPS_FILE));
-    expect(s.reviewRows().filter((r) => r.kind === 'secret').map((r) => r.value)).toEqual(['kept', 'kept']);
+    expect(
+      s
+        .reviewRows()
+        .filter((r) => r.kind === 'secret')
+        .map((r) => r.value),
+    ).toEqual(['kept', 'kept']);
     expect(s.applyOptions().canRotateCookie).toBe(true);
     // From the Review, back is the last question.
     s.back();
@@ -574,12 +755,21 @@ describe('starts', () => {
   });
 
   test('a re-run that picks another server asks its role and channels again', async () => {
-    const w = world({ guilds: [{ id: GUILD, name: 'Gurizada' }, { id: GUILD2, name: 'Outro' }] });
+    const w = world({
+      guilds: [
+        { id: GUILD, name: 'Gurizada' },
+        { id: GUILD2, name: 'Outro' },
+      ],
+    });
     const { s } = make({ host: VPS, file: VPS_FILE, rerun: true, world: w });
     expect(s.jump('discord')).toBe(true);
     await answer(s, 'discordToken', '');
     await answer(s, 'clientSecret', '');
-    expect(s.current().options.map((o) => [o.label, o.chosen])).toEqual([['Gurizada', true], ['Outro', false], ['Another server (add the bot)', false]]);
+    expect(s.current().options.map((o) => [o.label, o.chosen])).toEqual([
+      ['Gurizada', true],
+      ['Outro', false],
+      ['Another server (add the bot)', false],
+    ]);
     await answer(s, 'guild', GUILD2);
     expect(s.current().id).toBe('role');
     expect(s.allAnswered()).toBe(false);
@@ -616,20 +806,41 @@ describe('hidden answers and apply options', () => {
   test('custom direct ports from the file stay while the mode does, and show in the Review', async () => {
     const file = { ...VPS_FILE, HTTP_PORT: '8080', HTTPS_PORT: '8443', PUBLIC_URL: 'https://telinha.example.com:8443' };
     const { s } = make({ host: VPS, file, rerun: true });
-    expect(s.values()).toMatchObject({ HTTP_PORT: '8080', HTTPS_PORT: '8443', PUBLIC_URL: 'https://telinha.example.com:8443' });
+    expect(s.values()).toMatchObject({
+      HTTP_PORT: '8080',
+      HTTPS_PORT: '8443',
+      PUBLIC_URL: 'https://telinha.example.com:8443',
+    });
     s.toReview();
-    expect(s.reviewRows().filter((r) => /port|address/i.test(r.label)).map((r) => [r.label, r.value])).toEqual([
-      ['Web address', 'https://telinha.example.com:8443'], ['HTTPS port', '8443'], ['HTTP port', '8080'], ['Media ports', 'Keep TCP 7881 and UDP 7882'],
+    expect(
+      s
+        .reviewRows()
+        .filter((r) => /port|address/i.test(r.label))
+        .map((r) => [r.label, r.value]),
+    ).toEqual([
+      ['Web address', 'https://telinha.example.com:8443'],
+      ['HTTPS port', '8443'],
+      ['HTTP port', '8080'],
+      ['Media ports', 'Keep TCP 7881 and UDP 7882'],
     ]);
     s.jump('address');
     await answer(s, 'vpsAddress', 'tunnel');
     await answer(s, 'tunnelToken', TUNNEL);
     await answer(s, 'tunnelHost', 't.example.com');
-    expect(s.values()).toMatchObject({ INGRESS: 'tunnel', HTTP_PORT: '', HTTPS_PORT: '', PUBLIC_URL: 'https://t.example.com' });
+    expect(s.values()).toMatchObject({
+      INGRESS: 'tunnel',
+      HTTP_PORT: '',
+      HTTPS_PORT: '',
+      PUBLIC_URL: 'https://t.example.com',
+    });
     s.jump('address');
     await answer(s, 'vpsAddress', 'domain');
     // Back on the same mode: the ports again; a new name drops the old URL with its port.
-    expect(s.values()).toMatchObject({ HTTP_PORT: '8080', HTTPS_PORT: '8443', PUBLIC_URL: 'https://telinha.example.com:8443' });
+    expect(s.values()).toMatchObject({
+      HTTP_PORT: '8080',
+      HTTPS_PORT: '8443',
+      PUBLIC_URL: 'https://telinha.example.com:8443',
+    });
     await answer(s, 'domain', 'new.example.com');
     expect(s.values()).toMatchObject({ HTTPS_PORT: '8443', PUBLIC_URL: 'https://new.example.com' });
   });
@@ -651,7 +862,16 @@ describe('hidden answers and apply options', () => {
     expect(s.screen()).toBe('review');
     expect(s.applyOptions()).toEqual({ sysctl: 'manual', canRotateCookie: false, tray: null });
     expect(s.values().AUTO_UPDATE).toBe('off');
-    expect(s.steps().map((x) => x.summary)).toEqual(['Rented server (VPS)', 'sslip.io', '/telinha · Gurizada', 'this computer, 443 too', 'TCP 7881, 443, 80\nUDP 7882', 'manual', '', '']);
+    expect(s.steps().map((x) => x.summary)).toEqual([
+      'Rented server (VPS)',
+      'sslip.io',
+      '/telinha · Gurizada',
+      'this computer, 443 too',
+      'TCP 7881, 443, 80\nUDP 7882',
+      'manual',
+      '',
+      '',
+    ]);
   });
 
   test('Windows: the tray step after the updates, its sidebar summary and the apply option', async () => {
@@ -673,7 +893,8 @@ describe('hidden answers and apply options', () => {
     const rows = s.reviewRows();
     const at = rows.findIndex((r) => r.step === 'Tray icon');
     expect(rows.slice(at).map((r) => [r.label, r.value])).toEqual([
-      ['Tray icon', 'Yes, show the icon'], ['Start with Windows', 'Yes, at every sign-in'],
+      ['Tray icon', 'Yes, show the icon'],
+      ['Start with Windows', 'Yes, at every sign-in'],
     ]);
     s.jump('tray');
     await answer(s, 'tray', 'no');
@@ -683,7 +904,15 @@ describe('hidden answers and apply options', () => {
   });
 
   test('Windows re-run: the tray questions start from what the PC has', () => {
-    const { s } = make({ host: VPS, platform: 'win32', isRoot: false, compiled: true, file: VPS_FILE, rerun: true, tray: { installed: false, optedOut: true, autostart: false } });
+    const { s } = make({
+      host: VPS,
+      platform: 'win32',
+      isRoot: false,
+      compiled: true,
+      file: VPS_FILE,
+      rerun: true,
+      tray: { installed: false, optedOut: true, autostart: false },
+    });
     expect(s.applyOptions().tray).toEqual({ install: false, autostart: false });
   });
 
@@ -703,7 +932,9 @@ describe('hidden answers and apply options', () => {
 
     const { s } = make({ host: VPS, dns: [] });
     await vpsDomain(s);
-    expect(s.current().hint.at(-1)).toBe('First add a DNS record: turn.t.example.com → 203.0.113.9 (A record, DNS only). Yes then checks that it resolves.');
+    expect(s.current().hint.at(-1)).toBe(
+      'First add a DNS record: turn.t.example.com → 203.0.113.9 (A record, DNS only). Yes then checks that it resolves.',
+    );
     expect(await s.submit('on')).toBe('stayed');
     expect(s.current().actions.map((a) => a.label)).toEqual(['I added it: check again', 'Keep it on anyway']);
     await s.action('keep');

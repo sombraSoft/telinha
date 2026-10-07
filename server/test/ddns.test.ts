@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createDuckDns, startDdnsLoop, type Ddns, type DdnsLast } from '../src/ddns.ts';
+import { createDuckDns, type Ddns, type DdnsLast, startDdnsLoop } from '../src/ddns.ts';
 
 const TOKEN = 'fake-duckdns-token-0000'; // gitleaks:allow
 
@@ -15,7 +15,13 @@ function duck(replies: (string | Error | number)[]) {
     if (typeof r === 'number') return new Response('', { status: r });
     return new Response(r);
   }) as unknown as typeof globalThis.fetch;
-  const d = createDuckDns({ domain: 'mygroup', token: TOKEN, fetch, log: (...a) => logs.push(a.join(' ')), now: () => t });
+  const d = createDuckDns({
+    domain: 'mygroup',
+    token: TOKEN,
+    fetch,
+    log: (...a) => logs.push(a.join(' ')),
+    now: () => t,
+  });
   return { d, urls, logs, tick: (ms: number) => (t += ms) };
 }
 
@@ -112,7 +118,13 @@ describe('startDdnsLoop', () => {
     const { ddns, updates } = fakeDdns(c);
     const ips = ['1.1.1.1', '1.1.1.1', '2.2.2.2', '2.2.2.2'];
     let lookups = 0;
-    const stop = startDdnsLoop({ ddns, lookupIp: async () => ips[Math.min(lookups++, ips.length - 1)]!, log: () => {}, sleep: c.sleep, now: c.now });
+    const stop = startDdnsLoop({
+      ddns,
+      lookupIp: async () => ips[Math.min(lookups++, ips.length - 1)]!,
+      log: () => {},
+      sleep: c.sleep,
+      now: c.now,
+    });
     await c.flush();
     expect(updates).toEqual(['1.1.1.1']);
     await c.step();
@@ -142,7 +154,14 @@ describe('startDdnsLoop', () => {
   test('keeps the record alive every 24 h', async () => {
     const c = clock();
     const { ddns, updates } = fakeDdns(c);
-    const stop = startDdnsLoop({ ddns, lookupIp: async () => '1.1.1.1', intervalMs: 3600_000, log: () => {}, sleep: c.sleep, now: c.now });
+    const stop = startDdnsLoop({
+      ddns,
+      lookupIp: async () => '1.1.1.1',
+      intervalMs: 3600_000,
+      log: () => {},
+      sleep: c.sleep,
+      now: c.now,
+    });
     await c.flush();
     for (let h = 1; h < 24; h++) await c.step();
     expect(updates).toHaveLength(1);
@@ -156,7 +175,15 @@ describe('startDdnsLoop', () => {
     const { ddns, updates } = fakeDdns(c);
     let lookups = 0;
     const stop = startDdnsLoop({
-      ddns, fixedIp: '9.9.9.9', lookupIp: async () => { lookups++; return 'x'; }, log: () => {}, sleep: c.sleep, now: c.now,
+      ddns,
+      fixedIp: '9.9.9.9',
+      lookupIp: async () => {
+        lookups++;
+        return 'x';
+      },
+      log: () => {},
+      sleep: c.sleep,
+      now: c.now,
     });
     await c.flush();
     expect(updates).toEqual(['9.9.9.9']);
@@ -172,8 +199,14 @@ describe('startDdnsLoop', () => {
     const logs: unknown[][] = [];
     let n = 0;
     const stop = startDdnsLoop({
-      ddns, lookupIp: async () => { if (n++ < 3) throw new Error('offline'); return '1.1.1.1'; },
-      log: (...a) => logs.push(a), sleep: c.sleep, now: c.now,
+      ddns,
+      lookupIp: async () => {
+        if (n++ < 3) throw new Error('offline');
+        return '1.1.1.1';
+      },
+      log: (...a) => logs.push(a),
+      sleep: c.sleep,
+      now: c.now,
     });
     await c.flush();
     await c.step();
@@ -189,7 +222,16 @@ describe('startDdnsLoop', () => {
     const c = clock();
     const { ddns } = fakeDdns(c);
     let lookups = 0;
-    const stop = startDdnsLoop({ ddns, lookupIp: async () => { lookups++; return '1.1.1.1'; }, log: () => {}, sleep: c.sleep, now: c.now });
+    const stop = startDdnsLoop({
+      ddns,
+      lookupIp: async () => {
+        lookups++;
+        return '1.1.1.1';
+      },
+      log: () => {},
+      sleep: c.sleep,
+      now: c.now,
+    });
     await c.flush();
     stop();
     await c.step();

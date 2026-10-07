@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { MessageFlags } from 'discord.js';
-import { buildCommand, commandDenied, handleCommand, type CommandDeps, type CommandInput, type CommandPayload } from '../src/bot.ts';
-import { renderCard, type Card } from '../src/card.ts';
+import {
+  buildCommand,
+  type CommandDeps,
+  type CommandInput,
+  type CommandPayload,
+  commandDenied,
+  handleCommand,
+} from '../src/bot.ts';
+import { type Card, renderCard } from '../src/card.ts';
 import type { Locale } from '../src/i18n.ts';
 import { createRooms } from '../src/rooms.ts';
 
@@ -9,8 +16,16 @@ const NOW = 1_700_000_000_000;
 const group = (l: Locale) => (l === 'pt-BR' ? 'Galera' : 'Crew');
 
 const base: CommandInput = {
-  locale: 'en-US', guildLocale: 'pt-BR', allowed: true, command: 'tela', guildId: '100', channelId: '300', channelIds: ['300', '301'],
-  userId: '7', who: 'Zé', what: 'Elden Ring',
+  locale: 'en-US',
+  guildLocale: 'pt-BR',
+  allowed: true,
+  command: 'tela',
+  guildId: '100',
+  channelId: '300',
+  channelIds: ['300', '301'],
+  userId: '7',
+  who: 'Zé',
+  what: 'Elden Ring',
 };
 
 // The real Room module on :memory: with a fake LiveKit (rooms.test.ts covers open itself).
@@ -33,7 +48,12 @@ function setup(o: { ensureFails?: boolean; replyFails?: boolean } = {}) {
   });
   const deps: CommandDeps = {
     rooms,
-    render: (rec) => renderCard(rec, { streamers: [], viewers: [] }, { publicUrl: 'https://tela.example.com', group: group(rec.locale) }),
+    render: (rec) =>
+      renderCard(
+        rec,
+        { streamers: [], viewers: [] },
+        { publicUrl: 'https://tela.example.com', group: group(rec.locale) },
+      ),
     reply: async (p) => {
       calls.push(p.flags ? 'reply ephemeral' : 'reply card');
       if (o.replyFails && !p.flags) throw new Error('Unknown interaction');
@@ -51,7 +71,13 @@ test('command: configured name, English base with pt-BR localizations', () => {
   const c = buildCommand('tela').toJSON();
   expect(c.name).toBe('tela');
   expect(c.description_localizations?.['pt-BR']).toBe('Abre uma telinha pra compartilhar a tela');
-  const [opt] = c.options as Array<{ name: string; name_localizations?: Record<string, string>; max_length?: number; required?: boolean; description_localizations?: Record<string, string> }>;
+  const [opt] = c.options as Array<{
+    name: string;
+    name_localizations?: Record<string, string>;
+    max_length?: number;
+    required?: boolean;
+    description_localizations?: Record<string, string>;
+  }>;
   expect(opt!.name).toBe('what');
   expect(opt!.name_localizations?.['pt-BR']).toBe('o_que');
   expect(opt!.description_localizations?.['pt-BR']).toContain('O que vai passar');
@@ -88,8 +114,15 @@ describe('handleCommand', () => {
     expect(s.calls).toEqual(['ensureRoom lamo-futi', 'reply card']);
     expect(s.logs).toEqual([['tela', '7', 'lamo-futi']]);
     expect(s.rooms.get('lamo-futi')).toMatchObject({
-      guildId: '100', channelId: '300', messageId: '999', locale: 'pt-BR', openerId: '7', openerName: 'Zé',
-      what: 'Elden Ring', createdAt: NOW, closedAt: null,
+      guildId: '100',
+      channelId: '300',
+      messageId: '999',
+      locale: 'pt-BR',
+      openerId: '7',
+      openerName: 'Zé',
+      what: 'Elden Ring',
+      createdAt: NOW,
+      closedAt: null,
     });
     const card = s.replies[0]!;
     expect(card.flags).toBeUndefined();

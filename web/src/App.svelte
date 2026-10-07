@@ -8,7 +8,7 @@
   import { currentLocale, t } from './lib/i18n/i18n.svelte';
   import { MembersFeed } from './lib/members.svelte';
   import { prefs } from './lib/prefs.svelte';
-  import { RoomSession, browserClock, livekitRoom, noticeText, serverTokens } from './lib/room.svelte';
+  import { browserClock, livekitRoom, noticeText, RoomSession, serverTokens } from './lib/room.svelte';
   import { resolveTheme } from './lib/theme';
 
   const rc = new RoomSession({ room: livekitRoom, tokens: serverTokens(), clock: browserClock, prefs });
@@ -108,7 +108,7 @@
     <PeopleList {rc} members={members.list} open={peopleOpen} ontoggle={togglePeople} />
     <!-- In the body, not the viewport, so it sits below the top bar whatever its height. -->
     {#if rc.connected && !rc.canPlaybackAudio}
-      <button class="btn primary unlock" data-testid="audio-unlock" onclick={() => rc.startAudio()}>
+      <button type="button" class="btn primary unlock" data-testid="audio-unlock" onclick={() => rc.startAudio()}>
         <span aria-hidden="true">🔊</span>
         {t('audio.unlock')}
       </button>
@@ -121,7 +121,7 @@
     <div class="card" tabindex="-1" {@attach focusFirst}>
       <p data-testid="notice">{noticeText(rc.fatal.notice)}</p>
       {#if rc.fatal.reload}
-        <button class="btn primary" onclick={() => location.reload()}>{t('fatal.reload')}</button>
+        <button type="button" class="btn primary" onclick={() => location.reload()}>{t('fatal.reload')}</button>
       {/if}
     </div>
   </div>
@@ -132,6 +132,7 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     height: 100vh;
+    /* biome-ignore lint/suspicious/noDuplicateProperties: 100vh is the fallback where dvh is unsupported */
     height: 100dvh;
   }
   /* --side-w is a registered <length> (base.css), so it animates: it drives

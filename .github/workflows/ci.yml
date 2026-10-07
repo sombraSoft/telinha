@@ -56,9 +56,11 @@ jobs:
               - 'e2e/**'
               - 'tray/**'
               - versions.json
-              # scripts/toolchain.test.ts holds the Dockerfile's Bun and Go pins to
-              # mise.toml, so a Renovate group PR that reached only it still runs it.
+              # scripts/toolchain.test.ts holds the Dockerfile's Bun and Go pins and
+              # biome.jsonc's schema to mise.toml, so a Renovate group PR that
+              # reached only them still runs it.
               - Dockerfile
+              - biome.jsonc
             e2e:
               - 'server/**'
               - 'web/**'
@@ -616,7 +618,7 @@ jobs:
         with:
           version: 2026.10.3
           install: false
-          install_args: bun github:jdx/jactionlint shellcheck hadolint editorconfig-checker
+          install_args: bun github:jdx/jactionlint shellcheck hadolint editorconfig-checker biome
           cache_save: ${{ github.event_name == 'push' }}
       # mise lock keeps every locked version and rewrites only what mise.toml
       # no longer matches, so a diff means mise.lock was not refreshed with it.
@@ -633,7 +635,7 @@ jobs:
       - name: install tools
         env:
           MISE_GITHUB_TOKEN: ${{ github.token }}
-        run: mise install --locked bun github:jdx/jactionlint shellcheck hadolint editorconfig-checker
+        run: mise install --locked bun github:jdx/jactionlint shellcheck hadolint editorconfig-checker biome
       # Listed explicitly: telinha-update has no extension, and a missing file
       # should fail the job rather than be silently skipped.
       - name: shellcheck
@@ -671,6 +673,10 @@ jobs:
       # check is off and why.
       - name: editorconfig
         run: editorconfig-checker
+      # Formatting, lint rules and import order (biome.jsonc); errors fail the
+      # job, warnings show up as annotations on the PR.
+      - name: biome
+        run: biome ci --reporter=default --reporter=github .
       # Structure and every asset hash present; a stale hash fails the image job.
       - name: versions.json
         run: bun scripts/versions.ts check

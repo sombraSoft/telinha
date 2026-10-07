@@ -55,7 +55,9 @@
       "description": "The Debian image that ci.yml's arm64 smoke runs under QEMU, pinned to a digest in a `docker run` line, which no built-in manager reads; bookworm-slim is not a version, so only its digest moves",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
-      "matchStrings": ["docker run [^\\n]* (?<depName>debian):(?<currentValue>[\\w.-]+)@(?<currentDigest>sha256:[a-f0-9]{64}) "],
+      "matchStrings": [
+        "docker run [^\\n]* (?<depName>debian):(?<currentValue>[\\w.-]+)@(?<currentDigest>sha256:[a-f0-9]{64}) "
+      ],
       "datasourceTemplate": "docker"
     },
     {
@@ -65,6 +67,15 @@
       "matchStrings": ["Install-Module (?<depName>PSScriptAnalyzer) -RequiredVersion (?<currentValue>\\S+)"],
       "datasourceTemplate": "nuget",
       "registryUrlTemplate": "https://www.powershellgallery.com/api/v2/"
+    },
+    {
+      "description": "The Biome release biome.jsonc's $schema URL names, which scripts/toolchain.test.ts holds equal to mise.toml's biome; the biome package rule below reads its tags",
+      "customType": "regex",
+      "managerFilePatterns": ["/^biome\\.jsonc$/"],
+      "matchStrings": ["https://biomejs\\.dev/schemas/(?<currentValue>[^/]+)/schema\\.json"],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "biome",
+      "packageNameTemplate": "biomejs/biome"
     }
   ],
   "packageRules": [
@@ -86,8 +97,10 @@
       "minimumReleaseAge": null
     },
     {
-      "description": "Biome bumps change which code the lint and format checks accept, so they are reviewed by hand wherever Biome is pinned (package.json or mise.toml)",
-      "matchPackageNames": ["@biomejs/biome", "biomejs/biome"],
+      "description": "Biome bumps change which code the lint and format checks accept, so they are reviewed by hand. mise.toml and biome.jsonc's $schema move in one PR. Biome's GitHub tags name the package (@biomejs/biome@2.5.15) and the repo tags its other packages too, so only those tags are versions",
+      "matchPackageNames": ["biomejs/biome"],
+      "extractVersion": "^@biomejs/biome@(?<version>.+)$",
+      "groupName": "biome",
       "automerge": false
     },
     {
@@ -116,7 +129,10 @@
     {
       "description": "Bumps in versions.json: the downloaded ones stay red until `bun scripts/versions.ts refresh`, the Caddy recipe needs the image job green; neither automerges or blocks the allNonMajor group",
       "matchDepNames": [
-        "caddyserver/caddy", "caddyserver/xcaddy", "github.com/caddy-dns/duckdns", "github.com/mholt/caddy-l4",
+        "caddyserver/caddy",
+        "caddyserver/xcaddy",
+        "github.com/caddy-dns/duckdns",
+        "github.com/mholt/caddy-l4",
         "cloudflare/cloudflared"
       ],
       "groupName": "child-binaries",

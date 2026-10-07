@@ -42,7 +42,13 @@ export function isDocker(o: Pick<HostDeps, 'platform' | 'env' | 'dockerFlag' | '
 
 export async function detectHost(d: HostDeps): Promise<HostInfo> {
   const docker = isDocker(d);
-  const kind: HostKind = docker ? 'docker' : d.platform === 'win32' ? 'windows' : d.isRoot ? 'linux-root' : 'linux-user';
+  const kind: HostKind = docker
+    ? 'docker'
+    : d.platform === 'win32'
+      ? 'windows'
+      : d.isRoot
+        ? 'linux-root'
+        : 'linux-user';
   // Both lookups at once: each may take its whole budget offline.
   const [publicIp, nat] = await Promise.all([
     d.lookupPublicIp().catch(() => null),

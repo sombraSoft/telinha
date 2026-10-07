@@ -6,24 +6,24 @@
 // are never made reactive.
 import {
   DisconnectReason,
-  Room,
-  RoomEvent,
-  Track,
+  type Participant as LiveKitParticipant,
   type LocalParticipant,
   type LocalVideoTrack,
-  type Participant as LiveKitParticipant,
   type RemoteAudioTrack,
   type RemoteTrackPublication,
   type RemoteVideoTrack,
+  Room,
+  RoomEvent,
   type RoomEventCallbacks,
+  Track,
 } from 'livekit-client';
 import { avatarUrl, discordIdOf, parseMeta } from './avatar';
-import { setUserLocale, t } from './i18n/i18n.svelte';
 import { commandName, type Locale, type MessageKey, type Params } from './i18n';
+import { setUserLocale, t } from './i18n/i18n.svelte';
 import { LocalShare, type Publisher } from './local-share.svelte';
 import { isValidRoom } from './room-name';
 import type { ShareSettings } from './share';
-import { streamLabel, summarize, type ByteSample, type VideoStats } from './stats';
+import { type ByteSample, streamLabel, summarize, type VideoStats } from './stats';
 
 export type TokenUser = { id: string; name: string; avatar: string | null; locale: Locale };
 export type TokenResponse = { url: string; token: string; identity: string; user: TokenUser; group: string };
@@ -189,7 +189,9 @@ function participantOf(p: RoomParticipant, local: boolean): Participant {
  * the order the tabs joined, so every page numbers them the same way.
  */
 function labelTiles(list: { p: Participant; joined: number }[]): Participant[] {
-  const streaming = list.filter((x) => x.p.stream).sort((a, b) => a.joined - b.joined || (a.p.identity < b.p.identity ? -1 : 1));
+  const streaming = list
+    .filter((x) => x.p.stream)
+    .sort((a, b) => a.joined - b.joined || (a.p.identity < b.p.identity ? -1 : 1));
   const count = new Map<string, number>();
   const labels = new Map<string, string>();
   for (const { p } of streaming) {
@@ -400,7 +402,10 @@ export class RoomSession {
     if (!room || !this.connected) return;
     const me = room.localParticipant.identity;
     const visible = this.focusId ? [this.focusId] : this.tiles.map((p) => p.identity);
-    const value = visible.filter((id) => id !== me).sort().join(',');
+    const value = visible
+      .filter((id) => id !== me)
+      .sort()
+      .join(',');
     if (value === this.#lastWatching) return;
     this.#lastWatching = value;
     room.localParticipant.setAttributes({ watching: value }).catch(() => (this.#lastWatching = null));

@@ -5,10 +5,11 @@
 // purpose (exit 0). It also judges a staged update: two failed starts in a row
 // roll the executable back. The child holds our stdin pipe and our pid so it
 // can notice when this loop is gone.
-import { rollback } from '../update/swap.ts';
-import { readState, statePath, writeState } from '../update/state.ts';
-import { errorMessage, nodeFs, type UpdateFs } from '../update/types.ts';
+
 import type { Paths } from '../paths.ts';
+import { readState, statePath, writeState } from '../update/state.ts';
+import { rollback } from '../update/swap.ts';
+import { errorMessage, nodeFs, type UpdateFs } from '../update/types.ts';
 import { servicePidFile } from './index.ts';
 
 export interface RunLoopChild {
@@ -67,7 +68,13 @@ function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
 const bunSpawn: SpawnChild = (cmd, env) => {
   // stdin stays a pipe we never write: the child reads EOF on it the moment this process dies.
   const proc = Bun.spawn(cmd, { env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
-  return { pid: proc.pid, exited: proc.exited, stdout: proc.stdout, stderr: proc.stderr, kill: (signal) => proc.kill(signal) };
+  return {
+    pid: proc.pid,
+    exited: proc.exited,
+    stdout: proc.stdout,
+    stderr: proc.stderr,
+    kill: (signal) => proc.kill(signal),
+  };
 };
 
 const defaultOnSignal: NonNullable<RunLoopOptions['onSignal']> = (fn) => {

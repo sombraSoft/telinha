@@ -16,6 +16,7 @@ const palettes = {
 
 const [mode, setMode] = createSignal<Mode>('dark');
 const [noColor, setNoColor] = createSignal(false);
+
 export { mode, noColor, setMode, setNoColor };
 
 const fg = RGBA.defaultForeground();
@@ -50,7 +51,8 @@ export interface ThemeSource {
 
 /** TELINHA_THEME > the terminal's answer to OSC 10/11 > COLORFGBG > dark. */
 export async function detectMode(
-  renderer: ThemeSource | null, env: Record<string, string | undefined>,
+  renderer: ThemeSource | null,
+  env: Record<string, string | undefined>,
 ): Promise<{ mode: Mode; source: 'TELINHA_THEME' | 'terminal' | 'COLORFGBG' | 'fallback' }> {
   const forced = env.TELINHA_THEME?.toLowerCase();
   if (forced === 'light' || forced === 'dark') return { mode: forced, source: 'TELINHA_THEME' };
@@ -60,7 +62,8 @@ export async function detectMode(
   }
   // "fg;bg" or "fg;default;bg": ANSI 7 and 15 are the light backgrounds.
   const bg = env.COLORFGBG?.split(';').pop();
-  if (bg !== undefined && /^\d+$/.test(bg)) return { mode: bg === '7' || bg === '15' ? 'light' : 'dark', source: 'COLORFGBG' };
+  if (bg !== undefined && /^\d+$/.test(bg))
+    return { mode: bg === '7' || bg === '15' ? 'light' : 'dark', source: 'COLORFGBG' };
   return { mode: 'dark', source: 'fallback' };
 }
 

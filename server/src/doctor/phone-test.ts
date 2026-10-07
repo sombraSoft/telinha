@@ -4,7 +4,7 @@
 // their status and the hint explaining them. Framework-free like SetupSession:
 // the plain doctor awaits finished(), the screens subscribe() and re-read state.
 import type { ControlClient, DoctorReport, PhoneTestPoll } from '../cli/control.ts';
-import { doctorStrings, type DoctorStrKey } from '../cli/doctor-strings.ts';
+import { type DoctorStrKey, doctorStrings } from '../cli/doctor-strings.ts';
 import type { Locale } from '../cli/strings.ts';
 import type { Config, Media } from '../config.ts';
 import type { CheckStatus } from './types.ts';
@@ -20,7 +20,13 @@ export const PHONE_POLL_MS = 8_000;
 export type PhoneRowId = 'https' | 'signaling' | 'publish' | 'initial' | 'udp' | 'tcp' | 'turn';
 
 /** One line of the phone report, in the order both doctors show them; hint only on a row that is not ok. */
-export interface PhoneRow { id: PhoneRowId; status: CheckStatus; label: string; value: string; hint?: string }
+export interface PhoneRow {
+  id: PhoneRowId;
+  status: CheckStatus;
+  label: string;
+  value: string;
+  hint?: string;
+}
 
 export type PhoneTestState =
   | { kind: 'starting' }
@@ -32,7 +38,10 @@ export type PhoneTestState =
   | { kind: 'skipped' };
 
 /** How a run ended: done's status (worst row), expired or an error warn, skipped or not running skip. */
-export interface PhoneOutcome { status: CheckStatus; report?: DoctorReport }
+export interface PhoneOutcome {
+  status: CheckStatus;
+  report?: DoctorReport;
+}
 
 export interface PhoneTestInit {
   control: DoctorControl;
@@ -85,7 +94,8 @@ export class PhoneTest {
     if (locale === this.#locale) return;
     this.#locale = locale;
     const s = this.#state;
-    if (s?.kind === 'done' && this.#report) this.#set({ ...s, rows: phoneRows(this.#report, this.#init.config, locale) });
+    if (s?.kind === 'done' && this.#report)
+      this.#set({ ...s, rows: phoneRows(this.#report, this.#init.config, locale) });
   }
 
   /** Resolves when the current run (or the next one, before start()) ends. */
@@ -128,11 +138,15 @@ export class PhoneTest {
     let poll: PhoneTestPoll = { state: 'pending' };
     try {
       while (!cancelled && this.#now() < deadline) {
-        const next = await Promise.race([ctl.doctorWait(link.id, Math.min(PHONE_POLL_MS, deadline - this.#now())), interrupted]);
+        const next = await Promise.race([
+          ctl.doctorWait(link.id, Math.min(PHONE_POLL_MS, deadline - this.#now())),
+          interrupted,
+        ]);
         if (!next || stale()) return;
         // A report means the phone opened the link, even when no poll saw it open.
         const s = this.#state;
-        if ((next.state === 'opened' || next.state === 'done') && s?.kind === 'waiting' && !s.opened) this.#set({ ...s, opened: true });
+        if ((next.state === 'opened' || next.state === 'done') && s?.kind === 'waiting' && !s.opened)
+          this.#set({ ...s, opened: true });
         poll = next;
         if (poll.state === 'done' || poll.state === 'expired') break;
       }
@@ -145,7 +159,11 @@ export class PhoneTest {
       const r = poll.report;
       this.#report = r;
       const rows = phoneRows(r, this.#init.config, this.#locale);
-      this.#set({ kind: 'done', status: rows.reduce<CheckStatus>((w, row) => (RANK[row.status] > RANK[w] ? row.status : w), 'ok'), rows });
+      this.#set({
+        kind: 'done',
+        status: rows.reduce<CheckStatus>((w, row) => (RANK[row.status] > RANK[w] ? row.status : w), 'ok'),
+        rows,
+      });
     } else this.#set({ kind: poll.state === 'expired' ? 'expired' : 'skipped' });
   }
 
@@ -201,7 +219,13 @@ function mediaPorts(config: Config | null): Ports | null {
 }
 
 /** Plain-language hints for a report, each with the rows it explains. */
-function phoneHints(r: DoctorReport, ports: Ports | null, publicIp: string | null, media: Media, turnHost: string | null | undefined): Hint[] {
+function phoneHints(
+  r: DoctorReport,
+  ports: Ports | null,
+  publicIp: string | null,
+  media: Media,
+  turnHost: string | null | undefined,
+): Hint[] {
   const p: Record<string, number> = ports ? { tcp: ports.tcp, udp: ports.udp } : {};
   const cloud = media === 'cloud';
   // In cloud mode the page already loaded from PUBLIC_URL: signaling goes straight to Cloud.
@@ -212,8 +236,10 @@ function phoneHints(r: DoctorReport, ports: Ports | null, publicIp: string | nul
   else if (!r.tcp.ok) out.push({ key: cloud ? 'hintCloudTcp' : 'hintTcp', params: p, rows: ['tcp'] });
   // In cloud mode the candidate is Cloud's address, never this network's.
   const ip = r.initial?.candidateIp;
-  if (!cloud && ip && publicIp && ip !== publicIp && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) out.push({ key: 'hintIp', params: { ip, publicIp }, rows: ['initial'] });
-  if (r.turn && !r.turn.ok) out.push({ key: 'hintTurn', params: { turnHost: turnHost ?? 'turn.<host>' }, rows: ['turn'] });
+  if (!cloud && ip && publicIp && ip !== publicIp && /^\d+\.\d+\.\d+\.\d+$/.test(ip))
+    out.push({ key: 'hintIp', params: { ip, publicIp }, rows: ['initial'] });
+  if (r.turn && !r.turn.ok)
+    out.push({ key: 'hintTurn', params: { turnHost: turnHost ?? 'turn.<host>' }, rows: ['turn'] });
   return out;
 }
 
@@ -230,23 +256,76 @@ function phoneRows(r: DoctorReport, config: Config | null, locale: Locale): Phon
   const s: Say = (key, params) => doctorStrings(locale, key, params);
   const ports = mediaPorts(config);
   const hints = phoneHints(r, ports, config?.livekitNodeIp ?? null, config?.media ?? 'self', config?.turn?.host);
-  const ok = (v: boolean, rtt?: number) => (v ? (rtt !== undefined ? s('worksRtt', { ms: rtt }) : s('works')) : s('failed'));
+  const ok = (v: boolean, rtt?: number) =>
+    v ? (rtt !== undefined ? s('worksRtt', { ms: rtt }) : s('works')) : s('failed');
   const why = (v: { ok: boolean; error?: string }) => (!v.ok && v.error ? `: ${v.error}` : '');
   const raw: { id: PhoneRowId; ok: boolean; label: string; value: string }[] = [
-    { id: 'https', ok: r.https.ok, label: s('rowHttps'), value: r.https.ok ? (r.https.latencyMs !== null ? s('latency', { ms: r.https.latencyMs }) : s('works')) : s('failed') },
-    { id: 'signaling', ok: r.signaling.ok, label: s('rowSignaling'), value: r.signaling.ok ? s('works') : `${s('failed')}${why(r.signaling)}` },
-    { id: 'publish', ok: r.publish.ok, label: s('rowPublish'), value: r.publish.ok ? s('works') : `${s('failed')}${why(r.publish)}` },
     {
-      id: 'initial', ok: !!r.initial, label: s('rowInitial'),
-      value: r.initial ? s('initialPath', { protocol: r.initial.protocol.toUpperCase(), ip: r.initial.candidateIp ?? '?', ms: r.initial.rttMs ?? '?' }) : s('initialNone'),
+      id: 'https',
+      ok: r.https.ok,
+      label: s('rowHttps'),
+      value: r.https.ok
+        ? r.https.latencyMs !== null
+          ? s('latency', { ms: r.https.latencyMs })
+          : s('works')
+        : s('failed'),
     },
-    { id: 'udp', ok: r.udp.ok, label: ports ? s('rowUdp', { port: ports.udp }) : s('rowUdpCloud'), value: `${ok(r.udp.ok, r.udp.rttMs)}${why(r.udp)}` },
-    { id: 'tcp', ok: r.tcp.ok, label: ports ? s('rowTcp', { port: ports.tcp }) : s('rowTcpCloud'), value: `${ok(r.tcp.ok, r.tcp.rttMs)}${why(r.tcp)}` },
-    ...(r.turn ? [{ id: 'turn' as const, ok: r.turn.ok, label: s('rowTurn'), value: `${ok(r.turn.ok, r.turn.rttMs)}${why(r.turn)}` }] : []),
+    {
+      id: 'signaling',
+      ok: r.signaling.ok,
+      label: s('rowSignaling'),
+      value: r.signaling.ok ? s('works') : `${s('failed')}${why(r.signaling)}`,
+    },
+    {
+      id: 'publish',
+      ok: r.publish.ok,
+      label: s('rowPublish'),
+      value: r.publish.ok ? s('works') : `${s('failed')}${why(r.publish)}`,
+    },
+    {
+      id: 'initial',
+      ok: !!r.initial,
+      label: s('rowInitial'),
+      value: r.initial
+        ? s('initialPath', {
+            protocol: r.initial.protocol.toUpperCase(),
+            ip: r.initial.candidateIp ?? '?',
+            ms: r.initial.rttMs ?? '?',
+          })
+        : s('initialNone'),
+    },
+    {
+      id: 'udp',
+      ok: r.udp.ok,
+      label: ports ? s('rowUdp', { port: ports.udp }) : s('rowUdpCloud'),
+      value: `${ok(r.udp.ok, r.udp.rttMs)}${why(r.udp)}`,
+    },
+    {
+      id: 'tcp',
+      ok: r.tcp.ok,
+      label: ports ? s('rowTcp', { port: ports.tcp }) : s('rowTcpCloud'),
+      value: `${ok(r.tcp.ok, r.tcp.rttMs)}${why(r.tcp)}`,
+    },
+    ...(r.turn
+      ? [
+          {
+            id: 'turn' as const,
+            ok: r.turn.ok,
+            label: s('rowTurn'),
+            value: `${ok(r.turn.ok, r.turn.rttMs)}${why(r.turn)}`,
+          },
+        ]
+      : []),
   ];
   return raw.map((row) => {
     const mine = hints.filter((h) => h.rows.includes(row.id)).map((h) => s(h.key, h.params));
     const status = rowStatus(row.id, row.ok, r, mine.length > 0);
-    return { id: row.id, status, label: row.label, value: row.value, ...(mine.length && status !== 'ok' ? { hint: mine.join('\n') } : {}) };
+    return {
+      id: row.id,
+      status,
+      label: row.label,
+      value: row.value,
+      ...(mine.length && status !== 'ok' ? { hint: mine.join('\n') } : {}),
+    };
   });
 }

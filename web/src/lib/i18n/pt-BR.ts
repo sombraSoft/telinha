@@ -18,7 +18,7 @@ export const ptBR: Messages = {
   'theme.onyx': 'Ônix',
   'theme.light': 'Claro',
   'lang.auto': 'Automático',
-  'you': '(você)',
+  you: '(você)',
   'empty.title': 'Ninguém transmitindo ainda.',
   'empty.hint': 'Clica em {share} pra começar.',
   'share.start': 'Compartilhar tela',

@@ -15,13 +15,23 @@
 // --no-pack compiles only (no archives, no sums). `pack` archives binaries built
 // earlier (the release signs them in between): DIR/<target>/telinha[.exe] and,
 // for Windows, --tray else DIR/tray/telinha-tray.exe.
-import solidPlugin from '@opentui/solid/bun-plugin';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { writeArchive, type Entry } from '../server/src/archive.ts';
-import { SUMS, archiveContents, archiveFiles, assetName, caddyAssetName, caddyExeName, exeName, formatSums } from '../server/src/release.ts';
-import { TARGETS, hostTarget, type Target } from '../server/src/version.ts';
+import solidPlugin from '@opentui/solid/bun-plugin';
+import { type Entry, writeArchive } from '../server/src/archive.ts';
+import {
+  archiveContents,
+  archiveFiles,
+  assetName,
+  caddyAssetName,
+  caddyExeName,
+  exeName,
+  formatSums,
+  SUMS,
+} from '../server/src/release.ts';
+import { hostTarget, TARGETS, type Target } from '../server/src/version.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
 
@@ -79,10 +89,11 @@ function expand(t: string, platform: string): Target[] {
 }
 
 export function parseArgs(argv: string[], platform: string = process.platform): Options {
-  const usage = 'usage: bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out DIR] [--smoke] [--tray PATH] [--no-pack]\n'
-    + '       bun scripts/build-binary.ts pack --target <t>... --from DIR [--tray PATH] [--out DIR]\n'
-    + '       bun scripts/build-binary.ts sums [--out DIR]\n'
-    + '       bun scripts/build-binary.ts pack-caddy --target <t> --from DIR [--out DIR]';
+  const usage =
+    'usage: bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out DIR] [--smoke] [--tray PATH] [--no-pack]\n' +
+    '       bun scripts/build-binary.ts pack --target <t>... --from DIR [--tray PATH] [--out DIR]\n' +
+    '       bun scripts/build-binary.ts sums [--out DIR]\n' +
+    '       bun scripts/build-binary.ts pack-caddy --target <t> --from DIR [--out DIR]';
   let mode: Options['mode'] = 'compile';
   let from: string | undefined;
   let tray: string | undefined;
@@ -127,7 +138,8 @@ export function parseArgs(argv: string[], platform: string = process.platform): 
     throw new Error('compile Windows targets on Windows: Bun cannot write the version resource when cross-compiling');
   }
   version ??= (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string }).version;
-  if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`--version must look like 1.2.3 or 1.2.3-rc.1, got ${version}`);
+  if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version))
+    throw new Error(`--version must look like 1.2.3 or 1.2.3-rc.1, got ${version}`);
   return { mode, targets, version, out: resolve(ROOT, out), smoke, pack, tray };
 }
 
@@ -172,8 +184,11 @@ export function buildConfig(t: Target, o: { version: string; commit: string; out
       // The version resource takes four numbers: 0.7.0-rc.1 -> 0.7.0.0.
       ...(isWindows(t) && {
         windows: {
-          title: 'Telinha', publisher: 'sombraSoft', version: `${o.version.split('-')[0]!}.0`,
-          description: 'Telinha screen share server', copyright: 'MIT',
+          title: 'Telinha',
+          publisher: 'sombraSoft',
+          version: `${o.version.split('-')[0]!}.0`,
+          description: 'Telinha screen share server',
+          copyright: 'MIT',
         },
       }),
     },
@@ -205,7 +220,8 @@ async function pack(t: Target, files: { exe: string; tray?: string }, out: strin
 
 async function writeSums(out: string, names: string[]): Promise<string> {
   const sums: Record<string, string> = {};
-  for (const name of names) sums[name] = new Bun.CryptoHasher('sha256').update(await Bun.file(join(out, name)).bytes()).digest('hex');
+  for (const name of names)
+    sums[name] = new Bun.CryptoHasher('sha256').update(await Bun.file(join(out, name)).bytes()).digest('hex');
   const file = join(out, SUMS);
   const text = formatSums(sums);
   await Bun.write(file, text);
@@ -223,15 +239,21 @@ async function smoke(o: Options): Promise<void> {
   console.log(line);
   if (r.exitCode !== 0) throw new Error(`--version exited with ${r.exitCode ?? r.signalCode}`);
   const want = `telinha ${o.version}`;
-  if (line !== want && !line.startsWith(`${want} `)) throw new Error(`--version printed "${line}", want "${want} (...)"`);
+  if (line !== want && !line.startsWith(`${want} `))
+    throw new Error(`--version printed "${line}", want "${want} (...)"`);
 
   step(`smoke: TELINHA_SMOKE_TUI=1 ${exe} --version`);
   const tui = Bun.spawnSync([exe, '--version'], {
-    cwd: o.out, env: { ...process.env, TELINHA_SMOKE_TUI: '1' }, stdout: 'pipe', stderr: 'inherit', timeout: 60_000,
+    cwd: o.out,
+    env: { ...process.env, TELINHA_SMOKE_TUI: '1' },
+    stdout: 'pipe',
+    stderr: 'inherit',
+    timeout: 60_000,
   });
   const frame = tui.stdout.toString().trim();
   console.log(frame);
-  if (tui.exitCode !== 0 || !frame.includes('count 1')) throw new Error(`the TUI smoke failed (exit ${tui.exitCode ?? tui.signalCode})`);
+  if (tui.exitCode !== 0 || !frame.includes('count 1'))
+    throw new Error(`the TUI smoke failed (exit ${tui.exitCode ?? tui.signalCode})`);
 
   step('smoke: binary size and contents');
   for (const t of o.targets) {
@@ -287,9 +309,11 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   // Whatever is in web/dist gets embedded; without the page the binary is useless.
-  if (!existsSync(join(ROOT, 'web', 'dist', 'index.html'))) throw new Error('web/dist/index.html missing: run bun run build first');
+  if (!existsSync(join(ROOT, 'web', 'dist', 'index.html')))
+    throw new Error('web/dist/index.html missing: run bun run build first');
   if (o.tray && !existsSync(o.tray)) throw new Error(`no telinha-tray.exe at ${o.tray}`);
-  if (o.pack && !o.tray && o.targets.some(isWindows)) console.warn('warning: windows zips without telinha-tray.exe (no --tray)');
+  if (o.pack && !o.tray && o.targets.some(isWindows))
+    console.warn('warning: windows zips without telinha-tray.exe (no --tray)');
   await mkdir(o.out, { recursive: true });
   const commit = shortCommit();
   const assets: string[] = [];

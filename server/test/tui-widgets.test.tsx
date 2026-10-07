@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { createSignal } from 'solid-js';
-import { fitFooter, Footer, Header, Sidebar, type SidebarStep } from '../src/tui/ui/chrome.tsx';
+import { qrMatrix } from '../src/doctor/qr.ts';
+import { Footer, fitFooter, Header, Sidebar, type SidebarStep } from '../src/tui/ui/chrome.tsx';
 import { fit, fitTail, pad, useLayout, windowStart, wrap } from '../src/tui/ui/layout.ts';
 import { qrRows } from '../src/tui/ui/qr.tsx';
-import { qrMatrix } from '../src/doctor/qr.ts';
-import { Bar, Field, HintPane, Picker, StatusIcon, type PickOption } from '../src/tui/ui/widgets.tsx';
+import { Bar, Field, HintPane, Picker, type PickOption, StatusIcon } from '../src/tui/ui/widgets.tsx';
 import { frame, paste, press, settle, typeText, until, VERSION, withTui } from './tui-harness.tsx';
 
 const OPTS: PickOption[] = [
@@ -47,10 +47,17 @@ describe('fit and friends', () => {
 describe('useLayout', () => {
   function Probe() {
     const L = useLayout();
-    return <text fg="#ffffff">{`sidebar=${L.sidebar()} side=${L.side()} card=${L.cardW()} hint=${L.hintW()} list=${L.listRows()}`}</text>;
+    return (
+      <text fg="#ffffff">{`sidebar=${L.sidebar()} side=${L.side()} card=${L.cardW()} hint=${L.hintW()} list=${L.listRows()}`}</text>
+    );
   }
   test('hint pane beside the card from 110 columns of card+hint; no sidebar under 80', async () => {
-    const at = (width: number, height: number) => withTui(() => <Probe />, { width, height }, async (s) => frame(s).trim());
+    const at = (width: number, height: number) =>
+      withTui(
+        () => <Probe />,
+        { width, height },
+        async (s) => frame(s).trim(),
+      );
     // 139 - 2 - 27 = 110: side by side, the hint pane 38 wide.
     expect(await at(139, 34)).toBe('sidebar=true side=true card=71 hint=38 list=22');
     expect(await at(138, 34)).toBe('sidebar=true side=false card=109 hint=109 list=22');
@@ -61,62 +68,91 @@ describe('useLayout', () => {
 
 describe('Picker', () => {
   test('numbered rows, descriptions, the saved answer and a subtle row', async () => {
-    await withTui(() => <Picker options={OPTS} onConfirm={() => {}} />, { width: 80, height: 14 }, async (s) => {
-      const f = frame(s);
-      expect(f).toContain('  1. A computer at home');
-      expect(f).toContain('❯ 2. A rented server (VPS)  ✓ current answer');
-      expect(f).toContain('     Hetzner, DigitalOcean and similar');
-      // Subtle rows get a blank line above.
-      expect(f).toMatch(/similar\n\s*\n\s+3\. Advanced…/);
-    });
+    await withTui(
+      () => <Picker options={OPTS} onConfirm={() => {}} />,
+      { width: 80, height: 14 },
+      async (s) => {
+        const f = frame(s);
+        expect(f).toContain('  1. A computer at home');
+        expect(f).toContain('❯ 2. A rented server (VPS)  ✓ current answer');
+        expect(f).toContain('     Hetzner, DigitalOcean and similar');
+        // Subtle rows get a blank line above.
+        expect(f).toMatch(/similar\n\s*\n\s+3\. Advanced…/);
+      },
+    );
   });
 
   test('a digit picks; arrows and j/k move and wrap', async () => {
     const got: unknown[] = [];
     const moves: number[] = [];
-    await withTui(() => <Picker options={OPTS} initial={0} onMove={(i) => moves.push(i)} onConfirm={(v) => got.push(v)} />, { width: 80, height: 14 }, async (s) => {
-      await press(s, 'up');
-      expect(frame(s)).toContain('❯ 3. Advanced…');
-      await press(s, 'j');
-      expect(frame(s)).toContain('❯ 1. A computer at home');
-      await press(s, 'k', 'k');
-      expect(frame(s)).toContain('❯ 2. A rented server');
-      await press(s, 'enter');
-      expect(got).toEqual(['vps']);
-      await press(s, '1');
-      expect(got).toEqual(['vps', 'home']);
-      expect(moves).toEqual([0, 2, 0, 2, 1, 0]);
-    });
+    await withTui(
+      () => <Picker options={OPTS} initial={0} onMove={(i) => moves.push(i)} onConfirm={(v) => got.push(v)} />,
+      { width: 80, height: 14 },
+      async (s) => {
+        await press(s, 'up');
+        expect(frame(s)).toContain('❯ 3. Advanced…');
+        await press(s, 'j');
+        expect(frame(s)).toContain('❯ 1. A computer at home');
+        await press(s, 'k', 'k');
+        expect(frame(s)).toContain('❯ 2. A rented server');
+        await press(s, 'enter');
+        expect(got).toEqual(['vps']);
+        await press(s, '1');
+        expect(got).toEqual(['vps', 'home']);
+        expect(moves).toEqual([0, 2, 0, 2, 1, 0]);
+      },
+    );
   });
 
   test('a long list shows a window with "↑ N more" / "↓ N more"', async () => {
-    const many = Array.from({ length: 20 }, (_, i) => ({ value: `c${i + 1}`, label: `#channel-${i + 1}`, desc: `topic ${i + 1}` }));
-    await withTui(() => <Picker options={many} maxRows={8} width={40} onConfirm={() => {}} />, { width: 60, height: 14 }, async (s) => {
-      let f = frame(s);
-      expect(f).toContain('❯  1. #channel-1');
-      expect(f).toContain('topic 1');
-      // Only the highlighted row has its description when the list is tight.
-      expect(f).not.toContain('topic 2');
-      expect(f).toContain('↓ 15 more');
-      expect(f).not.toContain('↑');
-      await press(s, ...Array<string>(8).fill('down'));
-      f = frame(s);
-      expect(f).toContain('❯  9. #channel-9');
-      expect(f).toMatch(/↑ \d+ more/);
-      expect(f).toMatch(/↓ \d+ more/);
-      await press(s, 'up', 'up', 'up', 'up', 'up', 'up', 'up', 'up', 'up');
-      f = frame(s);
-      expect(f).toContain('❯ 20. #channel-20');
-      expect(f).toContain('↑ 15 more');
-      expect(f).not.toContain('↓');
-    });
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      value: `c${i + 1}`,
+      label: `#channel-${i + 1}`,
+      desc: `topic ${i + 1}`,
+    }));
+    await withTui(
+      () => <Picker options={many} maxRows={8} width={40} onConfirm={() => {}} />,
+      { width: 60, height: 14 },
+      async (s) => {
+        let f = frame(s);
+        expect(f).toContain('❯  1. #channel-1');
+        expect(f).toContain('topic 1');
+        // Only the highlighted row has its description when the list is tight.
+        expect(f).not.toContain('topic 2');
+        expect(f).toContain('↓ 15 more');
+        expect(f).not.toContain('↑');
+        await press(s, ...Array<string>(8).fill('down'));
+        f = frame(s);
+        expect(f).toContain('❯  9. #channel-9');
+        expect(f).toMatch(/↑ \d+ more/);
+        expect(f).toMatch(/↓ \d+ more/);
+        await press(s, 'up', 'up', 'up', 'up', 'up', 'up', 'up', 'up', 'up');
+        f = frame(s);
+        expect(f).toContain('❯ 20. #channel-20');
+        expect(f).toContain('↑ 15 more');
+        expect(f).not.toContain('↓');
+      },
+    );
   });
 
   test('multi: space toggles, a toggles all, min shows the error', async () => {
     const got: unknown[] = [];
-    const opts = [{ value: 'g', label: '#general' }, { value: 'm', label: '#games' }, { value: 'n', label: '#movie-night' }];
+    const opts = [
+      { value: 'g', label: '#general' },
+      { value: 'm', label: '#games' },
+      { value: 'n', label: '#movie-night' },
+    ];
     await withTui(
-      () => <Picker multi allKey options={opts} min={1} minError="Pick at least one channel." onConfirm={(v) => got.push(v)} />,
+      () => (
+        <Picker
+          multi
+          allKey
+          options={opts}
+          min={1}
+          minError="Pick at least one channel."
+          onConfirm={(v) => got.push(v)}
+        />
+      ),
       { width: 60, height: 12 },
       async (s) => {
         expect(frame(s)).toContain('0 selected');
@@ -149,69 +185,89 @@ describe('Picker', () => {
   test('inactive: keys go elsewhere', async () => {
     const got: unknown[] = [];
     const [on, setOn] = createSignal(false);
-    await withTui(() => <Picker options={OPTS} active={on} onConfirm={(v) => got.push(v)} />, { width: 60, height: 12 }, async (s) => {
-      await press(s, '1', 'enter');
-      expect(got).toEqual([]);
-      setOn(true);
-      await press(s, '1');
-      expect(got).toEqual(['home']);
-    });
+    await withTui(
+      () => <Picker options={OPTS} active={on} onConfirm={(v) => got.push(v)} />,
+      { width: 60, height: 12 },
+      async (s) => {
+        await press(s, '1', 'enter');
+        expect(got).toEqual([]);
+        setOn(true);
+        await press(s, '1');
+        expect(got).toEqual(['home']);
+      },
+    );
   });
 });
 
 describe('Field', () => {
   test('typing, backspace, Ctrl+U, default on an empty Enter', async () => {
     const got: string[] = [];
-    await withTui(() => <Field width={40} placeholder="call.example.com" defaultText="telinha" onSubmit={(v) => got.push(v)} />, { width: 60, height: 8 }, async (s) => {
-      expect(frame(s)).toContain('▌call.example.com');
-      expect(frame(s)).toContain('default: telinha');
-      await typeText(s, 'guri');
-      expect(frame(s)).toContain('guri▌');
-      await press(s, 'backspace');
-      expect(frame(s)).toContain('gur▌');
-      await press(s, 'enter');
-      await press(s, 'ctrl+u');
-      expect(frame(s)).toContain('▌call.example.com');
-      await press(s, 'enter');
-      expect(got).toEqual(['gur', 'telinha']);
-    });
+    await withTui(
+      () => <Field width={40} placeholder="call.example.com" defaultText="telinha" onSubmit={(v) => got.push(v)} />,
+      { width: 60, height: 8 },
+      async (s) => {
+        expect(frame(s)).toContain('▌call.example.com');
+        expect(frame(s)).toContain('default: telinha');
+        await typeText(s, 'guri');
+        expect(frame(s)).toContain('guri▌');
+        await press(s, 'backspace');
+        expect(frame(s)).toContain('gur▌');
+        await press(s, 'enter');
+        await press(s, 'ctrl+u');
+        expect(frame(s)).toContain('▌call.example.com');
+        await press(s, 'enter');
+        expect(got).toEqual(['gur', 'telinha']);
+      },
+    );
   });
 
   test('secret: bracketed paste is masked, newlines stripped, Ctrl+R reveals', async () => {
     const got: string[] = [];
     // gitleaks:allow
     const token = 'a3f9c2e1-7b44-4d0e-9c51-2f8e6b1d03aa'; // gitleaks:allow
-    await withTui(() => <Field secret width={50} onSubmit={(v) => got.push(v)} />, { width: 60, height: 8 }, async (s) => {
-      await paste(s, `${token}\n`);
-      let f = await until(s, '36 characters · pasted');
-      expect(f).not.toContain('a3f9c2e1');
-      expect(f).toContain('•'.repeat(36));
-      await press(s, 'ctrl+r');
-      f = frame(s);
-      expect(f).toContain(token);
-      await press(s, 'ctrl+r');
-      expect(frame(s)).not.toContain('a3f9c2e1');
-      await press(s, 'enter');
-      expect(got).toEqual([token]);
-    });
+    await withTui(
+      () => <Field secret width={50} onSubmit={(v) => got.push(v)} />,
+      { width: 60, height: 8 },
+      async (s) => {
+        await paste(s, `${token}\n`);
+        let f = await until(s, '36 characters · pasted');
+        expect(f).not.toContain('a3f9c2e1');
+        expect(f).toContain('•'.repeat(36));
+        await press(s, 'ctrl+r');
+        f = frame(s);
+        expect(f).toContain(token);
+        await press(s, 'ctrl+r');
+        expect(frame(s)).not.toContain('a3f9c2e1');
+        await press(s, 'enter');
+        expect(got).toEqual([token]);
+      },
+    );
   });
 
   test('a secret wider than the box keeps its tail with a leading …', async () => {
-    await withTui(() => <Field secret width={20} onSubmit={() => {}} />, { width: 40, height: 6 }, async (s) => {
-      await paste(s, 'x'.repeat(40));
-      const f = frame(s);
-      expect(f).toContain(`…${'•'.repeat(14)}▌`);
-      expect(f).toContain('40 characters');
-    });
+    await withTui(
+      () => <Field secret width={20} onSubmit={() => {}} />,
+      { width: 40, height: 6 },
+      async (s) => {
+        await paste(s, 'x'.repeat(40));
+        const f = frame(s);
+        expect(f).toContain(`…${'•'.repeat(14)}▌`);
+        expect(f).toContain('40 characters');
+      },
+    );
   });
 
   test('keepsSecret says Enter keeps the saved value; ←, Esc and Tab fall through', async () => {
     const got: string[] = [];
-    await withTui(() => <Field secret keepsSecret width={50} onSubmit={(v) => got.push(v)} />, { width: 60, height: 8 }, async (s) => {
-      expect(frame(s)).toContain('Enter keeps the current one');
-      await press(s, 'left', 'escape', 'tab', 'enter');
-      expect(got).toEqual(['']);
-    });
+    await withTui(
+      () => <Field secret keepsSecret width={50} onSubmit={(v) => got.push(v)} />,
+      { width: 60, height: 8 },
+      async (s) => {
+        expect(frame(s)).toContain('Enter keeps the current one');
+        await press(s, 'left', 'escape', 'tab', 'enter');
+        expect(got).toEqual(['']);
+      },
+    );
   });
 });
 
@@ -271,28 +327,41 @@ describe('chrome', () => {
     ];
     const [rows, setRows] = createSignal<number | undefined>(undefined);
     const noop = () => {};
-    await withTui(() => <Sidebar steps={many} focused={false} cursor={0} maxRows={rows()} onMove={noop} onJump={noop} onLeave={noop} />, { width: 40, height: 20 }, async (s) => {
-      const height = () => frame(s).trimEnd().split('\n').length;
-      let f = frame(s);
-      // Too long for one line: one line per part. Short enough: joined.
-      expect(f).toContain('│   TCP 7881, 8443       │\n│   UDP 7882             │');
-      expect(f).toContain('TCP 7881 · UDP 7882');
-      expect(height()).toBe(2 + 4 * 2 + 4);
-      setRows(13);
-      await settle(s);
-      f = frame(s);
-      expect(height()).toBe(2 + 4 + 4);
-      expect(f).toContain('A computer at home');
-      setRows(8);
-      await settle(s);
-      f = frame(s);
-      expect(height()).toBe(2 + 4);
-      expect(f).not.toContain('A computer at home');
-    });
+    await withTui(
+      () => (
+        <Sidebar steps={many} focused={false} cursor={0} maxRows={rows()} onMove={noop} onJump={noop} onLeave={noop} />
+      ),
+      { width: 40, height: 20 },
+      async (s) => {
+        const height = () => frame(s).trimEnd().split('\n').length;
+        let f = frame(s);
+        // Too long for one line: one line per part. Short enough: joined.
+        expect(f).toContain('│   TCP 7881, 8443       │\n│   UDP 7882             │');
+        expect(f).toContain('TCP 7881 · UDP 7882');
+        expect(height()).toBe(2 + 4 * 2 + 4);
+        setRows(13);
+        await settle(s);
+        f = frame(s);
+        expect(height()).toBe(2 + 4 + 4);
+        expect(f).toContain('A computer at home');
+        setRows(8);
+        await settle(s);
+        f = frame(s);
+        expect(height()).toBe(2 + 4);
+        expect(f).not.toContain('A computer at home');
+      },
+    );
   });
 
   test('footer: what does not fit leaves, the least needed keys first, quit last', () => {
-    const items: [string, string][] = [['↑↓', 'mover'], ['enter', 'escolher'], ['pgup/pgdn', 'rolar'], ['esc/←', 'voltar'], ['tab', 'passos'], ['ctrl+c', 'sair']];
+    const items: [string, string][] = [
+      ['↑↓', 'mover'],
+      ['enter', 'escolher'],
+      ['pgup/pgdn', 'rolar'],
+      ['esc/←', 'voltar'],
+      ['tab', 'passos'],
+      ['ctrl+c', 'sair'],
+    ];
     expect(fitFooter(items, 120)).toEqual(items);
     expect(fitFooter(items, 80).map(([k]) => k)).toEqual(['↑↓', 'enter', 'pgup/pgdn', 'esc/←', 'ctrl+c']);
     expect(fitFooter(items, 40).map(([k]) => k)).toEqual(['↑↓', 'enter', 'ctrl+c']);
@@ -311,7 +380,13 @@ describe('chrome', () => {
             <StatusIcon status="pending" />
             <Bar value={50} width={10} />
           </box>
-          <Footer items={[['↑↓', 'move'], ['enter', 'details'], ['q', 'quit']]} />
+          <Footer
+            items={[
+              ['↑↓', 'move'],
+              ['enter', 'details'],
+              ['q', 'quit'],
+            ]}
+          />
         </box>
       ),
       { width: 80, height: 8 },
@@ -328,17 +403,28 @@ describe('chrome', () => {
   });
 
   test('pt-BR header', async () => {
-    await withTui(() => <Header mode="setup" version={VERSION} right="algo" />, { width: 80, height: 5, locale: 'pt-BR' }, async (s) => {
-      const f = frame(s);
-      expect(f).toContain('telinha configuração');
-      expect(f).toContain('Compartilhamento de tela pro seu grupo do Discord');
-      expect(f).toContain('algo');
-    });
+    await withTui(
+      () => <Header mode="setup" version={VERSION} right="algo" />,
+      { width: 80, height: 5, locale: 'pt-BR' },
+      async (s) => {
+        const f = frame(s);
+        expect(f).toContain('telinha configuração');
+        expect(f).toContain('Compartilhamento de tela pro seu grupo do Discord');
+        expect(f).toContain('algo');
+      },
+    );
   });
 
   test('hint pane wraps and ends an overflow with …', async () => {
     await withTui(
-      () => <HintPane lines={['one two three four five six seven eight nine ten eleven twelve']} extra={{ head: 'Ports', items: ['UDP 7882'] }} width={20} maxRows={6} />,
+      () => (
+        <HintPane
+          lines={['one two three four five six seven eight nine ten eleven twelve']}
+          extra={{ head: 'Ports', items: ['UDP 7882'] }}
+          width={20}
+          maxRows={6}
+        />
+      ),
       { width: 30, height: 10 },
       async (s) => {
         const f = frame(s);

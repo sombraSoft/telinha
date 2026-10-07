@@ -5,7 +5,7 @@
 // flags, the environment and the existing file (secrets never from flags) and
 // prints plain lines. Both end in the same answers -> values -> tasks.
 // `--docker` runs inside the image and only writes the file.
-import { constants as fsc, existsSync } from 'node:fs';
+import { existsSync, constants as fsc } from 'node:fs';
 import { chmod, copyFile, lchown, lstat, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises';
 import { arch as osArch } from 'node:os';
 import { posix } from 'node:path';
@@ -17,21 +17,52 @@ import { probe } from '../nat/index.ts';
 import { lookupPublicIp, resolveA, tlsInfo } from '../netinfo.ts';
 import { defaultSpawn, serviceManager } from '../service/index.ts';
 import { autostartEnabled, defaultTrayLauncher, trayDistPath, trayExePath } from '../service/tray.ts';
-import { assertOneStdin, GLOBAL_FLAGS, parseArgs, readSecretSource, UsageError, type ArgSpec, type CliContext, type ParsedArgs } from './args.ts';
+import {
+  type ArgSpec,
+  assertOneStdin,
+  type CliContext,
+  GLOBAL_FLAGS,
+  type ParsedArgs,
+  parseArgs,
+  readSecretSource,
+  UsageError,
+} from './args.ts';
 import { createControlClient } from './control.ts';
+import {
+  type ApplyHooks,
+  type ApplyOptions,
+  type ApplyResult,
+  type ApplyTarget,
+  planTasks,
+  runApply,
+  type SecretMemo,
+  type SummaryRow,
+  silentOut,
+  TASKS,
+  type TaskLine,
+  TaskList,
+} from './setup/apply.ts';
 import { at } from './setup/apply-strings.ts';
-import { planTasks, runApply, silentOut, TaskList, TASKS, type ApplyHooks, type ApplyOptions, type ApplyResult, type ApplyTarget, type SecretMemo, type SummaryRow, type TaskLine } from './setup/apply.ts';
 import { createDiscordSetup } from './setup/discord.ts';
 import { MANAGED_KEYS } from './setup/envwrite.ts';
-import { defaultOsName, detectHost, routerLabel, type HostInfo } from './setup/host.ts';
-import { trayHere, type ModelEnv, type Text, type TrayState } from './setup/model.ts';
+import { defaultOsName, detectHost, type HostInfo, routerLabel } from './setup/host.ts';
+import { type ModelEnv, type Text, type TrayState, trayHere } from './setup/model.ts';
 import { q } from './setup/qstrings.ts';
-import { answersFromFlags, resolveValues, trayFromFlags, type ResolveBase } from './setup/resolve.ts';
+import { answersFromFlags, type ResolveBase, resolveValues, trayFromFlags } from './setup/resolve.ts';
 import { SetupSession } from './setup/session.ts';
-import { nextSteps, SetupAbort, UNPRIVILEGED_PORT_START, validateValues, type SetupDeps, type SetupFs, type Values, type Wizard } from './setup/steps.ts';
-import { t, type SKey } from './setup/strings.ts';
+import {
+  nextSteps,
+  SetupAbort,
+  type SetupDeps,
+  type SetupFs,
+  UNPRIVILEGED_PORT_START,
+  type Values,
+  validateValues,
+  type Wizard,
+} from './setup/steps.ts';
+import { type SKey, t } from './setup/strings.ts';
 import type { SetupUi, SetupUiResult } from './setup/ui.ts';
-import { ts, type Locale, type Params } from './strings.ts';
+import { type Locale, type Params, ts } from './strings.ts';
 import { createTerm, type Out } from './term.ts';
 
 export type { SetupDeps } from './setup/steps.ts';
@@ -125,7 +156,11 @@ function nodeFs(): SetupFs {
         throw e;
       }
     },
-    exists: (path) => stat(path).then(() => true, () => false),
+    exists: (path) =>
+      stat(path).then(
+        () => true,
+        () => false,
+      ),
     // Exclusive: never through a symlink someone planted at the target.
     copyFile: (from, to) => copyFile(from, to, fsc.COPYFILE_EXCL),
   };
@@ -159,7 +194,8 @@ export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
     nat: { probe: () => probe() },
     ddns: ({ domain, token }) => createDuckDns({ domain, token, fetch, log: () => {} }),
     discord: (token) => createDiscordSetup({ token, fetch, version: ctx.version }),
-    serviceManager: ({ user }) => serviceManager({ platform, isRoot, user, paths: ctx.paths, envFile: ctx.envFile, env: ctx.env }),
+    serviceManager: ({ user }) =>
+      serviceManager({ platform, isRoot, user, paths: ctx.paths, envFile: ctx.envFile, env: ctx.env }),
     control,
     bins: (config, paths, log, progress) => ensureBinariesForConfig(config, paths, log, { progress }),
     spawn: defaultSpawn,
@@ -187,9 +223,14 @@ export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
     // Imported on use: doctor pulls in the checks and the QR renderer.
     doctor: async (c) => (await import('./doctor.ts')).run({ flags: {}, positionals: c.argv.slice(1), rest: [] }, c),
     async doctorChecks(c, onResult) {
-      const [{ buildCheckContext }, { CHECKS, runChecks }] = await Promise.all([import('./doctor.ts'), import('../doctor/checks.ts')]);
+      const [{ buildCheckContext }, { CHECKS, runChecks }] = await Promise.all([
+        import('./doctor.ts'),
+        import('../doctor/checks.ts'),
+      ]);
       let done = 0;
-      return runChecks(CHECKS, await buildCheckContext(c, { local: false, control }), (r) => onResult?.(r, ++done, CHECKS.length));
+      return runChecks(CHECKS, await buildCheckContext(c, { local: false, control }), (r) =>
+        onResult?.(r, ++done, CHECKS.length),
+      );
     },
     execPath: process.execPath,
     which: (cmd) => Bun.which(cmd),
@@ -198,8 +239,22 @@ export function defaultDeps(ctx: CliContext, o: { tty: boolean }): SetupDeps {
   };
 }
 
-function makeWizard(ctx: CliContext, deps: SetupDeps, locale: Locale, host: HostInfo, o: { docker: boolean; out: Out }): Wizard {
-  return { ctx, deps, out: o.out, locale, s: (key: SKey, params?: Params) => t(locale, key, params), host, docker: o.docker };
+function makeWizard(
+  ctx: CliContext,
+  deps: SetupDeps,
+  locale: Locale,
+  host: HostInfo,
+  o: { docker: boolean; out: Out },
+): Wizard {
+  return {
+    ctx,
+    deps,
+    out: o.out,
+    locale,
+    s: (key: SKey, params?: Params) => t(locale, key, params),
+    host,
+    docker: o.docker,
+  };
 }
 
 /** Managed keys from the file, overridden by the environment (the rule `run` applies). */
@@ -232,7 +287,9 @@ async function detect(ctx: CliContext, deps: SetupDeps, docker: boolean): Promis
 }
 
 /** The file to write and the managed values it holds now. */
-interface Loaded extends ApplyTarget { values: Values }
+interface Loaded extends ApplyTarget {
+  values: Values;
+}
 
 /** install-docker.sh's layout, for an image run without TELINHA_HOST_ENV. */
 const DOCKER_HOST_ENV = '/opt/telinha/config/telinha.env';
@@ -247,8 +304,15 @@ async function load(ctx: CliContext, deps: SetupDeps, docker: boolean): Promise<
 }
 
 /** Secrets from the environment or their -file flags (env wins); never from a flag's value. */
-async function readSecrets(ctx: CliContext, flags: Flags, stdin?: () => Promise<string>): Promise<Partial<Record<SecretKey, string>>> {
-  assertOneStdin(SECRETS.map(([, f]) => flags[f]), ctx.locale);
+async function readSecrets(
+  ctx: CliContext,
+  flags: Flags,
+  stdin?: () => Promise<string>,
+): Promise<Partial<Record<SecretKey, string>>> {
+  assertOneStdin(
+    SECRETS.map(([, f]) => flags[f]),
+    ctx.locale,
+  );
   const out: Partial<Record<SecretKey, string>> = {};
   for (const [key, fileFlag] of SECRETS) {
     const v = await readSecretSource({ env: ctx.env[key], file: flags[fileFlag], stdin });
@@ -258,12 +322,29 @@ async function readSecrets(ctx: CliContext, flags: Flags, stdin?: () => Promise<
 }
 
 /** What the questions may look at besides the answers (the machine comes later). */
-function modelEnv(ctx: CliContext, deps: SetupDeps, flags: Flags, file: Values, o: { docker: boolean; portStart: number | null; tray?: TrayState }): Omit<ModelEnv, 'lookups' | 'host'> {
+function modelEnv(
+  ctx: CliContext,
+  deps: SetupDeps,
+  flags: Flags,
+  file: Values,
+  o: { docker: boolean; portStart: number | null; tray?: TrayState },
+): Omit<ModelEnv, 'lookups' | 'host'> {
   return {
-    platform: deps.platform, isRoot: deps.isRoot, docker: o.docker, compiled: ctx.compiled,
-    offline: !!flags['no-discord-check'], langFlag: !!flags.lang,
-    flags: { noService: !!flags['no-service'], noUpnp: !!flags['no-upnp'], noFirewall: !!flags['no-firewall'], noDoctor: !!flags['no-doctor'] },
-    file, unprivilegedPortStart: o.portStart, locale: ctx.locale,
+    platform: deps.platform,
+    isRoot: deps.isRoot,
+    docker: o.docker,
+    compiled: ctx.compiled,
+    offline: !!flags['no-discord-check'],
+    langFlag: !!flags.lang,
+    flags: {
+      noService: !!flags['no-service'],
+      noUpnp: !!flags['no-upnp'],
+      noFirewall: !!flags['no-firewall'],
+      noDoctor: !!flags['no-doctor'],
+    },
+    file,
+    unprivilegedPortStart: o.portStart,
+    locale: ctx.locale,
     ...(o.tray && { tray: o.tray }),
   };
 }
@@ -273,15 +354,29 @@ async function trayState(ctx: CliContext, deps: SetupDeps, docker: boolean): Pro
   if (!trayHere({ platform: deps.platform, compiled: ctx.compiled, docker })) return undefined;
   const exe = trayExePath(ctx.paths);
   const [installed, optedOut, autostart] = await Promise.all([
-    deps.fs.exists(exe), deps.fs.exists(trayDistPath(ctx.paths)), autostartEnabled(deps.spawn, exe).catch(() => false),
+    deps.fs.exists(exe),
+    deps.fs.exists(trayDistPath(ctx.paths)),
+    autostartEnabled(deps.spawn, exe).catch(() => false),
   ]);
   return { installed, optedOut, autostart };
 }
 
-function applyOptions(ctx: CliContext, flags: Flags, docker: boolean, o: Pick<ApplyOptions, 'sysctl' | 'rotateCookie' | 'doctorMode' | 'secrets' | 'tray'>): ApplyOptions {
+function applyOptions(
+  ctx: CliContext,
+  flags: Flags,
+  docker: boolean,
+  o: Pick<ApplyOptions, 'sysctl' | 'rotateCookie' | 'doctorMode' | 'secrets' | 'tray'>,
+): ApplyOptions {
   return {
-    docker, compiled: ctx.compiled,
-    flags: { noService: !!flags['no-service'], noFirewall: !!flags['no-firewall'], noUpnp: !!flags['no-upnp'], noDoctor: !!flags['no-doctor'], offline: !!flags['no-discord-check'] },
+    docker,
+    compiled: ctx.compiled,
+    flags: {
+      noService: !!flags['no-service'],
+      noFirewall: !!flags['no-firewall'],
+      noUpnp: !!flags['no-upnp'],
+      noDoctor: !!flags['no-doctor'],
+      offline: !!flags['no-discord-check'],
+    },
     ...o,
   };
 }
@@ -294,23 +389,46 @@ const plainHooks: ApplyHooks = {
   withTerminal: (fn) => fn(),
 };
 
-async function nonInteractive(ctx: CliContext, deps: SetupDeps, flags: Flags, o: { stdin?: () => Promise<string> }): Promise<number> {
+async function nonInteractive(
+  ctx: CliContext,
+  deps: SetupDeps,
+  flags: Flags,
+  o: { stdin?: () => Promise<string> },
+): Promise<number> {
   const docker = !!flags.docker;
   const l = await load(ctx, deps, docker);
   // The machine first: without --host it is what tells home from VPS.
   const host = await detect(ctx, deps, docker);
   const secrets = await readSecrets(ctx, flags, o.stdin);
   const env: ModelEnv = { ...modelEnv(ctx, deps, flags, l.values, { docker, portStart: null }), host, lookups: {} };
-  const r = answersFromFlags(flags, env, { secrets, locale: ctx.locale, lenient: false, advanced: !!flags.advanced, env: ctx.env });
+  const r = answersFromFlags(flags, env, {
+    secrets,
+    locale: ctx.locale,
+    lenient: false,
+    advanced: !!flags.advanced,
+    env: ctx.env,
+  });
   if (r.errors.length || r.missing.length) {
     for (const e of r.errors) ctx.stderr(textOf(ctx.locale, e));
     if (r.missing.length) ctx.stderr(q(ctx.locale, 'missing', { list: r.missing.join(', ') }));
     return 2;
   }
-  const values = resolveValues(r.answers, env, { file: l.values, host, locale: ctx.locale, langFlag: !!flags.lang, docker, compiled: ctx.compiled });
+  const values = resolveValues(r.answers, env, {
+    file: l.values,
+    host,
+    locale: ctx.locale,
+    langFlag: !!flags.lang,
+    docker,
+    compiled: ctx.compiled,
+  });
   const w = makeWizard(ctx, deps, ctx.locale, host, { docker, out: deps.term(ctx.locale) });
   w.out.info(hostLine(w));
-  const opts = applyOptions(ctx, flags, docker, { sysctl: 'auto', rotateCookie: false, doctorMode: 'cli', tray: trayFromFlags(flags, env) });
+  const opts = applyOptions(ctx, flags, docker, {
+    sysctl: 'auto',
+    rotateCookie: false,
+    doctorMode: 'cli',
+    tray: trayFromFlags(flags, env),
+  });
   const result = await runApply(w, l, values, planTasks(values, opts), opts, plainHooks);
   if (result.kind !== 'done') return 1;
   nextSteps(w, values, { file: l.shown });
@@ -328,7 +446,8 @@ async function portStart(deps: SetupDeps): Promise<number | null> {
 function summary(out: Out, locale: Locale, rows: SummaryRow[]): void {
   if (!rows.length) return;
   out.step(at(locale, 'summaryTitle'));
-  const mark = (k: TaskLine['kind']) => (k === 'ok' ? out.style.green('✓') : k === 'warn' ? out.style.yellow('!') : k === 'fail' ? out.style.red('✗') : ' ');
+  const mark = (k: TaskLine['kind']) =>
+    k === 'ok' ? out.style.green('✓') : k === 'warn' ? out.style.yellow('!') : k === 'fail' ? out.style.red('✗') : ' ';
   for (const r of rows) {
     const label = at(locale, TASKS[r.id].label);
     const [first = '', ...more] = r.headline?.text.split('\n') ?? [];
@@ -346,19 +465,47 @@ function summary(out: Out, locale: Locale, rows: SummaryRow[]): void {
   }
 }
 
-async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags: Flags, o: { stdin?: () => Promise<string>; offer: { envFile: string } | null }): Promise<number | null> {
+async function interactive(
+  ctx: CliContext,
+  deps: SetupDeps,
+  ui: SetupUi,
+  flags: Flags,
+  o: { stdin?: () => Promise<string>; offer: { envFile: string } | null },
+): Promise<number | null> {
   const docker = !!flags.docker;
   const l = await load(ctx, deps, docker);
   // Detection takes seconds offline: the first question shows while it runs.
   const detecting = detect(ctx, deps, docker);
   const secrets = await readSecrets(ctx, flags, o.stdin);
-  const envBase = modelEnv(ctx, deps, flags, l.values, { docker, portStart: await portStart(deps), tray: await trayState(ctx, deps, docker) });
+  const envBase = modelEnv(ctx, deps, flags, l.values, {
+    docker,
+    portStart: await portStart(deps),
+    tray: await trayState(ctx, deps, docker),
+  });
   // Flags next to a terminal are the questions' defaults; a rule they break is a notice on the first card, not an exit.
-  const pre = answersFromFlags(flags, { ...envBase, host: null, lookups: {} }, { secrets, locale: ctx.locale, lenient: true, advanced: !!flags.advanced, env: ctx.env });
-  const base: ResolveBase = { file: l.values, host: null, locale: ctx.locale, langFlag: !!flags.lang, docker, compiled: ctx.compiled };
+  const pre = answersFromFlags(
+    flags,
+    { ...envBase, host: null, lookups: {} },
+    { secrets, locale: ctx.locale, lenient: true, advanced: !!flags.advanced, env: ctx.env },
+  );
+  const base: ResolveBase = {
+    file: l.values,
+    host: null,
+    locale: ctx.locale,
+    langFlag: !!flags.lang,
+    docker,
+    compiled: ctx.compiled,
+  };
   const session = new SetupSession({
-    env: envBase, host: null, base, locale: ctx.locale, deps,
-    preset: pre.answers, presetErrors: pre.errors, acceptDefaults: ctx.yes, rerun: l.previous !== null,
+    env: envBase,
+    host: null,
+    base,
+    locale: ctx.locale,
+    deps,
+    preset: pre.answers,
+    presetErrors: pre.errors,
+    acceptDefaults: ctx.yes,
+    rerun: l.previous !== null,
   });
   const host = detecting.then((h) => {
     session.setHost(h);
@@ -374,27 +521,50 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
     const h = await host;
     const values = session.values();
     const chosen = session.applyOptions();
-    const opts = applyOptions(ctx, flags, docker, { sysctl: chosen.sysctl ?? 'auto', rotateCookie: a.rotateCookie, doctorMode: 'data', secrets: memo, tray: chosen.tray });
+    const opts = applyOptions(ctx, flags, docker, {
+      sysctl: chosen.sysctl ?? 'auto',
+      rotateCookie: a.rotateCookie,
+      doctorMode: 'data',
+      secrets: memo,
+      tray: chosen.tray,
+    });
     applied = values;
     const w = makeWizard(ctx, deps, session.locale, h, { docker, out: silentOut() });
     return runApply(w, l, values, planTasks(values, opts), opts, hooks, tasks);
   };
-  const doctor = docker || flags['no-doctor'] ? null : {
-    buildContext: async () => (await import('./doctor.ts')).buildCheckContext({ ...ctx, locale: session.locale }, { local: false, control: deps.control }),
-    control: deps.control,
-    config: () => {
-      if (!applied) return null;
-      try {
-        return validateValues(applied, l.previous, ctx.paths.home, { compiled: ctx.compiled }).config;
-      } catch {
-        return null;
-      }
-    },
-  };
+  const doctor =
+    docker || flags['no-doctor']
+      ? null
+      : {
+          buildContext: async () =>
+            (await import('./doctor.ts')).buildCheckContext(
+              { ...ctx, locale: session.locale },
+              { local: false, control: deps.control },
+            ),
+          control: deps.control,
+          config: () => {
+            if (!applied) return null;
+            try {
+              return validateValues(applied, l.previous, ctx.paths.home, { compiled: ctx.compiled }).config;
+            } catch {
+              return null;
+            }
+          },
+        };
 
   let result: SetupUiResult;
   try {
-    result = await ui.run({ ctx, version: ctx.version, docker, session, tasks, apply, offer: o.offer, doctor, shownFile: l.shown });
+    result = await ui.run({
+      ctx,
+      version: ctx.version,
+      docker,
+      session,
+      tasks,
+      apply,
+      offer: o.offer,
+      doctor,
+      shownFile: l.shown,
+    });
   } finally {
     session.dispose();
   }
@@ -404,7 +574,8 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
   const out = deps.term(locale);
   if (result.kind === 'declined') return null;
   // The last attempt did not get to the file, an earlier one did: say so instead of "nothing was written".
-  const notWritten = () => (tasks.wroteAny ? out.warn(t(locale, 'wroteEarlier', { file: l.shown })) : ctx.stderr(t(locale, 'aborted')));
+  const notWritten = () =>
+    tasks.wroteAny ? out.warn(t(locale, 'wroteEarlier', { file: l.shown })) : ctx.stderr(t(locale, 'aborted'));
   if (result.kind === 'quit' || result.result.kind === 'back') {
     if (tasks.wroteAny) summary(out, locale, tasks.summary());
     if (!tasks.wrote) notWritten();
@@ -420,7 +591,11 @@ async function interactive(ctx: CliContext, deps: SetupDeps, ui: SetupUi, flags:
   return r.code;
 }
 
-async function setup(ctx: CliContext, deps: Partial<SetupDeps>, o: { stdin?: () => Promise<string>; offer: { envFile: string } | null }): Promise<number | null> {
+async function setup(
+  ctx: CliContext,
+  deps: Partial<SetupDeps>,
+  o: { stdin?: () => Promise<string>; offer: { envFile: string } | null },
+): Promise<number | null> {
   let flags: Flags;
   try {
     flags = parseArgs(ctx.argv, SETUP_SPEC, { locale: ctx.locale }).flags;
@@ -452,7 +627,12 @@ async function setup(ctx: CliContext, deps: Partial<SetupDeps>, o: { stdin?: () 
   }
 }
 
-export async function run(_args: ParsedArgs, ctx: CliContext, deps: Partial<SetupDeps> = {}, o: { stdin?: () => Promise<string> } = {}): Promise<number> {
+export async function run(
+  _args: ParsedArgs,
+  ctx: CliContext,
+  deps: Partial<SetupDeps> = {},
+  o: { stdin?: () => Promise<string> } = {},
+): Promise<number> {
   // Only the welcome card declines, and run never shows it.
   return (await setup(ctx, deps, { ...o, offer: null })) ?? 1;
 }

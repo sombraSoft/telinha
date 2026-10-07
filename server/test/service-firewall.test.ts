@@ -2,8 +2,18 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { addRuleArgv, applyFirewallRules, deleteProgramRulesArgv, deleteRuleArgv, firewallRules, loadFirewallPorts, portsFromEnv, removeFirewallRules, RULE_NAMES } from '../src/service/firewall.ts';
 import type { FootprintInput } from '../src/footprint.ts';
+import {
+  addRuleArgv,
+  applyFirewallRules,
+  deleteProgramRulesArgv,
+  deleteRuleArgv,
+  firewallRules,
+  loadFirewallPorts,
+  portsFromEnv,
+  RULE_NAMES,
+  removeFirewallRules,
+} from '../src/service/firewall.ts';
 import type { SpawnFn, SpawnOutcome } from '../src/service/index.ts';
 import { PROD_ENV } from './helpers.ts';
 
@@ -27,8 +37,17 @@ function recorder(respond: (cmd: string[]) => Partial<SpawnOutcome> | undefined 
 
 // Which exposures a mode has is footprint.test.ts's; these pin the rule shape.
 const input = (over: Partial<FootprintInput> = {}): FootprintInput => ({
-  media: 'self', ingress: 'direct', turn: null, port: 8081, livekitPort: 7880, mediaTcpPort: 7881, mediaUdpPort: 7882,
-  httpsPort: 443, httpPort: 80, ipWatchSeconds: 300, ...over,
+  media: 'self',
+  ingress: 'direct',
+  turn: null,
+  port: 8081,
+  livekitPort: 7880,
+  mediaTcpPort: 7881,
+  mediaUdpPort: 7882,
+  httpsPort: 443,
+  httpPort: 80,
+  ipWatchSeconds: 300,
+  ...over,
 });
 
 describe('firewallRules', () => {
@@ -42,29 +61,49 @@ describe('firewallRules', () => {
   });
 
   test('the local port, never the PUBLIC_URL one', () => {
-    expect(firewallRules(BIN, input({ publicUrl: 'https://g.duckdns.org:8443', httpsPort: 9443 })).find((r) => r.name === 'Telinha HTTPS')!.port).toBe(9443);
+    expect(
+      firewallRules(BIN, input({ publicUrl: 'https://g.duckdns.org:8443', httpsPort: 9443 })).find(
+        (r) => r.name === 'Telinha HTTPS',
+      )!.port,
+    ).toBe(9443);
   });
 
   test('RULE_NAMES lists every rule ever created', () => {
-    const all = firewallRules(BIN, input({ mediaTcpPort: 1, mediaUdpPort: 2, httpsPort: 3, httpPort: 4 })).map((r) => r.name);
+    const all = firewallRules(BIN, input({ mediaTcpPort: 1, mediaUdpPort: 2, httpsPort: 3, httpPort: 4 })).map(
+      (r) => r.name,
+    );
     expect(all).toEqual([...RULE_NAMES]);
   });
 });
 
 describe('footprint input from the environment', () => {
   test('a loadable config decides', () => {
-    expect(portsFromEnv({ ...PROD_ENV, MEDIA_TCP_PORT: '7001', MEDIA_UDP_PORT: '7002', HTTPS_PORT: '8443', HTTP_PORT: '0' }))
-      .toMatchObject({ media: 'self', mediaTcpPort: 7001, mediaUdpPort: 7002, ingress: 'direct', httpsPort: 8443, httpPort: 0 });
+    expect(
+      portsFromEnv({ ...PROD_ENV, MEDIA_TCP_PORT: '7001', MEDIA_UDP_PORT: '7002', HTTPS_PORT: '8443', HTTP_PORT: '0' }),
+    ).toMatchObject({
+      media: 'self',
+      mediaTcpPort: 7001,
+      mediaUdpPort: 7002,
+      ingress: 'direct',
+      httpsPort: 8443,
+      httpPort: 0,
+    });
     expect(portsFromEnv({ ...PROD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'eyJ' }).ingress).toBe('tunnel');
-    expect(portsFromEnv({ ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj.livekit.cloud' }).media).toBe('cloud');
+    expect(portsFromEnv({ ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj.livekit.cloud' }).media).toBe(
+      'cloud',
+    );
   });
 
   test('a config that does not load yet falls back to the port keys and their defaults', () => {
     expect(portsFromEnv({})).toEqual(input());
-    expect(portsFromEnv({ MEDIA_TCP_PORT: '7001', HTTP_PORT: '0', INGRESS: 'tunnel', HTTPS_PORT: 'junk' }))
-      .toEqual(input({ mediaTcpPort: 7001, ingress: 'tunnel', httpPort: 0 }));
+    expect(portsFromEnv({ MEDIA_TCP_PORT: '7001', HTTP_PORT: '0', INGRESS: 'tunnel', HTTPS_PORT: 'junk' })).toEqual(
+      input({ mediaTcpPort: 7001, ingress: 'tunnel', httpPort: 0 }),
+    );
     // MEDIA=cloud without its URL does not load: still no LiveKit rules.
-    expect(firewallRules(BIN, portsFromEnv({ MEDIA: 'cloud' })).map((r) => r.name)).toEqual(['Telinha HTTPS', 'Telinha HTTP']);
+    expect(firewallRules(BIN, portsFromEnv({ MEDIA: 'cloud' })).map((r) => r.name)).toEqual([
+      'Telinha HTTPS',
+      'Telinha HTTP',
+    ]);
     expect(portsFromEnv({ MEDIA: 'junk' }).media).toBe('self');
   });
 
@@ -73,7 +112,12 @@ describe('footprint input from the environment', () => {
     dirs.push(dir);
     const envFile = join(dir, 'telinha.env');
     writeFileSync(envFile, 'MEDIA_TCP_PORT=7001\nMEDIA_UDP_PORT=7002\nHTTP_PORT=0\n');
-    expect(loadFirewallPorts(envFile, {})).toMatchObject({ media: 'self', mediaTcpPort: 7001, mediaUdpPort: 7002, httpPort: 0 });
+    expect(loadFirewallPorts(envFile, {})).toMatchObject({
+      media: 'self',
+      mediaTcpPort: 7001,
+      mediaUdpPort: 7002,
+      httpPort: 0,
+    });
     expect(loadFirewallPorts(envFile, { MEDIA_TCP_PORT: '7100' }).mediaTcpPort).toBe(7100);
     expect(loadFirewallPorts(join(dir, 'missing.env'), {}).mediaTcpPort).toBe(7881);
   });
@@ -83,23 +127,54 @@ describe('netsh', () => {
   const rule = { name: 'Telinha LiveKit TCP', program: LIVEKIT, protocol: 'TCP' as const, port: 7881 };
 
   test('argv for delete and add', () => {
-    expect(deleteRuleArgv('Telinha HTTP')).toEqual(['netsh', 'advfirewall', 'firewall', 'delete', 'rule', 'name=Telinha HTTP']);
+    expect(deleteRuleArgv('Telinha HTTP')).toEqual([
+      'netsh',
+      'advfirewall',
+      'firewall',
+      'delete',
+      'rule',
+      'name=Telinha HTTP',
+    ]);
     expect(addRuleArgv(rule)).toEqual([
-      'netsh', 'advfirewall', 'firewall', 'add', 'rule',
-      'name=Telinha LiveKit TCP', 'dir=in', 'action=allow', 'protocol=TCP', 'localport=7881', `program=${LIVEKIT}`, 'profile=any', 'enable=yes',
+      'netsh',
+      'advfirewall',
+      'firewall',
+      'add',
+      'rule',
+      'name=Telinha LiveKit TCP',
+      'dir=in',
+      'action=allow',
+      'protocol=TCP',
+      'localport=7881',
+      `program=${LIVEKIT}`,
+      'profile=any',
+      'enable=yes',
     ]);
   });
 
   test("apply: every Telinha rule deleted, each program's inbound rules cleared (a Block from a dismissed alert), then the adds, in order", async () => {
-    const r = recorder((cmd) => (cmd[3] === 'delete' ? { code: 1, stdout: 'No rules match the specified criteria.' } : undefined));
+    const r = recorder((cmd) =>
+      cmd[3] === 'delete' ? { code: 1, stdout: 'No rules match the specified criteria.' } : undefined,
+    );
     const rules = firewallRules(BIN, input({ httpPort: 0 }));
     await applyFirewallRules(r.spawn, rules);
     const n = RULE_NAMES.length;
     expect(r.calls.slice(0, n)).toEqual(RULE_NAMES.map((name) => deleteRuleArgv(name)));
     expect(r.calls.slice(n, n + 2)).toEqual([deleteProgramRulesArgv(LIVEKIT), deleteProgramRulesArgv(CADDY)]);
-    expect(deleteProgramRulesArgv(CADDY)).toEqual(['netsh', 'advfirewall', 'firewall', 'delete', 'rule', 'name=all', 'dir=in', `program=${CADDY}`]);
+    expect(deleteProgramRulesArgv(CADDY)).toEqual([
+      'netsh',
+      'advfirewall',
+      'firewall',
+      'delete',
+      'rule',
+      'name=all',
+      'dir=in',
+      `program=${CADDY}`,
+    ]);
     expect(r.calls.slice(n + 2).map((c) => `${c[3]} ${c[5]}`)).toEqual([
-      'add name=Telinha LiveKit TCP', 'add name=Telinha LiveKit UDP', 'add name=Telinha HTTPS',
+      'add name=Telinha LiveKit TCP',
+      'add name=Telinha LiveKit UDP',
+      'add name=Telinha HTTPS',
     ]);
     expect(r.calls.at(-1)).toEqual(addRuleArgv({ name: 'Telinha HTTPS', program: CADDY, protocol: 'TCP', port: 443 }));
   });
@@ -114,9 +189,14 @@ describe('netsh', () => {
   });
 
   test('apply: a failing add throws with the rule name and netsh output', async () => {
-    const r = recorder((cmd) => (cmd[3] === 'add' && cmd[5] === 'name=Telinha LiveKit UDP' ? { code: 1, stdout: 'The requested operation requires elevation (Run as administrator).' } : undefined));
-    await expect(applyFirewallRules(r.spawn, firewallRules(BIN, input({ ingress: 'tunnel' }))))
-      .rejects.toThrow('netsh could not add rule "Telinha LiveKit UDP": The requested operation requires elevation (Run as administrator).');
+    const r = recorder((cmd) =>
+      cmd[3] === 'add' && cmd[5] === 'name=Telinha LiveKit UDP'
+        ? { code: 1, stdout: 'The requested operation requires elevation (Run as administrator).' }
+        : undefined,
+    );
+    await expect(applyFirewallRules(r.spawn, firewallRules(BIN, input({ ingress: 'tunnel' })))).rejects.toThrow(
+      'netsh could not add rule "Telinha LiveKit UDP": The requested operation requires elevation (Run as administrator).',
+    );
     expect(r.calls).toHaveLength(RULE_NAMES.length + 1 + 2);
   });
 

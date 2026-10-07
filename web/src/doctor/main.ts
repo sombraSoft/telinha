@@ -4,13 +4,22 @@
 // ICE picked, then TCP forced, then TURN over TLS when the server offers it;
 // posts the result for the terminal. No login: the
 // link's cookie opens only these routes and the relay.
-import { Room, RoomEvent, Track, type LocalTrackPublication } from 'livekit-client';
+import { type LocalTrackPublication, Room, RoomEvent, Track } from 'livekit-client';
 import '../styles/themes.css';
 import '../styles/base.css';
 import {
-  hints, messageOf, selectedPath, tcpFromForced, turnFromForced, udpFromInitial, type Media, type Path, type Report, type StepResult,
+  hints,
+  type Media,
+  messageOf,
+  type Path,
+  type Report,
+  type StepResult,
+  selectedPath,
+  tcpFromForced,
+  turnFromForced,
+  udpFromInitial,
 } from './analyze';
-import { pickLocale, tr, type Key } from './strings';
+import { type Key, pickLocale, tr } from './strings';
 
 const L = pickLocale(navigator.language);
 const s = (key: Key, params?: Record<string, string | number>) => tr(L, key, params);
@@ -54,7 +63,13 @@ app.append(main);
 
 const rows = new Map<StepId, { icon: HTMLElement; label: HTMLElement; detail: HTMLElement; li: HTMLElement }>();
 const LABELS: Record<StepId, Key> = {
-  https: 'stepHttps', signaling: 'stepSignaling', publish: 'stepPublish', initial: 'stepInitial', udp: 'stepUdp', tcp: 'stepTcp', turn: 'stepTurn',
+  https: 'stepHttps',
+  signaling: 'stepSignaling',
+  publish: 'stepPublish',
+  initial: 'stepInitial',
+  udp: 'stepUdp',
+  tcp: 'stepTcp',
+  turn: 'stepTurn',
   report: 'stepReport',
 };
 
@@ -75,13 +90,16 @@ function mark(id: StepId, status: Status, detail?: string) {
   const r = rows.get(id)!;
   r.li.dataset.status = status;
   r.icon.textContent = ICON[status];
-  r.detail.textContent = detail ?? (status === 'run' ? s('running') : status === 'wait' ? s('waiting') : status === 'skip' ? s('skipped') : '');
+  r.detail.textContent =
+    detail ??
+    (status === 'run' ? s('running') : status === 'wait' ? s('waiting') : status === 'skip' ? s('skipped') : '');
 }
 
 const okText = (ms?: number | null) => (ms !== undefined && ms !== null ? s('okMs', { ms }) : s('ok'));
 const stepText = (r: StepResult) => (r.ok ? okText(r.rttMs) : `${s('failed')}${r.error ? `: ${r.error}` : ''}`);
 const pathText = (p: Path) =>
-  s('path', { protocol: p.protocol.toUpperCase(), ip: p.candidateIp ?? '?', ms: p.rttMs ?? '?' }) + (p.relay ? ` (${s('relayed')})` : '');
+  s('path', { protocol: p.protocol.toUpperCase(), ip: p.candidateIp ?? '?', ms: p.rttMs ?? '?' }) +
+  (p.relay ? ` (${s('relayed')})` : '');
 
 function finish(text: string, hintList: string[] = []) {
   footer.replaceChildren();
@@ -232,7 +250,9 @@ async function runTest(): Promise<void> {
     mark('udp', 'run');
     await sleep(2000);
     const initial = pub ? await readPath(pub, 8000) : null;
-    report.initial = initial ? { protocol: initial.protocol, candidateIp: initial.candidateIp, rttMs: initial.rttMs } : null;
+    report.initial = initial
+      ? { protocol: initial.protocol, candidateIp: initial.candidateIp, rttMs: initial.rttMs }
+      : null;
     if (initial) mark('initial', 'ok', pathText(initial));
     else mark('initial', 'fail', s('failed'));
     report.udp = udpFromInitial(initial, true);
@@ -252,7 +272,11 @@ async function runTest(): Promise<void> {
     } else {
       report.tcp = { ok: false, error: 'nothing published' };
     }
-    mark('tcp', report.tcp.ok ? 'ok' : report.tcp.error?.startsWith('could not force') ? 'warn' : 'fail', stepText(report.tcp));
+    mark(
+      'tcp',
+      report.tcp.ok ? 'ok' : report.tcp.error?.startsWith('could not force') ? 'warn' : 'fail',
+      stepText(report.tcp),
+    );
 
     // 6. TURN over TLS: only a fallback for networks that allow nothing but 443, so a failure is a warning
     if (turnHost) {
@@ -284,7 +308,11 @@ async function runTest(): Promise<void> {
   const hintText = hints(report, ports, media, turnHost).map((h) => s(h.key, h.params));
   try {
     const r = await withTimeout(
-      fetch('/doctor/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) }),
+      fetch('/doctor/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(report),
+      }),
       15_000,
       'report',
     );

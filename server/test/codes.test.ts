@@ -56,13 +56,35 @@ describe('newRoomCode', () => {
 
 describe('ROOM_RE', () => {
   test('exactly the codes newRoomCode makes', () => {
-    for (const ok of ['lamo-futi', 'bafo-kiru', 'lamofu-tibare', 'baba-baba', 'zuzuzu-zuzuzu']) expect(ok).toMatch(ROOM_RE);
+    for (const ok of ['lamo-futi', 'bafo-kiru', 'lamofu-tibare', 'baba-baba', 'zuzuzu-zuzuzu'])
+      expect(ok).toMatch(ROOM_RE);
     for (const bad of [
-      '', 'abcd', 'Room_1-x', 'x'.repeat(40), 'AbC_dEf-123', 'q3Jx_9aZ-kP2w', // old ids
-      'lamofuti', 'lamo-', '-futi', 'la-futi', 'lamo-fu', 'lamofu-ti', 'lamo-futiba', 'lamofuti-bare', 'lamofutiba-re',
-      'Lamo-futi', 'lamo_futi', 'lamo--futi', 'lamo-futi-bare', 'cama-futi', 'lamo-fyti', 'lamo-futi ', ' lamo-futi',
+      '',
+      'abcd',
+      'Room_1-x',
+      'x'.repeat(40),
+      'AbC_dEf-123',
+      'q3Jx_9aZ-kP2w', // old ids
+      'lamofuti',
+      'lamo-',
+      '-futi',
+      'la-futi',
+      'lamo-fu',
+      'lamofu-ti',
+      'lamo-futiba',
+      'lamofuti-bare',
+      'lamofutiba-re',
+      'Lamo-futi',
+      'lamo_futi',
+      'lamo--futi',
+      'lamo-futi-bare',
+      'cama-futi',
+      'lamo-fyti',
+      'lamo-futi ',
+      ' lamo-futi',
       'lamo-futi\n',
-    ]) expect(bad).not.toMatch(ROOM_RE);
+    ])
+      expect(bad).not.toMatch(ROOM_RE);
   });
 });
 

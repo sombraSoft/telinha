@@ -2,7 +2,15 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createPortMapper, defaultNatDeps, discoverGateways, probe, type Mapping, type NatDeps, type UdpFactory } from '../src/nat/index.ts';
+import {
+  createPortMapper,
+  defaultNatDeps,
+  discoverGateways,
+  type Mapping,
+  type NatDeps,
+  probe,
+  type UdpFactory,
+} from '../src/nat/index.ts';
 
 const GW = '192.168.0.1';
 const LOCAL = '192.168.0.10';
@@ -23,16 +31,27 @@ const MAPPINGS: Mapping[] = [
   { protocol: 'udp', externalPort: 7882, internalPort: 7882, description: 'Telinha UDP 7882' },
 ];
 
-const soapOk = (action: string, fields: Record<string, string | number> = {}) => new Response(
-  `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:${action}Response xmlns:u="${SERVICE}">`
-  + Object.entries(fields).map(([k, v]) => `<${k}>${v}</${k}>`).join('') + `</u:${action}Response></s:Body></s:Envelope>`,
-);
-const soapFault = (code: number) => new Response(
-  `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><detail><UPnPError><errorCode>${code}</errorCode>`
-  + `<errorDescription>err ${code}</errorDescription></UPnPError></detail></s:Fault></s:Body></s:Envelope>`, { status: 500 },
-);
+const soapOk = (action: string, fields: Record<string, string | number> = {}) =>
+  new Response(
+    `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:${action}Response xmlns:u="${SERVICE}">` +
+      Object.entries(fields)
+        .map(([k, v]) => `<${k}>${v}</${k}>`)
+        .join('') +
+      `</u:${action}Response></s:Body></s:Envelope>`,
+  );
+const soapFault = (code: number) =>
+  new Response(
+    `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><detail><UPnPError><errorCode>${code}</errorCode>` +
+      `<errorDescription>err ${code}</errorDescription></UPnPError></detail></s:Fault></s:Body></s:Envelope>`,
+    { status: 500 },
+  );
 
-interface IgdEntry { client: string; internalPort: number; description: string; lease: number }
+interface IgdEntry {
+  client: string;
+  internalPort: number;
+  description: string;
+  lease: number;
+}
 
 /**
  * A scripted LAN with a fake clock: a router that may speak UPnP IGD (SSDP +
@@ -48,13 +67,23 @@ function lan(o: { igd?: boolean; pcp?: boolean; natpmp?: boolean; addFault?: num
 
   let now = 1_700_000_000_000;
   const timers: { at: number; fire: () => void }[] = [];
-  const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
-    if (signal?.aborted) return resolve();
-    const t = { at: now + ms, fire: () => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); resolve(); } };
-    timers.push(t);
-    signal?.addEventListener('abort', () => t.fire(), { once: true });
-  });
-  const flush = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0)); };
+  const sleep = (ms: number, signal?: AbortSignal) =>
+    new Promise<void>((resolve) => {
+      if (signal?.aborted) return resolve();
+      const t = {
+        at: now + ms,
+        fire: () => {
+          const i = timers.indexOf(t);
+          if (i >= 0) timers.splice(i, 1);
+          resolve();
+        },
+      };
+      timers.push(t);
+      signal?.addEventListener('abort', () => t.fire(), { once: true });
+    });
+  const flush = async () => {
+    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+  };
   const advance = async (ms: number) => {
     const target = now + ms;
     await flush();
@@ -72,14 +101,25 @@ function lan(o: { igd?: boolean; pcp?: boolean; natpmp?: boolean; addFault?: num
 
   const udp: UdpFactory = async (h) => {
     let closed = false;
-    const reply = (d: Uint8Array, port: number, address: string) => queueMicrotask(() => { if (!closed) h.onMessage(d, port, address); });
+    const reply = (d: Uint8Array, port: number, address: string) =>
+      queueMicrotask(() => {
+        if (!closed) h.onMessage(d, port, address);
+      });
     return {
-      close() { closed = true; },
+      close() {
+        closed = true;
+      },
       send(data, port, address) {
         const b = typeof data === 'string' ? new TextEncoder().encode(data) : data;
         if (port === 1900 && net.igd) {
           const st = /\r\nST: (.*)\r\n/.exec(new TextDecoder().decode(b))?.[1];
-          reply(new TextEncoder().encode(`HTTP/1.1 200 OK\r\nLOCATION: ${LOCATION}\r\nST: ${st}\r\nUSN: uuid:r::${st}\r\n\r\n`), 1900, GW);
+          reply(
+            new TextEncoder().encode(
+              `HTTP/1.1 200 OK\r\nLOCATION: ${LOCATION}\r\nST: ${st}\r\nUSN: uuid:r::${st}\r\n\r\n`,
+            ),
+            1900,
+            GW,
+          );
         }
         if (port !== 5351 || address !== GW) return;
         const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
@@ -132,18 +172,33 @@ function lan(o: { igd?: boolean; pcp?: boolean; natpmp?: boolean; addFault?: num
     if (url === LOCATION) return new Response(DESC);
     if (url !== CONTROL) return new Response('', { status: 404 });
     const action = /#(\w+)"$/.exec(new Headers(init?.headers).get('SOAPAction') ?? '')?.[1] ?? '';
-    const args = Object.fromEntries([...String(init?.body).matchAll(/<(New\w+)>([^<]*)<\/New\w+>/g)].map((m) => [m[1]!, m[2]!]));
+    const args = Object.fromEntries(
+      [...String(init?.body).matchAll(/<(New\w+)>([^<]*)<\/New\w+>/g)].map((m) => [m[1]!, m[2]!]),
+    );
     soap.push({ action, args });
     const key = `${args.NewProtocol}/${args.NewExternalPort}`;
     if (action === 'GetExternalIPAddress') return soapOk(action, { NewExternalIPAddress: '203.0.113.9' });
     if (action === 'AddPortMapping') {
       if (o.addFault) return soapFault(o.addFault);
-      igdTable[key] = { client: args.NewInternalClient!, internalPort: Number(args.NewInternalPort), description: args.NewPortMappingDescription!, lease: Number(args.NewLeaseDuration) };
+      igdTable[key] = {
+        client: args.NewInternalClient!,
+        internalPort: Number(args.NewInternalPort),
+        description: args.NewPortMappingDescription!,
+        lease: Number(args.NewLeaseDuration),
+      };
       return soapOk(action);
     }
     if (action === 'GetSpecificPortMappingEntry') {
       const e = igdTable[key];
-      return e ? soapOk(action, { NewInternalClient: e.client, NewInternalPort: e.internalPort, NewPortMappingDescription: e.description, NewEnabled: 1, NewLeaseDuration: e.lease }) : soapFault(714);
+      return e
+        ? soapOk(action, {
+            NewInternalClient: e.client,
+            NewInternalPort: e.internalPort,
+            NewPortMappingDescription: e.description,
+            NewEnabled: 1,
+            NewLeaseDuration: e.lease,
+          })
+        : soapFault(714);
     }
     if (action === 'DeletePortMapping') {
       if (!igdTable[key]) return soapFault(714);
@@ -163,7 +218,14 @@ function lan(o: { igd?: boolean; pcp?: boolean; natpmp?: boolean; addFault?: num
     random: (n) => new Uint8Array(n).fill(7),
   };
   return {
-    net, deps, igdTable, pmpTable, soap, pcpRequests, logs, advance,
+    net,
+    deps,
+    igdTable,
+    pmpTable,
+    soap,
+    pcpRequests,
+    logs,
+    advance,
     now: () => now,
     adds: () => soap.filter((s) => s.action === 'AddPortMapping').length,
     mapper: (extra: { statePath?: string; leaseSeconds?: number } = {}) =>
@@ -191,8 +253,14 @@ describe('discovery and probe', () => {
     const gws = await p;
     expect(gws.map((g) => g.kind)).toEqual(['igd', 'pcp']);
     expect(gws[0]).toEqual({
-      kind: 'igd', version: 1, location: LOCATION, controlUrl: CONTROL, serviceType: SERVICE,
-      localIp: LOCAL, gatewayIp: GW, name: 'Test Router',
+      kind: 'igd',
+      version: 1,
+      location: LOCATION,
+      controlUrl: CONTROL,
+      serviceType: SERVICE,
+      localIp: LOCAL,
+      gatewayIp: GW,
+      name: 'Test Router',
     });
   });
 
@@ -218,7 +286,12 @@ describe('discovery and probe', () => {
     const p = probe(env.deps);
     await env.advance(3000);
     const r = await p;
-    expect(r).toEqual({ gateway: null, externalIp: null, localIp: LOCAL, errors: ['PCP/NAT-PMP at 192.168.0.1: no answer'] });
+    expect(r).toEqual({
+      gateway: null,
+      externalIp: null,
+      localIp: LOCAL,
+      errors: ['PCP/NAT-PMP at 192.168.0.1: no answer'],
+    });
   });
 
   test('probe: NAT-PMP external address', async () => {
@@ -242,7 +315,10 @@ describe('createPortMapper', () => {
     expect(s.enabled).toBe(true);
     expect(s.externalIp).toBe('203.0.113.9');
     expect(s.gateway?.kind).toBe('igd');
-    expect(s.mappings.map((x) => [x.state, x.leaseEndsAt! - env.now() > 3590_000])).toEqual([['mapped', true], ['mapped', true]]);
+    expect(s.mappings.map((x) => [x.state, x.leaseEndsAt! - env.now() > 3590_000])).toEqual([
+      ['mapped', true],
+      ['mapped', true],
+    ]);
     await m.stop();
   });
 
@@ -319,8 +395,12 @@ describe('createPortMapper', () => {
     const env = lan({ igd: true });
     const m = await started(env);
     await m.stop();
-    expect(env.soap.filter((s) => s.action === 'DeletePortMapping').map((s) => `${s.args.NewProtocol}/${s.args.NewExternalPort}`).sort())
-      .toEqual(['TCP/7881', 'UDP/7882']);
+    expect(
+      env.soap
+        .filter((s) => s.action === 'DeletePortMapping')
+        .map((s) => `${s.args.NewProtocol}/${s.args.NewExternalPort}`)
+        .sort(),
+    ).toEqual(['TCP/7881', 'UDP/7882']);
     expect(env.igdTable).toEqual({});
     expect(m.status().mappings.map((x) => x.state)).toEqual(['pending', 'pending']);
     await env.advance(60 * MIN);
@@ -331,7 +411,10 @@ describe('createPortMapper', () => {
     const env = lan();
     const m = await started(env);
     expect(env.logs).toEqual(['upnp: no UPnP/NAT-PMP gateway found; forward the ports on the router by hand']);
-    expect(m.status().mappings.map((x) => [x.state, x.error])).toEqual([['failed', 'no gateway'], ['failed', 'no gateway']]);
+    expect(m.status().mappings.map((x) => [x.state, x.error])).toEqual([
+      ['failed', 'no gateway'],
+      ['failed', 'no gateway'],
+    ]);
     await env.advance(25 * MIN);
     expect(env.logs).toHaveLength(1);
     env.net.natpmp = true;
@@ -357,7 +440,9 @@ describe('createPortMapper', () => {
     const env = lan({ natpmp: true, pmpRemapTo: 50000 });
     const m = await started(env);
     expect(m.status().mappings.map((x) => x.state)).toEqual(['mapped', 'failed']);
-    expect(env.logs).toContain('upnp: could not map UDP 7882 via NAT-PMP: NAT-PMP gave external port 50000 instead of 7882');
+    expect(env.logs).toContain(
+      'upnp: could not map UDP 7882 via NAT-PMP: NAT-PMP gave external port 50000 instead of 7882',
+    );
     expect(env.pmpTable['udp/7882']).toBeUndefined();
     const stop = m.stop();
     await env.advance(1000);
@@ -371,13 +456,21 @@ describe('createPortMapper', () => {
     expect(m.status().gateway?.kind).toBe('pcp');
     expect(m.status().externalIp).toBe('203.0.113.50');
     const nonce = '07'.repeat(12);
-    expect(JSON.parse(readFileSync(statePath, 'utf8')).mappings.map((x: { nonce: string }) => x.nonce)).toEqual([nonce, nonce]);
+    expect(JSON.parse(readFileSync(statePath, 'utf8')).mappings.map((x: { nonce: string }) => x.nonce)).toEqual([
+      nonce,
+      nonce,
+    ]);
     await env.advance(30 * MIN);
     const stop = m.stop();
     await env.advance(1000);
     await stop;
     expect(env.pcpRequests.map((r) => [r.port, r.lifetime, r.nonce])).toEqual([
-      [7881, 3600, nonce], [7882, 3600, nonce], [7881, 3600, nonce], [7882, 3600, nonce], [7881, 0, nonce], [7882, 0, nonce],
+      [7881, 3600, nonce],
+      [7882, 3600, nonce],
+      [7881, 3600, nonce],
+      [7882, 3600, nonce],
+      [7881, 0, nonce],
+      [7882, 0, nonce],
     ]);
     expect(env.pmpTable).toEqual({});
   });
@@ -388,18 +481,39 @@ describe('createPortMapper', () => {
     // A previous run mapped 9999 (since removed from the config) and died without stop().
     env.igdTable['TCP/9999'] = { client: LOCAL, internalPort: 9999, description: 'Telinha TCP 9999', lease: 3600 };
     env.igdTable['TCP/9998'] = { client: '192.168.0.77', internalPort: 9998, description: 'Xbox', lease: 0 };
-    const stale = (port: number) => ({ protocol: 'tcp', externalPort: port, internalPort: port, description: `Telinha TCP ${port}`, state: 'mapped' });
+    const stale = (port: number) => ({
+      protocol: 'tcp',
+      externalPort: port,
+      internalPort: port,
+      description: `Telinha TCP ${port}`,
+      state: 'mapped',
+    });
     mkdirSync(join(tmp, 'run'), { recursive: true });
-    writeFileSync(statePath, JSON.stringify({ enabled: true, gateway: null, externalIp: null, updatedAt: 0, mappings: [stale(9999), stale(9998), { ...MAPPINGS[0], state: 'mapped' }] }));
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        enabled: true,
+        gateway: null,
+        externalIp: null,
+        updatedAt: 0,
+        mappings: [stale(9999), stale(9998), { ...MAPPINGS[0], state: 'mapped' }],
+      }),
+    );
     const m = await started(env, { statePath });
     expect(env.logs[0]).toBe('upnp: removed stale mapping TCP 9999');
     expect(Object.keys(env.igdTable).sort()).toEqual(['TCP/7881', 'TCP/9998', 'UDP/7882']);
     const file = JSON.parse(readFileSync(statePath, 'utf8'));
     expect(file.externalIp).toBe('203.0.113.9');
     expect(file.updatedAt).toBe(env.now() - 500); // written when the cycle ended, 2.5 s in
-    expect(file.mappings.map((x: { externalPort: number; state: string }) => [x.externalPort, x.state])).toEqual([[7881, 'mapped'], [7882, 'mapped']]);
+    expect(file.mappings.map((x: { externalPort: number; state: string }) => [x.externalPort, x.state])).toEqual([
+      [7881, 'mapped'],
+      [7882, 'mapped'],
+    ]);
     await m.stop();
-    expect(JSON.parse(readFileSync(statePath, 'utf8')).mappings.map((x: { state: string }) => x.state)).toEqual(['pending', 'pending']);
+    expect(JSON.parse(readFileSync(statePath, 'utf8')).mappings.map((x: { state: string }) => x.state)).toEqual([
+      'pending',
+      'pending',
+    ]);
   });
 
   test('nothing to map: no discovery, no rediscovery loop, no "forward by hand" line', async () => {
@@ -407,8 +521,14 @@ describe('createPortMapper', () => {
     let sockets = 0;
     const udp = env.deps.udp;
     const m = createPortMapper({
-      mappings: [], statePath: join(tmp, 'none', 'upnp.json'), log: (...a) => env.logs.push(a.join(' ')),
-      ...env.deps, udp: async (h) => { sockets++; return udp(h); },
+      mappings: [],
+      statePath: join(tmp, 'none', 'upnp.json'),
+      log: (...a) => env.logs.push(a.join(' ')),
+      ...env.deps,
+      udp: async (h) => {
+        sockets++;
+        return udp(h);
+      },
     });
     await m.start();
     await m.refresh();
@@ -424,7 +544,16 @@ describe('createPortMapper', () => {
     const env = lan({ igd: true });
     env.igdTable['TCP/7881'] = { client: LOCAL, internalPort: 7881, description: 'Telinha TCP 7881', lease: 0 };
     mkdirSync(join(tmp, 'cloud'), { recursive: true });
-    writeFileSync(statePath, JSON.stringify({ enabled: true, gateway: null, externalIp: null, updatedAt: 0, mappings: [{ ...MAPPINGS[0], state: 'mapped' }] }));
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        enabled: true,
+        gateway: null,
+        externalIp: null,
+        updatedAt: 0,
+        mappings: [{ ...MAPPINGS[0], state: 'mapped' }],
+      }),
+    );
     const m = createPortMapper({ mappings: [], statePath, log: (...a) => env.logs.push(a.join(' ')), ...env.deps });
     const p = m.start();
     await env.advance(3000);
@@ -443,7 +572,13 @@ describe('createPortMapper', () => {
     const statePath = join(tmp, 'cloud-nogw', 'upnp.json');
     const env = lan();
     mkdirSync(join(tmp, 'cloud-nogw'), { recursive: true });
-    const state = JSON.stringify({ enabled: true, gateway: null, externalIp: null, updatedAt: 0, mappings: [{ ...MAPPINGS[0], state: 'mapped' }] });
+    const state = JSON.stringify({
+      enabled: true,
+      gateway: null,
+      externalIp: null,
+      updatedAt: 0,
+      mappings: [{ ...MAPPINGS[0], state: 'mapped' }],
+    });
     writeFileSync(statePath, state);
     const m = createPortMapper({ mappings: [], statePath, log: (...a) => env.logs.push(a.join(' ')), ...env.deps });
     const p = m.start();

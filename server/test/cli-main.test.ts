@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CliContext, ParsedArgs } from '../src/cli/args.ts';
-import { loadSetupUi, main, scanGlobals, type MainDeps } from '../src/cli/main.ts';
+import { loadSetupUi, type MainDeps, main, scanGlobals } from '../src/cli/main.ts';
 import type { SetupDeps } from '../src/cli/setup/steps.ts';
 import type { SetupUi } from '../src/cli/setup/ui.ts';
 import { versionLine } from '../src/version.ts';
@@ -28,7 +28,13 @@ function harness(o: Partial<MainDeps> & { tty?: boolean; homeDir?: string } = {}
     stdoutTty: o.tty ?? false,
     stdout: (l) => out.push(l),
     stderr: (l) => err.push(l),
-    commands: { setup: runner('setup'), doctor: runner('doctor'), update: runner('update'), service: runner('service'), tray: runner('tray') },
+    commands: {
+      setup: runner('setup'),
+      doctor: runner('doctor'),
+      update: runner('update'),
+      service: runner('service'),
+      tray: runner('tray'),
+    },
     run: async (ctx, r) => void calls.push({ cmd: 'run', ctx, pause: r.pauseOnError }),
     offerSetup: async (ctx) => (calls.push({ cmd: 'offer', ctx }), 5),
     waitForEnter: async () => void calls.push({ cmd: 'enter', ctx: undefined as never }),
@@ -39,8 +45,16 @@ function harness(o: Partial<MainDeps> & { tty?: boolean; homeDir?: string } = {}
 
 describe('scanGlobals', () => {
   test('the command is the first bare word that is not a --home/--lang value', () => {
-    expect(scanGlobals(['--home', 'D:\\x', 'service', 'install', '--firewall'])).toMatchObject({ command: 'service', positionals: ['install'], home: 'D:\\x' });
-    expect(scanGlobals(['--lang=pt-BR', '-y', 'doctor', '--json'])).toMatchObject({ command: 'doctor', lang: 'pt-BR', yes: true });
+    expect(scanGlobals(['--home', 'D:\\x', 'service', 'install', '--firewall'])).toMatchObject({
+      command: 'service',
+      positionals: ['install'],
+      home: 'D:\\x',
+    });
+    expect(scanGlobals(['--lang=pt-BR', '-y', 'doctor', '--json'])).toMatchObject({
+      command: 'doctor',
+      lang: 'pt-BR',
+      yes: true,
+    });
     expect(scanGlobals([])).toMatchObject({ command: null, help: false, version: false });
     expect(scanGlobals(['help', 'update'])).toMatchObject({ command: 'help', positionals: ['update'] });
     expect(scanGlobals(['setup', '--', 'x'])).toMatchObject({ command: 'setup', positionals: [] });
@@ -83,7 +97,10 @@ describe('main', () => {
   test('unknown command: usage on stderr, exit 2', async () => {
     const h = harness();
     expect(await h.main(['frobnicate'])).toBe(2);
-    expect(h.err).toEqual(['unknown command frobnicate', 'Usage: telinha [command] [flags]. Run telinha help for the list of commands.']);
+    expect(h.err).toEqual([
+      'unknown command frobnicate',
+      'Usage: telinha [command] [flags]. Run telinha help for the list of commands.',
+    ]);
     expect(h.calls).toEqual([]);
   });
 
@@ -140,7 +157,12 @@ describe('main', () => {
     expect(await declined.main([])).toBe(0);
     expect(declined.calls.map((c) => c.cmd)).toEqual(['enter']);
     // The wizard threw: the error is printed, then the window waits.
-    const failed = harness({ tty: true, offerSetup: async () => { throw new Error('boom'); } });
+    const failed = harness({
+      tty: true,
+      offerSetup: async () => {
+        throw new Error('boom');
+      },
+    });
     expect(await failed.main([])).toBe(1);
     expect(failed.err).toEqual(['telinha: boom']);
     expect(failed.calls.map((c) => c.cmd)).toEqual(['enter']);
@@ -167,8 +189,12 @@ describe('main', () => {
     const seen: { via: string; tty: boolean; ui: SetupUi | undefined }[] = [];
     let loads = 0;
     const setup = async () => ({
-      run: async (_args: ParsedArgs, ctx: CliContext, deps: Partial<SetupDeps> = {}) => (seen.push({ via: 'run', tty: ctx.tty, ui: deps.ui }), 0),
-      offerSetup: async (ctx: CliContext, deps: Partial<SetupDeps> = {}) => (seen.push({ via: 'offer', tty: ctx.tty, ui: deps.ui }), null),
+      run: async (_args: ParsedArgs, ctx: CliContext, deps: Partial<SetupDeps> = {}) => (
+        seen.push({ via: 'run', tty: ctx.tty, ui: deps.ui }), 0
+      ),
+      offerSetup: async (ctx: CliContext, deps: Partial<SetupDeps> = {}) => (
+        seen.push({ via: 'offer', tty: ctx.tty, ui: deps.ui }), null
+      ),
     });
     const wired = (tty: boolean) => {
       const h = harness({ tty, setup, loadSetupUi: async () => (loads++, ui), offerSetup: undefined });

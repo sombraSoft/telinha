@@ -8,15 +8,29 @@ export const newIdentity = (userId: string, random: (n: number) => Uint8Array) =
   `${userId}:${Buffer.from(random(3)).toString('hex')}`;
 
 export async function createToken(o: {
-  key: string; secret: string; room: string; identity: string; name: string; id: string; avatar: string | null;
+  key: string;
+  secret: string;
+  room: string;
+  identity: string;
+  name: string;
+  id: string;
+  avatar: string | null;
 }): Promise<string> {
   // Short: LiveKit refreshes tokens of connected participants, so only a
   // leaked, unused link dies (closed rooms are refused anyway).
   const at = new AccessToken(o.key, o.secret, {
-    identity: o.identity, name: o.name, ttl: '10m', metadata: JSON.stringify({ id: o.id, avatar: o.avatar || null }),
+    identity: o.identity,
+    name: o.name,
+    ttl: '10m',
+    metadata: JSON.stringify({ id: o.id, avatar: o.avatar || null }),
   });
   at.addGrant({
-    room: o.room, roomJoin: true, canSubscribe: true, canPublish: true, canPublishData: true, canUpdateOwnMetadata: true,
+    room: o.room,
+    roomJoin: true,
+    canSubscribe: true,
+    canPublish: true,
+    canPublishData: true,
+    canUpdateOwnMetadata: true,
     canPublishSources: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO],
   });
   return at.toJwt();
@@ -46,7 +60,10 @@ export interface RoomService {
  * it as the default. emptyTimeout outlives our own close so LiveKit never drops
  * a room before anyone had the chance to open the link.
  */
-export const roomTimeouts = (closeEmptySeconds: number) => ({ emptyTimeout: closeEmptySeconds + 120, departureTimeout: 20 });
+export const roomTimeouts = (closeEmptySeconds: number) => ({
+  emptyTimeout: closeEmptySeconds + 120,
+  departureTimeout: 20,
+});
 
 export const isNotFound = (e: unknown) => {
   const err = e as { status?: unknown; code?: unknown } | null;

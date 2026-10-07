@@ -10,7 +10,11 @@ export interface TermOut {
   isTTY?: boolean;
 }
 
-export interface Spinner { update(label: string): void; stop(okLabel?: string): void; fail(label?: string): void }
+export interface Spinner {
+  update(label: string): void;
+  stop(okLabel?: string): void;
+  fail(label?: string): void;
+}
 
 export interface Term {
   info(msg: string): void;
@@ -25,7 +29,14 @@ export interface Term {
   link(url: string): string;
   /** NO_COLOR or not a TTY -> off. */
   colors: boolean;
-  style: { bold(s: string): string; dim(s: string): string; red(s: string): string; green(s: string): string; yellow(s: string): string; cyan(s: string): string };
+  style: {
+    bold(s: string): string;
+    dim(s: string): string;
+    red(s: string): string;
+    green(s: string): string;
+    yellow(s: string): string;
+    cyan(s: string): string;
+  };
   /** How far a download got; a plain terminal folds it into the running spinner's label. */
   progress?(done: number, total: number | null, label: string): void;
   /** What a long wait is waiting for (the setup screens show it on the task row); plain output has its lines already. */
@@ -47,6 +58,7 @@ export interface TermOptions {
 }
 
 const ESC = '\x1b';
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI sequences start with ESC
 const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]|\x1b\]8;;[^\x1b]*\x1b\\/g;
 export const visibleLength = (s: string) => [...s.replace(ANSI_RE, '')].length;
 
@@ -74,7 +86,14 @@ export function createTerm(o: TermOptions): Term {
   const env = o.env ?? process.env;
   const colors = o.tty && !!stdout.isTTY && !env.NO_COLOR;
   const sgr = (open: number, close: number) => (s: string) => (colors ? `${ESC}[${open}m${s}${ESC}[${close}m` : s);
-  const style = { bold: sgr(1, 22), dim: sgr(2, 22), red: sgr(31, 39), green: sgr(32, 39), yellow: sgr(33, 39), cyan: sgr(36, 39) };
+  const style = {
+    bold: sgr(1, 22),
+    dim: sgr(2, 22),
+    red: sgr(31, 39),
+    green: sgr(32, 39),
+    yellow: sgr(33, 39),
+    cyan: sgr(36, 39),
+  };
   const write = (s: string) => void stdout.write(s);
   const println = (s = '') => write(`${s}\n`);
   // The animated spinner on screen, if any: progress lands on its line.
@@ -97,8 +116,15 @@ export function createTerm(o: TermOptions): Term {
       let n = 0;
       let timer: ReturnType<typeof setInterval> | null = null;
       const animated = colors && (o.spinnerMs ?? 80) > 0;
-      const paint = () => write(`\r${ESC}[2K${style.cyan(frames[n++ % frames.length]!)} ${current}${extra ? ` ${style.dim(extra)}` : ''}`);
-      const self = { suffix: (s: string) => void (extra = s) };
+      const paint = () =>
+        write(
+          `\r${ESC}[2K${style.cyan(frames[n++ % frames.length]!)} ${current}${extra ? ` ${style.dim(extra)}` : ''}`,
+        );
+      const self = {
+        suffix: (s: string) => {
+          extra = s;
+        },
+      };
       if (animated) {
         paint();
         timer = setInterval(paint, o.spinnerMs ?? 80);
@@ -132,14 +158,26 @@ export function createTerm(o: TermOptions): Term {
 
     table(rows) {
       const widths: number[] = [];
-      for (const r of rows) r.forEach((c, i) => (widths[i] = Math.max(widths[i] ?? 0, visibleLength(c))));
       for (const r of rows) {
-        println(`  ${r.map((c, i) => (i === r.length - 1 ? c : c + ' '.repeat(widths[i]! - visibleLength(c)))).join('  ')}`.trimEnd());
+        for (const [i, c] of r.entries()) widths[i] = Math.max(widths[i] ?? 0, visibleLength(c));
+      }
+      for (const r of rows) {
+        println(
+          `  ${r.map((c, i) => (i === r.length - 1 ? c : c + ' '.repeat(widths[i]! - visibleLength(c)))).join('  ')}`.trimEnd(),
+        );
       }
     },
 
     link(url) {
-      const supported = colors && !!(env.WT_SESSION || env.TERM_PROGRAM || env.VTE_VERSION || env.KONSOLE_VERSION || /kitty|wezterm/.test(env.TERM ?? ''));
+      const supported =
+        colors &&
+        !!(
+          env.WT_SESSION ||
+          env.TERM_PROGRAM ||
+          env.VTE_VERSION ||
+          env.KONSOLE_VERSION ||
+          /kitty|wezterm/.test(env.TERM ?? '')
+        );
       return supported ? `${ESC}]8;;${url}${ESC}\\${url}${ESC}]8;;${ESC}\\` : url;
     },
   };

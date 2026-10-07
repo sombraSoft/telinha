@@ -35,7 +35,10 @@ export function tagFromRedirect(res: { status: number; headers: Headers }): stri
 export async function latestReleaseTag(fetchFn: FetchFn, repo = REPO, timeoutMs = 30_000): Promise<string | null> {
   try {
     // Manual redirects: the Location header is the answer; following it would download a page.
-    const res = await fetchFn(`https://github.com/${repo}/releases/latest`, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetchFn(`https://github.com/${repo}/releases/latest`, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     return tagFromRedirect(res);
   } catch {
     return null;
@@ -64,11 +67,17 @@ export const caddyExeName = (os: OsOf): string => `caddy${exeSuffix(os)}`;
 export const TRAY_EXE = 'telinha-tray.exe';
 
 /** What Telinha's archive for a target holds: the program, the tray (Windows only; optional, older releases lack it), LICENSE. */
-export const archiveContents = (t: Target): { exe: string; tray: string | null; license: string } =>
-  ({ exe: exeName(t), tray: onWindows(t) ? TRAY_EXE : null, license: 'LICENSE' });
+export const archiveContents = (t: Target): { exe: string; tray: string | null; license: string } => ({
+  exe: exeName(t),
+  tray: onWindows(t) ? TRAY_EXE : null,
+  license: 'LICENSE',
+});
 
 /** A target's archive contents with each file's mode and where it comes from; only Windows zips carry the tray. */
-export function archiveFiles(t: Target, files: { exe: string; tray?: string; license: string }): { path: string; mode: number; source: string }[] {
+export function archiveFiles(
+  t: Target,
+  files: { exe: string; tray?: string; license: string },
+): { path: string; mode: number; source: string }[] {
   const names = archiveContents(t);
   const out = [{ path: names.exe, mode: 0o755, source: files.exe }];
   if (names.tray && files.tray) out.push({ path: names.tray, mode: 0o755, source: files.tray });
@@ -87,14 +96,18 @@ export const TRAY_DIST = 'telinha-tray.dist.exe';
  * or `<stem>.failed-<release tag>`. Renamed, never deleted (Windows refuses to
  * delete a running exe); the updater sweeps whatever ASIDE_RE matches.
  */
-export const asideBase = (stem: 'telinha' | 'telinha-tray', kind: 'old' | 'failed', label: string): string => `${stem}.${kind}-${label}`;
+export const asideBase = (stem: 'telinha' | 'telinha-tray', kind: 'old' | 'failed', label: string): string =>
+  `${stem}.${kind}-${label}`;
 export const ASIDE_RE = /^telinha(-tray)?\.(old|failed)-/;
 
 export const SUMS = 'SHA256SUMS';
 
 /** sha256sum format, `<hex>  <file>` sorted by name, so `sha256sum -c` checks a download by hand. */
 export function formatSums(sums: Record<string, string>): string {
-  return Object.keys(sums).sort().map((name) => `${sums[name]}  ${name}\n`).join('');
+  return Object.keys(sums)
+    .sort()
+    .map((name) => `${sums[name]}  ${name}\n`)
+    .join('');
 }
 
 /** `<sha256 hex>  <file>` lines (a `*` binary marker is accepted) -> file -> hex; any other line is skipped. */

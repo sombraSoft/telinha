@@ -7,46 +7,52 @@ import { createGitHubReleases } from '../update/github.ts';
 import { nodeFs } from '../update/types.ts';
 import { createUpdater, type Updater } from '../update/updater.ts';
 import { hostTarget, type Target } from '../version.ts';
-import { GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, type ParsedArgs } from './args.ts';
-import { createControlClient, type ControlClient, type UpdateCheck, type UpdateResult } from './control.ts';
+import { type CliContext, GLOBAL_FLAGS, type ParsedArgs, parseArgs, UsageError } from './args.ts';
+import { type ControlClient, createControlClient, type UpdateCheck, type UpdateResult } from './control.ts';
 import { defineStrings, ts } from './strings.ts';
 
 export const UPDATE_FLAGS = { check: 'boolean', now: 'boolean' } as const;
 export const UPDATE_SPEC = { flags: { ...GLOBAL_FLAGS, ...UPDATE_FLAGS } } as const;
 
-const t = defineStrings({
-  current: 'Telinha {version}',
-  latest: 'Newest stable release: {tag}',
-  latestUnknown: 'Newest stable release: unknown (offline, or none published)',
-  pin: 'Pinned to {tag} (UPDATE_PIN)',
-  upToDate: 'Up to date.',
-  available: '{tag} is available.',
-  staged: '{tag} is installed and waits for the next start.',
-  failed: '{tag} failed: {reason}. Skipped until a newer release; telinha update --now retries it.',
-  pending: '{tag} is not downloadable yet; it will be retried.',
-  deferred: '{n} room(s) open; the update to {tag} is applied when they close (telinha update --now skips the wait).',
-  installedRestart: '{tag} installed; the service is restarting to apply it.',
-  installedStart: '{tag} installed; start Telinha to use it.',
-  nativeOnly: 'Updates apply to native installs only. Docker: docker compose pull; from a clone: git pull.',
-  viaService: 'Asking the running service...',
-  serviceOwned: 'The service updates itself here; it is not running. Start it (sudo telinha service start), then run telinha update again.',
-}, {
-  current: 'Telinha {version}',
-  latest: 'Versão estável mais nova: {tag}',
-  latestUnknown: 'Versão estável mais nova: desconhecida (sem internet, ou nenhuma publicada)',
-  pin: 'Fixada em {tag} (UPDATE_PIN)',
-  upToDate: 'Já está atualizada.',
-  available: '{tag} está disponível.',
-  staged: '{tag} está instalada e espera o próximo início.',
-  failed: '{tag} falhou: {reason}. Ignorada até sair uma versão mais nova; telinha update --now tenta de novo.',
-  pending: '{tag} ainda não pode ser baixada; vai ser tentada de novo.',
-  deferred: '{n} sala(s) aberta(s); a atualização pra {tag} é aplicada quando elas fecharem (telinha update --now não espera).',
-  installedRestart: '{tag} instalada; o serviço está reiniciando pra aplicar.',
-  installedStart: '{tag} instalada; inicie a Telinha pra usar.',
-  nativeOnly: 'Atualizações valem só pra instalação nativa. Docker: docker compose pull; de um clone: git pull.',
-  viaService: 'Pedindo ao serviço em execução...',
-  serviceOwned: 'Aqui o serviço se atualiza sozinho, e ele não está rodando. Inicie ele (sudo telinha service start) e rode telinha update de novo.',
-});
+const t = defineStrings(
+  {
+    current: 'Telinha {version}',
+    latest: 'Newest stable release: {tag}',
+    latestUnknown: 'Newest stable release: unknown (offline, or none published)',
+    pin: 'Pinned to {tag} (UPDATE_PIN)',
+    upToDate: 'Up to date.',
+    available: '{tag} is available.',
+    staged: '{tag} is installed and waits for the next start.',
+    failed: '{tag} failed: {reason}. Skipped until a newer release; telinha update --now retries it.',
+    pending: '{tag} is not downloadable yet; it will be retried.',
+    deferred: '{n} room(s) open; the update to {tag} is applied when they close (telinha update --now skips the wait).',
+    installedRestart: '{tag} installed; the service is restarting to apply it.',
+    installedStart: '{tag} installed; start Telinha to use it.',
+    nativeOnly: 'Updates apply to native installs only. Docker: docker compose pull; from a clone: git pull.',
+    viaService: 'Asking the running service...',
+    serviceOwned:
+      'The service updates itself here; it is not running. Start it (sudo telinha service start), then run telinha update again.',
+  },
+  {
+    current: 'Telinha {version}',
+    latest: 'Versão estável mais nova: {tag}',
+    latestUnknown: 'Versão estável mais nova: desconhecida (sem internet, ou nenhuma publicada)',
+    pin: 'Fixada em {tag} (UPDATE_PIN)',
+    upToDate: 'Já está atualizada.',
+    available: '{tag} está disponível.',
+    staged: '{tag} está instalada e espera o próximo início.',
+    failed: '{tag} falhou: {reason}. Ignorada até sair uma versão mais nova; telinha update --now tenta de novo.',
+    pending: '{tag} ainda não pode ser baixada; vai ser tentada de novo.',
+    deferred:
+      '{n} sala(s) aberta(s); a atualização pra {tag} é aplicada quando elas fecharem (telinha update --now não espera).',
+    installedRestart: '{tag} instalada; o serviço está reiniciando pra aplicar.',
+    installedStart: '{tag} instalada; inicie a Telinha pra usar.',
+    nativeOnly: 'Atualizações valem só pra instalação nativa. Docker: docker compose pull; de um clone: git pull.',
+    viaService: 'Pedindo ao serviço em execução...',
+    serviceOwned:
+      'Aqui o serviço se atualiza sozinho, e ele não está rodando. Inicie ele (sudo telinha service start) e rode telinha update de novo.',
+  },
+);
 
 export interface UpdateCliDeps {
   control?: Pick<ControlClient, 'available' | 'update'>;
@@ -79,7 +85,8 @@ function pinFrom(ctx: CliContext): string | null {
 }
 
 function describe(ctx: CliContext, c: UpdateCheck): void {
-  const s = (key: Parameters<typeof t>[1], params?: Record<string, string | number>) => ctx.stdout(t(ctx.locale, key, params));
+  const s = (key: Parameters<typeof t>[1], params?: Record<string, string | number>) =>
+    ctx.stdout(t(ctx.locale, key, params));
   s('current', { version: c.current });
   if (c.pin) s('pin', { tag: c.pin });
   if (c.latest) s('latest', { tag: c.latest });
@@ -92,7 +99,8 @@ function describe(ctx: CliContext, c: UpdateCheck): void {
 /** Lines for the outcome; the exit code says whether something is installed or up to date (0) or not (1). */
 function report(ctx: CliContext, r: UpdateResult, viaService: boolean): number {
   describe(ctx, r);
-  const s = (key: Parameters<typeof t>[1], params?: Record<string, string | number>) => ctx.stdout(t(ctx.locale, key, params));
+  const s = (key: Parameters<typeof t>[1], params?: Record<string, string | number>) =>
+    ctx.stdout(t(ctx.locale, key, params));
   switch (r.action) {
     case 'none':
       if (r.target) s('available', { tag: r.target });
@@ -145,20 +153,22 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: UpdateCliDeps
     return 1;
   }
   const pin = pinFrom(ctx);
-  const updater = deps.updater?.({ current: ctx.version, pin }) ?? createUpdater({
-    current: ctx.version,
-    pin,
-    checkMs: 60_000,
-    maxDeferMs: 0,
-    paths: ctx.paths,
-    target: deps.target ?? hostTarget(),
-    openRooms: () => 0,
-    github: createGitHubReleases({ fetch: deps.fetch }),
-    fs: nodeFs(),
-    log: (...a) => ctx.stderr(a.map(String).join(' ')),
-    onApplied: () => {},
-    compiled: ctx.compiled,
-  });
+  const updater =
+    deps.updater?.({ current: ctx.version, pin }) ??
+    createUpdater({
+      current: ctx.version,
+      pin,
+      checkMs: 60_000,
+      maxDeferMs: 0,
+      paths: ctx.paths,
+      target: deps.target ?? hostTarget(),
+      openRooms: () => 0,
+      github: createGitHubReleases({ fetch: deps.fetch }),
+      fs: nodeFs(),
+      log: (...a) => ctx.stderr(a.map(String).join(' ')),
+      onApplied: () => {},
+      compiled: ctx.compiled,
+    });
   // Nothing runs, so nothing to defer: a plain `telinha update` installs right away.
   return report(ctx, await updater.update(mode === 'scheduled' ? 'now' : mode), false);
 }

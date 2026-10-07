@@ -1,19 +1,30 @@
 import { describe, expect, test } from 'bun:test';
+import type { CliContext } from '../src/cli/args.ts';
+import {
+  type ApplyHooks,
+  type ApplyOptions,
+  type ApplyTarget,
+  backTarget,
+  planTasks,
+  runApply,
+  type SecretMemo,
+  silentOut,
+  TASKS,
+  type TaskId,
+  TaskList,
+  type TaskRow,
+} from '../src/cli/setup/apply.ts';
+import { at } from '../src/cli/setup/apply-strings.ts';
+import { createDiscordSetup } from '../src/cli/setup/discord.ts';
+import type { HostInfo } from '../src/cli/setup/host.ts';
+import { type SetupDeps, type SetupFs, SYSCTL_SCRIPT, type Values, type Wizard } from '../src/cli/setup/steps.ts';
+import { t } from '../src/cli/setup/strings.ts';
+import type { Spinner, Term } from '../src/cli/term.ts';
 import type { Ddns } from '../src/ddns.ts';
 import type { CheckResult } from '../src/doctor/types.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import { resolvePaths } from '../src/paths.ts';
 import type { ServiceManager, SpawnOutcome } from '../src/service/index.ts';
-import type { CliContext } from '../src/cli/args.ts';
-import type { Spinner, Term } from '../src/cli/term.ts';
-import {
-  backTarget, planTasks, runApply, silentOut, TaskList, TASKS, type ApplyHooks, type ApplyOptions, type ApplyTarget, type SecretMemo, type TaskId, type TaskRow,
-} from '../src/cli/setup/apply.ts';
-import { at } from '../src/cli/setup/apply-strings.ts';
-import { createDiscordSetup } from '../src/cli/setup/discord.ts';
-import type { HostInfo } from '../src/cli/setup/host.ts';
-import { SYSCTL_SCRIPT, type SetupDeps, type SetupFs, type Values, type Wizard } from '../src/cli/setup/steps.ts';
-import { t } from '../src/cli/setup/strings.ts';
 
 const APP = '111111111111111111';
 const GUILD = '222222222222222222';
@@ -23,13 +34,23 @@ const TOKEN = 'Rk7wQz3NvX9pLm2TbC5hJd'; // gitleaks:allow
 const SECRET = 'Pw8zHn4Vq2KxMt7RcB3s'; // gitleaks:allow
 const DUCK = '9b4e2c7a1f6d3b8e0a5c'; // gitleaks:allow
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const discordFetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = String(input).replace('https://discord.com/api/v10', '');
   const auth = new Headers(init?.headers).get('authorization');
-  if (url === '/oauth2/token') return auth === `Basic ${Buffer.from(`${APP}:${SECRET}`).toString('base64')}` ? json({}) : json({ error: 'invalid_client' }, 401);
+  if (url === '/oauth2/token')
+    return auth === `Basic ${Buffer.from(`${APP}:${SECRET}`).toString('base64')}`
+      ? json({})
+      : json({ error: 'invalid_client' }, 401);
   if (auth !== `Bot ${TOKEN}`) return json({ message: '401: Unauthorized' }, 401);
-  if (url === '/applications/@me') return json({ id: APP, name: 'Telinha Bot', flags: (1 << 13) | (1 << 15), redirect_uris: ['https://t.example.com/auth/callback'] });
+  if (url === '/applications/@me')
+    return json({
+      id: APP,
+      name: 'Telinha Bot',
+      flags: (1 << 13) | (1 << 15),
+      redirect_uris: ['https://t.example.com/auth/callback'],
+    });
   if (url === '/users/@me/guilds') return json([{ id: GUILD, name: 'Gurizada' }]);
   if (url === `/guilds/${GUILD}/roles`) return json([{ id: ROLE, name: 'Membro', position: 1 }]);
   if (url === `/guilds/${GUILD}/channels`) return json([{ id: CHANNEL, name: 'geral', type: 0, position: 0 }]);
@@ -41,7 +62,14 @@ class Sink implements Term {
   out: string[] = [];
   progressCalls: [number, number | null, string][] = [];
   colors = false;
-  style = { bold: (s: string) => s, dim: (s: string) => s, red: (s: string) => s, green: (s: string) => s, yellow: (s: string) => s, cyan: (s: string) => s };
+  style = {
+    bold: (s: string) => s,
+    dim: (s: string) => s,
+    red: (s: string) => s,
+    green: (s: string) => s,
+    yellow: (s: string) => s,
+    cyan: (s: string) => s,
+  };
   info = (m: string) => void this.out.push(m);
   ok = (m: string) => void this.out.push(`ok ${m}`);
   warn = (m: string) => void this.out.push(`warn ${m}`);
@@ -50,7 +78,11 @@ class Sink implements Term {
   line = (m = '') => void this.out.push(m);
   spinner(label: string): Spinner {
     this.out.push(`spin ${label}`);
-    return { update: (l) => void this.out.push(`spin ${l}`), stop: (l) => void this.out.push(`ok ${l ?? label}`), fail: (l) => void this.out.push(`fail ${l ?? label}`) };
+    return {
+      update: (l) => void this.out.push(`spin ${l}`),
+      stop: (l) => void this.out.push(`ok ${l ?? label}`),
+      fail: (l) => void this.out.push(`fail ${l ?? label}`),
+    };
   }
   table = (rows: string[][]) => void this.out.push(...rows.map((r) => r.join(' ')));
   link = (u: string) => u;
@@ -76,13 +108,29 @@ interface Opts {
 /** Every fake random call differs, across runs too. */
 let seq = 0;
 
-const HOST: HostInfo = { kind: 'linux-root', platform: 'linux', arch: 'x64', isRoot: true, docker: false, osName: 'Debian', publicIp: '203.0.113.9', nat: null };
+const HOST: HostInfo = {
+  kind: 'linux-root',
+  platform: 'linux',
+  arch: 'x64',
+  isRoot: true,
+  docker: false,
+  osName: 'Debian',
+  publicIp: '203.0.113.9',
+  nat: null,
+};
 
 function make(o: Opts = {}) {
   const platform = o.platform ?? 'linux';
   const home = o.home ?? (platform === 'win32' ? 'C:\\T' : '/opt/telinha');
   const files = new Map(Object.entries(o.files ?? {}));
-  const rec = { spawn: [] as string[][], interactive: [] as string[][], ddns: [] as string[], doctor: [] as { tty: boolean; argv: string[] }[], checks: 0, cert: 0 };
+  const rec = {
+    spawn: [] as string[][],
+    interactive: [] as string[][],
+    ddns: [] as string[],
+    doctor: [] as { tty: boolean; argv: string[] }[],
+    checks: 0,
+    cert: 0,
+  };
   const fs: SetupFs = {
     mkdir: async () => {},
     createFile: async (p, data) => void files.set(p, data),
@@ -92,7 +140,12 @@ function make(o: Opts = {}) {
     },
     chmod: async () => {},
     chown: async () => {},
-    stat: async (p) => (files.has(p) ? { uid: 0, gid: 0, mode: 0o100600 } : p.includes('.') ? null : { uid: 0, gid: 0, mode: 0o40700, dir: true }),
+    stat: async (p) =>
+      files.has(p)
+        ? { uid: 0, gid: 0, mode: 0o100600 }
+        : p.includes('.')
+          ? null
+          : { uid: 0, gid: 0, mode: 0o40700, dir: true },
     rm: async (p) => void files.delete(p),
     readText: async (p) => files.get(p) ?? null,
     exists: async (p) => files.has(p),
@@ -100,13 +153,18 @@ function make(o: Opts = {}) {
   };
   const manager = (user: boolean): ServiceManager => ({
     kind: user ? 'systemd-user' : 'systemd-system',
-    install: o.install ?? (async () => ({ ok: true, steps: { task: 'ok', firewall: 'skipped', start: 'ok' }, hints: [] })),
-    uninstall: async () => {}, start: async () => {}, stop: async () => {}, restart: async () => {},
+    install:
+      o.install ?? (async () => ({ ok: true, steps: { task: 'ok', firewall: 'skipped', start: 'ok' }, hints: [] })),
+    uninstall: async () => {},
+    start: async () => {},
+    stop: async () => {},
+    restart: async () => {},
     status: async () => ({ installed: true, running: true, enabled: true, detail: '' }),
   });
 
   const deps = {
-    discord: (token: string) => createDiscordSetup({ token, fetch: discordFetch, version: 'test', sleep: async () => {} }),
+    discord: (token: string) =>
+      createDiscordSetup({ token, fetch: discordFetch, version: 'test', sleep: async () => {} }),
     ddns: ({ domain }: { domain: string }): Ddns => {
       let last: ReturnType<Ddns['last']> = null;
       return {
@@ -131,7 +189,10 @@ function make(o: Opts = {}) {
       return o.spawn?.(cmd, files) ?? { code: 0, stdout: '', stderr: '' };
     },
     spawnInteractive: async (cmd: string[]) => (rec.interactive.push(cmd), 0),
-    fs, platform, arch: 'x64', isRoot: o.isRoot ?? true,
+    fs,
+    platform,
+    arch: 'x64',
+    isRoot: o.isRoot ?? true,
     random: o.random ?? ((k: number) => new Uint8Array(k).fill(++seq % 256)),
     now: (() => {
       let t0 = 0;
@@ -142,7 +203,7 @@ function make(o: Opts = {}) {
     doctorChecks: async (_c: CliContext, onResult?: (r: CheckResult, done: number, total: number) => void) => {
       rec.checks++;
       const all = o.checks ?? [];
-      all.forEach((r, i) => onResult?.(r, i + 1, all.length));
+      for (const [i, r] of all.entries()) onResult?.(r, i + 1, all.length);
       return all;
     },
     execPath: platform === 'win32' ? `${home}\\bin\\telinha.exe` : `${home}/bin/telinha`,
@@ -152,8 +213,17 @@ function make(o: Opts = {}) {
   } as unknown as SetupDeps;
   const env = { TELINHA_HOME: home, SystemRoot: 'C:\\Windows' };
   const ctx: CliContext = {
-    argv: ['setup'], env, paths: resolvePaths(env, platform, o.isRoot ?? true), envFile: '', locale: 'en', tty: true, yes: false,
-    stdout: () => {}, stderr: () => {}, compiled: o.compiled ?? true, version: 'test',
+    argv: ['setup'],
+    env,
+    paths: resolvePaths(env, platform, o.isRoot ?? true),
+    envFile: '',
+    locale: 'en',
+    tty: true,
+    yes: false,
+    stdout: () => {},
+    stderr: () => {},
+    compiled: o.compiled ?? true,
+    version: 'test',
   };
   ctx.envFile = platform === 'win32' ? `${home}\\config\\telinha.env` : `${home}/config/telinha.env`;
   const sink = new Sink();
@@ -164,13 +234,30 @@ function make(o: Opts = {}) {
 
 /** A complete own-domain VPS file's values. */
 const VALUES = (more: Values = {}): Values => ({
-  HOSTING: 'vps', INGRESS: 'direct', PUBLIC_URL: 'https://t.example.com', HTTP_PORT: '80', HTTPS_PORT: '443', UPNP: 'off',
-  DISCORD_TOKEN: TOKEN, DISCORD_CLIENT_ID: APP, DISCORD_CLIENT_SECRET: SECRET, GUILD_ID: GUILD, ROLE_ID: ROLE, CHANNEL_IDS: CHANNEL, ...more,
+  HOSTING: 'vps',
+  INGRESS: 'direct',
+  PUBLIC_URL: 'https://t.example.com',
+  HTTP_PORT: '80',
+  HTTPS_PORT: '443',
+  UPNP: 'off',
+  DISCORD_TOKEN: TOKEN,
+  DISCORD_CLIENT_ID: APP,
+  DISCORD_CLIENT_SECRET: SECRET,
+  GUILD_ID: GUILD,
+  ROLE_ID: ROLE,
+  CHANNEL_IDS: CHANNEL,
+  ...more,
 });
 
 const OPTS = (more: Partial<ApplyOptions> = {}): ApplyOptions => ({
-  docker: false, compiled: true, sysctl: 'auto', rotateCookie: false, doctorMode: 'data', tray: null,
-  flags: { noService: false, noFirewall: false, noUpnp: false, noDoctor: false, offline: false }, ...more,
+  docker: false,
+  compiled: true,
+  sysctl: 'auto',
+  rotateCookie: false,
+  doctorMode: 'data',
+  tray: null,
+  flags: { noService: false, noFirewall: false, noUpnp: false, noDoctor: false, offline: false },
+  ...more,
 });
 
 /** Each value in turn, a repeat of the one before dropped. */
@@ -200,7 +287,12 @@ function hooks(script: ('retry' | 'skip' | 'back' | 'abort')[] = []) {
   const row = (id: TaskId) => seen.flatMap((rows) => rows.filter((r) => r.id === id));
   /** The statuses the row went through (a retry shows as running again). */
   const statuses = (id: TaskId) => changes(row(id).map((r) => r.status));
-  const details = (id: TaskId) => changes(row(id).map((r) => r.detail).filter(Boolean));
+  const details = (id: TaskId) =>
+    changes(
+      row(id)
+        .map((r) => r.detail)
+        .filter(Boolean),
+    );
   const progress = (id: TaskId) => changes(row(id).flatMap((r) => (r.progress ? [r.progress] : [])));
   /** The latest attempt's lines. */
   const lines = (id: TaskId) => (tasks.rows.find((r) => r.id === id)?.lines ?? []).map((l) => `${l.kind} ${l.text}`);
@@ -210,26 +302,63 @@ function hooks(script: ('retry' | 'skip' | 'back' | 'abort')[] = []) {
 describe('planTasks', () => {
   const flags = (f: Partial<ApplyOptions['flags']>) => OPTS({ flags: { ...OPTS().flags, ...f } });
   test('native: Discord, the file, programs, service, router, start, certificate, doctor', () => {
-    expect(planTasks(VALUES(), OPTS())).toEqual(['discord', 'config', 'binaries', 'service', 'router', 'start', 'cert', 'doctor']);
+    expect(planTasks(VALUES(), OPTS())).toEqual([
+      'discord',
+      'config',
+      'binaries',
+      'service',
+      'router',
+      'start',
+      'cert',
+      'doctor',
+    ]);
   });
   test('DuckDNS adds its update before the file', () => {
-    expect(planTasks(VALUES({ DDNS_PROVIDER: 'duckdns' }), OPTS()).slice(0, 3)).toEqual(['discord', 'duckdns', 'config']);
+    expect(planTasks(VALUES({ DDNS_PROVIDER: 'duckdns' }), OPTS()).slice(0, 3)).toEqual([
+      'discord',
+      'duckdns',
+      'config',
+    ]);
   });
   test('docker writes the file only', () => {
-    expect(planTasks(VALUES({ DDNS_PROVIDER: 'duckdns' }), OPTS({ docker: true }))).toEqual(['discord', 'duckdns', 'config']);
+    expect(planTasks(VALUES({ DDNS_PROVIDER: 'duckdns' }), OPTS({ docker: true }))).toEqual([
+      'discord',
+      'duckdns',
+      'config',
+    ]);
     expect(planTasks(VALUES(), OPTS({ docker: true, flags: { ...OPTS().flags, offline: true } }))).toEqual(['config']);
   });
   test('--no-discord-check, --no-service, --no-upnp, --no-doctor each drop their task', () => {
     expect(planTasks(VALUES(), flags({ offline: true }))[0]).toBe('config');
     expect(planTasks(VALUES(), flags({ noService: true }))).not.toContain('service');
     expect(planTasks(VALUES(), flags({ noUpnp: true }))).not.toContain('router');
-    expect(planTasks(VALUES(), flags({ noDoctor: true }))).toEqual(['discord', 'config', 'binaries', 'service', 'router', 'start']);
+    expect(planTasks(VALUES(), flags({ noDoctor: true }))).toEqual([
+      'discord',
+      'config',
+      'binaries',
+      'service',
+      'router',
+      'start',
+    ]);
   });
   test('the tray icon right after the service, when there is one (native Windows)', () => {
     const tray = { install: true, autostart: null };
-    expect(planTasks(VALUES(), OPTS({ tray }))).toEqual(['discord', 'config', 'binaries', 'service', 'tray', 'router', 'start', 'cert', 'doctor']);
+    expect(planTasks(VALUES(), OPTS({ tray }))).toEqual([
+      'discord',
+      'config',
+      'binaries',
+      'service',
+      'tray',
+      'router',
+      'start',
+      'cert',
+      'doctor',
+    ]);
     // --no-service keeps the icon: it shows Telinha started by hand too.
-    expect(planTasks(VALUES(), OPTS({ tray, flags: { ...OPTS().flags, noService: true } })).slice(2, 4)).toEqual(['binaries', 'tray']);
+    expect(planTasks(VALUES(), OPTS({ tray, flags: { ...OPTS().flags, noService: true } })).slice(2, 4)).toEqual([
+      'binaries',
+      'tray',
+    ]);
     expect(planTasks(VALUES(), OPTS({ tray, docker: true }))).not.toContain('tray');
   });
   test('a tunnel or an own proxy has no certificate of its own to wait for', () => {
@@ -256,14 +385,30 @@ describe('runApply', () => {
   test('rows: every task pending first, then running and a final status; lines are what the plain output printed', async () => {
     const { w, sink, target, files } = make({ compiled: false, available: false });
     const r = hooks();
-    const result = await runApply(w, target, VALUES(), ['discord', 'config', 'binaries', 'service', 'start'], OPTS({ compiled: false }), r.h, r.tasks);
+    const result = await runApply(
+      w,
+      target,
+      VALUES(),
+      ['discord', 'config', 'binaries', 'service', 'start'],
+      OPTS({ compiled: false }),
+      r.h,
+      r.tasks,
+    );
     expect(result.kind).toBe('done');
-    expect(r.seen[0]!.map((e) => `${e.id} ${e.status}`)).toEqual(['discord pending', 'config pending', 'binaries pending', 'service pending', 'start pending']);
+    expect(r.seen[0]!.map((e) => `${e.id} ${e.status}`)).toEqual([
+      'discord pending',
+      'config pending',
+      'binaries pending',
+      'service pending',
+      'start pending',
+    ]);
     expect(r.statuses('discord')).toEqual(['pending', 'running', 'ok']);
     expect(r.statuses('config')).toEqual(['pending', 'running', 'ok']);
     // From source the service row says why nothing is installed.
     expect(r.statuses('service')).toEqual(['pending', 'running', 'skipped']);
-    expect(r.lines('service')).toEqual(['info Running from source: no service is installed (the native binary installs one).']);
+    expect(r.lines('service')).toEqual([
+      'info Running from source: no service is installed (the native binary installs one).',
+    ]);
     // Nothing installed, nothing running: start it by hand, a warning.
     expect(r.statuses('start')).toEqual(['pending', 'running', 'warn']);
     expect(r.lines('config')).toEqual(['ok Wrote /opt/telinha/config/telinha.env']);
@@ -281,15 +426,34 @@ describe('runApply', () => {
       'step Start',
       'Start it with: bun server/src/index.ts run',
     ]);
-    if (result.kind === 'done') expect(result.tasks).toMatchObject({ discord: 'ok', config: 'ok', binaries: 'ok', service: 'skipped', start: 'warn', router: 'skipped' });
+    if (result.kind === 'done')
+      expect(result.tasks).toMatchObject({
+        discord: 'ok',
+        config: 'ok',
+        binaries: 'ok',
+        service: 'skipped',
+        start: 'warn',
+        router: 'skipped',
+      });
     expect(parseEnvFile(files.get(target.file)!).vars.DISCORD_TOKEN).toBe(TOKEN);
   });
 
   test('a failure asks decide: retry runs the task again, skip goes on', async () => {
     const { w, target, files } = make();
     const r = hooks(['retry', 'skip']);
-    const result = await runApply(w, target, VALUES({ ROLE_ID: '999999999999999999' }), ['discord', 'config'], OPTS(), r.h, r.tasks);
-    expect(r.decided).toEqual([['discord', 'Role 999999999999999999 does not exist in the server.'], ['discord', 'Role 999999999999999999 does not exist in the server.']]);
+    const result = await runApply(
+      w,
+      target,
+      VALUES({ ROLE_ID: '999999999999999999' }),
+      ['discord', 'config'],
+      OPTS(),
+      r.h,
+      r.tasks,
+    );
+    expect(r.decided).toEqual([
+      ['discord', 'Role 999999999999999999 does not exist in the server.'],
+      ['discord', 'Role 999999999999999999 does not exist in the server.'],
+    ]);
     expect(r.statuses('discord')).toEqual(['pending', 'running', 'fail', 'running', 'fail', 'skipped']);
     expect(result).toMatchObject({ kind: 'done', tasks: { discord: 'skipped', config: 'ok' } });
     expect(files.has(target.file)).toBe(true);
@@ -297,17 +461,45 @@ describe('runApply', () => {
 
   test('back and abort stop the run; abort says whether the file was written', async () => {
     const back = make();
-    expect(await runApply(back.w, back.target, VALUES({ DISCORD_TOKEN: 'nope' }), ['discord', 'config'], OPTS(), hooks(['back']).h)).toEqual({ kind: 'back', to: 'discord' });
+    expect(
+      await runApply(
+        back.w,
+        back.target,
+        VALUES({ DISCORD_TOKEN: 'nope' }),
+        ['discord', 'config'],
+        OPTS(),
+        hooks(['back']).h,
+      ),
+    ).toEqual({ kind: 'back', to: 'discord' });
     expect(back.files.size).toBe(0);
 
     const before = make();
-    expect(await runApply(before.w, before.target, VALUES({ DISCORD_TOKEN: 'nope' }), ['discord', 'config'], OPTS(), hooks(['abort']).h)).toEqual({ kind: 'aborted', wrote: false });
+    expect(
+      await runApply(
+        before.w,
+        before.target,
+        VALUES({ DISCORD_TOKEN: 'nope' }),
+        ['discord', 'config'],
+        OPTS(),
+        hooks(['abort']).h,
+      ),
+    ).toEqual({ kind: 'aborted', wrote: false });
     expect(before.files.size).toBe(0);
 
     // The service never answers: the failure comes after the file.
     const after = make({ available: false });
     const r = hooks(['abort']);
-    expect(await runApply(after.w, after.target, VALUES(), ['config', 'service', 'start', 'doctor'], OPTS({ flags: { ...OPTS().flags, offline: true } }), r.h, r.tasks)).toEqual({ kind: 'aborted', wrote: true });
+    expect(
+      await runApply(
+        after.w,
+        after.target,
+        VALUES(),
+        ['config', 'service', 'start', 'doctor'],
+        OPTS({ flags: { ...OPTS().flags, offline: true } }),
+        r.h,
+        r.tasks,
+      ),
+    ).toEqual({ kind: 'aborted', wrote: true });
     expect(r.decided[0]![0]).toBe('start');
     expect(r.decided[0]![1]).toContain('Telinha does not answer yet');
     expect(r.statuses('doctor')).toEqual(['pending']);
@@ -316,7 +508,15 @@ describe('runApply', () => {
   test('the file cannot be skipped: skipping it stops the run with nothing written', async () => {
     const { w, target, files } = make();
     const r = hooks(['skip']);
-    const result = await runApply(w, target, VALUES({ PUBLIC_URL: 'not a url' }), ['config', 'binaries', 'start'], OPTS(), r.h, r.tasks);
+    const result = await runApply(
+      w,
+      target,
+      VALUES({ PUBLIC_URL: 'not a url' }),
+      ['config', 'binaries', 'start'],
+      OPTS(),
+      r.h,
+      r.tasks,
+    );
     expect(r.decided[0]![1]).toStartWith('the resulting configuration is invalid:');
     expect(r.statuses('config')).toEqual(['pending', 'running', 'fail']);
     expect(r.statuses('binaries')).toEqual(['pending']);
@@ -328,7 +528,10 @@ describe('runApply', () => {
     const { w, target } = make({ bins: async () => Promise.reject(new Error('boom')) });
     // downloadBinaries turns a failed download into a warning itself.
     const r = hooks();
-    expect(await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), r.h, r.tasks)).toMatchObject({ kind: 'done', tasks: { binaries: 'warn' } });
+    expect(await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), r.h, r.tasks)).toMatchObject({
+      kind: 'done',
+      tasks: { binaries: 'warn' },
+    });
     expect(r.lines('binaries')).toEqual(['fail Download failed: boom. telinha run tries again at start.']);
     const broken = make({ doctor: async () => Promise.reject(new Error('gone')) });
     broken.w.deps.control.available = () => Promise.reject(new Error('no control'));
@@ -336,7 +539,9 @@ describe('runApply', () => {
     broken.w.deps.serviceManager = () => {
       throw new Error('no manager');
     };
-    expect(await runApply(broken.w, broken.target, VALUES(), ['config', 'service'], OPTS(), rb.h, rb.tasks)).toMatchObject({ kind: 'done', tasks: { service: 'skipped' } });
+    expect(
+      await runApply(broken.w, broken.target, VALUES(), ['config', 'service'], OPTS(), rb.h, rb.tasks),
+    ).toMatchObject({ kind: 'done', tasks: { service: 'skipped' } });
     expect(rb.decided).toEqual([['service', 'no manager']]);
     expect(rb.lines('service')).toContain('fail no manager');
   });
@@ -348,13 +553,26 @@ describe('runApply', () => {
       const m = make({ isRoot: false, home, files, available: true });
       const seen: { inside: boolean | null } = { inside: null };
       const r = hooks();
-      m.w.deps.spawnInteractive = async () => ((seen.inside = r.inTerminal()), 0);
-      await runApply(m.w, m.target, VALUES(), ['config', 'binaries', 'service', 'router', 'start', 'cert', 'doctor'], OPTS({ sysctl: mode }), r.h, r.tasks);
+      m.w.deps.spawnInteractive = async () => {
+        seen.inside = r.inTerminal();
+        return 0;
+      };
+      await runApply(
+        m.w,
+        m.target,
+        VALUES(),
+        ['config', 'binaries', 'service', 'router', 'start', 'cert', 'doctor'],
+        OPTS({ sysctl: mode }),
+        r.h,
+        r.tasks,
+      );
       if (mode === 'sudo') {
-        expect(r.terminal).toEqual([[
-          'Ports 80, 443 are below 1024: Linux lets only root bind them unless one setting changes.',
-          'One sudo command allows ports from 80 up for every user (it survives updates):',
-        ]]);
+        expect(r.terminal).toEqual([
+          [
+            'Ports 80, 443 are below 1024: Linux lets only root bind them unless one setting changes.',
+            'One sudo command allows ports from 80 up for every user (it survives updates):',
+          ],
+        ]);
         expect(seen.inside).toBe(true);
         expect(r.lines('service')).toContain('ok Ports from 80 up are allowed now.');
       } else {
@@ -369,10 +587,13 @@ describe('runApply', () => {
   test('Windows UAC: no terminal handover; the service row says what it waits for', async () => {
     const result = { ok: true, steps: { task: 'ok', firewall: 'ok', start: 'ok' }, hints: [] };
     const { w, target } = make({
-      platform: 'win32', isRoot: false,
+      platform: 'win32',
+      isRoot: false,
       spawn: (cmd, fsFiles) => {
-        if (cmd[0]!.endsWith('whoami.exe')) return { code: 0, stdout: '"User Name","SID"\r\n"pc\\me","S-1-5-21-9"\r\n', stderr: '' };
-        if (cmd[0] === 'powershell' && cmd[4]!.includes('Start-Process')) fsFiles.set('C:\\T\\service\\install-result.json', JSON.stringify(result));
+        if (cmd[0]!.endsWith('whoami.exe'))
+          return { code: 0, stdout: '"User Name","SID"\r\n"pc\\me","S-1-5-21-9"\r\n', stderr: '' };
+        if (cmd[0] === 'powershell' && cmd[4]!.includes('Start-Process'))
+          fsFiles.set('C:\\T\\service\\install-result.json', JSON.stringify(result));
         return { code: 0, stdout: '', stderr: '' };
       },
     });
@@ -400,7 +621,11 @@ describe('runApply', () => {
     // Without the session's memo the counter-based random makes new ones.
     expect((await apply()).COOKIE_SECRET).not.toBe(first.COOKIE_SECRET);
 
-    const file = VALUES({ COOKIE_SECRET: 'Gt5kWq8Zr3Np6Vx1Lm4Bc7Hd9Js2Ya0F', LIVEKIT_API_KEY: 'telinhaabcdef12', LIVEKIT_API_SECRET: 'Zc4Rn8Wq2Tx6Pk1Vm5Lb9Hs3Jd7Fy0Ga' }); // gitleaks:allow
+    const file = VALUES({
+      COOKIE_SECRET: 'Gt5kWq8Zr3Np6Vx1Lm4Bc7Hd9Js2Ya0F', // gitleaks:allow
+      LIVEKIT_API_KEY: 'telinhaabcdef12', // gitleaks:allow
+      LIVEKIT_API_SECRET: 'Zc4Rn8Wq2Tx6Pk1Vm5Lb9Hs3Jd7Fy0Ga', // gitleaks:allow
+    });
     const rot: SecretMemo = { made: {} };
     const r1 = await apply({ secrets: rot, rotateCookie: true }, { ...file });
     const r2 = await apply({ secrets: rot, rotateCookie: true }, { ...file });
@@ -428,7 +653,11 @@ describe('runApply', () => {
       { done: 512, total: null, unit: 'bytes', label: 'caddy' },
     ]);
     expect(r.details('binaries')).toEqual(['Downloading LiveKit, Caddy...', 'downloading livekit.tar.gz']);
-    expect(sink.progressCalls).toEqual([[0, 2_000_000, 'livekit'], [2_000_000, 2_000_000, 'livekit'], [512, null, 'caddy']]);
+    expect(sink.progressCalls).toEqual([
+      [0, 2_000_000, 'livekit'],
+      [2_000_000, 2_000_000, 'livekit'],
+      [512, null, 'caddy'],
+    ]);
   });
 
   test('the certificate wait reports the time waited against its limit', async () => {
@@ -451,7 +680,10 @@ describe('runApply', () => {
     const r = hooks();
     const result = await runApply(data.w, data.target, VALUES(), ['config', 'doctor'], OPTS(), r.h, r.tasks);
     expect(r.details('doctor')).toEqual(['1 of 2 checks', '2 of 2 checks']);
-    expect(r.progress('doctor')).toEqual([{ done: 1, total: 2, unit: 'items' }, { done: 2, total: 2, unit: 'items' }]);
+    expect(r.progress('doctor')).toEqual([
+      { done: 1, total: 2, unit: 'items' },
+      { done: 2, total: 2, unit: 'items' },
+    ]);
     expect(result).toMatchObject({ kind: 'done', doctor: checks, tasks: { doctor: 'warn' } });
     expect(r.lines('doctor')).toEqual(['warn 1 ok · 0 warnings · 1 failed · 0 skipped']);
     expect(data.rec.doctor).toEqual([]);
@@ -462,17 +694,25 @@ describe('runApply', () => {
     expect(cli.rec.checks).toBe(0);
   });
 
-  test('DuckDNS: the record is set before the file; a refusal fails the task with DuckDNS\'s words', async () => {
+  test("DuckDNS: the record is set before the file; a refusal fails the task with DuckDNS's words", async () => {
     const m = make();
     const r = hooks();
-    const values = VALUES({ DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'my-group', DUCKDNS_TOKEN: DUCK, PUBLIC_URL: 'https://my-group.duckdns.org' });
+    const values = VALUES({
+      DDNS_PROVIDER: 'duckdns',
+      DUCKDNS_DOMAIN: 'my-group',
+      DUCKDNS_TOKEN: DUCK,
+      PUBLIC_URL: 'https://my-group.duckdns.org',
+    });
     await runApply(m.w, m.target, values, ['duckdns', 'config'], OPTS(), r.h, r.tasks);
     expect(m.rec.ddns).toEqual(['my-group 203.0.113.9']);
     expect(r.lines('duckdns')).toEqual(['ok my-group.duckdns.org now points at 203.0.113.9.']);
     const bad = make();
     bad.w.deps.ddns = () => ({ update: async () => {}, last: () => ({ ip: '', at: 1, ok: false, error: 'KO' }) });
     const rb = hooks(['abort']);
-    expect(await runApply(bad.w, bad.target, values, ['duckdns', 'config'], OPTS(), rb.h, rb.tasks)).toEqual({ kind: 'aborted', wrote: false });
+    expect(await runApply(bad.w, bad.target, values, ['duckdns', 'config'], OPTS(), rb.h, rb.tasks)).toEqual({
+      kind: 'aborted',
+      wrote: false,
+    });
     expect(rb.decided).toEqual([['duckdns', 'DuckDNS did not accept it: KO']]);
   });
 
@@ -495,24 +735,48 @@ describe('TaskList', () => {
     const tasks = new TaskList();
     const atDecide: TaskRow[] = [];
     const script = ['retry', 'skip'] as const;
-    const hooks: ApplyHooks = { ...plain, decide: async () => (atDecide.push(tasks.rows[0]!), script[atDecide.length - 1]!) };
+    const hooks: ApplyHooks = {
+      ...plain,
+      decide: async () => (atDecide.push(tasks.rows[0]!), script[atDecide.length - 1]!),
+    };
     await runApply(w, target, VALUES({ ROLE_ID: '999999999999999999' }), ['discord', 'config'], OPTS(), hooks, tasks);
-    const lines = ['ok Bot: Telinha Bot (app id 111111111111111111)', 'fail Role 999999999999999999 does not exist in the server.'];
-    expect(atDecide.map((r) => [r.status, ...r.lines.map((l) => `${l.kind} ${l.text}`)])).toEqual([['fail', ...lines], ['fail', ...lines]]);
-    expect(tasks.rows.map((r) => [r.id, r.status])).toEqual([['discord', 'skipped'], ['config', 'ok']]);
+    const lines = [
+      'ok Bot: Telinha Bot (app id 111111111111111111)',
+      'fail Role 999999999999999999 does not exist in the server.',
+    ];
+    expect(atDecide.map((r) => [r.status, ...r.lines.map((l) => `${l.kind} ${l.text}`)])).toEqual([
+      ['fail', ...lines],
+      ['fail', ...lines],
+    ]);
+    expect(tasks.rows.map((r) => [r.id, r.status])).toEqual([
+      ['discord', 'skipped'],
+      ['config', 'ok'],
+    ]);
   });
 
-  test('a spinner\'s next line is the row\'s result; a line without a spinner is not', async () => {
+  test("a spinner's next line is the row's result; a line without a spinner is not", async () => {
     const { w, target } = make();
     const tasks = new TaskList();
     const seen: TaskRow[] = [];
     tasks.subscribe(() => void seen.push(...tasks.rows.filter((r) => r.id === 'binaries')));
     await runApply(w, target, VALUES(), ['config', 'binaries'], OPTS(), plain, tasks);
     // While the download runs the spinner is up and nothing has ended it.
-    expect(seen.find((r) => r.spinning)).toMatchObject({ status: 'running', detail: 'Downloading LiveKit, Caddy...', result: null });
+    expect(seen.find((r) => r.spinning)).toMatchObject({
+      status: 'running',
+      detail: 'Downloading LiveKit, Caddy...',
+      result: null,
+    });
     const [config, binaries] = tasks.rows;
-    expect(binaries).toMatchObject({ status: 'ok', spinning: false, result: { kind: 'ok', text: 'Programs ready in /opt/telinha/bin' } });
-    expect(config).toMatchObject({ status: 'ok', result: null, lines: [{ kind: 'ok', text: 'Wrote /opt/telinha/config/telinha.env' }] });
+    expect(binaries).toMatchObject({
+      status: 'ok',
+      spinning: false,
+      result: { kind: 'ok', text: 'Programs ready in /opt/telinha/bin' },
+    });
+    expect(config).toMatchObject({
+      status: 'ok',
+      result: null,
+      lines: [{ kind: 'ok', text: 'Wrote /opt/telinha/config/telinha.env' }],
+    });
   });
 
   test('what is left to do: a warning with its explanation, every router line; the summary leads with the headline', async () => {
@@ -520,7 +784,15 @@ describe('TaskList', () => {
     const files = { '/proc/sys/net/ipv4/ip_unprivileged_port_start': '1024', [`${home}/bin/telinha`]: 'x' };
     const { w, target } = make({ isRoot: false, home, files, available: true });
     const tasks = new TaskList();
-    await runApply(w, target, VALUES(), ['config', 'service', 'router', 'start'], OPTS({ sysctl: 'manual' }), plain, tasks);
+    await runApply(
+      w,
+      target,
+      VALUES(),
+      ['config', 'service', 'router', 'start'],
+      OPTS({ sysctl: 'manual' }),
+      plain,
+      tasks,
+    );
     const row = (id: TaskId) => tasks.rows.find((r) => r.id === id)!;
     expect(row('service').status).toBe('warn');
     expect(row('service').todo.map((l) => l.kind)).toEqual(['warn', 'info']);
@@ -530,9 +802,19 @@ describe('TaskList', () => {
     expect(row('config').todo).toEqual([]);
 
     const summary = tasks.summary();
-    expect(summary.map((r) => [r.id, r.status])).toEqual([['config', 'ok'], ['service', 'warn'], ['router', 'ok'], ['start', 'ok']]);
+    expect(summary.map((r) => [r.id, r.status])).toEqual([
+      ['config', 'ok'],
+      ['service', 'warn'],
+      ['router', 'ok'],
+      ['start', 'ok'],
+    ]);
     const at = (id: TaskId) => summary.find((r) => r.id === id)!;
-    expect(at('config')).toEqual({ id: 'config', status: 'ok', headline: { kind: 'ok', text: `Wrote ${home}/config/telinha.env` }, todo: [] });
+    expect(at('config')).toEqual({
+      id: 'config',
+      status: 'ok',
+      headline: { kind: 'ok', text: `Wrote ${home}/config/telinha.env` },
+      todo: [],
+    });
     // The router's first line heads its row; the rest are what is left to do.
     expect(at('router').headline).toEqual(row('router').lines[0]!);
     expect(at('router').todo).toEqual(row('router').lines.slice(1));
@@ -545,24 +827,47 @@ describe('TaskList', () => {
     const { w, target } = make({ available: false });
     const tasks = new TaskList();
     const offline = OPTS({ flags: { ...OPTS().flags, offline: true } });
-    await runApply(w, target, VALUES(), ['config', 'service', 'start', 'doctor'], offline, { ...plain, decide: async () => 'abort' }, tasks);
+    await runApply(
+      w,
+      target,
+      VALUES(),
+      ['config', 'service', 'start', 'doctor'],
+      offline,
+      { ...plain, decide: async () => 'abort' },
+      tasks,
+    );
     expect(tasks.rows.map((r) => r.status)).toEqual(['ok', 'ok', 'fail', 'pending']);
     const summary = tasks.summary();
-    expect(summary.map((r) => [r.id, r.status])).toEqual([['config', 'ok'], ['service', 'ok'], ['start', 'fail']]);
+    expect(summary.map((r) => [r.id, r.status])).toEqual([
+      ['config', 'ok'],
+      ['service', 'ok'],
+      ['start', 'fail'],
+    ]);
     expect(summary[2]!.headline).toEqual(tasks.rows[2]!.lines.findLast((l) => l.kind === 'fail')!);
     expect(summary[2]!.headline?.text).toContain('Telinha does not answer yet');
   });
 
-  test('wrote is the latest run\'s file, wroteAny any run\'s; a new run starts the rows over', async () => {
+  test("wrote is the latest run's file, wroteAny any run's; a new run starts the rows over", async () => {
     const tasks = new TaskList();
     expect([tasks.wrote, tasks.wroteAny, tasks.rows]).toEqual([false, false, []]);
     const first = make();
     await runApply(first.w, first.target, VALUES(), ['config'], OPTS(), plain, tasks);
     expect([tasks.wrote, tasks.wroteAny]).toEqual([true, true]);
     const again = make();
-    await runApply(again.w, again.target, VALUES({ DISCORD_TOKEN: 'nope' }), ['discord', 'config'], OPTS(), { ...plain, decide: async () => 'abort' }, tasks);
+    await runApply(
+      again.w,
+      again.target,
+      VALUES({ DISCORD_TOKEN: 'nope' }),
+      ['discord', 'config'],
+      OPTS(),
+      { ...plain, decide: async () => 'abort' },
+      tasks,
+    );
     expect([tasks.wrote, tasks.wroteAny]).toEqual([false, true]);
-    expect(tasks.rows.map((r) => [r.id, r.status])).toEqual([['discord', 'fail'], ['config', 'pending']]);
+    expect(tasks.rows.map((r) => [r.id, r.status])).toEqual([
+      ['discord', 'fail'],
+      ['config', 'pending'],
+    ]);
   });
 
   test('subscribe hears every change until it unsubscribes; rows is a copy', async () => {
@@ -579,6 +884,9 @@ describe('TaskList', () => {
     const rows = tasks.rows;
     rows[0]!.lines.push({ kind: 'fail', text: 'mine' });
     rows[0]!.status = 'fail';
-    expect(tasks.rows[0]).toMatchObject({ status: 'ok', lines: [{ kind: 'ok', text: 'Wrote /opt/telinha/config/telinha.env' }] });
+    expect(tasks.rows[0]).toMatchObject({
+      status: 'ok',
+      lines: [{ kind: 'ok', text: 'Wrote /opt/telinha/config/telinha.env' }],
+    });
   });
 });

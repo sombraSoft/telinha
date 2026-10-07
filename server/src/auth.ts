@@ -24,7 +24,9 @@ export function sign(secret: string, payload: object): string {
 }
 
 export function verify<T extends { exp: number } = Session>(
-  secret: string, value: unknown, now = Date.now(),
+  secret: string,
+  value: unknown,
+  now = Date.now(),
 ): T | null {
   if (typeof value !== 'string') return null;
   const dot = value.indexOf('.');
@@ -66,6 +68,7 @@ export function parseCookies(header: string | null | undefined = ''): Record<str
 // //evil.com: reject control characters, then check what a URL parser makes of it.
 export function safeNext(next: unknown): string {
   if (typeof next !== 'string' || !next.startsWith('/')) return '/';
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point
   if (/[\u0000-\u001f\u007f]/.test(next)) return '/';
   if (next.startsWith('//') || next.startsWith('/\\')) return '/';
   let url: URL;

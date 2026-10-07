@@ -2,7 +2,7 @@
 // room session (room.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { VideoQuality } from 'livekit-client';
-import { QUALITY, parseQuality, parseShareSettings, presetOf, type ShareSettings } from './share';
+import { parseQuality, parseShareSettings, presetOf, QUALITY, type ShareSettings } from './share';
 
 describe('presets', () => {
   test('values pick their preset, anything else is custom', () => {
@@ -27,7 +27,12 @@ describe('stored settings', () => {
   });
   test('share settings: the old {res, fps} format still loads, audio on', () => {
     expect(parseShareSettings({ res: 720, fps: 30 })).toEqual({ res: 720, fps: 30, preset: 'custom', audio: true });
-    expect(parseShareSettings({ res: '1440', fps: '15' })).toEqual({ res: 1440, fps: 15, preset: 'readable', audio: true });
+    expect(parseShareSettings({ res: '1440', fps: '15' })).toEqual({
+      res: 1440,
+      fps: 15,
+      preset: 'readable',
+      audio: true,
+    });
     expect(parseShareSettings({ res: 1080, fps: 60 })).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
   });
   test('share settings: the new format round-trips', () => {
@@ -44,9 +49,24 @@ describe('stored settings', () => {
     expect(parseShareSettings(null)).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
     expect(parseShareSettings('1080p')).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
     expect(parseShareSettings([720, 30])).toEqual({ res: 1080, fps: 60, preset: 'smooth', audio: true });
-    expect(parseShareSettings({ res: 999, fps: 30, audio: 'no' })).toEqual({ res: 1080, fps: 30, preset: 'custom', audio: true });
+    expect(parseShareSettings({ res: 999, fps: 30, audio: 'no' })).toEqual({
+      res: 1080,
+      fps: 30,
+      preset: 'custom',
+      audio: true,
+    });
     // A preset name that doesn't match the values follows the values.
-    expect(parseShareSettings({ res: 720, fps: 15, preset: 'smooth' })).toEqual({ res: 720, fps: 15, preset: 'custom', audio: true });
-    expect(parseShareSettings({ res: 1440, fps: 15, preset: 'ultra', audio: false })).toEqual({ res: 1440, fps: 15, preset: 'readable', audio: false });
+    expect(parseShareSettings({ res: 720, fps: 15, preset: 'smooth' })).toEqual({
+      res: 720,
+      fps: 15,
+      preset: 'custom',
+      audio: true,
+    });
+    expect(parseShareSettings({ res: 1440, fps: 15, preset: 'ultra', audio: false })).toEqual({
+      res: 1440,
+      fps: 15,
+      preset: 'readable',
+      audio: false,
+    });
   });
 });

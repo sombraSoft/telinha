@@ -1,9 +1,9 @@
 <script lang="ts">
+  import mascot from '../assets/telinha.webp';
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomSession } from '../lib/room.svelte';
   import { canShareScreen } from '../lib/share';
   import Tile from './Tile.svelte';
-  import mascot from '../assets/telinha.webp';
 
   let { rc }: { rc: RoomSession } = $props();
 

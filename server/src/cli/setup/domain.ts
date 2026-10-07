@@ -20,13 +20,24 @@ const DUCK_RE = /^[a-z0-9-]{1,63}$/;
 
 /** "https://Host.example.com:443/x" or "host.example.com" -> "host.example.com"; null when not a hostname. */
 export function parseHost(input: string): string | null {
-  const bare = input.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '').replace(/:\d+$/, '').replace(/\.$/, '').toLowerCase();
+  const bare = input
+    .trim()
+    .replace(/^[a-z]+:\/\//i, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/:\d+$/, '')
+    .replace(/\.$/, '')
+    .toLowerCase();
   return HOST_RE.test(bare) && !IPV4_RE.test(bare) ? bare : null;
 }
 
 /** The DuckDNS subdomain alone: "Name.duckdns.org" -> "name". */
 export function parseDuckDomain(input: string): string | null {
-  const bare = input.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/\.duckdns\.org\.?$/, '');
+  const bare = input
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/\.duckdns\.org\.?$/, '');
   return DUCK_RE.test(bare) ? bare : null;
 }
 

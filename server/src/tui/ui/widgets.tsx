@@ -1,7 +1,7 @@
 // The building blocks every screen uses. Each <text> sets fg (OpenTUI's own
 // default is white) and every bounded single-line row is cut with fit().
-import { TextAttributes, type RGBA } from '@opentui/core';
-import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { type RGBA, TextAttributes } from '@opentui/core';
+import { createMemo, createSignal, For, type JSX, Show } from 'solid-js';
 import { isDown, isEnter, isPrintable, isSpace, isUp, useKeys } from '../keys.ts';
 import { useT } from '../strings.ts';
 import { c } from '../theme.ts';
@@ -31,14 +31,27 @@ export function Bar(props: { value: number; width: number }) {
 export function Para(props: { text: string; fg?: Color }) {
   return (
     <box flexDirection="column">
-      <For each={props.text.split('\n')}>{(line) => <text fg={props.fg ?? c.muted} wrapMode="word">{line === '' ? ' ' : line}</text>}</For>
+      <For each={props.text.split('\n')}>
+        {(line) => (
+          <text fg={props.fg ?? c.muted} wrapMode="word">
+            {line === '' ? ' ' : line}
+          </text>
+        )}
+      </For>
     </box>
   );
 }
 
 export type Status = 'ok' | 'warn' | 'fail' | 'skip' | 'pending' | 'running' | 'skipped';
 
-const ICON: Record<Exclude<Status, 'running'>, string> = { ok: '✔', warn: '!', fail: '✖', skip: '–', skipped: '–', pending: '○' };
+const ICON: Record<Exclude<Status, 'running'>, string> = {
+  ok: '✔',
+  warn: '!',
+  fail: '✖',
+  skip: '–',
+  skipped: '–',
+  pending: '○',
+};
 
 export function statusColor(s: Status): Color {
   return s === 'ok' ? c.ok : s === 'warn' ? c.warn : s === 'fail' ? c.fail : s === 'running' ? c.accent : c.muted;
@@ -48,7 +61,10 @@ export function statusColor(s: Status): Color {
 export function StatusIcon(props: { status: Status }) {
   return (
     <Show when={props.status !== 'running'} fallback={<Spinner />}>
-      <text fg={statusColor(props.status)} attributes={props.status === 'ok' || props.status === 'warn' || props.status === 'fail' ? Bold : 0}>
+      <text
+        fg={statusColor(props.status)}
+        attributes={props.status === 'ok' || props.status === 'warn' || props.status === 'fail' ? Bold : 0}
+      >
         {ICON[props.status as Exclude<Status, 'running'>]}
       </text>
     </Show>
@@ -83,7 +99,13 @@ interface Line {
 }
 
 /** The "About this" pane: wrapped here so an overflow can end in a "…" line. */
-export function HintPane(props: { title?: string; lines: string[]; extra?: { head: string; items: string[] }; width: number; maxRows?: number }) {
+export function HintPane(props: {
+  title?: string;
+  lines: string[];
+  extra?: { head: string; items: string[] };
+  width: number;
+  maxRows?: number;
+}) {
   const t = useT();
   const lines = createMemo<Line[]>(() => {
     const inner = Math.max(1, props.width - 4);
@@ -112,7 +134,13 @@ export function HintPane(props: { title?: string; lines: string[]; extra?: { hea
       width={props.width}
       flexShrink={0}
     >
-      <For each={lines()}>{(l) => <text fg={l.fg} attributes={l.bold ? Bold : 0} wrapMode="none">{l.text === '' ? ' ' : l.text}</text>}</For>
+      <For each={lines()}>
+        {(l) => (
+          <text fg={l.fg} attributes={l.bold ? Bold : 0} wrapMode="none">
+            {l.text === '' ? ' ' : l.text}
+          </text>
+        )}
+      </For>
     </box>
   );
 }
@@ -222,7 +250,16 @@ export function Picker(props: {
     };
     const desc = (d: string): Part[] => [{ text: `${' '.repeat(indent)}${d}`, fg: c.muted }];
     const status: Part[][] = props.multi
-      ? [[], [{ text: err() || (picked().length === 1 ? t('common.selected1') : t('common.selected', { n: picked().length })), fg: err() ? c.fail : c.muted }]]
+      ? [
+          [],
+          [
+            {
+              text:
+                err() || (picked().length === 1 ? t('common.selected1') : t('common.selected', { n: picked().length })),
+              fg: err() ? c.fail : c.muted,
+            },
+          ],
+        ]
       : [];
 
     const full: Part[][] = [];
@@ -265,7 +302,11 @@ export function Picker(props: {
           <box flexDirection="row" flexShrink={0}>
             <Show when={parts.length} fallback={<text fg={c.muted}> </text>}>
               <For each={parts}>
-                {(p) => <text fg={p.fg} attributes={p.bold ? Bold : 0} wrapMode={props.width ? 'none' : 'word'}>{p.text}</text>}
+                {(p) => (
+                  <text fg={p.fg} attributes={p.bold ? Bold : 0} wrapMode={props.width ? 'none' : 'word'}>
+                    {p.text}
+                  </text>
+                )}
               </For>
             </Show>
           </box>
@@ -333,26 +374,41 @@ export function Field(props: {
       pasted() ? t('common.pasted') : '',
       props.defaultText ? `${t('common.default')}: ${props.defaultText}` : '',
       props.keepsSecret && value() === '' ? t('common.keepCurrent') : '',
-    ].filter(Boolean).join(' · ');
+    ]
+      .filter(Boolean)
+      .join(' · ');
   return (
     <box flexDirection="column" width={props.width} flexShrink={0}>
-      <box border borderStyle="rounded" borderColor={props.disabled ? c.muted : c.accent} paddingLeft={1} paddingRight={1} flexDirection="row">
+      <box
+        border
+        borderStyle="rounded"
+        borderColor={props.disabled ? c.muted : c.accent}
+        paddingLeft={1}
+        paddingRight={1}
+        flexDirection="row"
+      >
         <Show
           when={value() !== ''}
           fallback={
             <box flexDirection="row">
               <text fg={c.accent}>▌</text>
-              <text fg={c.muted} wrapMode="none">{fit(props.placeholder ?? t('common.empty'), inner() - 1)}</text>
+              <text fg={c.muted} wrapMode="none">
+                {fit(props.placeholder ?? t('common.empty'), inner() - 1)}
+              </text>
             </box>
           }
         >
-          <text fg={c.text} wrapMode="none">{shown()}</text>
+          <text fg={c.text} wrapMode="none">
+            {shown()}
+          </text>
           <Show when={!props.disabled}>
             <text fg={c.accent}>▌</text>
           </Show>
         </Show>
       </box>
-      <text fg={c.muted} paddingLeft={1} wrapMode="none">{fit(status(), props.width - 1) || ' '}</text>
+      <text fg={c.muted} paddingLeft={1} wrapMode="none">
+        {fit(status(), props.width - 1) || ' '}
+      </text>
     </box>
   );
 }

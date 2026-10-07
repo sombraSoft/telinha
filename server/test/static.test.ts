@@ -34,7 +34,12 @@ describe('serving /r/ (members)', () => {
 
   test('HEAD: headers, no body', async () => {
     const s = setup();
-    const r = await s.call(new Request('https://telinha.example.com/r/bafo-kiru', { method: 'HEAD', headers: { cookie: s.sessionCookie() } }));
+    const r = await s.call(
+      new Request('https://telinha.example.com/r/bafo-kiru', {
+        method: 'HEAD',
+        headers: { cookie: s.sessionCookie() },
+      }),
+    );
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toBe('text/html; charset=utf-8');
     expect(await r.text()).toBe('');
@@ -72,20 +77,45 @@ describe('serving /r/ (members)', () => {
   test('unknown files, bad codes, deeper paths and traversal attempts -> 404', async () => {
     const s = setup();
     const paths = [
-      '/r/nope.js', '/r/assets/', '/r/abc', '/r/abcd', '/r/Room_1-x', '/r/q3Jx_9aZ-kP2w', `/r/${'a'.repeat(40)}`,
-      '/r/bada-kemo-pisu', '/r/Bafo-kiru', '/r/bafo-kiruba', '/r/robots', '/r/ab%20cd', '/r/ab.cd', '/r/bafo-kiru/', '/r/bafo-kiru/x',
-      '/r/../package.json', '/r/%2e%2e/package.json', '/r/%2e%2e/x', '/r/..%2fpackage.json', '/r/assets/..%5c..%5cpackage.json',
-      '/r/\\..\\package.json', '/r\\..\\package.json', '/r//index.html', '/r/INDEX.HTML', '/r/index.html/',
+      '/r/nope.js',
+      '/r/assets/',
+      '/r/abc',
+      '/r/abcd',
+      '/r/Room_1-x',
+      '/r/q3Jx_9aZ-kP2w',
+      `/r/${'a'.repeat(40)}`,
+      '/r/bada-kemo-pisu',
+      '/r/Bafo-kiru',
+      '/r/bafo-kiruba',
+      '/r/robots',
+      '/r/ab%20cd',
+      '/r/ab.cd',
+      '/r/bafo-kiru/',
+      '/r/bafo-kiru/x',
+      '/r/../package.json',
+      '/r/%2e%2e/package.json',
+      '/r/%2e%2e/x',
+      '/r/..%2fpackage.json',
+      '/r/assets/..%5c..%5cpackage.json',
+      '/r/\\..\\package.json',
+      '/r\\..\\package.json',
+      '/r//index.html',
+      '/r/INDEX.HTML',
+      '/r/index.html/',
     ];
     for (const p of paths) {
-      const r = await s.call(new Request(`https://telinha.example.com${p}`, { headers: { cookie: s.sessionCookie() } }));
+      const r = await s.call(
+        new Request(`https://telinha.example.com${p}`, { headers: { cookie: s.sessionCookie() } }),
+      );
       expect([p, r.status]).toEqual([p, 404]);
     }
   });
 
   test('POST is not served', async () => {
     const s = setup();
-    const r = await s.call(new Request('https://telinha.example.com/r/', { method: 'POST', headers: { cookie: s.sessionCookie() } }));
+    const r = await s.call(
+      new Request('https://telinha.example.com/r/', { method: 'POST', headers: { cookie: s.sessionCookie() } }),
+    );
     expect(r.status).toBe(404);
   });
 });
@@ -95,18 +125,26 @@ describe('the command name in index.html', () => {
     dec(staticFromEntries([['index.html', enc(html)]], { command }).get('/r/index.html')!.body);
 
   test('a meta tag right before </head>', () => {
-    expect(page('<html><head><title>T</title></head><body></body></html>', 'tela'))
-      .toBe('<html><head><title>T</title><meta name="telinha-command" content="tela"></head><body></body></html>');
+    expect(page('<html><head><title>T</title></head><body></body></html>', 'tela')).toBe(
+      '<html><head><title>T</title><meta name="telinha-command" content="tela"></head><body></body></html>',
+    );
     expect(page('<HEAD></HEAD>', 'tela')).toBe('<HEAD><meta name="telinha-command" content="tela"></HEAD>');
   });
 
   test('escaped', () => {
-    expect(page('<head></head>', 'a"><script>&'))
-      .toBe('<head><meta name="telinha-command" content="a&#34;&#62;&#60;script&#62;&#38;"></head>');
+    expect(page('<head></head>', 'a"><script>&')).toBe(
+      '<head><meta name="telinha-command" content="a&#34;&#62;&#60;script&#62;&#38;"></head>',
+    );
   });
 
   test('only index.html is touched; /r/ is the same page', () => {
-    const f = staticFromEntries([['index.html', enc('<head></head>')], ['other.html', enc('<head></head>')]], { command: 'x' });
+    const f = staticFromEntries(
+      [
+        ['index.html', enc('<head></head>')],
+        ['other.html', enc('<head></head>')],
+      ],
+      { command: 'x' },
+    );
     expect(dec(f.get('/r/other.html')!.body)).toBe('<head></head>');
     expect(f.get('/r/')).toBe(f.get('/r/index.html')!);
   });
@@ -117,8 +155,12 @@ describe('the command name in index.html', () => {
 
   test('served with COMMAND_NAME', async () => {
     const s = setup({ command: 'tela' });
-    expect(await (await s.member('/r/bafo-kiru')).text()).toContain('<meta name="telinha-command" content="tela"></head>');
-    expect(await (await setup().member('/r/')).text()).toContain('<meta name="telinha-command" content="telinha"></head>');
+    expect(await (await s.member('/r/bafo-kiru')).text()).toContain(
+      '<meta name="telinha-command" content="tela"></head>',
+    );
+    expect(await (await setup().member('/r/')).text()).toContain(
+      '<meta name="telinha-command" content="telinha"></head>',
+    );
   });
 });
 
@@ -138,10 +180,16 @@ describe('loadStatic', () => {
   test('reads the tree recursively with URL keys under /r/', () => {
     const f = loadStatic(dir, { command: 'tela' });
     expect([...f.keys()].sort()).toEqual([
-      '/r/', '/r/assets/a.js', '/r/assets/nested/b.woff2', '/r/index.html', '/r/nohead/index.html',
+      '/r/',
+      '/r/assets/a.js',
+      '/r/assets/nested/b.woff2',
+      '/r/index.html',
+      '/r/nohead/index.html',
     ]);
     expect(f.get('/r/assets/nested/b.woff2')!.type).toBe('font/woff2');
-    expect(dec(f.get('/r/')!.body)).toBe('<head><meta name="telinha-command" content="tela"></head><div id="app"></div>');
+    expect(dec(f.get('/r/')!.body)).toBe(
+      '<head><meta name="telinha-command" content="tela"></head><div id="app"></div>',
+    );
   });
 
   test('missing dir, index.html or </head> throws', () => {

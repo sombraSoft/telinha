@@ -24,7 +24,12 @@ test('Online and Offline sections from the member list; whoever is in the room i
 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(offline.getByTestId('member-item')).toHaveText(['Diego, Offline', 'Elis, Offline', 'Fábio, Offline', 'Gabi, Offline']);
+  await expect(offline.getByTestId('member-item')).toHaveText([
+    'Diego, Offline',
+    'Elis, Offline',
+    'Fábio, Offline',
+    'Gabi, Offline',
+  ]);
 
   // The open section is remembered.
   await page.reload();
@@ -45,8 +50,11 @@ test('member list in pt-BR', async ({ page }) => {
   await page.getByTestId('settings-button').click();
   await page.getByTestId('lang-select').selectOption('pt-BR');
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('online-list').getByTestId('member-item'))
-    .toHaveText(['Ana, Online', 'Bruno, Ausente', 'Carla, Não perturbe']);
+  await expect(page.getByTestId('online-list').getByTestId('member-item')).toHaveText([
+    'Ana, Online',
+    'Bruno, Ausente',
+    'Carla, Não perturbe',
+  ]);
   await expect(page.getByTestId('offline-toggle')).toHaveText(/Offline — 4/);
 });
 
@@ -54,9 +62,16 @@ test('an empty section is left out; a long name never scrolls the sidebar sidewa
   await page.setViewportSize({ width: 1280, height: 800 });
   // 32 characters, Discord's longest display name; nobody offline.
   const long = 'Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww';
-  await page.route('/auth/members', (r) => r.fulfill({
-    json: { members: [{ id: '1', name: 'Dev', avatar: null, status: 'online' }, { id: '2', name: long, avatar: null, status: 'online' }] },
-  }));
+  await page.route('/auth/members', (r) =>
+    r.fulfill({
+      json: {
+        members: [
+          { id: '1', name: 'Dev', avatar: null, status: 'online' },
+          { id: '2', name: long, avatar: null, status: 'online' },
+        ],
+      },
+    }),
+  );
   await openRoom(page, newRoom());
 
   await expect(page.getByTestId('online-list').getByTestId('member-item')).toHaveText([`${long}, Online`]);
@@ -67,7 +82,9 @@ test('an empty section is left out; a long name never scrolls the sidebar sidewa
 
   // Only ourselves left: no Online section either.
   await page.unroute('/auth/members');
-  await page.route('/auth/members', (r) => r.fulfill({ json: { members: [{ id: '1', name: 'Dev', avatar: null, status: 'online' }] } }));
+  await page.route('/auth/members', (r) =>
+    r.fulfill({ json: { members: [{ id: '1', name: 'Dev', avatar: null, status: 'online' }] } }),
+  );
   await page.reload();
   await expect(page.getByTestId('me')).toContainText('Dev');
   await expect(page.getByTestId('people-list')).toContainText('Dev');

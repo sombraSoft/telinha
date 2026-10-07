@@ -1,15 +1,22 @@
 // Environment -> typed config. Pure (env passed in) so the guards are unit tested.
 import { fileURLToPath } from 'node:url';
 import { embeddedWebDir } from './embedded.ts';
-import { footprintOf, type ExposedKey, type FootprintInput } from './footprint.ts';
-import { resolveLocale, type Locale } from './i18n.ts';
+import { type ExposedKey, type FootprintInput, footprintOf } from './footprint.ts';
+import { type Locale, resolveLocale } from './i18n.ts';
 import type { Mapping } from './nat/index.ts';
-import { resolvePaths, type Paths } from './paths.ts';
+import { type Paths, resolvePaths } from './paths.ts';
 
-export interface DevUser { id: string; name: string }
+export interface DevUser {
+  id: string;
+  name: string;
+}
 export type Ingress = 'direct' | 'tunnel' | 'external';
 export type Media = 'self' | 'cloud';
-export interface DuckDnsConfig { provider: 'duckdns'; /** Bare subdomain, without .duckdns.org. */ domain: string; token: string }
+export interface DuckDnsConfig {
+  provider: 'duckdns' /** Bare subdomain, without .duckdns.org. */;
+  domain: string;
+  token: string;
+}
 export type Hosting = 'home' | 'vps';
 export type TurnSetting = 'auto' | 'on' | 'off';
 export interface TurnConfig {
@@ -97,17 +104,57 @@ export interface Config {
 
 /** Every key telinha.env may hold (no "unknown key" warning). */
 export const KNOWN_KEYS: ReadonlySet<string> = new Set([
-  'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'GUILD_ID', 'ROLE_ID', 'CHANNEL_IDS',
-  'COMMAND_NAME', 'GROUP_NAME', 'COOKIE_SECRET', 'SESSION_DAYS', 'ROLE_CACHE_SECONDS',
-  'PUBLIC_URL', 'HOSTING', 'INGRESS', 'LISTEN', 'HTTP_PORT', 'HTTPS_PORT', 'ACME_EMAIL', 'ACME_DNS', 'TUNNEL_TOKEN',
-  'MEDIA', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'LIVEKIT_CLOUD_URL',
-  'LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'LIVEKIT_NODE_IP', 'LIVEKIT_API_URL', 'LIVEKIT_PUBLIC_URL',
-  'IP_WATCH_SECONDS', 'TURN', 'TURN_PORT',
-  'CLOSE_EMPTY_SECONDS', 'POLL_SECONDS',
-  'TELINHA_HOME', 'TELINHA_ENV', 'DATA_DIR', 'BIN_DIR', 'WEB_DIR',
-  'DEV_USER', 'DEV_LOCALE',
-  'UPNP', 'DDNS_PROVIDER', 'DUCKDNS_DOMAIN', 'DUCKDNS_TOKEN',
-  'AUTO_UPDATE', 'UPDATE_PIN', 'UPDATE_CHECK_HOURS', 'UPDATE_MAX_DEFER_HOURS', 'LOCALE',
+  'DISCORD_TOKEN',
+  'DISCORD_CLIENT_ID',
+  'DISCORD_CLIENT_SECRET',
+  'GUILD_ID',
+  'ROLE_ID',
+  'CHANNEL_IDS',
+  'COMMAND_NAME',
+  'GROUP_NAME',
+  'COOKIE_SECRET',
+  'SESSION_DAYS',
+  'ROLE_CACHE_SECONDS',
+  'PUBLIC_URL',
+  'HOSTING',
+  'INGRESS',
+  'LISTEN',
+  'HTTP_PORT',
+  'HTTPS_PORT',
+  'ACME_EMAIL',
+  'ACME_DNS',
+  'TUNNEL_TOKEN',
+  'MEDIA',
+  'LIVEKIT_API_KEY',
+  'LIVEKIT_API_SECRET',
+  'LIVEKIT_CLOUD_URL',
+  'LIVEKIT_PORT',
+  'MEDIA_TCP_PORT',
+  'MEDIA_UDP_PORT',
+  'LIVEKIT_NODE_IP',
+  'LIVEKIT_API_URL',
+  'LIVEKIT_PUBLIC_URL',
+  'IP_WATCH_SECONDS',
+  'TURN',
+  'TURN_PORT',
+  'CLOSE_EMPTY_SECONDS',
+  'POLL_SECONDS',
+  'TELINHA_HOME',
+  'TELINHA_ENV',
+  'DATA_DIR',
+  'BIN_DIR',
+  'WEB_DIR',
+  'DEV_USER',
+  'DEV_LOCALE',
+  'UPNP',
+  'DDNS_PROVIDER',
+  'DUCKDNS_DOMAIN',
+  'DUCKDNS_TOKEN',
+  'AUTO_UPDATE',
+  'UPDATE_PIN',
+  'UPDATE_CHECK_HOURS',
+  'UPDATE_MAX_DEFER_HOURS',
+  'LOCALE',
 ]);
 
 type Env = Record<string, string | undefined>;
@@ -144,7 +191,9 @@ export function parseListen(v: string): { host: string; port: number } {
 }
 
 /** Why TURN over TLS on 443 cannot run with this config, or null when it can. */
-export function turnIneligibility(c: Pick<Config, 'media' | 'ingress' | 'hosting' | 'httpsPort' | 'publicUrl' | 'publicHost'>): string | null {
+export function turnIneligibility(
+  c: Pick<Config, 'media' | 'ingress' | 'hosting' | 'httpsPort' | 'publicUrl' | 'publicHost'>,
+): string | null {
   if (c.media === 'cloud') return "MEDIA=cloud brings LiveKit Cloud's own TURN";
   if (c.ingress !== 'direct') return 'it needs INGRESS=direct (Caddy must own port 443)';
   if (c.hosting === 'home') return 'home installs get no TURN: home connections do not let port 443 in';
@@ -200,7 +249,8 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     const m = /^(\d+):(.+)$/.exec(devRaw);
     if (!m) throw new Error('bad DEV_USER (want "<digits>:<name>")');
     // Fake login must never be reachable from outside this machine.
-    if (!DEV_URL_RE.test(publicUrl)) throw new Error('DEV_USER requires PUBLIC_URL http://localhost[:port] or http://127.0.0.1[:port]');
+    if (!DEV_URL_RE.test(publicUrl))
+      throw new Error('DEV_USER requires PUBLIC_URL http://localhost[:port] or http://127.0.0.1[:port]');
     if (!LOOPBACK.has(host)) throw new Error('DEV_USER requires a loopback LISTEN host');
     dev = { id: m[1]!, name: m[2]! };
   }
@@ -210,7 +260,8 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   const ingress = oneOf<Ingress>('INGRESS', dev ? 'external' : 'direct', INGRESSES);
   if (dev && ingress !== 'external') throw new Error('DEV_USER requires INGRESS=external');
   const hostingRaw = opt('HOSTING');
-  if (hostingRaw && !HOSTINGS.includes(hostingRaw as Hosting)) throw new Error(`bad HOSTING ${hostingRaw} (want ${HOSTINGS.join(' | ')})`);
+  if (hostingRaw && !HOSTINGS.includes(hostingRaw as Hosting))
+    throw new Error(`bad HOSTING ${hostingRaw} (want ${HOSTINGS.join(' | ')})`);
   const hosting = (hostingRaw as Hosting | undefined) ?? null;
   const media = oneOf<Media>('MEDIA', 'self', MEDIAS);
 
@@ -239,13 +290,19 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     // Let's Encrypt's HTTP and TLS-ALPN challenges only ever dial public 80 and 443.
     if (!acmeDns && urlPort !== 443) {
       if (httpPort === 0) {
-        throw new Error(`PUBLIC_URL uses port ${urlPort} and HTTP_PORT=0: Let's Encrypt validates only over public port 80 or 443, so this needs ACME_DNS=duckdns (a DuckDNS name) or a PUBLIC_URL on port 443`);
+        throw new Error(
+          `PUBLIC_URL uses port ${urlPort} and HTTP_PORT=0: Let's Encrypt validates only over public port 80 or 443, so this needs ACME_DNS=duckdns (a DuckDNS name) or a PUBLIC_URL on port 443`,
+        );
       }
-      warnings.push(`config: PUBLIC_URL uses port ${urlPort}; without ACME_DNS the certificate needs public port 80 reaching HTTP_PORT ${httpPort}`);
+      warnings.push(
+        `config: PUBLIC_URL uses port ${urlPort}; without ACME_DNS the certificate needs public port 80 reaching HTTP_PORT ${httpPort}`,
+      );
     }
     // Not an error: external 443 -> internal 8443 is common where 443 is taken.
     if (urlPort !== httpsPort) {
-      warnings.push(`config: PUBLIC_URL port ${urlPort} differs from HTTPS_PORT ${httpsPort}; assuming the router translates ${urlPort} -> ${httpsPort}`);
+      warnings.push(
+        `config: PUBLIC_URL port ${urlPort} differs from HTTPS_PORT ${httpsPort}; assuming the router translates ${urlPort} -> ${httpsPort}`,
+      );
     }
   }
   const tunnelToken = ingress === 'tunnel' ? get('TUNNEL_TOKEN') : undefined;
@@ -260,12 +317,13 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   if (turnSetting !== 'off') {
     const why = turnIneligibility({ media, ingress, hosting, httpsPort, publicUrl, publicHost });
     if (turnSetting === 'on' && why) {
-      throw new Error(`TURN=on is not possible here: ${why}. TURN over TLS on 443 is for a VPS in direct mode on port 443.`);
+      throw new Error(
+        `TURN=on is not possible here: ${why}. TURN over TLS on 443 is for a VPS in direct mode on port 443.`,
+      );
     }
     // auto: only where turn.<host> resolves with no user action, and only on a
     // declared VPS (a HOSTING-less file at home on 80/443 must not get it).
-    const on = turnSetting === 'on'
-      || (!why && hosting === 'vps' && turnAutoHost(publicHost));
+    const on = turnSetting === 'on' || (!why && hosting === 'vps' && turnAutoHost(publicHost));
     if (on) turn = { host: `turn.${publicHost}`, port: turnPort };
   }
 
@@ -274,13 +332,26 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     throw new Error('bad COMMAND_NAME (Discord: lowercase, 1-32 chars)');
   }
   const livekitNodeIp = opt('LIVEKIT_NODE_IP');
-  if (livekitNodeIp && !IPV4_RE.test(livekitNodeIp)) throw new Error(`bad LIVEKIT_NODE_IP ${livekitNodeIp} (want an IPv4 address)`);
+  if (livekitNodeIp && !IPV4_RE.test(livekitNodeIp))
+    throw new Error(`bad LIVEKIT_NODE_IP ${livekitNodeIp} (want an IPv4 address)`);
   // Upper bound: setTimeout's 2^31 ms limit (a longer delay fires at once).
   const ipWatchSecondsRaw = int('IP_WATCH_SECONDS', '300', 0, 2_147_483);
   // A static IP never changes, so there is nothing to watch.
   const ipWatchSeconds = livekitNodeIp ? 0 : ipWatchSecondsRaw;
   // One flat rule, TCP/UDP not told apart: nobody needs UDP 7882 to equal a TCP port.
-  const { ports } = footprintOf({ media, ingress, turn, port, livekitPort, mediaTcpPort, mediaUdpPort, httpsPort, httpPort, ipWatchSeconds, livekitNodeIp });
+  const { ports } = footprintOf({
+    media,
+    ingress,
+    turn,
+    port,
+    livekitPort,
+    mediaTcpPort,
+    mediaUdpPort,
+    httpsPort,
+    httpPort,
+    ipWatchSeconds,
+    livekitNodeIp,
+  });
   for (const [i, { key: a, port: n }] of ports.entries()) {
     const clash = ports.slice(i + 1).find((p) => p.port === n);
     if (clash) throw new Error(`ports collide: ${a}=${n}, ${clash.key}=${n}`);
@@ -307,12 +378,16 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     livekitUrl = `${secure ? 'wss' : 'ws'}://${u.host}`;
     livekitApiUrl = `${secure ? 'https' : 'http'}://${u.host}`;
     const selfOnly: [string, string | undefined][] = [
-      ['LIVEKIT_PORT', '7880'], ['MEDIA_TCP_PORT', '7881'], ['MEDIA_UDP_PORT', '7882'],
-      ['LIVEKIT_API_URL', `http://127.0.0.1:${livekitPort}`], ['LIVEKIT_PUBLIC_URL', undefined],
+      ['LIVEKIT_PORT', '7880'],
+      ['MEDIA_TCP_PORT', '7881'],
+      ['MEDIA_UDP_PORT', '7882'],
+      ['LIVEKIT_API_URL', `http://127.0.0.1:${livekitPort}`],
+      ['LIVEKIT_PUBLIC_URL', undefined],
     ];
     for (const [k, d] of selfOnly) {
       const v = opt(k);
-      if (v !== undefined && v.replace(/\/$/, '') !== d) warnings.push(`config: ${k} only applies to MEDIA=self; ignored`);
+      if (v !== undefined && v.replace(/\/$/, '') !== d)
+        warnings.push(`config: ${k} only applies to MEDIA=self; ignored`);
     }
   } else {
     // The proxy derives ws(s):// from it per request; a bad value must fail here,
@@ -348,11 +423,14 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   // Only the native binary can replace itself; Docker and source runs update their own way.
   let autoUpdate = oneOf('AUTO_UPDATE', compiled ? 'on' : 'off', ['on', 'off'] as const) === 'on';
   if (autoUpdate && !compiled) {
-    warnings.push('config: AUTO_UPDATE=on applies to the native binary only; off here (Docker: telinha-update, source: git pull)');
+    warnings.push(
+      'config: AUTO_UPDATE=on applies to the native binary only; off here (Docker: telinha-update, source: git pull)',
+    );
     autoUpdate = false;
   }
   const updatePin = opt('UPDATE_PIN');
-  if (updatePin && !TAG_RE.test(updatePin)) throw new Error(`bad UPDATE_PIN ${updatePin} (want a release tag like v1.2.3)`);
+  if (updatePin && !TAG_RE.test(updatePin))
+    throw new Error(`bad UPDATE_PIN ${updatePin} (want a release tag like v1.2.3)`);
   const localeRaw = opt('LOCALE');
   if (localeRaw && !LOCALE_RE.test(localeRaw)) throw new Error(`bad LOCALE ${localeRaw} (want en | pt-BR)`);
 
@@ -365,7 +443,10 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     guildId: discord('GUILD_ID'),
     roleId: discord('ROLE_ID'),
     // the slash command only works in these channels, e.g. a chat visitors can't see
-    channelIds: discord('CHANNEL_IDS').split(',').map((c) => c.trim()).filter(Boolean),
+    channelIds: discord('CHANNEL_IDS')
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean),
     publicUrl,
     cookieSecret: get('COOKIE_SECRET'),
     host,
@@ -381,7 +462,8 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     closeEmptySeconds: num('CLOSE_EMPTY_SECONDS', '300'),
     pollSeconds: num('POLL_SECONDS', '5'),
     groupName: opt('GROUP_NAME'),
-    webDir: opt('WEB_DIR') ?? embeddedWebDir({ compiled }) ?? fileURLToPath(new URL('../../web/dist/', import.meta.url)),
+    webDir:
+      opt('WEB_DIR') ?? embeddedWebDir({ compiled }) ?? fileURLToPath(new URL('../../web/dist/', import.meta.url)),
     secureCookies: !publicUrl.startsWith('http://'),
     commandName,
     ingress,
@@ -414,7 +496,10 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
 }
 
 const MAPPING_NAMES: Record<ExposedKey, string> = {
-  MEDIA_TCP_PORT: 'telinha media (tcp)', MEDIA_UDP_PORT: 'telinha media (udp)', HTTPS_PORT: 'telinha https', HTTP_PORT: 'telinha http',
+  MEDIA_TCP_PORT: 'telinha media (tcp)',
+  MEDIA_UDP_PORT: 'telinha media (udp)',
+  HTTPS_PORT: 'telinha https',
+  HTTP_PORT: 'telinha http',
 };
 
 /**

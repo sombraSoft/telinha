@@ -1,8 +1,9 @@
 // Per-viewer preferences, persisted in localStorage (see store.ts).
+
+import type { Locale } from './i18n';
+import { parseQuality, parseShareSettings, type QualityChoice, type ShareSettings } from './share';
 import { load, save } from './store';
 import { parseThemeChoice, type ThemeChoice } from './theme';
-import { parseQuality, parseShareSettings, type QualityChoice, type ShareSettings } from './share';
-import type { Locale } from './i18n';
 
 export type LangChoice = 'auto' | Locale;
 const parseLang = (v: unknown): LangChoice => (v === 'pt-BR' || v === 'en' ? v : 'auto');

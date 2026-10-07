@@ -3,7 +3,7 @@
 // phone test (link + QR) beside the list on wide terminals or under it.
 // Also shown inside setup after the install (embedded: no header of its own).
 import type { RGBA } from '@opentui/core';
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, useContext, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, type JSX, onCleanup, onMount, Show, useContext } from 'solid-js';
 import { doctorStrings } from '../../cli/doctor-strings.ts';
 import type { Locale } from '../../cli/strings.ts';
 import { canDrawBlocks } from '../../doctor/qr.ts';
@@ -12,8 +12,21 @@ import { isDown, isEnter, isSpace, isUp, useKeys } from '../keys.ts';
 import { useLocale, useT } from '../strings.ts';
 import { c } from '../theme.ts';
 import { Footer, Header } from '../ui/chrome.tsx';
-import { CARD_CHROME, ChromeCtx, createChrome, fit, FOOTER_ROWS, HEADER_ROWS, HINT_WIDTH, pad, useLayout, useTick, windowStart, wrap } from '../ui/layout.ts';
-import { qrRows, QrView } from '../ui/qr.tsx';
+import {
+  CARD_CHROME,
+  ChromeCtx,
+  createChrome,
+  FOOTER_ROWS,
+  fit,
+  HEADER_ROWS,
+  HINT_WIDTH,
+  pad,
+  useLayout,
+  useTick,
+  windowStart,
+  wrap,
+} from '../ui/layout.ts';
+import { QrView, qrRows } from '../ui/qr.tsx';
 import { Bold, Card, Spinner, StatusIcon, statusColor } from '../ui/widgets.tsx';
 import { createDoctorState, type DoctorRow, type PhoneOptions } from './state.ts';
 
@@ -69,14 +82,19 @@ export function DoctorScreen(p: DoctorScreenProps) {
 function DoctorBody(p: DoctorScreenProps) {
   const t = useT();
   const locale = useLocale();
-  const ds = (key: Parameters<typeof doctorStrings>[1], params?: Record<string, string | number>) => doctorStrings(locale(), key, params);
+  const ds = (key: Parameters<typeof doctorStrings>[1], params?: Record<string, string | number>) =>
+    doctorStrings(locale(), key, params);
   const L = useLayout({ sidebar: !!p.embedded });
   const chrome = useContext(ChromeCtx);
   onCleanup(() => chrome.setHeaderHidden(false));
   const tick = useTick();
   const st = createDoctorState({
-    locale, checks: p.checks, buildContext: () => p.buildContext(), phone: p.phone,
-    ...(p.initial ? { initial: p.initial } : {}), ...(p.checkTimeoutMs ? { checkTimeoutMs: p.checkTimeoutMs } : {}),
+    locale,
+    checks: p.checks,
+    buildContext: () => p.buildContext(),
+    phone: p.phone,
+    ...(p.initial ? { initial: p.initial } : {}),
+    ...(p.checkTimeoutMs ? { checkTimeoutMs: p.checkTimeoutMs } : {}),
   });
   onCleanup(st.dispose);
   onMount(() => {
@@ -180,7 +198,12 @@ function DoctorBody(p: DoctorScreenProps) {
         return lines(ds('phoneError', { error: s.message }), c.fail);
       case 'waiting': {
         // Read per tick, so the countdown moves without rebuilding the QR code.
-        const spin: Item = { kind: 'spin', text: () => (tick(), s.opened ? ds('phoneOpened') : t('doctor.phoneLeft', { time: clock(s.deadline - st.now()) })) };
+        const spin: Item = {
+          kind: 'spin',
+          text: () => (
+            tick(), s.opened ? ds('phoneOpened') : t('doctor.phoneLeft', { time: clock(s.deadline - st.now()) })
+          ),
+        };
         const head = [...lines(ds('phoneOpen'), c.text), ...lines(s.url, c.accent)];
         // The status above the code; a code that would be cut is not drawn at all (it would not scan).
         if (qrPlan().show) return [...head, spin, { kind: 'qr', url: s.url }];
@@ -210,20 +233,24 @@ function DoctorBody(p: DoctorScreenProps) {
     let first = -1;
     let last = -1;
     rows.forEach((row, i) => {
-      if (i === st.rows.length && i > 0) out.push(blank, { kind: 'text', text: ds('phoneTitle'), fg: c.text, bold: true });
+      if (i === st.rows.length && i > 0)
+        out.push(blank, { kind: 'text', text: ds('phoneTitle'), fg: c.text, bold: true });
       if (i === sel()) first = out.length;
       out.push({ kind: 'row', row, index: i });
       if (open().includes(row.key)) {
         const w = Math.max(4, inner() - INDENT);
         // The row cuts a long summary: open, it reads in full first.
         const cut = row.status !== 'running' && Bun.stringWidth(row.summary) > summaryWidth(inner());
-        for (const d of cut ? [row.summary, ...row.detail] : row.detail) for (const l of wrap(d, w)) out.push({ kind: 'text', text: ' '.repeat(INDENT) + l, fg: c.muted });
+        for (const d of cut ? [row.summary, ...row.detail] : row.detail)
+          for (const l of wrap(d, w)) out.push({ kind: 'text', text: ' '.repeat(INDENT) + l, fg: c.muted });
         const showFix = row.fix && row.status !== 'ok' && row.status !== 'running';
         if (showFix) {
           out.push({ kind: 'text', text: `${' '.repeat(INDENT)}└ ${t('doctor.fix')}`, fg: c.text, bold: true });
-          for (const l of wrap(row.fix!, w - 2)) out.push({ kind: 'text', text: `${' '.repeat(INDENT + 2)}${l}`, fg: c.text });
+          for (const l of wrap(row.fix!, w - 2))
+            out.push({ kind: 'text', text: `${' '.repeat(INDENT + 2)}${l}`, fg: c.text });
         }
-        if (!row.detail.length && !showFix) out.push({ kind: 'text', text: `${' '.repeat(INDENT)}${t('doctor.nothing')}`, fg: c.muted });
+        if (!row.detail.length && !showFix)
+          out.push({ kind: 'text', text: `${' '.repeat(INDENT)}${t('doctor.nothing')}`, fg: c.muted });
         out.push(blank);
       }
       if (i === sel()) last = out.length - 1;
@@ -275,13 +302,19 @@ function DoctorBody(p: DoctorScreenProps) {
         return (
           <box flexDirection="row" gap={1} flexShrink={0}>
             <Spinner />
-            <text fg={c.muted} wrapMode="none">{fit(it.text(), panelInner() - 2)}</text>
+            <text fg={c.muted} wrapMode="none">
+              {fit(it.text(), panelInner() - 2)}
+            </text>
           </box>
         );
       case 'qr':
         return <QrView text={it.url} env={p.phone?.env ?? {}} />;
       case 'text':
-        return <text fg={it.fg || c.muted} attributes={it.bold ? Bold : 0} wrapMode="none">{it.text === '' ? ' ' : it.text}</text>;
+        return (
+          <text fg={it.fg || c.muted} attributes={it.bold ? Bold : 0} wrapMode="none">
+            {it.text === '' ? ' ' : it.text}
+          </text>
+        );
     }
   };
 
@@ -317,19 +350,35 @@ function DoctorBody(p: DoctorScreenProps) {
         </Show>
         <Show when={!compact()}>
           <Card title={` ${t('doctor.title')} `} width={cardW()}>
-            <text fg={c.text} attributes={Bold}>{t('doctor.title')}</text>
-            <text fg={c.muted} wrapMode="none">{fit(t('doctor.intro'), inner())}</text>
+            <text fg={c.text} attributes={Bold}>
+              {t('doctor.title')}
+            </text>
+            <text fg={c.muted} wrapMode="none">
+              {fit(t('doctor.intro'), inner())}
+            </text>
             <box flexDirection="column" marginTop={1} flexShrink={0}>
               <For each={listItems()}>{renderItem}</For>
             </box>
             <box marginTop={1} flexDirection="row" gap={1} flexShrink={0}>
-              <Show when={!st.running()} fallback={<><Spinner /><text fg={c.muted}>{t('doctor.running')}</text></>}>
-                <text fg={worst()} attributes={Bold} wrapMode="none">{fit(summary(), inner())}</text>
+              <Show
+                when={!st.running()}
+                fallback={
+                  <>
+                    <Spinner />
+                    <text fg={c.muted}>{t('doctor.running')}</text>
+                  </>
+                }
+              >
+                <text fg={worst()} attributes={Bold} wrapMode="none">
+                  {fit(summary(), inner())}
+                </text>
               </Show>
             </box>
             <Show when={under()}>
               <box flexDirection="column" marginTop={1} flexShrink={0}>
-                <text fg={c.text} attributes={Bold}>{ds('phoneTitle')}</text>
+                <text fg={c.text} attributes={Bold}>
+                  {ds('phoneTitle')}
+                </text>
                 <For each={panelItems()}>{renderItem}</For>
               </box>
             </Show>
@@ -363,14 +412,23 @@ const summaryWidth = (width: number) => Math.max(4, width - ROW_LEAD - TITLE_W -
 
 function RowLine(props: { row: DoctorRow; sel: boolean; open: boolean; width: number }) {
   const sumW = () => summaryWidth(props.width);
-  const fg = () => (props.row.status === 'running' || props.row.status === 'ok' || props.row.status === 'skip' ? c.muted : statusColor(props.row.status));
+  const fg = () =>
+    props.row.status === 'running' || props.row.status === 'ok' || props.row.status === 'skip'
+      ? c.muted
+      : statusColor(props.row.status);
   return (
     <box flexDirection="row" flexShrink={0}>
       <text fg={c.accent}>{props.sel ? '❯ ' : '  '}</text>
       <text fg={c.muted}>{props.open ? '▾ ' : props.sel ? '▸ ' : '  '}</text>
       <StatusIcon status={props.row.status} />
-      <text fg={props.sel ? c.accent : c.text} attributes={props.sel ? Bold : 0} wrapMode="none">{` ${pad(props.row.title, TITLE_W)} `}</text>
-      <text fg={fg()} wrapMode="none">{props.row.status === 'running' ? '…' : fit(props.row.summary, sumW())}</text>
+      <text
+        fg={props.sel ? c.accent : c.text}
+        attributes={props.sel ? Bold : 0}
+        wrapMode="none"
+      >{` ${pad(props.row.title, TITLE_W)} `}</text>
+      <text fg={fg()} wrapMode="none">
+        {props.row.status === 'running' ? '…' : fit(props.row.summary, sumW())}
+      </text>
     </box>
   );
 }

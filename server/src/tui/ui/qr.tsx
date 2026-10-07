@@ -3,7 +3,7 @@
 // "▀" packs two module rows per cell row (fg = top, bg = bottom) where the
 // terminal draws blocks well; elsewhere every module is two spaces with a
 // background colour.
-import { For, createMemo } from 'solid-js';
+import { createMemo, For } from 'solid-js';
 import { canDrawBlocks, qrMatrix } from '../../doctor/qr.ts';
 
 const DARK = '#000000';
@@ -29,12 +29,23 @@ function runs(cells: { fg: string; bg: string }[], glyph: string): Run[] {
 export function qrRows(text: string, blocks: boolean): Run[][] {
   const m = qrMatrix(text);
   const color = (dark: boolean | undefined) => (dark ? DARK : LIGHT);
-  if (!blocks) return m.map((row) => runs(row.map((d) => ({ fg: color(d), bg: color(d) })), '  '));
+  if (!blocks)
+    return m.map((row) =>
+      runs(
+        row.map((d) => ({ fg: color(d), bg: color(d) })),
+        '  ',
+      ),
+    );
   const out: Run[][] = [];
   for (let y = 0; y < m.length; y += 2) {
     const top = m[y]!;
     const bottom = m[y + 1];
-    out.push(runs(top.map((d, x) => ({ fg: color(d), bg: color(bottom?.[x] ?? false) })), '▀'));
+    out.push(
+      runs(
+        top.map((d, x) => ({ fg: color(d), bg: color(bottom?.[x] ?? false) })),
+        '▀',
+      ),
+    );
   }
   return out;
 }
@@ -46,7 +57,13 @@ export function QrView(props: { text: string; env: Record<string, string | undef
       <For each={rows()}>
         {(row) => (
           <box flexDirection="row" flexShrink={0}>
-            <For each={row}>{(r) => <text fg={r.fg} bg={r.bg} wrapMode="none">{r.text}</text>}</For>
+            <For each={row}>
+              {(r) => (
+                <text fg={r.fg} bg={r.bg} wrapMode="none">
+                  {r.text}
+                </text>
+              )}
+            </For>
           </box>
         )}
       </For>

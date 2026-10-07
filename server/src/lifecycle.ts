@@ -34,8 +34,12 @@ const PERMANENT_CODES = new Set([10003, 10008, 50001, 50013]);
  */
 export function isPermanentEditError(e: unknown): boolean {
   const err = e as { status?: unknown; code?: unknown } | null;
-  return err?.status === 401 || err?.status === 403 || err?.status === 404
-    || (typeof err?.code === 'number' && PERMANENT_CODES.has(err.code));
+  return (
+    err?.status === 401 ||
+    err?.status === 403 ||
+    err?.status === 404 ||
+    (typeof err?.code === 'number' && PERMANENT_CODES.has(err.code))
+  );
 }
 
 interface CardState {
@@ -67,7 +71,13 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
     if (!st) {
       // /telinha posted the open card with nobody in it.
       st = {
-        channelId: rec.channelId, messageId: rec.messageId, next: 0, pending: null, fails: 0, dead: false, closed: false,
+        channelId: rec.channelId,
+        messageId: rec.messageId,
+        next: 0,
+        pending: null,
+        fails: 0,
+        dead: false,
+        closed: false,
         sent: JSON.stringify(render({ ...rec, closedAt: null }, NOBODY)),
       };
       cards.set(rec.room, st);

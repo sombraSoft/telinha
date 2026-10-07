@@ -38,20 +38,29 @@ describe('resolvePaths', () => {
 
   test('linux user: XDG_DATA_HOME respected, empty one ignored', () => {
     expect(resolvePaths({ HOME: '/home/ze', XDG_DATA_HOME: '/xdg' }, 'linux', false).home).toBe('/xdg/telinha');
-    expect(resolvePaths({ HOME: '/home/ze', XDG_DATA_HOME: '' }, 'linux', false).home).toBe('/home/ze/.local/share/telinha');
+    expect(resolvePaths({ HOME: '/home/ze', XDG_DATA_HOME: '' }, 'linux', false).home).toBe(
+      '/home/ze/.local/share/telinha',
+    );
   });
 
   test('TELINHA_HOME wins on every platform', () => {
     expect(resolvePaths({ TELINHA_HOME: '/telinha' }, 'linux', true).data).toBe('/telinha/data');
     expect(resolvePaths({ TELINHA_HOME: '/telinha', HOME: '/home/ze' }, 'linux', false).bin).toBe('/telinha/bin');
-    expect(resolvePaths({ TELINHA_HOME: 'D:\\tl', LOCALAPPDATA: 'C:\\x' }, 'win32', false).config).toBe('D:\\tl\\config');
+    expect(resolvePaths({ TELINHA_HOME: 'D:\\tl', LOCALAPPDATA: 'C:\\x' }, 'win32', false).config).toBe(
+      'D:\\tl\\config',
+    );
   });
 
   test('BIN_DIR and DATA_DIR override their own entries; run follows DATA_DIR', () => {
     const p = resolvePaths({ TELINHA_HOME: '/telinha', BIN_DIR: '/usr/local/bin', DATA_DIR: '/data' }, 'linux', true);
     expect(p).toEqual({
-      home: '/telinha', bin: '/usr/local/bin', config: '/telinha/config',
-      data: '/data', run: '/data/run', logs: '/telinha/logs', logFile: '/telinha/logs/telinha.log',
+      home: '/telinha',
+      bin: '/usr/local/bin',
+      config: '/telinha/config',
+      data: '/data',
+      run: '/data/run',
+      logs: '/telinha/logs',
+      logFile: '/telinha/logs/telinha.log',
     });
   });
 });
@@ -60,13 +69,17 @@ describe('homeOfExe', () => {
   const none = () => false;
   test('<home>/bin/telinha[.exe] under a home named telinha: that home', () => {
     expect(homeOfExe('C:\\Telinha\\bin\\telinha.exe', 'win32', none)).toBe('C:\\Telinha');
-    expect(homeOfExe('C:\\Users\\ana\\AppData\\Local\\Telinha\\BIN\\telinha.exe', 'win32', none)).toBe('C:\\Users\\ana\\AppData\\Local\\Telinha');
+    expect(homeOfExe('C:\\Users\\ana\\AppData\\Local\\Telinha\\BIN\\telinha.exe', 'win32', none)).toBe(
+      'C:\\Users\\ana\\AppData\\Local\\Telinha',
+    );
     expect(homeOfExe('/srv/telinha/bin/telinha', 'linux', none)).toBe('/srv/telinha');
   });
 
   test('another name counts once it holds config/telinha.env', () => {
     expect(homeOfExe('D:\\apps\\screen\\bin\\telinha.exe', 'win32', none)).toBeNull();
-    expect(homeOfExe('D:\\apps\\screen\\bin\\telinha.exe', 'win32', (p) => p === 'D:\\apps\\screen\\config\\telinha.env')).toBe('D:\\apps\\screen');
+    expect(
+      homeOfExe('D:\\apps\\screen\\bin\\telinha.exe', 'win32', (p) => p === 'D:\\apps\\screen\\config\\telinha.env'),
+    ).toBe('D:\\apps\\screen');
   });
 
   test('not in a bin dir (a download), or ~/bin: no home', () => {

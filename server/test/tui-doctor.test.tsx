@@ -5,16 +5,16 @@ import { join } from 'node:path';
 import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer, type TestRendererSetup } from '@opentui/core/testing';
 import type { CliContext } from '../src/cli/args.ts';
-import { resolvePaths } from '../src/paths.ts';
 import type { DoctorReport, PhoneTestPoll } from '../src/cli/control.ts';
 import type { Locale } from '../src/cli/strings.ts';
 import { checkTitle } from '../src/doctor/checks.ts';
 import type { DoctorControl } from '../src/doctor/phone-test.ts';
 import type { Check, CheckContext, CheckStatus } from '../src/doctor/types.ts';
+import { resolvePaths } from '../src/paths.ts';
 import { runDoctorTui } from '../src/tui/doctor/index.tsx';
 import { DoctorScreen } from '../src/tui/doctor/screen.tsx';
 import { qrRows } from '../src/tui/ui/qr.tsx';
-import { frame, press, settle, until, VERSION, withTui, type Session } from './tui-harness.tsx';
+import { frame, press, type Session, settle, until, VERSION, withTui } from './tui-harness.tsx';
 
 // A real link: the public address with its port and a 43-character token (a 45-module code).
 const TOKEN = 'Xq3vN8rT2mK7pL5wZ9cB4dF6gH1jS0aY-eU_iO2kR7t'; // gitleaks:allow
@@ -41,13 +41,27 @@ function gate() {
   return { p, open };
 }
 
-interface Spec { id: string; status: CheckStatus; summary: string; detail?: string[]; fix?: string; wait?: Promise<void> }
+interface Spec {
+  id: string;
+  status: CheckStatus;
+  summary: string;
+  detail?: string[];
+  fix?: string;
+  wait?: Promise<void>;
+}
 
 const fake = (s: Spec): Check => ({
   id: s.id,
   async run(ctx) {
     if (s.wait) await s.wait;
-    return { id: s.id, title: checkTitle(s.id, ctx.locale), status: s.status, summary: s.summary, ...(s.detail ? { detail: s.detail } : {}), ...(s.fix ? { fix: s.fix } : {}) };
+    return {
+      id: s.id,
+      title: checkTitle(s.id, ctx.locale),
+      status: s.status,
+      summary: s.summary,
+      ...(s.detail ? { detail: s.detail } : {}),
+      ...(s.fix ? { fix: s.fix } : {}),
+    };
   },
 });
 
@@ -55,9 +69,20 @@ const SPECS: Spec[] = [
   { id: 'config', status: 'ok', summary: 'telinha.env is valid' },
   { id: 'discord-token', status: 'ok', summary: 'Signed in as Telinha#4410', detail: ['Intents: guild members'] },
   { id: 'dns', status: 'ok', summary: 'gurizada.duckdns.org points at 203.0.113.7' },
-  { id: 'gateway', status: 'fail', summary: 'UDP 7882 is not reachable from the internet', detail: ['Router: 192.168.0.1 (UPnP)'], fix: 'Forward UDP 7882 on your router to 192.168.0.23, then run telinha doctor again.' },
+  {
+    id: 'gateway',
+    status: 'fail',
+    summary: 'UDP 7882 is not reachable from the internet',
+    detail: ['Router: 192.168.0.1 (UPnP)'],
+    fix: 'Forward UDP 7882 on your router to 192.168.0.23, then run telinha doctor again.',
+  },
   { id: 'cgnat', status: 'skip', summary: 'Skipped: needs the internet' },
-  { id: 'update', status: 'warn', summary: '0.9.1 is available (running 0.9.0)', fix: 'Installs by itself when no room is open, or now: telinha update --now' },
+  {
+    id: 'update',
+    status: 'warn',
+    summary: '0.9.1 is available (running 0.9.0)',
+    fix: 'Installs by itself when no room is open, or now: telinha update --now',
+  },
 ];
 
 function control(o: { available?: boolean; states?: (PhoneTestPoll | 'hang')[] } = {}) {
@@ -75,11 +100,22 @@ function control(o: { available?: boolean; states?: (PhoneTestPoll | 'hang')[] }
     },
   };
   /** Answers the poll that is waiting. */
-  const answer = (s: PhoneTestPoll) => pending.splice(0).forEach((r) => r(s));
+  const answer = (s: PhoneTestPoll) => {
+    for (const r of pending.splice(0)) r(s);
+  };
   return { client, calls, answer };
 }
 
-function screen(o: { specs?: Spec[]; ctl?: DoctorControl | null; exits?: number[]; builds?: { n: number }; locale?: Locale; env?: Record<string, string> } = {}) {
+function screen(
+  o: {
+    specs?: Spec[];
+    ctl?: DoctorControl | null;
+    exits?: number[];
+    builds?: { n: number };
+    locale?: Locale;
+    env?: Record<string, string>;
+  } = {},
+) {
   const exits = o.exits ?? [];
   return () => (
     <DoctorScreen
@@ -90,7 +126,11 @@ function screen(o: { specs?: Spec[]; ctl?: DoctorControl | null; exits?: number[
         if (o.builds) o.builds.n++;
         return { locale: o.locale ?? 'en' } as CheckContext;
       }}
-      phone={o.ctl === null ? null : { control: o.ctl ?? control({ available: false }).client, env: o.env ?? ENV, config: null, now: () => NOW }}
+      phone={
+        o.ctl === null
+          ? null
+          : { control: o.ctl ?? control({ available: false }).client, env: o.env ?? ENV, config: null, now: () => NOW }
+      }
       onExit={(c) => exits.push(c)}
     />
   );
@@ -111,7 +151,9 @@ describe('doctor screen', () => {
       expect(f).toMatch(/Configuration +telinha\.env is valid/);
       // Still running: a spinner and "…" instead of a summary.
       expect(f).toMatch(/⠋ Router +…/);
-      const order = ['Configuration', 'Discord bot token', 'DNS', 'Router', 'Carrier NAT', 'Updates'].map((x) => f.indexOf(x));
+      const order = ['Configuration', 'Discord bot token', 'DNS', 'Router', 'Carrier NAT', 'Updates'].map((x) =>
+        f.indexOf(x),
+      );
       expect(order.every((v, i) => v > 0 && (i === 0 || v > order[i - 1]!))).toBe(true);
       g.open();
       f = await done(s);
@@ -135,7 +177,13 @@ describe('doctor screen', () => {
   test('r runs the checks again with a fresh context', async () => {
     const builds = { n: 0 };
     let g = gate();
-    const specs = SPECS.map((x) => ({ ...x, status: 'ok' as const, get wait() { return g.p; } }));
+    const specs = SPECS.map((x) => ({
+      ...x,
+      status: 'ok' as const,
+      get wait() {
+        return g.p;
+      },
+    }));
     const exits: number[] = [];
     await withTui(screen({ specs, ctl: null, exits, builds }), {}, async (s) => {
       g.open();
@@ -172,7 +220,11 @@ describe('doctor screen', () => {
       await until(s, 'Waiting for the phone');
       ctl.answer({ state: 'opened', openedAt: 1 });
       await until(s, 'Opened on the phone, testing...');
-      ctl.answer({ state: 'done', openedAt: 1, report: { ...REPORT, udp: { ok: false }, tcp: { ok: false }, initial: null } });
+      ctl.answer({
+        state: 'done',
+        openedAt: 1,
+        report: { ...REPORT, udp: { ok: false }, tcp: { ok: false }, initial: null },
+      });
       f = await until(s, 'LiveKit connection');
       expect(f).not.toContain('▀▀▀▀');
       expect(f).toMatch(/│ {2}Phone test +│/);
@@ -238,15 +290,19 @@ describe('doctor screen', () => {
   });
 
   test('pt-BR', async () => {
-    await withTui(screen({ ctl: control({ available: false }).client, locale: 'pt-BR' }), { locale: 'pt-BR' }, async (s) => {
-      const f = await until(s, 'Inicie a Telinha');
-      expect(f).toContain('telinha diagnóstico');
-      expect(f).toContain('Compartilhamento de tela pro seu grupo do Discord');
-      expect(f).toContain('Verificações desta instalação');
-      expect(f).toContain('3 ok · 1 aviso · 1 com falha · 1 pulado');
-      expect(f).toContain('rodar de novo');
-      expect(f).toContain('Teste no celular');
-    });
+    await withTui(
+      screen({ ctl: control({ available: false }).client, locale: 'pt-BR' }),
+      { locale: 'pt-BR' },
+      async (s) => {
+        const f = await until(s, 'Inicie a Telinha');
+        expect(f).toContain('telinha diagnóstico');
+        expect(f).toContain('Compartilhamento de tela pro seu grupo do Discord');
+        expect(f).toContain('Verificações desta instalação');
+        expect(f).toContain('3 ok · 1 aviso · 1 com falha · 1 pulado');
+        expect(f).toContain('rodar de novo');
+        expect(f).toContain('Teste no celular');
+      },
+    );
   });
 });
 
@@ -256,20 +312,40 @@ describe('runDoctorTui', () => {
     try {
       const env = { TELINHA_HOME: home, TELINHA_THEME: 'dark' };
       const ctx: CliContext = {
-        argv: ['doctor', '--local'], env, paths: resolvePaths(env), envFile: join(home, 'config', 'telinha.env'), locale: 'en', tty: true, yes: false,
-        stdout: () => {}, stderr: () => {}, compiled: false, version: 'test',
+        argv: ['doctor', '--local'],
+        env,
+        paths: resolvePaths(env),
+        envFile: join(home, 'config', 'telinha.env'),
+        locale: 'en',
+        tty: true,
+        yes: false,
+        stdout: () => {},
+        stderr: () => {},
+        compiled: false,
+        version: 'test',
       };
       const seen: CheckContext[] = [];
-      const checks: Check[] = [{ id: 'config', async run(c) { seen.push(c); return { id: 'config', title: 'Configuration', status: 'fail', summary: 'missing' }; } }];
+      const checks: Check[] = [
+        {
+          id: 'config',
+          async run(c) {
+            seen.push(c);
+            return { id: 'config', title: 'Configuration', status: 'fail', summary: 'missing' };
+          },
+        },
+      ];
       let setup!: TestRendererSetup;
       const ctl = control();
-      const p = runDoctorTui({ ctx, flags: { local: true }, deps: { checks, control: ctl.client } }, {
-        createRenderer: async () => {
-          setup = await createTestRenderer({ width: 100, height: 30 });
-          return setup.renderer as CliRenderer;
+      const p = runDoctorTui(
+        { ctx, flags: { local: true }, deps: { checks, control: ctl.client } },
+        {
+          createRenderer: async () => {
+            setup = await createTestRenderer({ width: 100, height: 30 });
+            return setup.renderer as CliRenderer;
+          },
+          proc: { on: () => {}, off: () => {}, exit: () => {} },
         },
-        proc: { on: () => {}, off: () => {}, exit: () => {} },
-      });
+      );
       for (let i = 0; i < 100 && !seen.length; i++) await Bun.sleep(10);
       await Bun.sleep(30);
       await setup.renderOnce();
@@ -287,7 +363,10 @@ describe('runDoctorTui', () => {
 });
 
 describe('doctor frames', () => {
-  const sizes = [[120, 34], [80, 30]] as const;
+  const sizes = [
+    [120, 34],
+    [80, 30],
+  ] as const;
   const locales: Locale[] = ['en', 'pt-BR'];
 
   for (const [width, height] of sizes) {

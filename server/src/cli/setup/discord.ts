@@ -18,9 +18,26 @@ const TEXT_TYPES = new Set([0, 5]);
 const CATEGORY = 4;
 export const SNOWFLAKE_RE = /^\d{17,20}$/;
 
-export interface DiscordApplication { id: string; name: string; flags: number; redirectUris: string[]; botPublic: boolean }
-export interface DiscordRole { id: string; name: string; position: number; managed: boolean }
-export interface DiscordChannel { id: string; name: string; type: number; parentId: string | null; position: number }
+export interface DiscordApplication {
+  id: string;
+  name: string;
+  flags: number;
+  redirectUris: string[];
+  botPublic: boolean;
+}
+export interface DiscordRole {
+  id: string;
+  name: string;
+  position: number;
+  managed: boolean;
+}
+export interface DiscordChannel {
+  id: string;
+  name: string;
+  type: number;
+  parentId: string | null;
+  position: number;
+}
 
 export interface DiscordSetup {
   application(): Promise<DiscordApplication>;
@@ -36,7 +53,10 @@ export interface DiscordSetup {
 
 /** A 4xx/5xx from Discord; `message` is Discord's own when it sent one. */
 export class DiscordError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
     this.name = 'DiscordError';
   }
@@ -72,18 +92,36 @@ export function createDiscordSetup(o: {
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Authorization: `Bot ${o.token}`, 'User-Agent': agent };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await send(`${API}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await send(`${API}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
     if (!res.ok) throw new DiscordError(res.status, await errorText(res));
     return (await res.json()) as T;
   }
 
   return {
     async application() {
-      const a = await call<{ id: string; name: string; flags?: number; redirect_uris?: string[]; bot_public?: boolean }>('GET', '/applications/@me');
-      return { id: a.id, name: a.name, flags: a.flags ?? 0, redirectUris: a.redirect_uris ?? [], botPublic: !!a.bot_public };
+      const a = await call<{
+        id: string;
+        name: string;
+        flags?: number;
+        redirect_uris?: string[];
+        bot_public?: boolean;
+      }>('GET', '/applications/@me');
+      return {
+        id: a.id,
+        name: a.name,
+        flags: a.flags ?? 0,
+        redirectUris: a.redirect_uris ?? [],
+        botPublic: !!a.bot_public,
+      };
     },
     async enableLimitedIntents(current) {
-      const a = await call<{ flags?: number }>('PATCH', '/applications/@me', { flags: current | PRESENCE_LIMITED | MEMBERS_LIMITED });
+      const a = await call<{ flags?: number }>('PATCH', '/applications/@me', {
+        flags: current | PRESENCE_LIMITED | MEMBERS_LIMITED,
+      });
       return a.flags ?? 0;
     },
     async guilds() {
@@ -91,12 +129,23 @@ export function createDiscordSetup(o: {
       return list.map((g) => ({ id: g.id, name: g.name }));
     },
     async roles(guildId) {
-      const list = await call<{ id: string; name: string; position: number; managed?: boolean }[]>('GET', `/guilds/${guildId}/roles`);
+      const list = await call<{ id: string; name: string; position: number; managed?: boolean }[]>(
+        'GET',
+        `/guilds/${guildId}/roles`,
+      );
       return list.map((r) => ({ id: r.id, name: r.name, position: r.position, managed: !!r.managed }));
     },
     async channels(guildId) {
-      const list = await call<{ id: string; name: string; type: number; parent_id?: string | null; position?: number }[]>('GET', `/guilds/${guildId}/channels`);
-      return list.map((c) => ({ id: c.id, name: c.name, type: c.type, parentId: c.parent_id ?? null, position: c.position ?? 0 }));
+      const list = await call<
+        { id: string; name: string; type: number; parent_id?: string | null; position?: number }[]
+      >('GET', `/guilds/${guildId}/channels`);
+      return list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        parentId: c.parent_id ?? null,
+        position: c.position ?? 0,
+      }));
     },
     async checkClientSecret(clientId, secret) {
       const res = await send(`${API}/oauth2/token`, {
@@ -138,8 +187,10 @@ export function sortChannels(all: DiscordChannel[]): { channel: DiscordChannel; 
   const catPos = (c: DiscordChannel) => (c.parentId && cats.has(c.parentId) ? cats.get(c.parentId)!.position : -1);
   return all
     .filter((c) => TEXT_TYPES.has(c.type))
-    .sort((a, b) => catPos(a) - catPos(b) || (a.parentId ?? '').localeCompare(b.parentId ?? '') || a.position - b.position)
-    .map((channel) => ({ channel, category: channel.parentId ? cats.get(channel.parentId)?.name ?? null : null }));
+    .sort(
+      (a, b) => catPos(a) - catPos(b) || (a.parentId ?? '').localeCompare(b.parentId ?? '') || a.position - b.position,
+    )
+    .map((channel) => ({ channel, category: channel.parentId ? (cats.get(channel.parentId)?.name ?? null) : null }));
 }
 
 /** Roles a member can be gated on: not @everyone (id = guild id), not a bot's own role; top of the list first. */
@@ -161,10 +212,15 @@ export async function checkDiscord(w: Wizard, values: Values, publicUrl: string)
   try {
     app = await client.application();
   } catch (e) {
-    return [e instanceof DiscordError && e.status === 401 ? s('discordTokenRejected') : s('discordUnreachable', { error: errMsg(e) })];
+    return [
+      e instanceof DiscordError && e.status === 401
+        ? s('discordTokenRejected')
+        : s('discordUnreachable', { error: errMsg(e) }),
+    ];
   }
   out.ok(s('discordBot', { name: app.name, id: app.id }));
-  if (values.DISCORD_CLIENT_ID && values.DISCORD_CLIENT_ID !== app.id) out.warn(s('clientIdMismatch', { given: values.DISCORD_CLIENT_ID, id: app.id }));
+  if (values.DISCORD_CLIENT_ID && values.DISCORD_CLIENT_ID !== app.id)
+    out.warn(s('clientIdMismatch', { given: values.DISCORD_CLIENT_ID, id: app.id }));
   values.DISCORD_CLIENT_ID = app.id;
   const problems: string[] = [];
   if (!hasIntents(app.flags)) {
@@ -191,9 +247,13 @@ export async function checkDiscord(w: Wizard, values: Values, publicUrl: string)
       return problems;
     }
     const roles = await client.roles(guild.id);
-    if (values.ROLE_ID !== guild.id && !roles.some((r) => r.id === values.ROLE_ID)) problems.push(s('roleMissing', { id: values.ROLE_ID! }));
+    if (values.ROLE_ID !== guild.id && !roles.some((r) => r.id === values.ROLE_ID))
+      problems.push(s('roleMissing', { id: values.ROLE_ID! }));
     const text = new Set(sortChannels(await client.channels(guild.id)).map((c) => c.channel.id));
-    for (const c of (values.CHANNEL_IDS ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
+    for (const c of (values.CHANNEL_IDS ?? '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)) {
       if (!text.has(c)) problems.push(s('channelMissing', { id: c }));
     }
   } catch (e) {

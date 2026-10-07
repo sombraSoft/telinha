@@ -3,18 +3,18 @@
 // questions, and at the end the web address with the doctor report or Exit.
 // ↑ from the first choice walks the finished tasks; Enter shows their lines.
 import type { KeyEvent, RGBA } from '@opentui/core';
-import { createEffect, createMemo, createSignal, Index, Match, on, Show, Switch, type Accessor } from 'solid-js';
-import { at } from '../../../cli/setup/apply-strings.ts';
+import { type Accessor, createEffect, createMemo, createSignal, Index, Match, on, Show, Switch } from 'solid-js';
 import { TASKS, type TaskId, type TaskLine, type TaskRow } from '../../../cli/setup/apply.ts';
+import { at } from '../../../cli/setup/apply-strings.ts';
 import { t as st } from '../../../cli/setup/strings.ts';
 import { isDown, isEnter, isSpace, isUp, useKeys } from '../../keys.ts';
 import { useLocale, useT } from '../../strings.ts';
 import { c } from '../../theme.ts';
 import { CARD_CHROME, fit, pad, useLayout, windowStart, wrap } from '../../ui/layout.ts';
-import { Bar, Bold, Card, Picker, StatusIcon, type PickOption } from '../../ui/widgets.tsx';
+import { Bar, Bold, Card, Picker, type PickOption, StatusIcon } from '../../ui/widgets.tsx';
 import type { ApplyStore } from '../store.ts';
 import { useS } from '../strings.ts';
-import { Lines, marked, paint, pickerRows, type Line } from './question.tsx';
+import { type Line, Lines, marked, paint, pickerRows } from './question.tsx';
 
 type Color = string | RGBA;
 const LABEL_W = 26;
@@ -22,7 +22,8 @@ const BAR_W = 22;
 const INDENT = '    ';
 const MB = 1024 * 1024;
 
-const lineColor = (k: TaskLine['kind']): Color => (k === 'ok' ? c.ok : k === 'warn' ? c.warn : k === 'fail' ? c.fail : c.muted);
+const lineColor = (k: TaskLine['kind']): Color =>
+  k === 'ok' ? c.ok : k === 'warn' ? c.warn : k === 'fail' ? c.fail : c.muted;
 const lineMark = (k: TaskLine['kind']) => (k === 'ok' ? '✔ ' : k === 'warn' ? '! ' : k === 'fail' ? '✖ ' : '');
 const mb = (n: number) => (n / MB).toFixed(1);
 
@@ -65,15 +66,22 @@ export function ApplyScreen(p: ApplyProps) {
   // lines, a warning's with its explanation when the row cannot say it all.
   // Opened that way a row shows only those lines; Enter shows all of them.
   const [brief, setBrief] = createSignal<TaskId[]>([]);
-  createEffect(on(p.store.stage, (stage) => {
-    if (stage !== 'done') return;
-    const todo = p.store.rows.filter((r) => {
-      if (r.id === 'router') return r.todo.length > 0;
-      return r.status === 'warn' && (r.todo.length > 1 || (r.todo.length === 1 && Bun.stringWidth(r.todo[0]!.text) > detailW()));
-    }).map((r) => r.id);
-    setBrief(todo.filter((id) => !open().includes(id)));
-    setOpen((o) => [...new Set([...o, ...todo])]);
-  }));
+  createEffect(
+    on(p.store.stage, (stage) => {
+      if (stage !== 'done') return;
+      const todo = p.store.rows
+        .filter((r) => {
+          if (r.id === 'router') return r.todo.length > 0;
+          return (
+            r.status === 'warn' &&
+            (r.todo.length > 1 || (r.todo.length === 1 && Bun.stringWidth(r.todo[0]!.text) > detailW()))
+          );
+        })
+        .map((r) => r.id);
+      setBrief(todo.filter((id) => !open().includes(id)));
+      setOpen((o) => [...new Set([...o, ...todo])]);
+    }),
+  );
 
   const rowKeys = (k: KeyEvent): boolean => {
     if (!p.active() || !settled() || k.ctrl || k.meta) return false;
@@ -119,7 +127,8 @@ export function ApplyScreen(p: ApplyProps) {
     const out = marked('✔', st(locale(), 'written', { file: p.shownFile }), inner(), c.ok, true);
     out.push({ text: '', fg: c.muted });
     // Its columns are aligned with spaces: wrapped only when a line does not fit.
-    for (const l of st(locale(), 'nextDocker').split('\n')) out.push(...(Bun.stringWidth(l) <= inner() ? [{ text: l, fg: c.muted }] : paint(l, inner(), c.muted)));
+    for (const l of st(locale(), 'nextDocker').split('\n'))
+      out.push(...(Bun.stringWidth(l) <= inner() ? [{ text: l, fg: c.muted }] : paint(l, inner(), c.muted)));
     return out;
   });
   // Rows under the list; tight: the choices without their descriptions.
@@ -142,12 +151,16 @@ export function ApplyScreen(p: ApplyProps) {
       out.push({ kind: 'row', row, index });
       if (!expanded(row)) return;
       const bad = row.lines.filter((l) => l.kind === 'warn' || l.kind === 'fail');
-      const lines = errorsOnly && row.id === failed() && bad.length ? bad : brief().includes(row.id) ? row.todo : row.lines;
+      const lines =
+        errorsOnly && row.id === failed() && bad.length ? bad : brief().includes(row.id) ? row.todo : row.lines;
       for (const l of lines) {
         // The mark on the first line, its width of spaces before the others.
         const mark = lineMark(l.kind);
         for (const [i, text] of wrap(l.text, Math.max(1, w - Bun.stringWidth(mark))).entries()) {
-          out.push({ kind: 'text', line: { text: `${INDENT}${i ? ' '.repeat(Bun.stringWidth(mark)) : mark}${text}`, fg: lineColor(l.kind) } });
+          out.push({
+            kind: 'text',
+            line: { text: `${INDENT}${i ? ' '.repeat(Bun.stringWidth(mark)) : mark}${text}`, fg: lineColor(l.kind) },
+          });
         }
       }
     });
@@ -200,7 +213,9 @@ export function ApplyScreen(p: ApplyProps) {
   const moreLine = () => {
     const v = view();
     if (!v.merged) return v.below ? t('common.moreBelow', { n: v.below }) : '';
-    return [v.above ? t('common.moreAbove', { n: v.above }) : '', v.below ? t('common.moreBelow', { n: v.below }) : ''].filter(Boolean).join('  ');
+    return [v.above ? t('common.moreAbove', { n: v.above }) : '', v.below ? t('common.moreBelow', { n: v.below }) : '']
+      .filter(Boolean)
+      .join('  ');
   };
 
   const title = () => s(p.docker ? 'apply.titleDocker' : 'apply.title');
@@ -212,7 +227,9 @@ export function ApplyScreen(p: ApplyProps) {
 
   return (
     <Card title={` ${p.badge()} `} width={fullW()} active={p.active()}>
-      <text fg={c.text} attributes={Bold} wrapMode="none">{fit(title(), inner())}</text>
+      <text fg={c.text} attributes={Bold} wrapMode="none">
+        {fit(title(), inner())}
+      </text>
       <Lines lines={[status()]} />
       <box flexDirection="column" marginTop={1} flexShrink={0}>
         <Show when={view().above && !view().merged}>
@@ -222,7 +239,9 @@ export function ApplyScreen(p: ApplyProps) {
           {(item) => (
             <Switch>
               <Match when={item().kind === 'row' && (item() as Extract<Item, { kind: 'row' }>)}>
-                {(it: Accessor<Extract<Item, { kind: 'row' }>>) => <TaskRowView row={it().row} sel={rowSel() === it().index} width={detailW()} />}
+                {(it: Accessor<Extract<Item, { kind: 'row' }>>) => (
+                  <TaskRowView row={it().row} sel={rowSel() === it().index} width={detailW()} />
+                )}
               </Match>
               <Match when={item().kind === 'text' && (item() as Extract<Item, { kind: 'text' }>)}>
                 {(it: Accessor<Extract<Item, { kind: 'text' }>>) => <Lines lines={[it().line]} />}
@@ -259,10 +278,17 @@ export function ApplyScreen(p: ApplyProps) {
             <box flexDirection="column" marginTop={1} flexShrink={0}>
               <Show when={!p.docker} fallback={<Lines lines={doneLines()} />}>
                 <box flexDirection="row" gap={1} flexShrink={0}>
-                  <text fg={c.ok} attributes={Bold} wrapMode="none">{`✔ ${s(running() ? 'apply.done' : 'apply.setUp')}`}</text>
+                  <text
+                    fg={c.ok}
+                    attributes={Bold}
+                    wrapMode="none"
+                  >{`✔ ${s(running() ? 'apply.done' : 'apply.setUp')}`}</text>
                   <text fg={c.muted}>→</text>
                   <text fg={c.accent} attributes={Bold} wrapMode="none">
-                    {fit(p.webAddress(), Math.max(1, inner() - Bun.stringWidth(s(running() ? 'apply.done' : 'apply.setUp')) - 6))}
+                    {fit(
+                      p.webAddress(),
+                      Math.max(1, inner() - Bun.stringWidth(s(running() ? 'apply.done' : 'apply.setUp')) - 6),
+                    )}
                   </text>
                 </box>
               </Show>
@@ -331,7 +357,7 @@ function TaskRowView(p: { row: TaskRow; sel: boolean; width: number }) {
         return { text: r.result?.text ?? last()?.text ?? r.detail, fg: c.muted };
     }
   };
-  const text = () => (detail().text.split('\n')[0] ?? '');
+  const text = () => detail().text.split('\n')[0] ?? '';
   return (
     <box flexDirection="row" gap={1} flexShrink={0}>
       <StatusIcon status={p.row.status} />
@@ -339,16 +365,24 @@ function TaskRowView(p: { row: TaskRow; sel: boolean; width: number }) {
         fg={p.sel ? c.accent : p.row.status === 'pending' ? c.muted : c.text}
         attributes={p.row.status === 'running' || p.sel ? Bold : 0}
         wrapMode="none"
-      >{pad(`${label()}${p.sel ? '  ‹' : ''}`, LABEL_W)}</text>
+      >
+        {pad(`${label()}${p.sel ? '  ‹' : ''}`, LABEL_W)}
+      </text>
       <Show
         when={progress()?.total || progress()?.unit === 'bytes' ? progress() : null}
-        fallback={<text fg={detail().fg} wrapMode="none">{fit(text(), p.width)}</text>}
+        fallback={
+          <text fg={detail().fg} wrapMode="none">
+            {fit(text(), p.width)}
+          </text>
+        }
       >
         <box flexDirection="row" gap={1} flexShrink={0}>
           <Show when={barW() && progress()?.total}>
             <Bar value={pct()} width={barW()} />
           </Show>
-          <text fg={c.muted} wrapMode="none">{fit(progressText(), Math.max(1, p.width - (barW() && progress()?.total ? barW() + 1 : 0)))}</text>
+          <text fg={c.muted} wrapMode="none">
+            {fit(progressText(), Math.max(1, p.width - (barW() && progress()?.total ? barW() + 1 : 0)))}
+          </text>
         </box>
       </Show>
     </box>

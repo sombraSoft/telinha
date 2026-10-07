@@ -1,23 +1,41 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { KNOWN_KEYS, loadConfig, parseListen, turnIneligibility, upnpMappings } from '../src/config.ts';
 import { ENV_TEMPLATE, renderEnvFile } from '../src/cli/setup/envwrite.ts';
+import { KNOWN_KEYS, loadConfig, parseListen, turnIneligibility, upnpMappings } from '../src/config.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import { resolvePaths } from '../src/paths.ts';
 
 // Own fixtures (not helpers.ts) so this suite pins exactly what loadConfig sees.
 const PROD_ENV = {
-  DISCORD_TOKEN: 'tok', DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'csecret',
-  GUILD_ID: '100', ROLE_ID: '200', CHANNEL_IDS: '300, 301,,',
-  PUBLIC_URL: 'https://tela.example.com/', COOKIE_SECRET: 'secret',
-  LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'lksecret',
+  DISCORD_TOKEN: 'tok',
+  DISCORD_CLIENT_ID: 'cid',
+  DISCORD_CLIENT_SECRET: 'csecret',
+  GUILD_ID: '100',
+  ROLE_ID: '200',
+  CHANNEL_IDS: '300, 301,,',
+  PUBLIC_URL: 'https://tela.example.com/',
+  COOKIE_SECRET: 'secret',
+  LIVEKIT_API_KEY: 'devkey',
+  LIVEKIT_API_SECRET: 'lksecret',
 };
-const DEV_ENV = { DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:5173', COOKIE_SECRET: 'x', LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'secret' };
+const DEV_ENV = {
+  DEV_USER: '1:Dev',
+  PUBLIC_URL: 'http://localhost:5173',
+  COOKIE_SECRET: 'x',
+  LIVEKIT_API_KEY: 'devkey',
+  LIVEKIT_API_SECRET: 'secret',
+};
 const TUNNEL_ENV = { ...PROD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' };
 // What the wizard writes for a home without a domain: DuckDNS name, HTTPS on 8443, DNS-01.
 const HOME_ENV = {
-  ...PROD_ENV, PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns',
-  DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'g', DUCKDNS_TOKEN: 'duck-secret-token', // gitleaks:allow
+  ...PROD_ENV,
+  PUBLIC_URL: 'https://g.duckdns.org:8443',
+  HTTPS_PORT: '8443',
+  HTTP_PORT: '0',
+  ACME_DNS: 'duckdns',
+  DDNS_PROVIDER: 'duckdns',
+  DUCKDNS_DOMAIN: 'g',
+  DUCKDNS_TOKEN: 'duck-secret-token', // gitleaks:allow
 };
 const CLOUD_ENV = { ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc123.livekit.cloud' };
 // What the wizard writes for a VPS on a DuckDNS name: HTTPS on 443, HTTP challenge on 80.
@@ -76,11 +94,25 @@ describe('loadConfig', () => {
 
   test('optional overrides', () => {
     const c = loadConfig({
-      ...PROD_ENV, GROUP_NAME: 'Crew', LIVEKIT_PUBLIC_URL: 'wss://lk.example.com', WEB_DIR: '/srv/web',
-      LISTEN: '[::1]:9000', SESSION_DAYS: '1', ROLE_CACHE_SECONDS: '10',
-      LIVEKIT_API_URL: 'http://10.0.0.5:7880/', DATA_DIR: '/data', CLOSE_EMPTY_SECONDS: '4', POLL_SECONDS: '1',
-      COMMAND_NAME: 'tela', HTTP_PORT: '8080', HTTPS_PORT: '443', ACME_EMAIL: 'a@b.c',
-      LIVEKIT_PORT: '7990', MEDIA_TCP_PORT: '7891', MEDIA_UDP_PORT: '7892', IP_WATCH_SECONDS: '60',
+      ...PROD_ENV,
+      GROUP_NAME: 'Crew',
+      LIVEKIT_PUBLIC_URL: 'wss://lk.example.com',
+      WEB_DIR: '/srv/web',
+      LISTEN: '[::1]:9000',
+      SESSION_DAYS: '1',
+      ROLE_CACHE_SECONDS: '10',
+      LIVEKIT_API_URL: 'http://10.0.0.5:7880/',
+      DATA_DIR: '/data',
+      CLOSE_EMPTY_SECONDS: '4',
+      POLL_SECONDS: '1',
+      COMMAND_NAME: 'tela',
+      HTTP_PORT: '8080',
+      HTTPS_PORT: '443',
+      ACME_EMAIL: 'a@b.c',
+      LIVEKIT_PORT: '7990',
+      MEDIA_TCP_PORT: '7891',
+      MEDIA_UDP_PORT: '7892',
+      IP_WATCH_SECONDS: '60',
     });
     expect(c.livekitApiUrl).toBe('http://10.0.0.5:7880');
     expect(c.dataDir).toBe('/data');
@@ -108,7 +140,9 @@ describe('loadConfig', () => {
     for (const bad of ['ftp://x', 'http://bad host', '127.0.0.1:7880', 'wss://lk.example.com']) {
       expect(() => loadConfig({ ...PROD_ENV, LIVEKIT_API_URL: bad })).toThrow('bad LIVEKIT_API_URL');
     }
-    expect(loadConfig({ ...PROD_ENV, LIVEKIT_API_URL: 'https://lk.example.com' }).livekitApiUrl).toBe('https://lk.example.com');
+    expect(loadConfig({ ...PROD_ENV, LIVEKIT_API_URL: 'https://lk.example.com' }).livekitApiUrl).toBe(
+      'https://lk.example.com',
+    );
   });
 
   test('missing required env', () => {
@@ -131,9 +165,11 @@ describe('loadConfig', () => {
 
   test('bad ports', () => {
     for (const k of ['LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'HTTPS_PORT']) {
-      for (const v of ['0', '65536', '1.5', 'x', '-1']) expect(() => loadConfig({ ...PROD_ENV, [k]: v })).toThrow(`bad ${k}`);
+      for (const v of ['0', '65536', '1.5', 'x', '-1'])
+        expect(() => loadConfig({ ...PROD_ENV, [k]: v })).toThrow(`bad ${k}`);
     }
-    for (const v of ['65536', '1.5', 'x', '-1']) expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: v })).toThrow('bad HTTP_PORT');
+    for (const v of ['65536', '1.5', 'x', '-1'])
+      expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: v })).toThrow('bad HTTP_PORT');
   });
 
   test('INGRESS and MEDIA values', () => {
@@ -150,7 +186,21 @@ describe('loadConfig', () => {
   });
 
   test('KNOWN_KEYS covers the schema, not the removed LIVEKIT_KEYS or TURN_TLS_PORT', () => {
-    for (const k of [...Object.keys(PROD_ENV), 'INGRESS', 'MEDIA', 'TUNNEL_TOKEN', 'TELINHA_ENV', 'BIN_DIR', 'DEV_USER', 'DUCKDNS_TOKEN', 'HOSTING', 'ACME_DNS', 'LIVEKIT_CLOUD_URL', 'TURN', 'TURN_PORT']) {
+    for (const k of [
+      ...Object.keys(PROD_ENV),
+      'INGRESS',
+      'MEDIA',
+      'TUNNEL_TOKEN',
+      'TELINHA_ENV',
+      'BIN_DIR',
+      'DEV_USER',
+      'DUCKDNS_TOKEN',
+      'HOSTING',
+      'ACME_DNS',
+      'LIVEKIT_CLOUD_URL',
+      'TURN',
+      'TURN_PORT',
+    ]) {
       expect(KNOWN_KEYS.has(k)).toBe(true);
     }
     expect(KNOWN_KEYS.has('LIVEKIT_KEYS')).toBe(false);
@@ -168,7 +218,10 @@ describe('loadConfig', () => {
   });
 
   test('the wizard writes the documented layout: same sections and keys as telinha.env.example', () => {
-    const example = readFileSync(new URL('../../deploy/telinha.env.example', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const example = readFileSync(new URL('../../deploy/telinha.env.example', import.meta.url), 'utf8').replace(
+      /\r\n/g,
+      '\n',
+    );
     expect(ENV_TEMPLATE).toBe(example);
     const rendered = renderEnvFile({}, null);
     const sections = (t: string) => [...t.matchAll(/^# --- (.+?) -+$/gm)].map((m) => m[1]);
@@ -186,7 +239,13 @@ describe('UPnP, DuckDNS, updates, LOCALE', () => {
   });
 
   test('DDNS_PROVIDER=duckdns needs both DUCKDNS keys; none ignores them', () => {
-    const duck = { ...PROD_ENV, PUBLIC_URL: 'https://gang.duckdns.org', DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'gang', DUCKDNS_TOKEN: 'tk' };
+    const duck = {
+      ...PROD_ENV,
+      PUBLIC_URL: 'https://gang.duckdns.org',
+      DDNS_PROVIDER: 'duckdns',
+      DUCKDNS_DOMAIN: 'gang',
+      DUCKDNS_TOKEN: 'tk',
+    };
     const c = loadConfig(duck);
     expect(c.ddns).toEqual({ provider: 'duckdns', domain: 'gang', token: 'tk' });
     expect(c.warnings).toEqual([]);
@@ -227,8 +286,10 @@ describe('UPnP, DuckDNS, updates, LOCALE', () => {
     }
     const c = loadConfig({ ...PROD_ENV, UPDATE_CHECK_HOURS: '1', UPDATE_MAX_DEFER_HOURS: '0' });
     expect([c.updateCheckHours, c.updateMaxDeferHours]).toEqual([1, 0]);
-    for (const v of ['0', '169', '1.5']) expect(() => loadConfig({ ...PROD_ENV, UPDATE_CHECK_HOURS: v })).toThrow('bad UPDATE_CHECK_HOURS');
-    for (const v of ['-1', '721']) expect(() => loadConfig({ ...PROD_ENV, UPDATE_MAX_DEFER_HOURS: v })).toThrow('bad UPDATE_MAX_DEFER_HOURS');
+    for (const v of ['0', '169', '1.5'])
+      expect(() => loadConfig({ ...PROD_ENV, UPDATE_CHECK_HOURS: v })).toThrow('bad UPDATE_CHECK_HOURS');
+    for (const v of ['-1', '721'])
+      expect(() => loadConfig({ ...PROD_ENV, UPDATE_MAX_DEFER_HOURS: v })).toThrow('bad UPDATE_MAX_DEFER_HOURS');
   });
 
   test('LOCALE: en or pt-BR, as people spell them', () => {
@@ -247,7 +308,9 @@ describe('UPnP, DuckDNS, updates, LOCALE', () => {
 
 describe('INGRESS=direct', () => {
   test('requires an https PUBLIC_URL', () => {
-    expect(() => loadConfig({ ...PROD_ENV, PUBLIC_URL: 'http://tela.example.com' })).toThrow('INGRESS=direct requires an https:// PUBLIC_URL');
+    expect(() => loadConfig({ ...PROD_ENV, PUBLIC_URL: 'http://tela.example.com' })).toThrow(
+      'INGRESS=direct requires an https:// PUBLIC_URL',
+    );
   });
 
   test('publicHost is the bare hostname, with or without a URL port', () => {
@@ -260,9 +323,12 @@ describe('INGRESS=direct', () => {
   test('URL port != HTTPS_PORT is a warning, not an error', () => {
     const c = loadConfig({ ...PROD_ENV, HTTPS_PORT: '8443' });
     expect(c.httpsPort).toBe(8443);
-    expect(c.warnings).toEqual(['config: PUBLIC_URL port 443 differs from HTTPS_PORT 8443; assuming the router translates 443 -> 8443']);
-    expect(loadConfig({ ...HOME_ENV, HTTPS_PORT: '443' }).warnings)
-      .toEqual(['config: PUBLIC_URL port 8443 differs from HTTPS_PORT 443; assuming the router translates 8443 -> 443']);
+    expect(c.warnings).toEqual([
+      'config: PUBLIC_URL port 443 differs from HTTPS_PORT 8443; assuming the router translates 443 -> 8443',
+    ]);
+    expect(loadConfig({ ...HOME_ENV, HTTPS_PORT: '443' }).warnings).toEqual([
+      'config: PUBLIC_URL port 8443 differs from HTTPS_PORT 443; assuming the router translates 8443 -> 443',
+    ]);
   });
 
   test('a high PUBLIC_URL port without DNS-01 is refused with HTTP_PORT=0, warned otherwise', () => {
@@ -270,8 +336,9 @@ describe('INGRESS=direct', () => {
     expect(() => loadConfig(high)).toThrow(
       "PUBLIC_URL uses port 8443 and HTTP_PORT=0: Let's Encrypt validates only over public port 80 or 443, so this needs ACME_DNS=duckdns (a DuckDNS name) or a PUBLIC_URL on port 443",
     );
-    expect(loadConfig({ ...high, HTTP_PORT: '80' }).warnings)
-      .toEqual(['config: PUBLIC_URL uses port 8443; without ACME_DNS the certificate needs public port 80 reaching HTTP_PORT 80']);
+    expect(loadConfig({ ...high, HTTP_PORT: '80' }).warnings).toEqual([
+      'config: PUBLIC_URL uses port 8443; without ACME_DNS the certificate needs public port 80 reaching HTTP_PORT 80',
+    ]);
     // Port 443 with HTTP_PORT=0 still has the TLS-ALPN challenge.
     expect(loadConfig({ ...PROD_ENV, HTTP_PORT: '0' }).warnings).toEqual([]);
     // Outside direct mode Caddy fetches no certificate.
@@ -304,12 +371,17 @@ describe('HOSTING and ACME_DNS', () => {
   });
 
   test('ACME_DNS=duckdns needs DUCKDNS_TOKEN and a duckdns.org host', () => {
-    expect(() => loadConfig({ ...HOME_ENV, DUCKDNS_TOKEN: '', DDNS_PROVIDER: 'none' })).toThrow('missing env DUCKDNS_TOKEN');
-    expect(() => loadConfig({ ...HOME_ENV, DDNS_PROVIDER: 'none', PUBLIC_URL: 'https://tela.example.com:8443' }))
-      .toThrow('ACME_DNS=duckdns needs a PUBLIC_URL host under duckdns.org (got tela.example.com)');
+    expect(() => loadConfig({ ...HOME_ENV, DUCKDNS_TOKEN: '', DDNS_PROVIDER: 'none' })).toThrow(
+      'missing env DUCKDNS_TOKEN',
+    );
+    expect(() =>
+      loadConfig({ ...HOME_ENV, DDNS_PROVIDER: 'none', PUBLIC_URL: 'https://tela.example.com:8443' }),
+    ).toThrow('ACME_DNS=duckdns needs a PUBLIC_URL host under duckdns.org (got tela.example.com)');
     // DNS-01 without the DDNS updater (a static IP) is fine.
     expect(loadConfig({ ...HOME_ENV, DDNS_PROVIDER: 'none' }).acmeDns?.provider).toBe('duckdns');
-    expect(() => loadConfig({ ...HOME_ENV, ACME_DNS: 'cloudflare' })).toThrow('bad ACME_DNS cloudflare (want none | duckdns)');
+    expect(() => loadConfig({ ...HOME_ENV, ACME_DNS: 'cloudflare' })).toThrow(
+      'bad ACME_DNS cloudflare (want none | duckdns)',
+    );
     expect(loadConfig({ ...PROD_ENV, ACME_DNS: 'none' }).acmeDns).toBeNull();
   });
 
@@ -336,7 +408,9 @@ describe('INGRESS=tunnel', () => {
     expect(c.tunnelToken).toBe('tt');
     expect(c.warnings).toEqual([]);
     expect(() => loadConfig({ ...TUNNEL_ENV, TUNNEL_TOKEN: '' })).toThrow('missing env TUNNEL_TOKEN');
-    expect(() => loadConfig({ ...TUNNEL_ENV, PUBLIC_URL: 'http://tela.example.com' })).toThrow('INGRESS=tunnel requires an https:// PUBLIC_URL');
+    expect(() => loadConfig({ ...TUNNEL_ENV, PUBLIC_URL: 'http://tela.example.com' })).toThrow(
+      'INGRESS=tunnel requires an https:// PUBLIC_URL',
+    );
   });
 
   test('HTTPS_PORT is not compared with the URL port', () => {
@@ -361,18 +435,32 @@ describe('INGRESS=external', () => {
 describe('port collisions', () => {
   test('media, LiveKit and LISTEN ports in every mode', () => {
     for (const env of [PROD_ENV, TUNNEL_ENV, { ...PROD_ENV, INGRESS: 'external' }, DEV_ENV]) {
-      expect(() => loadConfig({ ...env, MEDIA_UDP_PORT: '7881' })).toThrow('ports collide: MEDIA_TCP_PORT=7881, MEDIA_UDP_PORT=7881');
-      expect(() => loadConfig({ ...env, LIVEKIT_PORT: '7882' })).toThrow('ports collide: MEDIA_UDP_PORT=7882, LIVEKIT_PORT=7882');
-      expect(() => loadConfig({ ...env, LISTEN: '127.0.0.1:7880' })).toThrow('ports collide: LIVEKIT_PORT=7880, LISTEN=7880');
+      expect(() => loadConfig({ ...env, MEDIA_UDP_PORT: '7881' })).toThrow(
+        'ports collide: MEDIA_TCP_PORT=7881, MEDIA_UDP_PORT=7881',
+      );
+      expect(() => loadConfig({ ...env, LIVEKIT_PORT: '7882' })).toThrow(
+        'ports collide: MEDIA_UDP_PORT=7882, LIVEKIT_PORT=7882',
+      );
+      expect(() => loadConfig({ ...env, LISTEN: '127.0.0.1:7880' })).toThrow(
+        'ports collide: LIVEKIT_PORT=7880, LISTEN=7880',
+      );
     }
   });
 
   test('HTTPS_PORT and HTTP_PORT join the set in direct mode', () => {
-    expect(() => loadConfig({ ...PROD_ENV, HTTPS_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTPS_PORT=8081');
+    expect(() => loadConfig({ ...PROD_ENV, HTTPS_PORT: '8081' })).toThrow(
+      'ports collide: LISTEN=8081, HTTPS_PORT=8081',
+    );
     expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTP_PORT=8081');
-    expect(() => loadConfig({ ...PROD_ENV, HTTPS_PORT: '7880' })).toThrow('ports collide: LIVEKIT_PORT=7880, HTTPS_PORT=7880');
-    expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: '7881' })).toThrow('ports collide: MEDIA_TCP_PORT=7881, HTTP_PORT=7881');
-    expect(() => loadConfig({ ...PROD_ENV, MEDIA_UDP_PORT: '443' })).toThrow('ports collide: MEDIA_UDP_PORT=443, HTTPS_PORT=443');
+    expect(() => loadConfig({ ...PROD_ENV, HTTPS_PORT: '7880' })).toThrow(
+      'ports collide: LIVEKIT_PORT=7880, HTTPS_PORT=7880',
+    );
+    expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: '7881' })).toThrow(
+      'ports collide: MEDIA_TCP_PORT=7881, HTTP_PORT=7881',
+    );
+    expect(() => loadConfig({ ...PROD_ENV, MEDIA_UDP_PORT: '443' })).toThrow(
+      'ports collide: MEDIA_UDP_PORT=443, HTTPS_PORT=443',
+    );
     expect(() => loadConfig({ ...PROD_ENV, HTTP_PORT: '443' })).toThrow('ports collide: HTTPS_PORT=443, HTTP_PORT=443');
   });
 
@@ -398,46 +486,88 @@ describe('MEDIA=cloud', () => {
   });
 
   test('https:// accepted; path, query and trailing slash dropped', () => {
-    for (const u of ['https://proj-abc123.livekit.cloud', 'wss://proj-abc123.livekit.cloud/', 'wss://proj-abc123.livekit.cloud/rtc?x=1', 'https://proj-abc123.livekit.cloud/a/b/']) {
+    for (const u of [
+      'https://proj-abc123.livekit.cloud',
+      'wss://proj-abc123.livekit.cloud/',
+      'wss://proj-abc123.livekit.cloud/rtc?x=1',
+      'https://proj-abc123.livekit.cloud/a/b/',
+    ]) {
       const c = loadConfig({ ...CLOUD_ENV, LIVEKIT_CLOUD_URL: u });
-      expect([c.livekitUrl, c.livekitApiUrl]).toEqual(['wss://proj-abc123.livekit.cloud', 'https://proj-abc123.livekit.cloud']);
+      expect([c.livekitUrl, c.livekitApiUrl]).toEqual([
+        'wss://proj-abc123.livekit.cloud',
+        'https://proj-abc123.livekit.cloud',
+      ]);
     }
   });
 
   test('bad schemes and hostless values are refused', () => {
-    for (const bad of ['proj.livekit.cloud', 'ws://proj.livekit.cloud', 'http://proj.livekit.cloud', 'ftp://proj.livekit.cloud', 'wss://', 'not a url']) {
+    for (const bad of [
+      'proj.livekit.cloud',
+      'ws://proj.livekit.cloud',
+      'http://proj.livekit.cloud',
+      'ftp://proj.livekit.cloud',
+      'wss://',
+      'not a url',
+    ]) {
       expect(() => loadConfig({ ...CLOUD_ENV, LIVEKIT_CLOUD_URL: bad })).toThrow('bad LIVEKIT_CLOUD_URL');
     }
   });
 
   test('dev may point at a plain ws/http stand-in', () => {
     const c = loadConfig({ ...DEV_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'ws://localhost:7880' });
-    expect([c.livekitUrl, c.livekitApiUrl, c.livekitCloudHost]).toEqual(['ws://localhost:7880', 'http://localhost:7880', 'localhost:7880']);
-    expect(loadConfig({ ...DEV_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'http://127.0.0.1:7880/' }).livekitUrl).toBe('ws://127.0.0.1:7880');
+    expect([c.livekitUrl, c.livekitApiUrl, c.livekitCloudHost]).toEqual([
+      'ws://localhost:7880',
+      'http://localhost:7880',
+      'localhost:7880',
+    ]);
+    expect(loadConfig({ ...DEV_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'http://127.0.0.1:7880/' }).livekitUrl).toBe(
+      'ws://127.0.0.1:7880',
+    );
   });
 
   test('self-only keys are warned and ignored when set to something else than their default', () => {
     const c = loadConfig({
-      ...CLOUD_ENV, LIVEKIT_PORT: '7990', MEDIA_TCP_PORT: '7891', MEDIA_UDP_PORT: '7892',
-      LIVEKIT_API_URL: 'http://10.0.0.5:7880', LIVEKIT_PUBLIC_URL: 'wss://lk.example.com',
+      ...CLOUD_ENV,
+      LIVEKIT_PORT: '7990',
+      MEDIA_TCP_PORT: '7891',
+      MEDIA_UDP_PORT: '7892',
+      LIVEKIT_API_URL: 'http://10.0.0.5:7880',
+      LIVEKIT_PUBLIC_URL: 'wss://lk.example.com',
     });
-    expect(c.warnings).toEqual(['LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'LIVEKIT_API_URL', 'LIVEKIT_PUBLIC_URL']
-      .map((k) => `config: ${k} only applies to MEDIA=self; ignored`));
+    expect(c.warnings).toEqual(
+      ['LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'LIVEKIT_API_URL', 'LIVEKIT_PUBLIC_URL'].map(
+        (k) => `config: ${k} only applies to MEDIA=self; ignored`,
+      ),
+    );
     expect(c.livekitUrl).toBe('wss://proj-abc123.livekit.cloud');
     expect(c.livekitApiUrl).toBe('https://proj-abc123.livekit.cloud');
-    const same = loadConfig({ ...CLOUD_ENV, LIVEKIT_PORT: '7880', MEDIA_TCP_PORT: '7881', MEDIA_UDP_PORT: '7882', LIVEKIT_API_URL: 'http://127.0.0.1:7880/' });
+    const same = loadConfig({
+      ...CLOUD_ENV,
+      LIVEKIT_PORT: '7880',
+      MEDIA_TCP_PORT: '7881',
+      MEDIA_UDP_PORT: '7882',
+      LIVEKIT_API_URL: 'http://127.0.0.1:7880/',
+    });
     expect(same.warnings).toEqual([]);
     // Not validated either: nothing uses it.
-    expect(loadConfig({ ...CLOUD_ENV, LIVEKIT_API_URL: 'ftp://x' }).warnings).toEqual(['config: LIVEKIT_API_URL only applies to MEDIA=self; ignored']);
+    expect(loadConfig({ ...CLOUD_ENV, LIVEKIT_API_URL: 'ftp://x' }).warnings).toEqual([
+      'config: LIVEKIT_API_URL only applies to MEDIA=self; ignored',
+    ]);
   });
 
   test('LIVEKIT_NODE_IP and IP_WATCH_SECONDS keep their meaning, no warning', () => {
     expect(loadConfig({ ...CLOUD_ENV, IP_WATCH_SECONDS: '60' })).toMatchObject({ ipWatchSeconds: 60, warnings: [] });
-    expect(loadConfig({ ...CLOUD_ENV, LIVEKIT_NODE_IP: '203.0.113.7' })).toMatchObject({ livekitNodeIp: '203.0.113.7', ipWatchSeconds: 0, warnings: [] });
+    expect(loadConfig({ ...CLOUD_ENV, LIVEKIT_NODE_IP: '203.0.113.7' })).toMatchObject({
+      livekitNodeIp: '203.0.113.7',
+      ipWatchSeconds: 0,
+      warnings: [],
+    });
   });
 
   test('works with a tunnel', () => {
-    expect(loadConfig({ ...CLOUD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' }).livekitUrl).toBe('wss://proj-abc123.livekit.cloud');
+    expect(loadConfig({ ...CLOUD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' }).livekitUrl).toBe(
+      'wss://proj-abc123.livekit.cloud',
+    );
   });
 });
 
@@ -454,13 +584,18 @@ describe('TURN', () => {
   });
 
   test('auto on sslip.io: on', () => {
-    expect(loadConfig({ ...PROD_ENV, PUBLIC_URL: 'https://1-2-3-4.sslip.io', HOSTING: 'vps' }).turn)
-      .toEqual({ host: 'turn.1-2-3-4.sslip.io', port: 5349 });
+    expect(loadConfig({ ...PROD_ENV, PUBLIC_URL: 'https://1-2-3-4.sslip.io', HOSTING: 'vps' }).turn).toEqual({
+      host: 'turn.1-2-3-4.sslip.io',
+      port: 5349,
+    });
   });
 
   test('auto on an own domain: off until TURN=on (turn.<host> needs a record)', () => {
     expect(loadConfig({ ...PROD_ENV, HOSTING: 'vps' }).turn).toBeNull();
-    expect(loadConfig({ ...PROD_ENV, HOSTING: 'vps', TURN: 'on' }).turn).toEqual({ host: 'turn.tela.example.com', port: 5349 });
+    expect(loadConfig({ ...PROD_ENV, HOSTING: 'vps', TURN: 'on' }).turn).toEqual({
+      host: 'turn.tela.example.com',
+      port: 5349,
+    });
   });
 
   test('auto with HOSTING unset: off; TURN=on there: on', () => {
@@ -470,8 +605,14 @@ describe('TURN', () => {
   });
 
   test('auto where not eligible: off, no error', () => {
-    for (const env of [HOME_ENV, { ...VPS_DUCK_ENV, HOSTING: 'home' }, { ...VPS_DUCK_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' },
-      { ...VPS_DUCK_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' }, { ...VPS_DUCK_ENV, HTTPS_PORT: '8443' }, DEV_ENV]) {
+    for (const env of [
+      HOME_ENV,
+      { ...VPS_DUCK_ENV, HOSTING: 'home' },
+      { ...VPS_DUCK_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' },
+      { ...VPS_DUCK_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' },
+      { ...VPS_DUCK_ENV, HTTPS_PORT: '8443' },
+      DEV_ENV,
+    ]) {
       expect(loadConfig(env).turn).toBeNull();
     }
   });
@@ -484,17 +625,22 @@ describe('TURN', () => {
 
   test('TURN=on where it cannot run: each reason', () => {
     const on = { ...VPS_DUCK_ENV, TURN: 'on' };
-    expect(() => loadConfig({ ...on, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' }))
-      .toThrow(NOT_HERE("MEDIA=cloud brings LiveKit Cloud's own TURN"));
-    expect(() => loadConfig({ ...on, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' }))
-      .toThrow(NOT_HERE('it needs INGRESS=direct (Caddy must own port 443)'));
-    expect(() => loadConfig({ ...on, INGRESS: 'external' }))
-      .toThrow(NOT_HERE('it needs INGRESS=direct (Caddy must own port 443)'));
-    expect(() => loadConfig({ ...HOME_ENV, HOSTING: 'home', TURN: 'on' }))
-      .toThrow(NOT_HERE('home installs get no TURN: home connections do not let port 443 in'));
+    expect(() => loadConfig({ ...on, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' })).toThrow(
+      NOT_HERE("MEDIA=cloud brings LiveKit Cloud's own TURN"),
+    );
+    expect(() => loadConfig({ ...on, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' })).toThrow(
+      NOT_HERE('it needs INGRESS=direct (Caddy must own port 443)'),
+    );
+    expect(() => loadConfig({ ...on, INGRESS: 'external' })).toThrow(
+      NOT_HERE('it needs INGRESS=direct (Caddy must own port 443)'),
+    );
+    expect(() => loadConfig({ ...HOME_ENV, HOSTING: 'home', TURN: 'on' })).toThrow(
+      NOT_HERE('home installs get no TURN: home connections do not let port 443 in'),
+    );
     // Advanced home layout on 80/443: still refused.
-    expect(() => loadConfig({ ...on, HOSTING: 'home' }))
-      .toThrow(NOT_HERE('home installs get no TURN: home connections do not let port 443 in'));
+    expect(() => loadConfig({ ...on, HOSTING: 'home' })).toThrow(
+      NOT_HERE('home installs get no TURN: home connections do not let port 443 in'),
+    );
     const port443 = NOT_HERE('it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)');
     expect(() => loadConfig({ ...on, HTTPS_PORT: '8443' })).toThrow(port443);
     expect(() => loadConfig({ ...on, PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '8443' })).toThrow(port443);
@@ -506,32 +652,59 @@ describe('TURN', () => {
   });
 
   test('turnIneligibility: reasons in order, hosting null allowed', () => {
-    const base = { media: 'self', ingress: 'direct', hosting: null, httpsPort: 443, publicUrl: 'https://g.duckdns.org', publicHost: 'g.duckdns.org' } as const;
+    const base = {
+      media: 'self',
+      ingress: 'direct',
+      hosting: null,
+      httpsPort: 443,
+      publicUrl: 'https://g.duckdns.org',
+      publicHost: 'g.duckdns.org',
+    } as const;
     expect(turnIneligibility(base)).toBeNull();
     expect(turnIneligibility({ ...base, hosting: 'vps' })).toBeNull();
     // The first failing rule wins.
-    expect(turnIneligibility({ ...base, media: 'cloud', ingress: 'tunnel', hosting: 'home' })).toBe("MEDIA=cloud brings LiveKit Cloud's own TURN");
-    expect(turnIneligibility({ ...base, ingress: 'tunnel', hosting: 'home' })).toBe('it needs INGRESS=direct (Caddy must own port 443)');
-    expect(turnIneligibility({ ...base, hosting: 'home', httpsPort: 8443 })).toBe('home installs get no TURN: home connections do not let port 443 in');
-    expect(turnIneligibility({ ...base, httpsPort: 8443, publicHost: '1.2.3.4' }))
-      .toBe('it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)');
-    expect(turnIneligibility({ ...base, publicUrl: 'https://1.2.3.4', publicHost: '1.2.3.4' }))
-      .toBe('it needs a DNS name in PUBLIC_URL (turn.<host> must resolve)');
+    expect(turnIneligibility({ ...base, media: 'cloud', ingress: 'tunnel', hosting: 'home' })).toBe(
+      "MEDIA=cloud brings LiveKit Cloud's own TURN",
+    );
+    expect(turnIneligibility({ ...base, ingress: 'tunnel', hosting: 'home' })).toBe(
+      'it needs INGRESS=direct (Caddy must own port 443)',
+    );
+    expect(turnIneligibility({ ...base, hosting: 'home', httpsPort: 8443 })).toBe(
+      'home installs get no TURN: home connections do not let port 443 in',
+    );
+    expect(turnIneligibility({ ...base, httpsPort: 8443, publicHost: '1.2.3.4' })).toBe(
+      'it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)',
+    );
+    expect(turnIneligibility({ ...base, publicUrl: 'https://1.2.3.4', publicHost: '1.2.3.4' })).toBe(
+      'it needs a DNS name in PUBLIC_URL (turn.<host> must resolve)',
+    );
   });
 
   test('TURN values and TURN_PORT', () => {
     expect(() => loadConfig({ ...PROD_ENV, TURN: 'yes' })).toThrow('bad TURN yes (want auto | on | off)');
-    for (const v of ['0', '65536', '1.5', 'x']) expect(() => loadConfig({ ...PROD_ENV, TURN_PORT: v })).toThrow('bad TURN_PORT');
-    expect(loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '15349' }).turn).toEqual({ host: 'turn.g.duckdns.org', port: 15349 });
+    for (const v of ['0', '65536', '1.5', 'x'])
+      expect(() => loadConfig({ ...PROD_ENV, TURN_PORT: v })).toThrow('bad TURN_PORT');
+    expect(loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '15349' }).turn).toEqual({
+      host: 'turn.g.duckdns.org',
+      port: 15349,
+    });
     // Parsed with TURN off too.
     expect(loadConfig({ ...PROD_ENV, TURN_PORT: '6000' }).turnPort).toBe(6000);
   });
 
   test('TURN_PORT joins the collision set only when TURN is on', () => {
-    expect(() => loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, TURN_PORT=8081');
-    expect(() => loadConfig({ ...VPS_DUCK_ENV, LISTEN: '127.0.0.1:5349' })).toThrow('ports collide: LISTEN=5349, TURN_PORT=5349');
-    expect(() => loadConfig({ ...VPS_DUCK_ENV, MEDIA_TCP_PORT: '5349' })).toThrow('ports collide: MEDIA_TCP_PORT=5349, TURN_PORT=5349');
-    expect(() => loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '443' })).toThrow('ports collide: HTTPS_PORT=443, TURN_PORT=443');
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '8081' })).toThrow(
+      'ports collide: LISTEN=8081, TURN_PORT=8081',
+    );
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, LISTEN: '127.0.0.1:5349' })).toThrow(
+      'ports collide: LISTEN=5349, TURN_PORT=5349',
+    );
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, MEDIA_TCP_PORT: '5349' })).toThrow(
+      'ports collide: MEDIA_TCP_PORT=5349, TURN_PORT=5349',
+    );
+    expect(() => loadConfig({ ...VPS_DUCK_ENV, TURN_PORT: '443' })).toThrow(
+      'ports collide: HTTPS_PORT=443, TURN_PORT=443',
+    );
     expect(loadConfig({ ...VPS_DUCK_ENV, TURN: 'off', TURN_PORT: '8081' }).turn).toBeNull();
     expect(loadConfig({ ...PROD_ENV, TURN_PORT: '8081' }).turn).toBeNull();
   });
@@ -539,12 +712,15 @@ describe('TURN', () => {
 
 describe('COMMAND_NAME', () => {
   test('lowercase unicode letters, digits, - and _', () => {
-    for (const n of ['tela', 'tela-2', 'tela_x', 'ção', 'a', 'x'.repeat(32)]) expect(loadConfig({ ...PROD_ENV, COMMAND_NAME: n }).commandName).toBe(n);
+    for (const n of ['tela', 'tela-2', 'tela_x', 'ção', 'a', 'x'.repeat(32)])
+      expect(loadConfig({ ...PROD_ENV, COMMAND_NAME: n }).commandName).toBe(n);
   });
 
   test('rejects uppercase, spaces, symbols and 33 chars', () => {
     for (const n of ['Tela', 'TELA', 'tela x', 'tela!', 'x'.repeat(33), 'Ção']) {
-      expect(() => loadConfig({ ...PROD_ENV, COMMAND_NAME: n })).toThrow('bad COMMAND_NAME (Discord: lowercase, 1-32 chars)');
+      expect(() => loadConfig({ ...PROD_ENV, COMMAND_NAME: n })).toThrow(
+        'bad COMMAND_NAME (Discord: lowercase, 1-32 chars)',
+      );
     }
   });
 });
@@ -552,7 +728,8 @@ describe('COMMAND_NAME', () => {
 describe('IP watch and LIVEKIT_NODE_IP', () => {
   test('IP_WATCH_SECONDS=0 turns the watch off', () => {
     expect(loadConfig({ ...PROD_ENV, IP_WATCH_SECONDS: '0' }).ipWatchSeconds).toBe(0);
-    for (const v of ['-1', '1.5', 'x']) expect(() => loadConfig({ ...PROD_ENV, IP_WATCH_SECONDS: v })).toThrow('bad IP_WATCH_SECONDS');
+    for (const v of ['-1', '1.5', 'x'])
+      expect(() => loadConfig({ ...PROD_ENV, IP_WATCH_SECONDS: v })).toThrow('bad IP_WATCH_SECONDS');
   });
 
   test('a static node IP forces the watch off', () => {
@@ -584,7 +761,9 @@ describe('DEV_USER guard', () => {
     expect(loadConfig(DEV_ENV).ingress).toBe('external');
     expect(loadConfig({ ...DEV_ENV, INGRESS: 'external' }).ingress).toBe('external');
     for (const i of ['direct', 'tunnel']) {
-      expect(() => loadConfig({ ...DEV_ENV, INGRESS: i, TUNNEL_TOKEN: 'tt' })).toThrow('DEV_USER requires INGRESS=external');
+      expect(() => loadConfig({ ...DEV_ENV, INGRESS: i, TUNNEL_TOKEN: 'tt' })).toThrow(
+        'DEV_USER requires INGRESS=external',
+      );
     }
   });
 
@@ -594,7 +773,13 @@ describe('DEV_USER guard', () => {
   });
 
   test('rejects non-localhost PUBLIC_URL', () => {
-    for (const u of ['https://tela.example.com', 'https://localhost:8081', 'http://tela.example.com', 'http://localhost.example.com', 'http://10.0.0.1:8081']) {
+    for (const u of [
+      'https://tela.example.com',
+      'https://localhost:8081',
+      'http://tela.example.com',
+      'http://localhost.example.com',
+      'http://10.0.0.1:8081',
+    ]) {
       expect(() => loadConfig({ ...DEV_ENV, PUBLIC_URL: u })).toThrow('DEV_USER requires PUBLIC_URL');
     }
   });
@@ -623,7 +808,8 @@ test('parseListen', () => {
 });
 
 describe('upnpMappings', () => {
-  const ports = (env: Record<string, string>) => upnpMappings(loadConfig(env)).map((m) => `${m.protocol} ${m.externalPort}->${m.internalPort}`);
+  const ports = (env: Record<string, string>) =>
+    upnpMappings(loadConfig(env)).map((m) => `${m.protocol} ${m.externalPort}->${m.internalPort}`);
 
   test('direct: media ports, plus HTTPS only from a high PUBLIC_URL port', () => {
     expect(ports(HOME_ENV)).toEqual(['tcp 7881->7881', 'udp 7882->7882', 'tcp 8443->8443']);
@@ -633,7 +819,12 @@ describe('upnpMappings', () => {
   });
 
   test('never an external 80 or 443 entry', () => {
-    const envs = [PROD_ENV, { ...PROD_ENV, HTTP_PORT: '8080' }, { ...HOME_ENV, HTTP_PORT: '8080' }, { ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:80' }];
+    const envs = [
+      PROD_ENV,
+      { ...PROD_ENV, HTTP_PORT: '8080' },
+      { ...HOME_ENV, HTTP_PORT: '8080' },
+      { ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:80' },
+    ];
     for (const env of envs) {
       const external = upnpMappings(loadConfig(env)).map((m) => m.externalPort);
       expect(external).not.toContain(80);

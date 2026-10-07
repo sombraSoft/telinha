@@ -40,7 +40,8 @@ describe('lookupPublicIp', () => {
 describe('address classes', () => {
   test('private ranges', () => {
     for (const ip of ['10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.1']) expect(isPrivateIpv4(ip)).toBe(true);
-    for (const ip of ['172.15.0.1', '172.32.0.1', '100.64.0.1', '8.8.8.8', 'nope', '']) expect(isPrivateIpv4(ip)).toBe(false);
+    for (const ip of ['172.15.0.1', '172.32.0.1', '100.64.0.1', '8.8.8.8', 'nope', ''])
+      expect(isPrivateIpv4(ip)).toBe(false);
   });
 
   test('CGNAT is 100.64.0.0/10 only', () => {
@@ -50,7 +51,11 @@ describe('address classes', () => {
 });
 
 test('parseAltNames', () => {
-  expect(parseAltNames('DNS:a.example, DNS:b.example, IP Address:1.2.3.4')).toEqual(['a.example', 'b.example', '1.2.3.4']);
+  expect(parseAltNames('DNS:a.example, DNS:b.example, IP Address:1.2.3.4')).toEqual([
+    'a.example',
+    'b.example',
+    '1.2.3.4',
+  ]);
   expect(parseAltNames(undefined)).toEqual([]);
 });
 

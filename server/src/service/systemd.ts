@@ -5,7 +5,14 @@
 // a root-owned copy of the CLI (install.sh puts it in /usr/local/lib/telinha),
 // never bin/telinha, which the service user can replace.
 import { posix } from 'node:path';
-import { attempt, must, ServiceInstallError, type InstallResult, type ServiceDeps, type ServiceManager } from './index.ts';
+import {
+  attempt,
+  type InstallResult,
+  must,
+  type ServiceDeps,
+  ServiceInstallError,
+  type ServiceManager,
+} from './index.ts';
 
 // Linux paths whatever the host (tests run on Windows too).
 const { dirname, join } = posix;
@@ -18,7 +25,8 @@ export const SERVICE_USER = 'telinha';
  * binary update and rollback (a file capability would not: bins.ts replaces
  * caddy on each version bump). Run with `sh -c`; setup and doctor both offer it.
  */
-export const SYSCTL_SCRIPT = 'printf "net.ipv4.ip_unprivileged_port_start=80\\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system';
+export const SYSCTL_SCRIPT =
+  'printf "net.ipv4.ip_unprivileged_port_start=80\\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system';
 
 /**
  * A unit-file value in double quotes: C escapes for \ and ", %% for a literal
@@ -125,11 +133,24 @@ export function createSystemd(d: ServiceDeps, user: boolean): ServiceManager {
     kind: user ? 'systemd-user' : 'systemd-system',
 
     async install(o) {
-      const result: InstallResult = { ok: false, steps: { task: 'skipped', firewall: 'skipped', start: 'skipped' }, hints: [] };
+      const result: InstallResult = {
+        ok: false,
+        steps: { task: 'skipped', firewall: 'skipped', start: 'skipped' },
+        hints: [],
+      };
       result.steps.task = await attempt(async () => {
         if (!user) {
           if ((await spawn(['id', '-u', SERVICE_USER])).code !== 0) {
-            await run(['useradd', '--system', '--home-dir', o.home, '--no-create-home', '--shell', '/usr/sbin/nologin', SERVICE_USER]);
+            await run([
+              'useradd',
+              '--system',
+              '--home-dir',
+              o.home,
+              '--no-create-home',
+              '--shell',
+              '/usr/sbin/nologin',
+              SERVICE_USER,
+            ]);
           }
           // The home and config/ stay root's: root writes telinha.env there (setup)
           // and must never write into, or run anything from, a directory the
@@ -181,9 +202,13 @@ export function createSystemd(d: ServiceDeps, user: boolean): ServiceManager {
       const installed = await fs.exists(unit);
       const active = (await spawn(sc('is-active', UNIT_NAME))).stdout.trim();
       const enabled = (await spawn(sc('is-enabled', UNIT_NAME))).stdout.trim() === 'enabled';
-      const show = parseShow((await spawn(sc('show', '-p', 'MainPID', '-p', 'ActiveState', '-p', 'SubState', UNIT_NAME))).stdout);
+      const show = parseShow(
+        (await spawn(sc('show', '-p', 'MainPID', '-p', 'ActiveState', '-p', 'SubState', UNIT_NAME))).stdout,
+      );
       const running = active === 'active' || (await d.control.available());
-      const state = show.ActiveState ? `${show.ActiveState}${show.SubState ? ` (${show.SubState})` : ''}` : active || 'unknown';
+      const state = show.ActiveState
+        ? `${show.ActiveState}${show.SubState ? ` (${show.SubState})` : ''}`
+        : active || 'unknown';
       const pid = show.MainPID && show.MainPID !== '0' ? `, pid ${show.MainPID}` : '';
       const detail = installed
         ? `${manager.kind}: ${state}${pid}, ${enabled ? 'enabled' : 'not enabled'}`

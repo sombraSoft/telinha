@@ -5,11 +5,11 @@
 // that smells like "not published yet" is a PendingError; anything verified
 // wrong is a FailedError.
 import { basename, join } from 'node:path';
-import { readTarGz, readZip, type Entry } from '../archive.ts';
+import { type Entry, readTarGz, readZip } from '../archive.ts';
 import { sha256 } from '../bins.ts';
-import { TRAY_NEW, archiveContents, archiveType, assetName, newExeName } from '../release.ts';
+import { archiveContents, archiveType, assetName, newExeName, TRAY_NEW } from '../release.ts';
 import type { Target } from '../version.ts';
-import { FailedError, PendingError, errorMessage, type GitHubReleases, type UpdateFs } from './types.ts';
+import { errorMessage, FailedError, type GitHubReleases, PendingError, type UpdateFs } from './types.ts';
 
 export const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
 
@@ -37,9 +37,10 @@ async function streamTo(fs: UpdateFs, res: Response, path: string, maxBytes: num
   try {
     if (!res.body) throw new PendingError('empty response body');
     const reader = res.body.getReader();
-    const read = () => reader.read().catch((e: unknown) => {
-      throw new PendingError(`download interrupted: ${errorMessage(e)}`);
-    });
+    const read = () =>
+      reader.read().catch((e: unknown) => {
+        throw new PendingError(`download interrupted: ${errorMessage(e)}`);
+      });
     for (let step = await read(); !step.done; step = await read()) {
       total += step.value.byteLength;
       if (total > maxBytes) {
@@ -58,7 +59,8 @@ const named = (entries: Entry[], name: string) => entries.filter((e) => basename
 
 function findExecutable(entries: Entry[], name: string): Entry {
   const hits = named(entries, name);
-  if (hits.length !== 1) throw new FailedError(hits.length ? `archive has ${hits.length} entries named ${name}` : `archive has no ${name}`);
+  if (hits.length !== 1)
+    throw new FailedError(hits.length ? `archive has ${hits.length} entries named ${name}` : `archive has no ${name}`);
   return hits[0]!;
 }
 

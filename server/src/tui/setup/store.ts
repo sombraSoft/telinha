@@ -11,7 +11,9 @@ import type { SetupUiContext } from '../../cli/setup/ui.ts';
 export function createSessionStore(session: SetupSession) {
   const [version, setVersion] = createSignal(0);
   onCleanup(session.subscribe(() => setVersion((n) => n + 1)));
-  const read = <T>(fn: () => T) => () => (version(), fn());
+  const read =
+    <T>(fn: () => T) =>
+    () => (version(), fn());
   return {
     version,
     locale: read(() => session.locale),

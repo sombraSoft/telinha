@@ -22,11 +22,20 @@ const RESEND_AFTER_MS = 300;
 const DESCRIPTION_MAX_BYTES = 256 * 1024;
 const DESCRIPTION_TIMEOUT_MS = 3000;
 
-export interface SsdpReply { location: string; st: string; usn: string; address: string }
+export interface SsdpReply {
+  location: string;
+  st: string;
+  usn: string;
+  address: string;
+}
 
 // --- a tiny XML reader: element names without namespace prefixes, text content.
 
-export interface XmlNode { name: string; children: XmlNode[]; text: string }
+export interface XmlNode {
+  name: string;
+  children: XmlNode[];
+  text: string;
+}
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 export function decodeEntities(s: string): string {
@@ -40,7 +49,10 @@ export function decodeEntities(s: string): string {
 }
 
 export function escapeXml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot', "'": 'apos' } as Record<string, string>)[c]};`);
+  return s.replace(
+    /[&<>"']/g,
+    (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot', "'": 'apos' } as Record<string, string>)[c]};`,
+  );
 }
 
 /** Lenient: unbalanced or stray close tags never throw, they just end the nearest open element of that name. */
@@ -111,7 +123,7 @@ export function parseSsdpReply(text: string): { location: string; st: string; us
 const isPrivate = (ip: string) => {
   const n = ipv4ToInt(ip);
   if (n === null) return false;
-  return (n >>> 24) === 10 || (n >>> 20) === 0xac1 || (n >>> 16) === 0xc0a8 || (n >>> 16) === 0xa9fe;
+  return n >>> 24 === 10 || n >>> 20 === 0xac1 || n >>> 16 === 0xc0a8 || n >>> 16 === 0xa9fe;
 };
 
 /**
@@ -134,7 +146,10 @@ export function acceptableLocation(location: string, from: string): boolean {
  * sees each new one as it arrives (description fetches can start early).
  */
 export async function ssdpSearch(o: {
-  udp: UdpFactory; sleep: (ms: number) => Promise<void>; localIp?: string | null; timeoutMs?: number;
+  udp: UdpFactory;
+  sleep: (ms: number) => Promise<void>;
+  localIp?: string | null;
+  timeoutMs?: number;
   onReply?: (r: SsdpReply) => void;
 }): Promise<SsdpReply[]> {
   const timeoutMs = o.timeoutMs ?? 2500;
@@ -154,7 +169,9 @@ export async function ssdpSearch(o: {
       for (const st of SEARCH_TARGETS) {
         try {
           socket.send(searchMessage(st), SSDP_PORT, SSDP_ADDRESS);
-        } catch { /* no route for multicast on this interface: nothing will answer */ }
+        } catch {
+          /* no route for multicast on this interface: nothing will answer */
+        }
       }
     };
     sendAll();
@@ -169,11 +186,19 @@ export async function ssdpSearch(o: {
 
 // --- device description
 
-export interface IgdService { controlUrl: string; serviceType: string; version: 1 | 2; name?: string }
+export interface IgdService {
+  controlUrl: string;
+  serviceType: string;
+  version: 1 | 2;
+  name?: string;
+}
 
 export function parseDeviceDescription(xml: string, location: string): IgdService | null {
   const tree = parseXml(xml);
-  const services = findAll(tree, 'service').map((s) => ({ type: childText(s, 'serviceType'), control: childText(s, 'controlURL') }));
+  const services = findAll(tree, 'service').map((s) => ({
+    type: childText(s, 'serviceType'),
+    control: childText(s, 'controlURL'),
+  }));
   let pick: { type: string; control: string } | undefined;
   for (const want of WAN_SERVICES) {
     pick = services.find((s) => s.type === want && s.control);

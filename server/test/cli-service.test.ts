@@ -4,9 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CliContext } from '../src/cli/args.ts';
 import { ACTIONS, elevateCommand, run, serviceSpec } from '../src/cli/service.ts';
-import { NotElevatedError, ServiceInstallError, type InstallOptions, type InstallResult, type ServiceManager, type ServiceStatus } from '../src/service/index.ts';
-import type { RunLoopOptions } from '../src/service/runloop.ts';
 import { resolvePaths } from '../src/paths.ts';
+import {
+  type InstallOptions,
+  type InstallResult,
+  NotElevatedError,
+  ServiceInstallError,
+  type ServiceManager,
+  type ServiceStatus,
+} from '../src/service/index.ts';
+import type { RunLoopOptions } from '../src/service/runloop.ts';
 
 const WIN_HOME = 'C:\\Users\\ana\\AppData\\Local\\Telinha';
 const LINUX_HOME = '/opt/telinha';
@@ -23,16 +30,36 @@ function ctx(o: { argv: string[]; platform?: 'win32' | 'linux'; compiled?: boole
   const err: string[] = [];
   const paths = resolvePaths({ TELINHA_HOME: home }, platform);
   const c: CliContext = {
-    argv: o.argv, env: { TELINHA_HOME: home }, paths, envFile: `${paths.config}/telinha.env`, locale: o.locale ?? 'en', tty: false, yes: false,
-    stdout: (l) => out.push(l), stderr: (l) => err.push(l), compiled: o.compiled ?? true, version: '0.7.0',
+    argv: o.argv,
+    env: { TELINHA_HOME: home },
+    paths,
+    envFile: `${paths.config}/telinha.env`,
+    locale: o.locale ?? 'en',
+    tty: false,
+    yes: false,
+    stdout: (l) => out.push(l),
+    stderr: (l) => err.push(l),
+    compiled: o.compiled ?? true,
+    version: '0.7.0',
   };
   return { ctx: c, out, err, platform, home, paths };
 }
 
 const args = { flags: {}, positionals: [], rest: [] };
-const OK: InstallResult = { ok: true, steps: { task: 'ok', firewall: 'ok', start: 'ok' }, hints: ['loginctl enable-linger ana'] };
+const OK: InstallResult = {
+  ok: true,
+  steps: { task: 'ok', firewall: 'ok', start: 'ok' },
+  hints: ['loginctl enable-linger ana'],
+};
 
-function fakeManager(o: { kind?: ServiceManager['kind']; status?: ServiceStatus; install?: (opts: InstallOptions) => Promise<InstallResult>; fail?: string } = {}) {
+function fakeManager(
+  o: {
+    kind?: ServiceManager['kind'];
+    status?: ServiceStatus;
+    install?: (opts: InstallOptions) => Promise<InstallResult>;
+    fail?: string;
+  } = {},
+) {
   const calls: string[] = [];
   const installs: InstallOptions[] = [];
   const m: ServiceManager = {
@@ -58,7 +85,14 @@ function fakeManager(o: { kind?: ServiceManager['kind']; status?: ServiceStatus;
     },
     async status() {
       calls.push('status');
-      return o.status ?? { installed: true, running: true, enabled: true, detail: 'task Ready, last result 0; telinha answering' };
+      return (
+        o.status ?? {
+          installed: true,
+          running: true,
+          enabled: true,
+          detail: 'task Ready, last result 0; telinha answering',
+        }
+      );
     },
   };
   return { manager: m, calls, installs };
@@ -68,7 +102,9 @@ describe('telinha service', () => {
   test('the spec: --user takes a value on Windows and is a switch on Linux', () => {
     expect(serviceSpec('win32').flags.user).toBe('string');
     expect(serviceSpec('linux').flags.user).toBe('boolean');
-    expect(Object.keys(serviceSpec('linux').flags)).toEqual(expect.arrayContaining(['firewall', 'sid', 'result', 'log-file', 'home', 'lang']));
+    expect(Object.keys(serviceSpec('linux').flags)).toEqual(
+      expect.arrayContaining(['firewall', 'sid', 'result', 'log-file', 'home', 'lang']),
+    );
     expect(ACTIONS).toEqual(['install', 'uninstall', 'start', 'stop', 'restart', 'status', 'run']);
   });
 
@@ -82,7 +118,10 @@ describe('telinha service', () => {
   });
 
   test('an unknown or secret flag: usage, exit 2, the manager untouched', async () => {
-    for (const argv of [['service', 'stop', '--forse'], ['service', 'install', '--tunnel-token', 'x']]) {
+    for (const argv of [
+      ['service', 'stop', '--forse'],
+      ['service', 'install', '--tunnel-token', 'x'],
+    ]) {
       const t = ctx({ argv, platform: 'linux' });
       const m = fakeManager();
       expect(await run(args, t.ctx, { manager: m.manager, platform: 'linux' })).toBe(2);
@@ -93,7 +132,11 @@ describe('telinha service', () => {
 
   test('start / stop / restart / uninstall call the manager; --firewall reaches uninstall', async () => {
     const f = fakeManager();
-    for (const [action, expected] of [['start', 'start'], ['stop', 'stop'], ['restart', 'restart']] as const) {
+    for (const [action, expected] of [
+      ['start', 'start'],
+      ['stop', 'stop'],
+      ['restart', 'restart'],
+    ] as const) {
       const t = ctx({ argv: ['service', action] });
       expect(await run(args, t.ctx, { manager: f.manager })).toBe(0);
       expect(f.calls.at(-1)).toBe(expected);
@@ -115,21 +158,53 @@ describe('telinha service', () => {
   test('status: one summary line plus the detail; exit 0 only when installed and running', async () => {
     const up = ctx({ argv: ['service', 'status'] });
     expect(await run(args, up.ctx, { manager: fakeManager().manager })).toBe(0);
-    expect(up.out).toEqual(['Service (windows-task): installed, running, starts at boot', '  task Ready, last result 0; telinha answering']);
+    expect(up.out).toEqual([
+      'Service (windows-task): installed, running, starts at boot',
+      '  task Ready, last result 0; telinha answering',
+    ]);
     const down = ctx({ argv: ['service', 'status'], locale: 'pt-BR' });
-    expect(await run(args, down.ctx, { manager: fakeManager({ kind: 'systemd-system', status: { installed: true, running: false, enabled: false, detail: 'inactive (dead)' } }).manager })).toBe(1);
+    expect(
+      await run(args, down.ctx, {
+        manager: fakeManager({
+          kind: 'systemd-system',
+          status: { installed: true, running: false, enabled: false, detail: 'inactive (dead)' },
+        }).manager,
+      }),
+    ).toBe(1);
     expect(down.out[0]).toBe('Serviço (systemd-system): instalado, parado, não inicia com o sistema');
   });
 
   test('install: the flags become InstallOptions, steps and hints are printed', async () => {
     const f = fakeManager();
-    const t = ctx({ argv: ['service', 'install', '--firewall', '--user', 'PC\\ana', '--sid', 'S-1-5-21-1-2-3-1001', '--result', `${WIN_HOME}\\service\\install-result.json`] });
+    const t = ctx({
+      argv: [
+        'service',
+        'install',
+        '--firewall',
+        '--user',
+        'PC\\ana',
+        '--sid',
+        'S-1-5-21-1-2-3-1001',
+        '--result',
+        `${WIN_HOME}\\service\\install-result.json`,
+      ],
+    });
     expect(await run(args, t.ctx, { manager: f.manager, platform: 'win32' })).toBe(0);
-    expect(f.installs).toEqual([{
-      firewall: true, exe: `${WIN_HOME}\\bin\\telinha.exe`, home: WIN_HOME, locale: 'en', user: 'PC\\ana', sid: 'S-1-5-21-1-2-3-1001', resultFile: `${WIN_HOME}\\service\\install-result.json`,
-    }]);
+    expect(f.installs).toEqual([
+      {
+        firewall: true,
+        exe: `${WIN_HOME}\\bin\\telinha.exe`,
+        home: WIN_HOME,
+        locale: 'en',
+        user: 'PC\\ana',
+        sid: 'S-1-5-21-1-2-3-1001',
+        resultFile: `${WIN_HOME}\\service\\install-result.json`,
+      },
+    ]);
     expect(t.out).toEqual([
-      'service registration: ok', 'firewall rules: ok', 'start: ok',
+      'service registration: ok',
+      'firewall rules: ok',
+      'start: ok',
       'Still to do by hand: loginctl enable-linger ana',
       'Without it Telinha stops whenever you log out of this machine (an SSH session ending counts).',
       'Telinha runs as a service now (windows-task).',
@@ -140,7 +215,12 @@ describe('telinha service', () => {
     const f = fakeManager({ kind: 'systemd-user' });
     const t = ctx({ argv: ['service', 'install', '--user'], platform: 'linux' });
     expect(await run(args, t.ctx, { manager: f.manager, platform: 'linux' })).toBe(0);
-    expect(f.installs[0]).toMatchObject({ firewall: false, exe: '/opt/telinha/bin/telinha', home: '/opt/telinha', user: undefined });
+    expect(f.installs[0]).toMatchObject({
+      firewall: false,
+      exe: '/opt/telinha/bin/telinha',
+      home: '/opt/telinha',
+      user: undefined,
+    });
   });
 
   test('install without the native binary is refused', async () => {
@@ -152,20 +232,38 @@ describe('telinha service', () => {
   });
 
   test('install failure: every step printed, the error on stderr, exit 1', async () => {
-    const result: InstallResult = { ok: false, steps: { task: 'ok', firewall: 'failed: netsh could not add rule "Telinha HTTP": nope', start: 'skipped' }, hints: [] };
-    const f = fakeManager({ install: async () => { throw new ServiceInstallError(result); } });
+    const result: InstallResult = {
+      ok: false,
+      steps: { task: 'ok', firewall: 'failed: netsh could not add rule "Telinha HTTP": nope', start: 'skipped' },
+      hints: [],
+    };
+    const f = fakeManager({
+      install: async () => {
+        throw new ServiceInstallError(result);
+      },
+    });
     const t = ctx({ argv: ['service', 'install', '--firewall'], locale: 'pt-BR' });
     expect(await run(args, t.ctx, { manager: f.manager })).toBe(1);
-    expect(t.out).toEqual(['registro do serviço: ok', 'regras de firewall: netsh could not add rule "Telinha HTTP": nope', 'início: pulado']);
+    expect(t.out).toEqual([
+      'registro do serviço: ok',
+      'regras de firewall: netsh could not add rule "Telinha HTTP": nope',
+      'início: pulado',
+    ]);
     expect(t.err).toEqual([]);
   });
 
   test('not elevated: the hint carries the same command line, elevated', async () => {
     const exe = `${WIN_HOME}\\bin\\telinha.exe`;
-    const f = fakeManager({ install: async () => { throw new NotElevatedError(exe); } });
+    const f = fakeManager({
+      install: async () => {
+        throw new NotElevatedError(exe);
+      },
+    });
     const t = ctx({ argv: ['service', 'install', '--firewall'] });
     expect(await run(args, t.ctx, { manager: f.manager })).toBe(1);
-    expect(t.err).toEqual([`service install needs an administrator terminal. Open one and run: ${elevateCommand(exe, ['service', 'install', '--firewall'])}`]);
+    expect(t.err).toEqual([
+      `service install needs an administrator terminal. Open one and run: ${elevateCommand(exe, ['service', 'install', '--firewall'])}`,
+    ]);
     expect(elevateCommand(exe, ['service', 'install', '--home', "C:\\it's"])).toBe(
       `powershell -Command "Start-Process -FilePath '${exe}' -ArgumentList 'service','install','--home','C:\\it''s' -Verb RunAs"`,
     );
@@ -181,9 +279,16 @@ describe('telinha service', () => {
     const calls: string[][] = [];
     const t = ctx({ argv: ['service', 'status', '--user'], platform: 'linux' });
     const code = await run(args, t.ctx, {
-      platform: 'linux', isRoot: true,
+      platform: 'linux',
+      isRoot: true,
       spawn: async (cmd) => (calls.push(cmd), { code: 3, stdout: 'inactive\n', stderr: '' }),
-      fs: { readText: async () => null, writeFile: async () => {}, exists: async () => false, rm: async () => {}, mkdir: async () => {} },
+      fs: {
+        readText: async () => null,
+        writeFile: async () => {},
+        exists: async () => false,
+        rm: async () => {},
+        mkdir: async () => {},
+      },
       control: { available: async () => false, shutdown: async () => {} },
     });
     expect(code).toBe(1);
@@ -232,7 +337,9 @@ describe('telinha service', () => {
           o.log('service: hi');
           return 0;
         },
-        platform: 'linux', execPath: '/usr/bin/bun', script: '/src/server/src/index.ts',
+        platform: 'linux',
+        execPath: '/usr/bin/bun',
+        script: '/src/server/src/index.ts',
       });
       expect(seen[0]!.cmd).toEqual(['/usr/bin/bun', '/src/server/src/index.ts', 'run', '--home', LINUX_HOME]);
       expect(spy).toHaveBeenCalledWith(expect.any(String), 'service: hi');

@@ -26,13 +26,20 @@ export async function open(node: () => JSX.Element, o: OpenOptions = {}): Promis
   setMode('dark');
   setNoColor(false);
   const [locale, setLocale] = createSignal<Locale>(o.locale ?? 'en');
-  const s = await testRender(() => <TuiRoot locale={locale} onCtrlC={o.onCtrlC}>{node()}</TuiRoot>, {
-    width: o.width ?? 120,
-    height: o.height ?? 34,
-    // The runtime's rule: Ctrl+C reaches the screens instead of tearing the
-    // test renderer down.
-    exitOnCtrlC: RENDERER_CONFIG.exitOnCtrlC,
-  });
+  const s = await testRender(
+    () => (
+      <TuiRoot locale={locale} onCtrlC={o.onCtrlC}>
+        {node()}
+      </TuiRoot>
+    ),
+    {
+      width: o.width ?? 120,
+      height: o.height ?? 34,
+      // The runtime's rule: Ctrl+C reaches the screens instead of tearing the
+      // test renderer down.
+      exitOnCtrlC: RENDERER_CONFIG.exitOnCtrlC,
+    },
+  );
   await s.renderOnce();
   return Object.assign(s, { setLocale });
 }
@@ -55,7 +62,12 @@ export async function settle(s: Session, ms = 30): Promise<void> {
 
 /** The frame, trailing spaces and blank tail trimmed. */
 export function frame(s: Session): string {
-  return `${s.captureCharFrame().split('\n').map((l) => l.trimEnd()).join('\n').trimEnd()}\n`;
+  return `${s
+    .captureCharFrame()
+    .split('\n')
+    .map((l) => l.trimEnd())
+    .join('\n')
+    .trimEnd()}\n`;
 }
 
 export async function until(s: Session, text: string | RegExp, ms = 3000): Promise<string> {

@@ -14,7 +14,9 @@ export function readAstroConfig(): string {
 // Kept identical to the copy in reference.test.ts: quoted or bare keys, `root` skipped.
 export function localeFolders(config: string = readAstroConfig()): string[] {
   const block = /locales:\s*\{([\s\S]*?)\n\s*\},/.exec(config)?.[1] ?? '';
-  return [...block.matchAll(/^\s*'?([a-z][a-z0-9-]*)'?:\s*\{[^}]*\blang:/gm)].map((m) => m[1]!).filter((k) => k !== 'root');
+  return [...block.matchAll(/^\s*'?([a-z][a-z0-9-]*)'?:\s*\{[^}]*\blang:/gm)]
+    .map((m) => m[1]!)
+    .filter((k) => k !== 'root');
 }
 
 describe('docs workspace', () => {

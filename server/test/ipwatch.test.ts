@@ -29,14 +29,23 @@ function fakeFetch(replies: Record<string, Reply[]>) {
 const SELF = { changed: 'restarting livekit', startedWith: 'livekit started with the new one' };
 const CLOUD = { changed: 'nothing to restart', startedWith: 'nothing to restart' };
 
-function watch(replies: Record<string, Reply[]>, o: {
-  statePath?: string; onChange?: (ip: string, prev: string) => Promise<void>; labels?: { changed: string; startedWith: string };
-} = {}) {
+function watch(
+  replies: Record<string, Reply[]>,
+  o: {
+    statePath?: string;
+    onChange?: (ip: string, prev: string) => Promise<void>;
+    labels?: { changed: string; startedWith: string };
+  } = {},
+) {
   const f = fakeFetch(replies);
   const logs: unknown[][] = [];
   const changes: [string, string][] = [];
   const w = createIpWatch({
-    fetch: f.fetch, intervalMs: 60_000, log: (...a) => logs.push(a), statePath: o.statePath, labels: o.labels ?? SELF,
+    fetch: f.fetch,
+    intervalMs: 60_000,
+    log: (...a) => logs.push(a),
+    statePath: o.statePath,
+    labels: o.labels ?? SELF,
     onChange: async (ip, prev) => {
       changes.push([ip, prev]);
       await o.onChange?.(ip, prev);
@@ -96,7 +105,11 @@ describe('createIpWatch', () => {
     let fail = true;
     const { w, changes } = watch(
       { [TRACE]: [trace('203.0.113.7'), trace('203.0.113.9')] },
-      { onChange: async () => { if (fail) throw new Error('restart failed'); } },
+      {
+        onChange: async () => {
+          if (fail) throw new Error('restart failed');
+        },
+      },
     );
     await w.check();
     await w.check();
@@ -104,7 +117,10 @@ describe('createIpWatch', () => {
     expect(w.current()).toBe('203.0.113.7');
     fail = false;
     await w.check();
-    expect(changes).toEqual([['203.0.113.9', '203.0.113.7'], ['203.0.113.9', '203.0.113.7']]);
+    expect(changes).toEqual([
+      ['203.0.113.9', '203.0.113.7'],
+      ['203.0.113.9', '203.0.113.7'],
+    ]);
     expect(w.current()).toBe('203.0.113.9');
     await w.check();
     expect(changes).toHaveLength(2);
@@ -149,7 +165,9 @@ describe('createIpWatch', () => {
     expect(b.changes).toEqual([]);
     expect(b.w.current()).toBe('203.0.113.9');
     expect(readFileSync(statePath, 'utf8')).toBe('203.0.113.9\n');
-    expect(b.logs).toContainEqual(['public IP 203.0.113.7 -> 203.0.113.9 while telinha was down, livekit started with the new one']);
+    expect(b.logs).toContainEqual([
+      'public IP 203.0.113.7 -> 203.0.113.9 while telinha was down, livekit started with the new one',
+    ]);
     await b.w.check();
     expect(b.changes).toEqual([]);
     // From then on a change in this process restarts livekit as usual.

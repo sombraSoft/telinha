@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { CliContext } from '../src/cli/args.ts';
-import { run, TRAY_ACTIONS, type TrayCliDeps } from '../src/cli/tray.ts';
 import { ts } from '../src/cli/strings.ts';
+import { run, TRAY_ACTIONS, type TrayCliDeps } from '../src/cli/tray.ts';
 import { resolvePaths } from '../src/paths.ts';
 import type { SpawnOutcome } from '../src/service/index.ts';
 import { elevationTypeCommand } from '../src/service/windows.ts';
@@ -15,16 +15,33 @@ const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const T0 = 1_700_000_000_000;
 const args = { flags: {}, positionals: [], rest: [] };
 
-function harness(argv: string[], o: {
-  platform?: NodeJS.Platform; locale?: 'en' | 'pt-BR'; files?: Record<string, string>; procs?: Map<number, string>;
-  elevated?: boolean | 'no-uac'; autostart?: string | null; respond?: (cmd: string[]) => Partial<SpawnOutcome> | undefined;
-} = {}) {
+function harness(
+  argv: string[],
+  o: {
+    platform?: NodeJS.Platform;
+    locale?: 'en' | 'pt-BR';
+    files?: Record<string, string>;
+    procs?: Map<number, string>;
+    elevated?: boolean | 'no-uac';
+    autostart?: string | null;
+    respond?: (cmd: string[]) => Partial<SpawnOutcome> | undefined;
+  } = {},
+) {
   const out: string[] = [];
   const err: string[] = [];
   const paths = resolvePaths({ TELINHA_HOME: HOME }, 'win32');
   const ctx: CliContext = {
-    argv, env: { TELINHA_HOME: HOME, PATH: 'C:\\Windows', LOCALE: 'en', UNSET: undefined }, paths, envFile: `${paths.config}\\telinha.env`,
-    locale: o.locale ?? 'en', tty: false, yes: false, stdout: (l) => out.push(l), stderr: (l) => err.push(l), compiled: true, version: '0.7.0',
+    argv,
+    env: { TELINHA_HOME: HOME, PATH: 'C:\\Windows', LOCALE: 'en', UNSET: undefined },
+    paths,
+    envFile: `${paths.config}\\telinha.env`,
+    locale: o.locale ?? 'en',
+    tty: false,
+    yes: false,
+    stdout: (l) => out.push(l),
+    stderr: (l) => err.push(l),
+    compiled: true,
+    version: '0.7.0',
   };
   const files = new Map(Object.entries(o.files ?? {}));
   const procs = o.procs ?? new Map<number, string>();
@@ -36,9 +53,16 @@ function harness(argv: string[], o: {
     spawn: async (cmd) => {
       calls.push(cmd);
       // 2: elevated through UAC; 1: an administrator with UAC off; 3: a normal UAC session.
-      if (cmd[4] === ELEVATION_TYPE) return { code: 0, stdout: o.elevated === 'no-uac' ? '1\r\n' : o.elevated ? '2\r\n' : '3\r\n', stderr: '' };
+      if (cmd[4] === ELEVATION_TYPE)
+        return { code: 0, stdout: o.elevated === 'no-uac' ? '1\r\n' : o.elevated ? '2\r\n' : '3\r\n', stderr: '' };
       if (cmd[0] === 'reg' && cmd[1] === 'query') {
-        return o.autostart ? { code: 0, stdout: `\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\r\n    Telinha    REG_SZ    ${o.autostart}\r\n`, stderr: '' } : { code: 1, stdout: '', stderr: 'ERROR' };
+        return o.autostart
+          ? {
+              code: 0,
+              stdout: `\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\r\n    Telinha    REG_SZ    ${o.autostart}\r\n`,
+              stderr: '',
+            }
+          : { code: 1, stdout: '', stderr: 'ERROR' };
       }
       return { code: 0, stdout: '', stderr: '', ...o.respond?.(cmd) };
     },
@@ -50,7 +74,9 @@ function harness(argv: string[], o: {
     processInfo: (pid) => (procs.has(pid) ? { alive: true, exe: procs.get(pid)! } : { alive: false, exe: null }),
     launcher: { launch: (exe, env) => void launches.push({ exe, env }) },
     now: () => clock.t,
-    sleep: async (ms) => void (clock.t += ms),
+    sleep: async (ms) => {
+      clock.t += ms;
+    },
   };
   return { run: () => run(args, ctx, deps), out, err, calls, launches, files, clock };
 }
@@ -64,7 +90,14 @@ describe('telinha tray', () => {
   });
 
   test('usage errors exit 2 with the tray help', async () => {
-    for (const argv of [['tray'], ['tray', 'nope'], ['tray', 'autostart'], ['tray', 'autostart', 'maybe'], ['tray', 'start', 'now'], ['tray', 'status', '--json']]) {
+    for (const argv of [
+      ['tray'],
+      ['tray', 'nope'],
+      ['tray', 'autostart'],
+      ['tray', 'autostart', 'maybe'],
+      ['tray', 'start', 'now'],
+      ['tray', 'status', '--json'],
+    ]) {
       const h = harness(argv);
       expect(await h.run()).toBe(2);
       expect(h.err.at(-1)).toBe(ts('en', 'helpTray'));
@@ -96,11 +129,15 @@ describe('telinha tray', () => {
   test('start from an elevated terminal: refused, exit 1, nothing launched', async () => {
     let h = harness(['tray', 'start'], { files: { [EXE]: 'MZ' }, elevated: true });
     expect(await h.run()).toBe(1);
-    expect(h.err).toEqual(['Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.']);
+    expect(h.err).toEqual([
+      'Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.',
+    ]);
     expect(h.launches).toEqual([]);
     h = harness(['tray', 'start'], { files: { [EXE]: 'MZ' }, elevated: true, locale: 'pt-BR' });
     expect(await h.run()).toBe(1);
-    expect(h.err).toEqual(['Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.']);
+    expect(h.err).toEqual([
+      'Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.',
+    ]);
   });
 
   test('start as an administrator with UAC off: no normal session exists, so the tray starts', async () => {
@@ -130,7 +167,10 @@ describe('telinha tray', () => {
   test('stop: taskkill the pid tray.json names; not running is exit 0 too', async () => {
     let h = harness(['tray', 'stop'], { files: running, procs: trayProc() });
     expect(await h.run()).toBe(0);
-    expect(h.calls).toEqual([['taskkill', '/PID', '4321'], ['taskkill', '/F', '/PID', '4321']]);
+    expect(h.calls).toEqual([
+      ['taskkill', '/PID', '4321'],
+      ['taskkill', '/F', '/PID', '4321'],
+    ]);
     expect(h.out).toEqual(['Tray icon stopped.']);
     h = harness(['tray', 'stop'], { locale: 'pt-BR' });
     expect(await h.run()).toBe(0);
@@ -164,7 +204,10 @@ describe('telinha tray', () => {
     let h = harness(['tray', 'autostart', 'on']);
     expect(await h.run()).toBe(1);
     expect(h.calls).toEqual([]);
-    h = harness(['tray', 'autostart', 'on'], { files: { [EXE]: 'MZ' }, respond: () => ({ code: 1, stderr: 'ERROR: Access is denied.' }) });
+    h = harness(['tray', 'autostart', 'on'], {
+      files: { [EXE]: 'MZ' },
+      respond: () => ({ code: 1, stderr: 'ERROR: Access is denied.' }),
+    });
     expect(await h.run()).toBe(1);
     expect(h.err).toEqual(['tray autostart failed: reg add exited with code 1: ERROR: Access is denied.']);
   });

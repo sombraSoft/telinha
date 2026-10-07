@@ -1,6 +1,6 @@
 // Role members and their Discord status for the people list, refreshed every
 // 15 s while the tab is visible. Errors keep the last good list.
-import { parseMembers, poll, type Member } from './members';
+import { type Member, parseMembers, poll } from './members';
 
 const EVERY_MS = 15_000;
 const TIMEOUT_MS = 10_000;

@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { sign, verify } from '../src/auth.ts';
-import { COOKIE_TTL_MS, createDoctorStore, deriveDoctorKey, MAX_SESSIONS, SESSION_TTL_MS, type DoctorReport } from '../src/doctor/session.ts';
+import {
+  COOKIE_TTL_MS,
+  createDoctorStore,
+  type DoctorReport,
+  deriveDoctorKey,
+  MAX_SESSIONS,
+  SESSION_TTL_MS,
+} from '../src/doctor/session.ts';
 
 const NOW = 1_700_000_000_000;
 const SECRET = 'cookie-secret';

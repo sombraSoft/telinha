@@ -29,7 +29,9 @@ export function newRoomCode(random: (n: number) => Uint8Array, syllables: 4 | 6 
 
 /** Tries 4-syllable codes up to `tries` times against `exists`, then 6-syllable ones; throws after 2*tries. */
 export function uniqueRoomCode(
-  exists: (code: string) => boolean, random: (n: number) => Uint8Array, tries = 8,
+  exists: (code: string) => boolean,
+  random: (n: number) => Uint8Array,
+  tries = 8,
 ): string {
   for (let i = 0; i < 2 * tries; i++) {
     const code = newRoomCode(random, i < tries ? 4 : 6);

@@ -13,10 +13,25 @@ afterEach(() => {
 });
 
 const NONE: UpdateResult = {
-  current: '0.7.0', latest: 'v0.7.0', pin: null, target: null, staged: null, failed: null, pending: null, deferredSince: null,
-  action: 'none', message: 'up to date (0.7.0)',
+  current: '0.7.0',
+  latest: 'v0.7.0',
+  pin: null,
+  target: null,
+  staged: null,
+  failed: null,
+  pending: null,
+  deferredSince: null,
+  action: 'none',
+  message: 'up to date (0.7.0)',
 };
-const STAGED: UpdateResult = { ...NONE, latest: 'v0.8.0', target: 'v0.8.0', staged: { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: 1, failedStarts: 0 }, action: 'staged', message: 'v0.8.0 installed; restarting to apply it' };
+const STAGED: UpdateResult = {
+  ...NONE,
+  latest: 'v0.8.0',
+  target: 'v0.8.0',
+  staged: { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: 1, failedStarts: 0 },
+  action: 'staged',
+  message: 'v0.8.0 installed; restarting to apply it',
+};
 
 function ctx(o: { argv: string[]; compiled?: boolean; locale?: 'en' | 'pt-BR'; envFileText?: string }) {
   const home = mkdtempSync(join(tmpdir(), 'telinha-upd-'));
@@ -27,8 +42,17 @@ function ctx(o: { argv: string[]; compiled?: boolean; locale?: 'en' | 'pt-BR'; e
   const out: string[] = [];
   const err: string[] = [];
   const c: CliContext = {
-    argv: o.argv, env: { TELINHA_HOME: home }, paths: resolvePaths({ TELINHA_HOME: home }), envFile, locale: o.locale ?? 'en', tty: false, yes: false,
-    stdout: (l) => out.push(l), stderr: (l) => err.push(l), compiled: o.compiled ?? true, version: '0.7.0',
+    argv: o.argv,
+    env: { TELINHA_HOME: home },
+    paths: resolvePaths({ TELINHA_HOME: home }),
+    envFile,
+    locale: o.locale ?? 'en',
+    tty: false,
+    yes: false,
+    stdout: (l) => out.push(l),
+    stderr: (l) => err.push(l),
+    compiled: o.compiled ?? true,
+    version: '0.7.0',
   };
   return { ctx: c, out, err };
 }
@@ -37,7 +61,10 @@ const args = { flags: {}, positionals: [], rest: [] };
 
 function control(available: boolean, result: UpdateResult = NONE) {
   const modes: UpdateMode[] = [];
-  return { modes, client: { available: async () => available, update: async (mode: UpdateMode) => (modes.push(mode), result) } };
+  return {
+    modes,
+    client: { available: async () => available, update: async (mode: UpdateMode) => (modes.push(mode), result) },
+  };
 }
 
 function updater(result: UpdateResult) {
@@ -56,7 +83,11 @@ describe('telinha update', () => {
   });
 
   test('service running: --check asks it to look, the default honours the deferral, --now does not', async () => {
-    for (const [argv, mode] of [[['update', '--check'], 'check'], [['update'], 'scheduled'], [['update', '--now'], 'now']] as const) {
+    for (const [argv, mode] of [
+      [['update', '--check'], 'check'],
+      [['update'], 'scheduled'],
+      [['update', '--now'], 'now'],
+    ] as const) {
       const c = control(true, NONE);
       const t = ctx({ argv: [...argv] });
       expect(await run(args, t.ctx, { control: c.client })).toBe(0);
@@ -76,19 +107,44 @@ describe('telinha update', () => {
   });
 
   test('deferred: how many rooms and which version, exit 0', async () => {
-    const c = control(true, { ...NONE, latest: 'v0.8.0', target: 'v0.8.0', deferredSince: 5, action: 'deferred', message: '3 room(s) open, will update to v0.8.0 when they close' });
+    const c = control(true, {
+      ...NONE,
+      latest: 'v0.8.0',
+      target: 'v0.8.0',
+      deferredSince: 5,
+      action: 'deferred',
+      message: '3 room(s) open, will update to v0.8.0 when they close',
+    });
     const t = ctx({ argv: ['update'], locale: 'pt-BR' });
     expect(await run(args, t.ctx, { control: c.client })).toBe(0);
-    expect(t.out).toContain('3 sala(s) aberta(s); a atualização pra v0.8.0 é aplicada quando elas fecharem (telinha update --now não espera).');
+    expect(t.out).toContain(
+      '3 sala(s) aberta(s); a atualização pra v0.8.0 é aplicada quando elas fecharem (telinha update --now não espera).',
+    );
   });
 
   test('failed and pending results exit 1 and explain', async () => {
-    const failed = control(true, { ...NONE, latest: 'v0.8.0', target: 'v0.8.0', failed: { tag: 'v0.8.0', at: 1, reason: 'sha256 mismatch' }, action: 'failed', message: 'x' });
+    const failed = control(true, {
+      ...NONE,
+      latest: 'v0.8.0',
+      target: 'v0.8.0',
+      failed: { tag: 'v0.8.0', at: 1, reason: 'sha256 mismatch' },
+      action: 'failed',
+      message: 'x',
+    });
     const f = ctx({ argv: ['update'] });
     expect(await run(args, f.ctx, { control: failed.client })).toBe(1);
-    expect(f.out).toContain('v0.8.0 failed: sha256 mismatch. Skipped until a newer release; telinha update --now retries it.');
+    expect(f.out).toContain(
+      'v0.8.0 failed: sha256 mismatch. Skipped until a newer release; telinha update --now retries it.',
+    );
 
-    const pending = control(true, { ...NONE, latest: 'v0.8.0', target: 'v0.8.0', pending: { tag: 'v0.8.0', since: 1 }, action: 'pending', message: 'x' });
+    const pending = control(true, {
+      ...NONE,
+      latest: 'v0.8.0',
+      target: 'v0.8.0',
+      pending: { tag: 'v0.8.0', since: 1 },
+      action: 'pending',
+      message: 'x',
+    });
     const p = ctx({ argv: ['update', '--now'] });
     expect(await run(args, p.ctx, { control: pending.client })).toBe(1);
     expect(p.out).toContain('v0.8.0 is not downloadable yet; it will be retried.');
@@ -97,7 +153,9 @@ describe('telinha update', () => {
   test('service not running, not compiled: native installs only (but --check still works)', async () => {
     const t = ctx({ argv: ['update'], compiled: false });
     expect(await run(args, t.ctx, { control: control(false).client })).toBe(1);
-    expect(t.err).toEqual(['Updates apply to native installs only. Docker: docker compose pull; from a clone: git pull.']);
+    expect(t.err).toEqual([
+      'Updates apply to native installs only. Docker: docker compose pull; from a clone: git pull.',
+    ]);
     const u = updater({ ...NONE, latest: 'v0.8.0', target: 'v0.8.0', message: 'v0.8.0 is available' });
     const c = ctx({ argv: ['update', '--check'], compiled: false });
     expect(await run(args, c.ctx, { control: control(false).client, updater: u.factory })).toBe(0);
@@ -120,11 +178,20 @@ describe('telinha update', () => {
   test('root, service down, bin/ owned by the service user: never stages there itself', async () => {
     const u = updater(STAGED);
     const t = ctx({ argv: ['update'] });
-    expect(await run(args, t.ctx, { control: control(false).client, updater: u.factory, uid: 0, binOwner: () => 998 })).toBe(1);
+    expect(
+      await run(args, t.ctx, { control: control(false).client, updater: u.factory, uid: 0, binOwner: () => 998 }),
+    ).toBe(1);
     expect(u.modes).toEqual([]);
     expect(t.err.join('\n')).toContain('The service updates itself here');
     // --check writes nothing: still allowed.
-    expect(await run(args, ctx({ argv: ['update', '--check'] }).ctx, { control: control(false).client, updater: u.factory, uid: 0, binOwner: () => 998 })).toBe(0);
+    expect(
+      await run(args, ctx({ argv: ['update', '--check'] }).ctx, {
+        control: control(false).client,
+        updater: u.factory,
+        uid: 0,
+        binOwner: () => 998,
+      }),
+    ).toBe(0);
   });
 
   test('the pin also comes from the process environment, and no file means no pin', async () => {
@@ -147,7 +214,10 @@ describe('telinha update', () => {
   });
 
   test('an unknown or secret flag: usage, exit 2, nothing asked of the service', async () => {
-    for (const argv of [['update', '--nwo'], ['update', '--check', '--discord-token', 'x']]) {
+    for (const argv of [
+      ['update', '--nwo'],
+      ['update', '--check', '--discord-token', 'x'],
+    ]) {
       const c = control(true, NONE);
       const t = ctx({ argv });
       expect(await run({ flags: {}, positionals: ['update'], rest: [] }, t.ctx, { control: c.client })).toBe(2);

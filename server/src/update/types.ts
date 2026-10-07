@@ -5,10 +5,26 @@
 import { chmod, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import type { UpdateApplied, UpdateFailed, UpdatePending, UpdateStaged } from '../cli/control.ts';
 
-export type { UpdateAction, UpdateApplied, UpdateCheck, UpdateFailed, UpdateMode, UpdatePending, UpdateResult, UpdateStaged, UpdateStatus } from '../cli/control.ts';
+export type {
+  UpdateAction,
+  UpdateApplied,
+  UpdateCheck,
+  UpdateFailed,
+  UpdateMode,
+  UpdatePending,
+  UpdateResult,
+  UpdateStaged,
+  UpdateStatus,
+} from '../cli/control.ts';
 
-export interface FileStat { size: number; mtimeMs: number }
-export interface WriteSink { write(chunk: Uint8Array): Promise<void>; close(): Promise<void> }
+export interface FileStat {
+  size: number;
+  mtimeMs: number;
+}
+export interface WriteSink {
+  write(chunk: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+}
 
 export interface UpdateFs {
   /** Names (not paths) in `dir`; [] when it does not exist. */

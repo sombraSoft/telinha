@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { TrackSource } from 'livekit-server-sdk';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { TrackSource } from 'livekit-server-sdk';
 import { loadConfig } from '../src/config.ts';
 import type { LiveParticipant, RoomService, RoomTimeouts } from '../src/livekit.ts';
 import { createRooms, type NewRoom, type RoomRecord } from '../src/rooms.ts';
@@ -12,16 +12,27 @@ import { DEV_ENV, PROD_ENV } from './helpers.ts';
 const T0 = 1_700_000_000_000;
 const MIN = 60_000;
 const NEW: NewRoom = {
-  room: 'lamo-futi', guildId: '100', channelId: '300', locale: 'pt-BR', openerId: '7', openerName: 'Zé', what: 'Elden Ring',
+  room: 'lamo-futi',
+  guildId: '100',
+  channelId: '300',
+  locale: 'pt-BR',
+  openerId: '7',
+  openerName: 'Zé',
+  what: 'Elden Ring',
 };
 const MEMBER = { id: '1', name: 'Dev', locale: 'pt-BR' as const };
 const CARD = async () => ({ channelId: '301', messageId: '999' });
 
 const viewer = (id: string, tab = 'aa'): LiveParticipant => ({
-  identity: `${id}:${tab}`, metadata: JSON.stringify({ id, avatar: null }), attributes: {}, tracks: [],
+  identity: `${id}:${tab}`,
+  metadata: JSON.stringify({ id, avatar: null }),
+  attributes: {},
+  tracks: [],
 });
 const streamer = (id: string, stream?: string, tab = 'bb'): LiveParticipant => ({
-  ...viewer(id, tab), attributes: stream === undefined ? {} : { stream }, tracks: [{ source: TrackSource.SCREEN_SHARE }],
+  ...viewer(id, tab),
+  attributes: stream === undefined ? {} : { stream },
+  tracks: [{ source: TrackSource.SCREEN_SHARE }],
 });
 
 type Op = 'ensure' | 'list' | 'delete';
@@ -54,12 +65,21 @@ function setup(o: { devAutoOpen?: boolean; path?: string } = {}) {
     deleteRoom: (room) => gate('delete', room),
   };
   const rooms = createRooms({
-    path: o.path ?? ':memory:', livekit, closeEmptySeconds: 300, devAutoOpen: o.devAutoOpen, now: () => clock,
+    path: o.path ?? ':memory:',
+    livekit,
+    closeEmptySeconds: 300,
+    devAutoOpen: o.devAutoOpen,
+    now: () => clock,
     log: (...a) => void logs.push(a),
   });
   return {
-    rooms, calls, timeouts, logs,
-    at: (ms: number) => { clock = T0 + ms; },
+    rooms,
+    calls,
+    timeouts,
+    logs,
+    at: (ms: number) => {
+      clock = T0 + ms;
+    },
     set: (ps: LiveParticipant[], room = NEW.room) => present.set(room, ps),
     fail: (op: Op, e: Error | null) => (e ? failing.set(op, e) : failing.delete(op)),
     /** The next `op` call waits until release(op). */
@@ -89,10 +109,20 @@ describe('open', () => {
       posted.push(rec);
       return { channelId: '301', messageId: '999' };
     });
-    expect(posted).toEqual([{
-      ...NEW, createdAt: T0, messageId: null, firstJoinAt: null, lastSeenAt: null, lastTokenAt: null, closedAt: null,
-      cardDone: false, seen: [], streamed: [],
-    }]);
+    expect(posted).toEqual([
+      {
+        ...NEW,
+        createdAt: T0,
+        messageId: null,
+        firstJoinAt: null,
+        lastSeenAt: null,
+        lastTokenAt: null,
+        closedAt: null,
+        cardDone: false,
+        seen: [],
+        streamed: [],
+      },
+    ]);
     expect(s.calls).toEqual(['ensure lamo-futi']);
     // LiveKit keeps an empty room 2 min longer than the close window.
     expect(s.timeouts).toEqual([{ emptyTimeout: 420, departureTimeout: 20 }]);
@@ -105,10 +135,12 @@ describe('open', () => {
     const s = setup();
     s.fail('ensure', new Error('livekit down'));
     let posts = 0;
-    await expect(s.rooms.open(NEW, async () => {
-      posts++;
-      return { channelId: '301', messageId: '999' };
-    })).rejects.toThrow('livekit down');
+    await expect(
+      s.rooms.open(NEW, async () => {
+        posts++;
+        return { channelId: '301', messageId: '999' };
+      }),
+    ).rejects.toThrow('livekit down');
     expect(posts).toBe(0);
     expect(s.calls).toEqual(['ensure lamo-futi', 'delete lamo-futi']);
     expect(s.rooms.get(NEW.room)!.closedAt).toBe(T0);
@@ -118,7 +150,11 @@ describe('open', () => {
   test('card not posted: closed and deleted from LiveKit (best effort), the error rethrown', async () => {
     const s = setup();
     s.fail('delete', new Error('ECONNREFUSED'));
-    await expect(s.rooms.open(NEW, async () => { throw new Error('Unknown interaction'); })).rejects.toThrow('Unknown interaction');
+    await expect(
+      s.rooms.open(NEW, async () => {
+        throw new Error('Unknown interaction');
+      }),
+    ).rejects.toThrow('Unknown interaction');
     expect(s.calls).toEqual(['ensure lamo-futi', 'delete lamo-futi']);
     expect(s.rooms.get(NEW.room)).toMatchObject({ closedAt: T0, messageId: null });
   });
@@ -154,7 +190,12 @@ describe('admit', () => {
     expect(await s.rooms.admit(NEW.room, MEMBER)).toBe('ok');
     expect(s.calls).toEqual(['ensure lamo-futi', 'ensure lamo-futi']);
     // keeps it open, but the card's duration ignores it
-    expect(s.rooms.get(NEW.room)).toMatchObject({ lastTokenAt: T0 + 1000, lastSeenAt: null, firstJoinAt: null, seen: [] });
+    expect(s.rooms.get(NEW.room)).toMatchObject({
+      lastTokenAt: T0 + 1000,
+      lastSeenAt: null,
+      firstJoinAt: null,
+      seen: [],
+    });
   });
 
   test('unknown code: unknown, nothing created, LiveKit not asked', async () => {
@@ -188,8 +229,15 @@ describe('admit', () => {
     const s = setup({ devAutoOpen: true });
     expect(await s.rooms.admit('debu-gamo', MEMBER)).toBe('ok');
     expect(s.rooms.get('debu-gamo')).toMatchObject({
-      guildId: '', channelId: '', openerId: '1', openerName: 'Dev', locale: 'pt-BR', what: null, messageId: null,
-      createdAt: T0, closedAt: null,
+      guildId: '',
+      channelId: '',
+      openerId: '1',
+      openerName: 'Dev',
+      locale: 'pt-BR',
+      what: null,
+      messageId: null,
+      createdAt: T0,
+      closedAt: null,
     });
     expect(s.logs).toContainEqual(['dev room', 'debu-gamo']);
     s.at(5 * MIN);
@@ -206,14 +254,22 @@ describe('observe', () => {
     s.at(1000);
     await s.rooms.observe(NEW.room);
     s.set([
-      viewer('1', 'a1'), streamer('1', '1080p60 · H265', 'a2'), // streams in one tab, watches in another
-      viewer('2'), viewer('2', 'zz'), streamer('3'),
+      viewer('1', 'a1'),
+      streamer('1', '1080p60 · H265', 'a2'), // streams in one tab, watches in another
+      viewer('2'),
+      viewer('2', 'zz'),
+      streamer('3'),
       { identity: 'agent-x', metadata: '', attributes: {}, tracks: [] }, // no Discord id: ignored
     ]);
     s.at(2000);
     const o = (await s.rooms.observe(NEW.room))!;
     expect(o.live).toEqual({ streamers: [{ id: '3' }, { id: '1', quality: '1080p60 · H265' }], viewers: ['2'] });
-    expect(o.record).toMatchObject({ firstJoinAt: T0 + 1000, lastSeenAt: T0 + 2000, seen: ['3', '1', '2'], streamed: ['3', '1'] });
+    expect(o.record).toMatchObject({
+      firstJoinAt: T0 + 1000,
+      lastSeenAt: T0 + 2000,
+      seen: ['3', '1', '2'],
+      streamed: ['3', '1'],
+    });
     // LiveKit's listing order changes nothing
     s.set([viewer('2'), streamer('1', '1080p60 · H265', 'a2'), streamer('3')]);
     expect((await s.rooms.observe(NEW.room))!.live).toEqual(o.live);
@@ -233,11 +289,17 @@ describe('observe', () => {
     const s = setup();
     await s.rooms.open(NEW, CARD);
     for (const [label, shown] of [
-      ['1080p60 · H265', '1080p60 · H265'], ['', undefined], [undefined, undefined], ['<@&123> everyone', undefined],
-      ['x'.repeat(40), undefined], ['[a](https://evil)', undefined],
+      ['1080p60 · H265', '1080p60 · H265'],
+      ['', undefined],
+      [undefined, undefined],
+      ['<@&123> everyone', undefined],
+      ['x'.repeat(40), undefined],
+      ['[a](https://evil)', undefined],
     ] as const) {
       s.set([streamer('1', label)]);
-      expect((await s.rooms.observe(NEW.room))!.live.streamers).toEqual([shown ? { id: '1', quality: shown } : { id: '1' }]);
+      expect((await s.rooms.observe(NEW.room))!.live.streamers).toEqual([
+        shown ? { id: '1', quality: shown } : { id: '1' },
+      ]);
     }
   });
 
@@ -268,7 +330,11 @@ describe('observe', () => {
     s.at(124 * MIN);
     expect((await s.rooms.observe(NEW.room))!.record.closedAt).toBeNull();
     s.at(125 * MIN);
-    expect((await s.rooms.observe(NEW.room))!.record).toMatchObject({ closedAt: T0 + 125 * MIN, firstJoinAt: T0, lastSeenAt: T0 + 120 * MIN });
+    expect((await s.rooms.observe(NEW.room))!.record).toMatchObject({
+      closedAt: T0 + 125 * MIN,
+      firstJoinAt: T0,
+      lastSeenAt: T0 + 120 * MIN,
+    });
   });
 
   test('empty but open: ensured in LiveKit again (a LiveKit restart forgets rooms), not while someone is in it', async () => {
@@ -363,7 +429,13 @@ describe('admit and observe interleaved', () => {
     expect((await s.rooms.observe(NEW.room))!.record.closedAt).toBe(T0 + 5 * MIN + 1000);
     s.release('ensure');
     expect(await admitting).toBe('closed');
-    expect(s.calls).toEqual(['ensure lamo-futi', 'ensure lamo-futi', 'list lamo-futi', 'delete lamo-futi', 'delete lamo-futi']);
+    expect(s.calls).toEqual([
+      'ensure lamo-futi',
+      'ensure lamo-futi',
+      'list lamo-futi',
+      'delete lamo-futi',
+      'delete lamo-futi',
+    ]);
   });
 });
 
@@ -384,49 +456,56 @@ describe('cards', () => {
 });
 
 describe('the SQLite file', () => {
-  test('rooms survive a restart on the same file', () => inTempDir(async (file) => {
-    const a = setup({ path: file });
-    await a.rooms.open(NEW, CARD);
-    a.set([viewer('1')]);
-    a.at(2000);
-    await a.rooms.observe(NEW.room);
-    a.rooms.closeDb();
-    const b = setup({ path: file });
-    expect(b.rooms.get(NEW.room)).toMatchObject({ seen: ['1'], firstJoinAt: T0 + 2000, messageId: '999' });
-    expect(b.rooms.openRooms()).toEqual([NEW.room]);
-    b.rooms.closeDb();
-  }));
+  test('rooms survive a restart on the same file', () =>
+    inTempDir(async (file) => {
+      const a = setup({ path: file });
+      await a.rooms.open(NEW, CARD);
+      a.set([viewer('1')]);
+      a.at(2000);
+      await a.rooms.observe(NEW.room);
+      a.rooms.closeDb();
+      const b = setup({ path: file });
+      expect(b.rooms.get(NEW.room)).toMatchObject({ seen: ['1'], firstJoinAt: T0 + 2000, messageId: '999' });
+      expect(b.rooms.openRooms()).toEqual([NEW.room]);
+      b.rooms.closeDb();
+    }));
 
-  test('adds the columns a database from before them lacks', () => inTempDir(async (file) => {
-    const { Database } = await import('bun:sqlite');
-    const old = new Database(file);
-    old.exec(`CREATE TABLE rooms (room TEXT PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, message_id TEXT,
+  test('adds the columns a database from before them lacks', () =>
+    inTempDir(async (file) => {
+      const { Database } = await import('bun:sqlite');
+      const old = new Database(file);
+      old.exec(`CREATE TABLE rooms (room TEXT PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, message_id TEXT,
       locale TEXT NOT NULL, opener_id TEXT NOT NULL, opener_name TEXT NOT NULL, what TEXT, created_at INTEGER NOT NULL,
       first_join_at INTEGER, last_seen_at INTEGER, closed_at INTEGER, seen TEXT NOT NULL DEFAULT '[]',
       streamed TEXT NOT NULL DEFAULT '[]')`);
-    old.exec(`INSERT INTO rooms (room, guild_id, channel_id, locale, opener_id, opener_name, created_at)
+      old.exec(`INSERT INTO rooms (room, guild_id, channel_id, locale, opener_id, opener_name, created_at)
       VALUES ('lamo-futi', '100', '300', 'en', '7', 'Zé', ${T0})`);
-    old.close();
-    const s = setup({ path: file });
-    expect(s.rooms.get(NEW.room)).toMatchObject({ lastTokenAt: null, cardDone: false });
-    expect(await s.rooms.admit(NEW.room, MEMBER)).toBe('ok');
-    expect(s.rooms.get(NEW.room)!.lastTokenAt).toBe(T0);
-    s.rooms.closeDb();
-  }));
+      old.close();
+      const s = setup({ path: file });
+      expect(s.rooms.get(NEW.room)).toMatchObject({ lastTokenAt: null, cardDone: false });
+      expect(await s.rooms.admit(NEW.room, MEMBER)).toBe('ok');
+      expect(s.rooms.get(NEW.room)!.lastTokenAt).toBe(T0);
+      s.rooms.closeDb();
+    }));
 });
 
 describe('run.ts wiring', () => {
-  const livekit: RoomService = { ensureRoom: async () => {}, listParticipants: async () => [], deleteRoom: async () => {} };
+  const livekit: RoomService = {
+    ensureRoom: async () => {},
+    listParticipants: async () => [],
+    deleteRoom: async () => {},
+  };
   const quiet = () => {};
 
-  test('DEV_USER: admit opens an unknown code; production: unknown', () => inTempDir(async (_file, dir) => {
-    const dev = roomModuleFor({ ...loadConfig(DEV_ENV), dataDir: dir }, livekit, quiet);
-    expect(await dev.admit('debu-gamo', MEMBER)).toBe('ok');
-    expect(dev.openRooms()).toEqual(['debu-gamo']);
-    dev.closeDb();
-    const prod = roomModuleFor({ ...loadConfig(PROD_ENV), dataDir: dir }, livekit, quiet);
-    expect(await prod.admit('tuge-dosa', MEMBER)).toBe('unknown');
-    expect(prod.openRooms()).toEqual(['debu-gamo']);
-    prod.closeDb();
-  }));
+  test('DEV_USER: admit opens an unknown code; production: unknown', () =>
+    inTempDir(async (_file, dir) => {
+      const dev = roomModuleFor({ ...loadConfig(DEV_ENV), dataDir: dir }, livekit, quiet);
+      expect(await dev.admit('debu-gamo', MEMBER)).toBe('ok');
+      expect(dev.openRooms()).toEqual(['debu-gamo']);
+      dev.closeDb();
+      const prod = roomModuleFor({ ...loadConfig(PROD_ENV), dataDir: dir }, livekit, quiet);
+      expect(await prod.admit('tuge-dosa', MEMBER)).toBe('unknown');
+      expect(prod.openRooms()).toEqual(['debu-gamo']);
+      prod.closeDb();
+    }));
 });

@@ -7,12 +7,20 @@
 // that pid is confirmed to still be telinha.
 import { win32 } from 'node:path';
 import { sameExe } from '../supervisor.ts';
-import { applyFirewallRules, loadFirewallPorts, firewallRules, removeFirewallRules } from './firewall.ts';
-import { setAutostart, stopTray, trayExePath } from './tray.ts';
+import { applyFirewallRules, firewallRules, loadFirewallPorts, removeFirewallRules } from './firewall.ts';
 import {
-  attempt, errorMessage, must, NotElevatedError, ServiceInstallError,
-  type InstallOptions, type InstallResult, type ServiceDeps, type ServiceManager, type SpawnFn,
+  attempt,
+  errorMessage,
+  type InstallOptions,
+  type InstallResult,
+  must,
+  NotElevatedError,
+  type ServiceDeps,
+  ServiceInstallError,
+  type ServiceManager,
+  type SpawnFn,
 } from './index.ts';
+import { setAutostart, stopTray, trayExePath } from './tray.ts';
 
 // Windows paths whatever the host (tests run on Linux too).
 const { join } = win32;
@@ -26,7 +34,8 @@ const END_WAIT_MS = 5000;
 
 export const taskXmlPath = (home: string): string => join(home, 'service', 'telinha-task.xml');
 
-const escapeXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const escapeXml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
  * The task definition. Priority 4 is "normal" (the default 7 is below normal,
@@ -90,7 +99,10 @@ export function encodeTaskXml(xml: string): Uint8Array {
 
 /** `whoami /user /fo csv`: "User Name","SID" then one data row. */
 export function parseWhoami(csv: string): { user: string; sid: string } | null {
-  const row = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[1];
+  const row = csv
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)[1];
   const m = row ? /^"([^"]*)","(S-[^"]*)"/.exec(row) : null;
   return m ? { user: m[1]!, sid: m[2]! } : null;
 }
@@ -102,7 +114,10 @@ export function parseWhoami(csv: string): { user: string; sid: string } | null {
  * escaped properly, so only these are read.
  */
 export function parseTaskQuery(csv: string): { taskName: string; status: string; lastResult: string } | null {
-  const rows = csv.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('"'));
+  const rows = csv
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('"'));
   const row = rows[1];
   const m = row ? /^"([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)"/.exec(row) : null;
   return m ? { taskName: m[2]!, status: m[4]!, lastResult: m[7]! } : null;
@@ -118,7 +133,8 @@ const psQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const powershell = (command: string) => ['powershell', '-NoProfile', '-NonInteractive', '-Command', command];
 
 /** System32's whoami by full path: Git for Windows puts a `whoami` on PATH that knows no /user. */
-export const whoamiExe = (env: Record<string, string | undefined>): string => join(env.SystemRoot || env.windir || 'C:\\Windows', 'System32', 'whoami.exe');
+export const whoamiExe = (env: Record<string, string | undefined>): string =>
+  join(env.SystemRoot || env.windir || 'C:\\Windows', 'System32', 'whoami.exe');
 
 export const IS_ADMIN_PS =
   '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)';
@@ -145,8 +161,13 @@ export const ELEVATION_TYPE_PS =
   '$v = 0; $r = 0; if ([TelinhaProbe.Token]::GetTokenInformation([Security.Principal.WindowsIdentity]::GetCurrent().Token, 18, [ref]$v, 4, [ref]$r)) { $v }';
 
 /** Encoded: the script's double quotes never meet Windows command-line quoting. */
-export const elevationTypeCommand = (): string[] =>
-  ['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ELEVATION_TYPE_PS, 'utf16le').toString('base64')];
+export const elevationTypeCommand = (): string[] => [
+  'powershell',
+  '-NoProfile',
+  '-NonInteractive',
+  '-EncodedCommand',
+  Buffer.from(ELEVATION_TYPE_PS, 'utf16le').toString('base64'),
+];
 
 /**
  * Elevated through UAC, the only case where a program started from here would
@@ -178,7 +199,11 @@ export function createWindowsTask(d: ServiceDeps): ServiceManager {
     const xmlPath = taskXmlPath(o.home);
     await fs.mkdir(join(o.home, 'service'));
     await fs.writeFile(xmlPath, encodeTaskXml(taskXml({ home: o.home, exe: o.exe, sid })));
-    const ps = await spawn(powershell(`Register-ScheduledTask -TaskName ${psQuote(TASK_NAME)} -Xml (Get-Content -Raw -LiteralPath ${psQuote(xmlPath)}) -Force | Out-Null`));
+    const ps = await spawn(
+      powershell(
+        `Register-ScheduledTask -TaskName ${psQuote(TASK_NAME)} -Xml (Get-Content -Raw -LiteralPath ${psQuote(xmlPath)}) -Force | Out-Null`,
+      ),
+    );
     if (ps.code === 0) return;
     // No ScheduledTasks module (stripped-down editions): schtasks reads the same XML.
     log(`service: Register-ScheduledTask failed (${(ps.stderr || ps.stdout).trim()}); trying schtasks`);
@@ -192,14 +217,19 @@ export function createWindowsTask(d: ServiceDeps): ServiceManager {
     const cmd = ['schtasks', '/Delete', '/TN', TASK_NAME, '/F'];
     const r = await spawn(cmd);
     // Already gone is fine.
-    if (r.code !== 0 && !/cannot find|não foi possível encontrar|does not exist/i.test(r.stderr + r.stdout)) must(cmd, r);
+    if (r.code !== 0 && !/cannot find|não foi possível encontrar|does not exist/i.test(r.stderr + r.stdout))
+      must(cmd, r);
   }
 
   const manager: ServiceManager = {
     kind: 'windows-task',
 
     async install(o) {
-      const result: InstallResult = { ok: false, steps: { task: 'skipped', firewall: 'skipped', start: 'skipped' }, hints: [] };
+      const result: InstallResult = {
+        ok: false,
+        steps: { task: 'skipped', firewall: 'skipped', start: 'skipped' },
+        hints: [],
+      };
       try {
         if (!(await isElevated(spawn))) throw new NotElevatedError(o.exe);
         result.steps.task = await attempt(() => register(o));

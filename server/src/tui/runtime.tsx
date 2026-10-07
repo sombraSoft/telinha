@@ -3,13 +3,13 @@
 // the terminal always comes back usable: cursor shown, raw mode off, the main
 // screen restored. Only call this with stdin AND stdout on a TTY: without one
 // OpenTUI waits forever for the terminal's replies.
-import { createCliRenderer, type CliRenderer, type CliRendererConfig } from '@opentui/core';
-import { render as solidRender, usePaste, useKeyboard } from '@opentui/solid';
-import { createSignal, type Accessor, type JSX } from 'solid-js';
+import { type CliRenderer, type CliRendererConfig, createCliRenderer } from '@opentui/core';
+import { render as solidRender, useKeyboard, usePaste } from '@opentui/solid';
+import { type Accessor, createSignal, type JSX } from 'solid-js';
 import type { Locale } from '../cli/strings.ts';
-import { dispatchKey, dispatchPaste, isCtrlC, KeysCtx, useKeys, type KeyStack } from './keys.ts';
+import { dispatchKey, dispatchPaste, isCtrlC, type KeyStack, KeysCtx, useKeys } from './keys.ts';
 import { LocaleCtx } from './strings.ts';
-import { applyColorEnv, detectMode, setMode, type Mode } from './theme.ts';
+import { applyColorEnv, detectMode, type Mode, setMode } from './theme.ts';
 
 export interface TuiHandle {
   /**
@@ -48,7 +48,11 @@ export const RENDERER_CONFIG: CliRendererConfig = {
 };
 
 // 128 + signal number; Windows reports closing the console window as SIGHUP.
-const SIGNALS: [NodeJS.Signals, number][] = [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]];
+const SIGNALS: [NodeJS.Signals, number][] = [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+  ['SIGHUP', 129],
+];
 
 /** Provides the key stack and the locale, and routes every key and paste through the stack. */
 export function TuiRoot(props: { locale: Accessor<Locale>; onCtrlC?: () => void; children?: JSX.Element }) {
@@ -56,7 +60,9 @@ export function TuiRoot(props: { locale: Accessor<Locale>; onCtrlC?: () => void;
   return (
     <KeysCtx.Provider value={stack}>
       <LocaleCtx.Provider value={props.locale}>
-        <KeyRoot stack={stack} onCtrlC={props.onCtrlC}>{props.children}</KeyRoot>
+        <KeyRoot stack={stack} onCtrlC={props.onCtrlC}>
+          {props.children}
+        </KeyRoot>
       </LocaleCtx.Provider>
     </KeysCtx.Provider>
   );

@@ -1,9 +1,12 @@
 // The default gateway and the local IPv4 that reaches it: where PCP/NAT-PMP
 // requests go and what UPnP is told as the mapping's internal client.
 import { readFile } from 'node:fs/promises';
-import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
+import { type NetworkInterfaceInfo, networkInterfaces } from 'node:os';
 
-export interface DefaultRoute { gatewayIp: string; localIp: string }
+export interface DefaultRoute {
+  gatewayIp: string;
+  localIp: string;
+}
 type Interfaces = NodeJS.Dict<NetworkInterfaceInfo[]>;
 
 const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
@@ -27,7 +30,16 @@ export function parseProcNetRoute(text: string): { iface: string; gatewayIp: str
   for (const line of text.split('\n').slice(1)) {
     const f = line.trim().split(/\s+/);
     if (f.length < 8) continue;
-    const [iface, dest, gw, flagsHex, , , metricStr, mask] = f as [string, string, string, string, string, string, string, string];
+    const [iface, dest, gw, flagsHex, , , metricStr, mask] = f as [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ];
     if (dest !== '00000000' || mask !== '00000000' || !/^[0-9A-Fa-f]{8}$/.test(gw)) continue;
     const flags = parseInt(flagsHex, 16);
     if ((flags & 0x3) !== 0x3) continue;
@@ -67,7 +79,7 @@ export function localIpFor(gatewayIp: string, ifaces: Interfaces = networkInterf
   const inSubnet = (a: NetworkInterfaceInfo) => {
     const ip = ipv4ToInt(a.address);
     const mask = ipv4ToInt(a.netmask);
-    return gw !== null && ip !== null && mask !== null && ((ip & mask) >>> 0) === ((gw & mask) >>> 0);
+    return gw !== null && ip !== null && mask !== null && (ip & mask) >>> 0 === (gw & mask) >>> 0;
   };
   if (iface) {
     const own = (ifaces[iface] ?? []).filter(isV4);
@@ -89,12 +101,14 @@ async function routePrint(): Promise<string> {
 }
 
 /** Never throws: null when there is no default route or it cannot be read. */
-export async function defaultRoute(o: {
-  platform?: NodeJS.Platform;
-  readProcRoute?: () => Promise<string>;
-  routePrint?: () => Promise<string>;
-  interfaces?: () => Interfaces;
-} = {}): Promise<DefaultRoute | null> {
+export async function defaultRoute(
+  o: {
+    platform?: NodeJS.Platform;
+    readProcRoute?: () => Promise<string>;
+    routePrint?: () => Promise<string>;
+    interfaces?: () => Interfaces;
+  } = {},
+): Promise<DefaultRoute | null> {
   const platform = o.platform ?? process.platform;
   const ifaces = () => {
     try {

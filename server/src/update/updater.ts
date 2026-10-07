@@ -6,15 +6,24 @@
 // and skipped until a newer tag exists (`telinha update --now` retries it).
 import { join } from 'node:path';
 import type { Paths } from '../paths.ts';
-import { TRAY_NEW, isStableTag, newExeName } from '../release.ts';
+import { isStableTag, newExeName, TRAY_NEW } from '../release.ts';
 import type { Target } from '../version.ts';
 import { isCompiled } from '../version.ts';
 import { downloadRelease } from './download.ts';
-import { readState, statePath as defaultStatePath, writeState } from './state.ts';
+import { statePath as defaultStatePath, readState, writeState } from './state.ts';
 import { finish as finishSwap, stage } from './swap.ts';
 import {
-  FailedError, PendingError, errorMessage, nodeFs,
-  type GitHubReleases, type UpdateCheck, type UpdateFs, type UpdateMode, type UpdateResult, type UpdateState, type UpdateStatus,
+  errorMessage,
+  FailedError,
+  type GitHubReleases,
+  nodeFs,
+  PendingError,
+  type UpdateCheck,
+  type UpdateFs,
+  type UpdateMode,
+  type UpdateResult,
+  type UpdateState,
+  type UpdateStatus,
 } from './types.ts';
 
 export interface UpdaterOptions {
@@ -126,7 +135,10 @@ export function createUpdater(o: UpdaterOptions): Updater {
   /** Checks and applies run one at a time (timer and CLI may overlap). */
   let chain: Promise<unknown> = Promise.resolve();
 
-  const init = () => (loaded ??= readState(fs, statePath).then((s) => void (state = s)));
+  const init = () =>
+    (loaded ??= readState(fs, statePath).then((s) => {
+      state = s;
+    }));
   const save = () => writeState(fs, statePath, state);
   const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
     const run = chain.then(fn);
@@ -169,14 +181,25 @@ export function createUpdater(o: UpdaterOptions): Updater {
     state.lastCheck = now();
     await save();
     return {
-      current: o.current, latest: seen, pin, target,
-      staged: state.staged ?? null, failed: state.failed ?? null, pending: state.pending ?? null, deferredSince: state.deferredSince ?? null,
+      current: o.current,
+      latest: seen,
+      pin,
+      target,
+      staged: state.staged ?? null,
+      failed: state.failed ?? null,
+      pending: state.pending ?? null,
+      deferredSince: state.deferredSince ?? null,
     };
   }
 
   const result = (check: UpdateCheck, action: UpdateResult['action'], message: string): UpdateResult => ({
-    ...check, staged: state.staged ?? null, failed: state.failed ?? null, pending: state.pending ?? null, deferredSince: state.deferredSince ?? null,
-    action, message,
+    ...check,
+    staged: state.staged ?? null,
+    failed: state.failed ?? null,
+    pending: state.pending ?? null,
+    deferredSince: state.deferredSince ?? null,
+    action,
+    message,
   });
 
   /** `fresh` false only for the deferral poll: rooms are checked locally, GitHub's last answer stands within checkMs. */
@@ -265,7 +288,10 @@ export function createUpdater(o: UpdaterOptions): Updater {
       return {
         enabled: enabled && compiled,
         current: o.current,
-        latest: latestRaw?.tag && (isStableTag(latestRaw.tag) || (pin && sameVersion(latestRaw.tag, pin))) ? latestRaw.tag : null,
+        latest:
+          latestRaw?.tag && (isStableTag(latestRaw.tag) || (pin && sameVersion(latestRaw.tag, pin)))
+            ? latestRaw.tag
+            : null,
         pin,
         staged: state.staged ?? null,
         applied: state.applied ?? null,
@@ -275,14 +301,15 @@ export function createUpdater(o: UpdaterOptions): Updater {
         lastCheck: state.lastCheck ?? null,
       };
     },
-    finish: () => serialize(async () => {
-      try {
-        await init();
-        await finishSwap({ fs, bin: o.paths.bin, statePath, now, log });
-        state = await readState(fs, statePath);
-      } catch (e) {
-        log(`update: finish failed: ${errorMessage(e)}`);
-      }
-    }),
+    finish: () =>
+      serialize(async () => {
+        try {
+          await init();
+          await finishSwap({ fs, bin: o.paths.bin, statePath, now, log });
+          state = await readState(fs, statePath);
+        } catch (e) {
+          log(`update: finish failed: ${errorMessage(e)}`);
+        }
+      }),
   };
 }

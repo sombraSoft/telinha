@@ -16,7 +16,11 @@ function fakeUdp(answer: (data: Uint8Array, port: number, address: string, reply
       send(data, port, address) {
         const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
         sent.push(bytes);
-        answer(bytes, port, address, (d, p = 5351, a = GW) => queueMicrotask(() => { if (!closed) o.onMessage(d, p, a); }));
+        answer(bytes, port, address, (d, p = 5351, a = GW) =>
+          queueMicrotask(() => {
+            if (!closed) o.onMessage(d, p, a);
+          }),
+        );
       },
       close() {
         if (!closed) open--;
@@ -101,8 +105,17 @@ describe('NAT-PMP', () => {
       expect([...data]).toEqual([...bytes(0, 2, 0, 0, [7881, 2], [7881, 2], [3600, 4])]);
       reply(bytes(0, 130, [0, 2], [99, 4], [7881, 2], [7881, 2], [1800, 4]));
     });
-    expect(await natpmpMap({ udp: net.udp, sleep: c.sleep, gatewayIp: GW, protocol: 'tcp', internalPort: 7881, externalPort: 7881, lifetime: 3600 }))
-      .toEqual({ lifetime: 1800 });
+    expect(
+      await natpmpMap({
+        udp: net.udp,
+        sleep: c.sleep,
+        gatewayIp: GW,
+        protocol: 'tcp',
+        internalPort: 7881,
+        externalPort: 7881,
+        lifetime: 3600,
+      }),
+    ).toEqual({ lifetime: 1800 });
   });
 
   test('map UDP: a different external port is deleted and fails', async () => {
@@ -113,8 +126,15 @@ describe('NAT-PMP', () => {
       const lifetime = new DataView(data.buffer, data.byteOffset).getUint32(8);
       reply(bytes(0, 129, [0, 2], [99, 4], [7882, 2], [lifetime ? 50000 : 0, 2], [lifetime, 4]));
     });
-    const err = await natpmpMap({ udp: net.udp, sleep: c.sleep, gatewayIp: GW, protocol: 'udp', internalPort: 7882, externalPort: 7882, lifetime: 3600 })
-      .catch((e) => e);
+    const err = await natpmpMap({
+      udp: net.udp,
+      sleep: c.sleep,
+      gatewayIp: GW,
+      protocol: 'udp',
+      internalPort: 7882,
+      externalPort: 7882,
+      lifetime: 3600,
+    }).catch((e) => e);
     expect(err.message).toBe('NAT-PMP gave external port 50000 instead of 7882');
     expect(requests).toEqual([
       [...bytes(0, 1, 0, 0, [7882, 2], [7882, 2], [3600, 4])],

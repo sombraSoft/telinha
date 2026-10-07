@@ -9,7 +9,7 @@ import type { ActionId, QuestionView, SetupSession } from '../../../cli/setup/se
 import { useLocale } from '../../strings.ts';
 import { c } from '../../theme.ts';
 import { CARD_CHROME, fit, useLayout, wrap } from '../../ui/layout.ts';
-import { Bold, Card, Field, HintPane, Picker, Spinner, type PickOption } from '../../ui/widgets.tsx';
+import { Bold, Card, Field, HintPane, Picker, type PickOption, Spinner } from '../../ui/widgets.tsx';
 import type { SessionStore } from '../store.ts';
 
 type Color = string | RGBA;
@@ -21,10 +21,19 @@ export interface Line {
 
 /** Pre-wrapped lines: their count is what the layout budget counts. */
 export function Lines(p: { lines: Line[] }) {
-  return <For each={p.lines}>{(l) => <text fg={l.fg} attributes={l.bold ? Bold : 0} wrapMode="none">{l.text === '' ? ' ' : l.text}</text>}</For>;
+  return (
+    <For each={p.lines}>
+      {(l) => (
+        <text fg={l.fg} attributes={l.bold ? Bold : 0} wrapMode="none">
+          {l.text === '' ? ' ' : l.text}
+        </text>
+      )}
+    </For>
+  );
 }
 
-export const paint = (text: string, width: number, fg: Color, bold = false): Line[] => wrap(text, Math.max(1, width)).map((t) => ({ text: t, fg, bold }));
+export const paint = (text: string, width: number, fg: Color, bold = false): Line[] =>
+  wrap(text, Math.max(1, width)).map((t) => ({ text: t, fg, bold }));
 
 /** "! text" style lines: the mark on the first line, the rest indented under the text. */
 export function marked(mark: string, text: string, width: number, fg: Color, bold = false): Line[] {
@@ -105,7 +114,12 @@ function QuestionCard(p: QuestionProps) {
 
   const options = (): PickOption[] =>
     view().options.map((o) => ({ value: o.value, label: o.label, desc: o.desc, subtle: o.subtle, chosen: o.chosen }));
-  const actionOptions = (): PickOption[] => actions().map((a, i) => ({ value: ACTION + a.id, label: a.label, subtle: i === 0 && options().length > 0 && !textual() }));
+  const actionOptions = (): PickOption[] =>
+    actions().map((a, i) => ({
+      value: ACTION + a.id,
+      label: a.label,
+      subtle: i === 0 && options().length > 0 && !textual(),
+    }));
   /** Select: the options and the actions in one list; multi and fields keep them apart. */
   const mainOptions = (): PickOption[] => (view().kind === 'select' ? [...options(), ...actionOptions()] : options());
   const separateActions = () => actions().length > 0 && (textual() || options().length === 0);
@@ -149,7 +163,12 @@ function QuestionCard(p: QuestionProps) {
   // ---- the vertical budget: the card takes what it needs, the pane under it what is left
   const lookupRowCount = () => (running() ? 1 : lookupLines().length);
   const fixedRows = () =>
-    CARD_CHROME + 1 + qLines().length + (linkLines().length ? 1 + linkLines().length : 0) + 1 + (statusLines().length ? 1 + statusLines().length : 0);
+    CARD_CHROME +
+    1 +
+    qLines().length +
+    (linkLines().length ? 1 + linkLines().length : 0) +
+    1 +
+    (statusLines().length ? 1 + statusLines().length : 0);
   const sideRows = () => {
     // Body rows next to the main picker or field.
     const acts = separateActions() ? 1 + pickerRows(actionOptions(), inner()) : 0;
@@ -160,7 +179,10 @@ function QuestionCard(p: QuestionProps) {
   const reserve = () => (L.side() || !hintNeed() ? 0 : Math.min(hintNeed(), 5));
   const pickerMax = () => Math.max(4, L.bodyRows() - fixedRows() - sideRows() - reserve());
   const cardRows = () => {
-    const main = !textual() && options().length ? Math.min(pickerRows(mainOptions(), inner(), view().kind === 'multi'), pickerMax()) : 0;
+    const main =
+      !textual() && options().length
+        ? Math.min(pickerRows(mainOptions(), inner(), view().kind === 'multi'), pickerMax())
+        : 0;
     return fixedRows() + sideRows() + main;
   };
   const hintMax = () => (L.side() ? L.bodyRows() : L.bodyRows() - cardRows());
@@ -185,15 +207,25 @@ function QuestionCard(p: QuestionProps) {
     if (v.kind !== 'select') return 0;
     // Actions just appeared (an invite card, a failed lookup): start on the first one.
     if (actions().length) return options().length;
-    return Math.max(0, v.options.findIndex((o) => o.value === v.initial));
+    return Math.max(
+      0,
+      v.options.findIndex((o) => o.value === v.initial),
+    );
   };
   const fieldKey = () => `${view().id}|${view().kind}|${gen()}`;
   // A default that moves (the machine was detected meanwhile) moves the highlight too.
   const pickKey = () =>
     !textual() && options().length
-      ? `${view().id}|${mainOptions().map((o) => o.value).join(',')}|${view().kind === 'select' ? view().initial : ''}|${gen()}`
+      ? `${view().id}|${mainOptions()
+          .map((o) => o.value)
+          .join(',')}|${view().kind === 'select' ? view().initial : ''}|${gen()}`
       : '';
-  const actionsKey = () => (separateActions() ? actions().map((a) => a.id).join(',') : '');
+  const actionsKey = () =>
+    separateActions()
+      ? actions()
+          .map((a) => a.id)
+          .join(',')
+      : '';
   const minError = () => (view().id === 'channels' ? q(locale(), 'channelsMin') : undefined);
 
   const body = (
@@ -239,7 +271,9 @@ function QuestionCard(p: QuestionProps) {
           <Match when={running()}>
             <box flexDirection="row" gap={1} flexShrink={0}>
               <Spinner />
-              <text fg={c.text} wrapMode="none">{fit(view().lookup.state === 'running' ? (view().lookup as { label: string }).label : '', inner() - 2)}</text>
+              <text fg={c.text} wrapMode="none">
+                {fit(view().lookup.state === 'running' ? (view().lookup as { label: string }).label : '', inner() - 2)}
+              </text>
             </box>
           </Match>
           <Match when={lookupLines().length}>
@@ -250,7 +284,12 @@ function QuestionCard(p: QuestionProps) {
       <Show when={actionsKey()} keyed>
         {(_key: string) => (
           <box marginTop={1} flexShrink={0}>
-            <Picker options={actionOptions()} width={inner()} active={() => p.active() && !running()} onConfirm={pick} />
+            <Picker
+              options={actionOptions()}
+              width={inner()}
+              active={() => p.active() && !running()}
+              onConfirm={pick}
+            />
           </box>
         )}
       </Show>
@@ -260,7 +299,9 @@ function QuestionCard(p: QuestionProps) {
   return (
     <box flexDirection={L.side() ? 'row' : 'column'} gap={L.side() ? 1 : 0} flexGrow={1} alignItems="flex-start">
       <Card title={` ${view().badge} `} width={L.cardW()} active={p.active()}>
-        <text fg={c.text} attributes={Bold} wrapMode="none">{fit(view().title, inner())}</text>
+        <text fg={c.text} attributes={Bold} wrapMode="none">
+          {fit(view().title, inner())}
+        </text>
         <Lines lines={qLines()} />
         <Show when={linkLines().length}>
           <box flexDirection="column" marginTop={1} flexShrink={0}>
@@ -280,4 +321,3 @@ function QuestionCard(p: QuestionProps) {
     </box>
   );
 }
-

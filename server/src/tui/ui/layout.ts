@@ -2,7 +2,7 @@
 // relying on OpenTUI's wrapping/truncation, so frames are the same in every
 // terminal and in tests.
 import { useTerminalDimensions } from '@opentui/solid';
-import { createContext, createSignal, onCleanup, useContext, type Accessor } from 'solid-js';
+import { type Accessor, createContext, createSignal, onCleanup, useContext } from 'solid-js';
 
 export const SIDEBAR_WIDTH = 26;
 export const HINT_WIDTH = 38;

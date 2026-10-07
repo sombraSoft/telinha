@@ -6,7 +6,11 @@ import { dirname, join } from 'node:path';
 import { deflateRawSync, gunzipSync, gzipSync, inflateRawSync } from 'node:zlib';
 import { archiveType } from './release.ts';
 
-export interface Entry { path: string; mode: number; data: Uint8Array }
+export interface Entry {
+  path: string;
+  mode: number;
+  data: Uint8Array;
+}
 
 // 2000-01-01T00:00:00Z: archives built from the same files are byte-identical.
 const FIXED_MTIME = 946684800;
@@ -210,7 +214,8 @@ export function readZip(data: Uint8Array): Entry[] {
     const path = dec.decode(data.subarray(off + 46, off + 46 + nameLen));
     off += 46 + nameLen + extraLen + commentLen;
 
-    if (csize === 0xffffffff || usize === 0xffffffff || local === 0xffffffff) throw new Error('zip: zip64 is not supported');
+    if (csize === 0xffffffff || usize === 0xffffffff || local === 0xffffffff)
+      throw new Error('zip: zip64 is not supported');
     const unixMode = madeBy === 3 ? attrs >>> 16 : 0;
     const kind = unixMode & 0o170000;
     if (path.endsWith('/') || (kind !== 0 && kind !== 0o100000)) continue;
@@ -222,7 +227,8 @@ export function readZip(data: Uint8Array): Entry[] {
     if (method === 0) content = raw.slice();
     else if (method === 8) content = new Uint8Array(inflateRawSync(raw));
     else throw new Error(`zip: ${path} uses unsupported method ${method}`);
-    if (content.length !== usize || crc32(content) !== crc) throw new Error(`zip: ${path} is corrupt (size or crc mismatch)`);
+    if (content.length !== usize || crc32(content) !== crc)
+      throw new Error(`zip: ${path} is corrupt (size or crc mismatch)`);
     out.push({ path, mode: unixMode & 0o7777 || 0o644, data: content });
   }
   return out;
@@ -326,4 +332,4 @@ export async function extractTo(entries: Entry[], dir: string, pick?: (path: str
 
 /** A target's release archive, zip or tar.gz as its asset name says. */
 export const writeArchive = (t: Parameters<typeof archiveType>[0], entries: Entry[]): Uint8Array =>
-  (archiveType(t) === 'zip' ? writeZip(entries) : writeTarGz(entries));
+  archiveType(t) === 'zip' ? writeZip(entries) : writeTarGz(entries);

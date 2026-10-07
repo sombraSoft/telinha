@@ -24,7 +24,9 @@ function memFs() {
   const fs: UpdateFs = {
     async readdir(dir) {
       const d = `${n(dir).replace(/\/$/, '')}/`;
-      return [...files.keys()].filter((k) => k.startsWith(d) && !k.slice(d.length).includes('/')).map((k) => k.slice(d.length));
+      return [...files.keys()]
+        .filter((k) => k.startsWith(d) && !k.slice(d.length).includes('/'))
+        .map((k) => k.slice(d.length));
     },
     async rename(from, to) {
       const f = n(from);
@@ -90,11 +92,30 @@ describe('stage', () => {
     m.put(`${BIN}/telinha.old-0.6.0`, 'leftover');
     m.put(`${BIN}/telinha.failed-v0.6.5`, 'leftover');
     const logs: string[] = [];
-    const staged = await stage({ fs: m.fs, bin: BIN, platform: 'linux', tag: 'v0.8.0', current: '0.7.0', now, log: (...a) => logs.push(a.join(' ')) });
-    expect(m.ops).toEqual(['rm telinha.old-0.6.0', 'rm telinha.failed-v0.6.5', 'rename telinha -> telinha.old-0.7.0', 'rename telinha.new -> telinha']);
+    const staged = await stage({
+      fs: m.fs,
+      bin: BIN,
+      platform: 'linux',
+      tag: 'v0.8.0',
+      current: '0.7.0',
+      now,
+      log: (...a) => logs.push(a.join(' ')),
+    });
+    expect(m.ops).toEqual([
+      'rm telinha.old-0.6.0',
+      'rm telinha.failed-v0.6.5',
+      'rename telinha -> telinha.old-0.7.0',
+      'rename telinha.new -> telinha',
+    ]);
     expect(m.text(`${BIN}/telinha`)).toBe('v0.8.0 binary');
     expect(m.text(`${BIN}/telinha.old-0.7.0`)).toBe('v0.7.0 binary');
-    expect(staged).toEqual({ tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: T0, failedStarts: 0 });
+    expect(staged).toEqual({
+      tag: 'v0.8.0',
+      previous: '0.7.0',
+      previousFile: 'telinha.old-0.7.0',
+      at: T0,
+      failedStarts: 0,
+    });
     expect(logs.join('\n')).toContain('v0.8.0 installed as telinha (previous 0.7.0 kept as telinha.old-0.7.0)');
   });
 
@@ -116,7 +137,15 @@ describe('stage', () => {
     m.put(`${BIN}/telinha.old-0.7.0.exe`, 'running loop binary');
     m.busy.add(`${BIN}/telinha.old-0.7.0.exe`);
     const logs: string[] = [];
-    const staged = await stage({ fs: m.fs, bin: BIN, platform: 'win32', tag: 'v0.8.0', current: '0.7.0', now, log: (...a) => logs.push(a.join(' ')) });
+    const staged = await stage({
+      fs: m.fs,
+      bin: BIN,
+      platform: 'win32',
+      tag: 'v0.8.0',
+      current: '0.7.0',
+      now,
+      log: (...a) => logs.push(a.join(' ')),
+    });
     expect(staged.previousFile).toBe(`telinha.old-0.7.0-${Math.floor(T0 / 1000)}.exe`);
     expect(m.text(`${BIN}/telinha.old-0.7.0.exe`)).toBe('running loop binary');
     expect(m.text(`${BIN}/${staged.previousFile}`)).toBe('v0.7.0');
@@ -129,7 +158,9 @@ describe('stage', () => {
     m.put(`${BIN}/telinha`, 'current');
     m.put(`${BIN}/telinha.new`, 'new');
     m.busy.add(`${BIN}/telinha.new`);
-    await expect(stage({ fs: m.fs, bin: BIN, platform: 'linux', tag: 'v0.8.0', current: '0.7.0', now })).rejects.toThrow('EBUSY');
+    await expect(
+      stage({ fs: m.fs, bin: BIN, platform: 'linux', tag: 'v0.8.0', current: '0.7.0', now }),
+    ).rejects.toThrow('EBUSY');
     expect(m.text(`${BIN}/telinha`)).toBe('current');
     expect(m.ops).toEqual(['rename telinha -> telinha.old-0.7.0', 'rename telinha.old-0.7.0 -> telinha']);
   });
@@ -137,14 +168,24 @@ describe('stage', () => {
   test('nothing to install without telinha.new', async () => {
     const m = memFs();
     m.put(`${BIN}/telinha`, 'current');
-    await expect(stage({ fs: m.fs, bin: BIN, platform: 'linux', tag: 'v0.8.0', current: '0.7.0', now })).rejects.toThrow('nothing to install');
+    await expect(
+      stage({ fs: m.fs, bin: BIN, platform: 'linux', tag: 'v0.8.0', current: '0.7.0', now }),
+    ).rejects.toThrow('nothing to install');
     expect(m.ops).toEqual([]);
   });
 });
 
 describe('tray', () => {
   const winStage = (m: ReturnType<typeof memFs>, logs: string[] = []) =>
-    stage({ fs: m.fs, bin: BIN, platform: 'win32', tag: 'v0.8.0', current: '0.7.0', now, log: (...a) => logs.push(a.join(' ')) });
+    stage({
+      fs: m.fs,
+      bin: BIN,
+      platform: 'win32',
+      tag: 'v0.8.0',
+      current: '0.7.0',
+      now,
+      log: (...a) => logs.push(a.join(' ')),
+    });
   const install = (m: ReturnType<typeof memFs>) => {
     m.put(`${BIN}/telinha.exe`, 'v0.7.0');
     m.put(`${BIN}/telinha.new.exe`, 'v0.8.0');
@@ -160,15 +201,24 @@ describe('tray', () => {
     const staged = await winStage(m, logs);
     expect(m.ops).toEqual([
       'rm telinha-tray.old-0.6.0.exe',
-      'rename telinha.exe -> telinha.old-0.7.0.exe', 'rename telinha.new.exe -> telinha.exe',
-      'rename telinha-tray.exe -> telinha-tray.old-0.7.0.exe', 'rename telinha-tray.new.exe -> telinha-tray.exe',
+      'rename telinha.exe -> telinha.old-0.7.0.exe',
+      'rename telinha.new.exe -> telinha.exe',
+      'rename telinha-tray.exe -> telinha-tray.old-0.7.0.exe',
+      'rename telinha-tray.new.exe -> telinha-tray.exe',
     ]);
     expect(staged).toEqual({
-      tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0.exe', trayPreviousFile: 'telinha-tray.old-0.7.0.exe', at: T0, failedStarts: 0,
+      tag: 'v0.8.0',
+      previous: '0.7.0',
+      previousFile: 'telinha.old-0.7.0.exe',
+      trayPreviousFile: 'telinha-tray.old-0.7.0.exe',
+      at: T0,
+      failedStarts: 0,
     });
     expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray v0.8.0');
     expect(m.text(`${BIN}/telinha-tray.old-0.7.0.exe`)).toBe('tray v0.7.0');
-    expect(logs.join('\n')).toContain('tray installed as telinha-tray.exe (previous kept as telinha-tray.old-0.7.0.exe)');
+    expect(logs.join('\n')).toContain(
+      'tray installed as telinha-tray.exe (previous kept as telinha-tray.old-0.7.0.exe)',
+    );
   });
 
   test('a running tray is renamed aside, survives the sweep as .old and goes once it has exited', async () => {
@@ -205,7 +255,11 @@ describe('tray', () => {
     const logs: string[] = [];
     const staged = await winStage(m, logs);
     expect(staged.trayPreviousFile).toBeUndefined();
-    expect(m.ops).toEqual(['rename telinha.exe -> telinha.old-0.7.0.exe', 'rename telinha.new.exe -> telinha.exe', 'rename telinha-tray.new.exe -> telinha-tray.dist.exe']);
+    expect(m.ops).toEqual([
+      'rename telinha.exe -> telinha.old-0.7.0.exe',
+      'rename telinha.new.exe -> telinha.exe',
+      'rename telinha-tray.new.exe -> telinha-tray.dist.exe',
+    ]);
     expect(m.names()).toEqual(['telinha-tray.dist.exe', 'telinha.exe', 'telinha.old-0.7.0.exe']);
     expect(m.text(`${BIN}/telinha-tray.dist.exe`)).toBe('tray v0.8.0');
     expect(logs).toContain('update: v0.8.0 tray not installed; kept as telinha-tray.dist.exe');
@@ -218,7 +272,12 @@ describe('tray', () => {
     m.put(`${BIN}/telinha-tray.new.exe`, 'tray v0.8.0');
     const staged = await winStage(m);
     expect(staged.trayPreviousFile).toBe('telinha-tray.old-0.7.0.exe');
-    expect(m.names()).toEqual(['telinha-tray.dist.exe', 'telinha-tray.old-0.7.0.exe', 'telinha.exe', 'telinha.old-0.7.0.exe']);
+    expect(m.names()).toEqual([
+      'telinha-tray.dist.exe',
+      'telinha-tray.old-0.7.0.exe',
+      'telinha.exe',
+      'telinha.old-0.7.0.exe',
+    ]);
     expect(m.text(`${BIN}/telinha-tray.dist.exe`)).toBe('tray v0.8.0');
     expect(m.text(`${BIN}/telinha-tray.old-0.7.0.exe`)).toBe('tray v0.7.0');
   });
@@ -248,11 +307,21 @@ describe('tray', () => {
     const staged = await winStage(m, logs);
     expect(staged.trayPreviousFile).toBeUndefined();
     expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray v0.7.0');
-    expect(m.ops.slice(2)).toEqual(['rename telinha-tray.exe -> telinha-tray.old-0.7.0.exe', 'rename telinha-tray.old-0.7.0.exe -> telinha-tray.exe']);
+    expect(m.ops.slice(2)).toEqual([
+      'rename telinha-tray.exe -> telinha-tray.old-0.7.0.exe',
+      'rename telinha-tray.old-0.7.0.exe -> telinha-tray.exe',
+    ]);
     expect(logs.some((l) => l.startsWith('update: tray not replaced'))).toBe(true);
   });
 
-  const staged = { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0.exe', trayPreviousFile: 'telinha-tray.old-0.7.0.exe', at: T0, failedStarts: 2 };
+  const staged = {
+    tag: 'v0.8.0',
+    previous: '0.7.0',
+    previousFile: 'telinha.old-0.7.0.exe',
+    trayPreviousFile: 'telinha-tray.old-0.7.0.exe',
+    at: T0,
+    failedStarts: 2,
+  };
 
   test('rollback restores the previous tray and keeps the bad one as telinha-tray.failed-<tag>.exe', async () => {
     const m = memFs();
@@ -263,10 +332,20 @@ describe('tray', () => {
     // The new tray is running: renaming it aside still works.
     m.running.add(`${BIN}/telinha-tray.exe`);
     const logs: string[] = [];
-    await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now, log: (...a) => logs.push(a.join(' ')) });
+    await rollback({
+      fs: m.fs,
+      bin: BIN,
+      platform: 'win32',
+      staged,
+      exitCode: 1,
+      now,
+      log: (...a) => logs.push(a.join(' ')),
+    });
     expect(m.ops).toEqual([
-      'rename telinha.exe -> telinha.failed-v0.8.0.exe', 'rename telinha.old-0.7.0.exe -> telinha.exe',
-      'rename telinha-tray.exe -> telinha-tray.failed-v0.8.0.exe', 'rename telinha-tray.old-0.7.0.exe -> telinha-tray.exe',
+      'rename telinha.exe -> telinha.failed-v0.8.0.exe',
+      'rename telinha.old-0.7.0.exe -> telinha.exe',
+      'rename telinha-tray.exe -> telinha-tray.failed-v0.8.0.exe',
+      'rename telinha-tray.old-0.7.0.exe -> telinha-tray.exe',
     ]);
     expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray good');
     expect(m.text(`${BIN}/telinha-tray.failed-v0.8.0.exe`)).toBe('tray bad');
@@ -281,7 +360,15 @@ describe('tray', () => {
     m.put(`${BIN}/telinha-tray.old-0.7.0.exe`, 'tray good');
     m.busy.add(`${BIN}/telinha-tray.old-0.7.0.exe`);
     const logs: string[] = [];
-    const failed = await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now, log: (...a) => logs.push(a.join(' ')) });
+    const failed = await rollback({
+      fs: m.fs,
+      bin: BIN,
+      platform: 'win32',
+      staged,
+      exitCode: 1,
+      now,
+      log: (...a) => logs.push(a.join(' ')),
+    });
     expect(failed.tag).toBe('v0.8.0');
     expect(m.text(`${BIN}/telinha.exe`)).toBe('good');
     expect(m.text(`${BIN}/telinha-tray.exe`)).toBe('tray bad');
@@ -295,7 +382,12 @@ describe('tray', () => {
     m.put(`${BIN}/telinha-tray.dist.exe`, 'tray bad');
     m.put(`${BIN}/telinha-tray.old-0.7.0.exe`, 'tray good');
     await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged, exitCode: 1, now });
-    expect(m.names()).toEqual(['telinha-tray.dist.exe', 'telinha-tray.failed-v0.8.0.exe', 'telinha.exe', 'telinha.failed-v0.8.0.exe']);
+    expect(m.names()).toEqual([
+      'telinha-tray.dist.exe',
+      'telinha-tray.failed-v0.8.0.exe',
+      'telinha.exe',
+      'telinha.failed-v0.8.0.exe',
+    ]);
     expect(m.text(`${BIN}/telinha-tray.dist.exe`)).toBe('tray good');
   });
 
@@ -324,7 +416,7 @@ describe('tray', () => {
 });
 
 describe('rollback', () => {
-  const staged ={ tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: T0, failedStarts: 2 };
+  const staged = { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: T0, failedStarts: 2 };
 
   test('puts the recorded previous file back and keeps the bad one as telinha.failed-<tag>', async () => {
     const m = memFs();
@@ -346,7 +438,14 @@ describe('rollback', () => {
     m.put(`${BIN}/telinha.old-0.9.0`, 'wrong platform', 99);
     expect(await newestOld(m.fs, BIN, 'win32')).toBe('telinha.old-0.6.0.exe');
     expect(await newestOld(m.fs, BIN, 'linux')).toBe('telinha.old-0.9.0');
-    await rollback({ fs: m.fs, bin: BIN, platform: 'win32', staged: { ...staged, previousFile: 'telinha.old-0.7.0.exe' }, exitCode: 2, now });
+    await rollback({
+      fs: m.fs,
+      bin: BIN,
+      platform: 'win32',
+      staged: { ...staged, previousFile: 'telinha.old-0.7.0.exe' },
+      exitCode: 2,
+      now,
+    });
     expect(m.text(`${BIN}/telinha.exe`)).toBe('newest old');
     expect(m.text(`${BIN}/telinha.failed-v0.8.0.exe`)).toBe('bad');
   });
@@ -355,7 +454,15 @@ describe('rollback', () => {
     const m = memFs();
     m.put(`${BIN}/telinha`, 'bad');
     const logs: string[] = [];
-    const failed = await rollback({ fs: m.fs, bin: BIN, platform: 'linux', staged, exitCode: 1, now, log: (...a) => logs.push(a.join(' ')) });
+    const failed = await rollback({
+      fs: m.fs,
+      bin: BIN,
+      platform: 'linux',
+      staged,
+      exitCode: 1,
+      now,
+      log: (...a) => logs.push(a.join(' ')),
+    });
     expect(failed.tag).toBe('v0.8.0');
     expect(m.ops).toEqual([]);
     expect(m.text(`${BIN}/telinha`)).toBe('bad');
@@ -388,10 +495,20 @@ describe('sweep and finish', () => {
 
   test('sweep removes tray leftovers too, never the tray or its staged .new', async () => {
     const m = memFs();
-    for (const name of ['telinha-tray.exe', 'telinha-tray.new.exe', 'telinha-tray.old-0.6.0.exe', 'telinha-tray.failed-v0.6.1.exe', 'telinha-tray.old-manual-1700000000.exe']) {
+    for (const name of [
+      'telinha-tray.exe',
+      'telinha-tray.new.exe',
+      'telinha-tray.old-0.6.0.exe',
+      'telinha-tray.failed-v0.6.1.exe',
+      'telinha-tray.old-manual-1700000000.exe',
+    ]) {
       m.put(`${BIN}/${name}`, 'x');
     }
-    expect((await sweep(m.fs, BIN)).sort()).toEqual(['telinha-tray.failed-v0.6.1.exe', 'telinha-tray.old-0.6.0.exe', 'telinha-tray.old-manual-1700000000.exe']);
+    expect((await sweep(m.fs, BIN)).sort()).toEqual([
+      'telinha-tray.failed-v0.6.1.exe',
+      'telinha-tray.old-0.6.0.exe',
+      'telinha-tray.old-manual-1700000000.exe',
+    ]);
     expect(m.names()).toEqual(['telinha-tray.exe', 'telinha-tray.new.exe']);
   });
 
@@ -399,11 +516,14 @@ describe('sweep and finish', () => {
     const m = memFs();
     const statePath = '/t/data/run/update.json';
     const applied = { tag: 'v0.8.0', previous: '0.7.0', at: T0 };
-    m.put(statePath, JSON.stringify({
-      staged: { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: 1, failedStarts: 1 },
-      applied: { tag: 'v0.7.0', previous: '0.6.0', at: 1 },
-      lastCheck: 5,
-    }));
+    m.put(
+      statePath,
+      JSON.stringify({
+        staged: { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: 1, failedStarts: 1 },
+        applied: { tag: 'v0.7.0', previous: '0.6.0', at: 1 },
+        lastCheck: 5,
+      }),
+    );
     m.put(`${BIN}/telinha`, 'x');
     m.put(`${BIN}/telinha.old-0.7.0`, 'x');
     await finish({ fs: m.fs, bin: BIN, statePath, now });

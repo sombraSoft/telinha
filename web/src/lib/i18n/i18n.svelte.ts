@@ -1,5 +1,5 @@
 import { prefs } from '../prefs.svelte';
-import { format, resolveLocale, type Locale, type MessageKey, type Params } from './index';
+import { format, type Locale, type MessageKey, type Params, resolveLocale } from './index';
 
 // Locale reported by /auth/token (from Discord); navigator.language until then.
 let userLocale = $state<string | undefined>(undefined);

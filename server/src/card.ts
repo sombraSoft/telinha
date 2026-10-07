@@ -1,9 +1,13 @@
 // The command's message as a live status card. Pure: the lifecycle compares the
 // rendered payloads and only edits Discord when they differ.
 import {
-  ButtonStyle, ComponentType, escapeMarkdown, type APIActionRowComponent, type APIButtonComponentWithURL,
+  type APIActionRowComponent,
+  type APIButtonComponentWithURL,
+  ButtonStyle,
+  ComponentType,
+  escapeMarkdown,
 } from 'discord.js';
-import { t, type Key, type Locale } from './i18n.ts';
+import { type Key, type Locale, t } from './i18n.ts';
 import type { RoomRecord } from './rooms.ts';
 
 /** Who is in the room, one entry per person (Discord user). */
@@ -54,7 +58,13 @@ function fit(l: Locale, parts: (string | List)[]): string {
   const shown = lists.map((p) => p.items.length);
   const build = () =>
     parts
-      .map((p) => (typeof p === 'string' ? p : p.items.length ? t(l, p.key, { list: listText(p.items, shown[lists.indexOf(p)]!) }) : null))
+      .map((p) =>
+        typeof p === 'string'
+          ? p
+          : p.items.length
+            ? t(l, p.key, { list: listText(p.items, shown[lists.indexOf(p)]!) })
+            : null,
+      )
       .filter((s): s is string => s !== null)
       .join('\n');
   let out = build();
@@ -83,9 +93,10 @@ export function renderCard(rec: RoomRecord, live: Live, o: CardOptions): Card {
   const allowedMentions = { parse: [] as [] };
 
   if (rec.closedAt !== null) {
-    const lasted = rec.firstJoinAt === null
-      ? t(l, 'cardNobody')
-      : t(l, 'cardLasted', { duration: formatDuration(l, (rec.lastSeenAt ?? rec.firstJoinAt) - rec.firstJoinAt) });
+    const lasted =
+      rec.firstJoinAt === null
+        ? t(l, 'cardNobody')
+        : t(l, 'cardLasted', { duration: formatDuration(l, (rec.lastSeenAt ?? rec.firstJoinAt) - rec.firstJoinAt) });
     const content = fit(l, [
       t(l, 'cardClosed', { who, what }),
       lasted,
@@ -96,7 +107,10 @@ export function renderCard(rec: RoomRecord, live: Live, o: CardOptions): Card {
 
   const content = fit(l, [
     t(l, 'opened', { who, what }),
-    { key: 'cardStreaming', items: live.streamers.map((s) => (s.quality ? `${mention(s.id)} (${s.quality})` : mention(s.id))) },
+    {
+      key: 'cardStreaming',
+      items: live.streamers.map((s) => (s.quality ? `${mention(s.id)} (${s.quality})` : mention(s.id))),
+    },
     // Only while someone streams: with nothing on, arrivals are not worth an edit.
     { key: 'cardInRoom', items: live.streamers.length ? live.viewers.map(mention) : [] },
     // Discord renders the relative time itself, so the clock needs no edits.
@@ -105,13 +119,20 @@ export function renderCard(rec: RoomRecord, live: Live, o: CardOptions): Card {
   ]);
   return {
     content,
-    components: [{
-      type: ComponentType.ActionRow,
-      components: [{
-        type: ComponentType.Button, style: ButtonStyle.Link, label: t(l, 'open'), emoji: { name: '📺' },
-        url: `${o.publicUrl}/r/${rec.room}`,
-      }],
-    }],
+    components: [
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Link,
+            label: t(l, 'open'),
+            emoji: { name: '📺' },
+            url: `${o.publicUrl}/r/${rec.room}`,
+          },
+        ],
+      },
+    ],
     allowedMentions,
   };
 }

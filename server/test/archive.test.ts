@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { crc32, extractTo, readTarGz, readZip, writeTarGz, writeZip, type Entry } from '../src/archive.ts';
+import { crc32, type Entry, extractTo, readTarGz, readZip, writeTarGz, writeZip } from '../src/archive.ts';
 
 const enc = new TextEncoder();
 const bin = new Uint8Array(70_000).map((_, i) => (i * 31) & 0xff);
@@ -74,7 +74,10 @@ describe('extractTo', () => {
     test(`rejects ${bad} and writes nothing`, async () => {
       const dir = tmp();
       try {
-        const entries = [{ path: 'ok.txt', mode: 0o644, data: enc.encode('ok') }, { path: bad, mode: 0o644, data: enc.encode('x') }];
+        const entries = [
+          { path: 'ok.txt', mode: 0o644, data: enc.encode('ok') },
+          { path: bad, mode: 0o644, data: enc.encode('x') },
+        ];
         await expect(extractTo(entries, dir)).rejects.toThrow(/absolute|escapes/);
         expect(existsSync(join(dir, 'ok.txt'))).toBe(false);
       } finally {
@@ -96,7 +99,10 @@ describe('extractTo', () => {
 
 // Archives made by a real tool, when one is on PATH (Windows ships bsdtar, which also writes zip).
 describe('real archives', () => {
-  const tar = process.platform === 'win32' ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : Bun.which('tar');
+  const tar =
+    process.platform === 'win32'
+      ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+      : Bun.which('tar');
   const usable = !!tar && existsSync(tar);
 
   test.skipIf(!usable)('reads a tar.gz written by tar', () => {

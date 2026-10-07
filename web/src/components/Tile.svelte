@@ -3,7 +3,7 @@
   import { t } from '../lib/i18n/i18n.svelte';
   import { prefs } from '../lib/prefs.svelte';
   import type { Participant } from '../lib/room.svelte';
-  import { QUALITY, QUALITY_CHOICES, parseQuality } from '../lib/share';
+  import { parseQuality, QUALITY, QUALITY_CHOICES } from '../lib/share';
   import { qualityLabel, type VideoStats } from '../lib/stats';
 
   type Props = {
@@ -120,10 +120,12 @@
     disablepictureinpicture={!pipSupported}
   ></video>
   {#if audio}
+    <!-- biome-ignore lint/a11y/useMediaCaption: live call audio has no caption track -->
     <audio bind:this={audioEl} autoplay></audio>
   {/if}
 
   <button
+    type="button"
     class="hit"
     aria-pressed={focused}
     aria-label={focused ? t('tile.unfocus') : t('tile.focus', { name: participant.label })}
@@ -142,7 +144,11 @@
   {/if}
 
   {#if watchers.length}
-    <div class="viewers overlay" data-testid="tile-viewers" title={t('tile.watching', { names: watchers.map((v) => v.name).join(', ') })}>
+    <div
+      class="viewers overlay"
+      data-testid="tile-viewers"
+      title={t('tile.watching', { names: watchers.map((v) => v.name).join(', ') })}
+    >
       {#each watchers.slice(0, 5) as v (v.identity)}
         <img class="avatar" src={v.avatar} alt="" />
       {/each}
@@ -162,20 +168,25 @@
 
     <div class="controls overlay">
       {#if participant.local}
-        <button class="btn danger" aria-label={t('tile.stop')} title={t('tile.stop')} onclick={onstop}>
+        <button type="button" class="btn danger" aria-label={t('tile.stop')} title={t('tile.stop')} onclick={onstop}>
           <span aria-hidden="true">⏹</span>
-          {#if !strip}<span aria-hidden="true">{t('tile.stop')}</span>{/if}
+          {#if !strip}
+            <span aria-hidden="true">{t('tile.stop')}</span>
+          {/if}
         </button>
       {:else}
         {#if audio}
           <div class="volume">
             <button
+              type="button"
               class="btn icon"
               aria-label={muted ? t('tile.unmute') : t('tile.mute')}
               title={muted ? t('tile.unmute') : t('tile.mute')}
               aria-pressed={muted}
               onclick={() => prefs.toggleMute(participant.identity)}
-            >{muted ? '🔇' : '🔊'}</button>
+            >
+              {muted ? '🔇' : '🔊'}
+            </button>
             {#if !strip}
               <input
                 type="range"
@@ -190,22 +201,42 @@
           </div>
         {/if}
         {#if !strip}
-          <select class="select" name="quality" data-testid="quality-select" value={quality} aria-label={t('tile.quality')} title={t('tile.quality')} onchange={pickQuality}>
+          <select
+            class="select"
+            name="quality"
+            data-testid="quality-select"
+            value={quality}
+            aria-label={t('tile.quality')}
+            title={t('tile.quality')}
+            onchange={pickQuality}
+          >
             {#each QUALITY_CHOICES as q (q)}
               <option value={q}>{t(`quality.${q}`)}</option>
             {/each}
           </select>
         {/if}
         {#if pipSupported}
-          <button class="btn icon" aria-label={t('tile.pip')} title={t('tile.pip')} aria-pressed={pip} onclick={togglePip}>⧉</button>
+          <button
+            type="button"
+            class="btn icon"
+            aria-label={t('tile.pip')}
+            title={t('tile.pip')}
+            aria-pressed={pip}
+            onclick={togglePip}
+          >
+            ⧉
+          </button>
         {/if}
       {/if}
       <button
+        type="button"
         class="btn icon"
         aria-label={fullscreen ? t('tile.exitFullscreen') : t('tile.fullscreen')}
         title={fullscreen ? t('tile.exitFullscreen') : t('tile.fullscreen')}
         onclick={() => toggleFullscreen(tileEl)}
-      >⛶</button>
+      >
+        ⛶
+      </button>
     </div>
   </div>
 </div>
@@ -408,7 +439,12 @@
     border-radius: var(--radius-sm);
     background: var(--scrim);
     color: var(--on-scrim);
-    font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font:
+      11px / 1.45 ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Consolas,
+      monospace;
     white-space: pre;
     pointer-events: none;
   }

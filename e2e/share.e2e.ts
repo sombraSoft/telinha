@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { fakeDisplayMedia, newRoom, openRoom } from './helpers.ts';
 
 /** Init script: remembers what the page asked getDisplayMedia for. */
@@ -75,7 +75,9 @@ test('go live uses the modal settings, keeps them, and Quality changes them live
     await expect(page.locator('[data-testid="tile"][data-local="true"]')).toBeVisible();
 
     // Unticked sound asks for no audio at all; the readability preset captures up to 1440p 15 fps.
-    const opts = await page.evaluate(() => (window as unknown as { displayOptions: Record<string, unknown> }).displayOptions);
+    const opts = await page.evaluate(
+      () => (window as unknown as { displayOptions: Record<string, unknown> }).displayOptions,
+    );
     expect(opts.audio).toBe(false);
     expect(opts).not.toHaveProperty('systemAudio');
     expect(opts.video).toMatchObject({ height: { max: 1440 }, frameRate: { ideal: 15, max: 15 } });

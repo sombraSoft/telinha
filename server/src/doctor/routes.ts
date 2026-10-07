@@ -5,7 +5,7 @@
 import { AccessToken, TrackSource } from 'livekit-server-sdk';
 import { cookie, parseCookies } from '../auth.ts';
 import type { Config } from '../config.ts';
-import { roomTimeouts, type RoomService } from '../livekit.ts';
+import { type RoomService, roomTimeouts } from '../livekit.ts';
 import type { StaticFiles } from '../static.ts';
 import { COOKIE_TTL_MS, DOCTOR_COOKIE, type DoctorReport, type DoctorStore } from './session.ts';
 
@@ -14,9 +14,20 @@ export { DOCTOR_COOKIE };
 /** The largest report body accepted. */
 export const MAX_REPORT_BYTES = 16 * 1024;
 
-export type DoctorConfig = Pick<Config,
-  'cookieSecret' | 'secureCookies' | 'livekitUrl' | 'livekitKey' | 'livekitSecret' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort'
-  | 'media' | 'turn' | 'closeEmptySeconds'>;
+export type DoctorConfig = Pick<
+  Config,
+  | 'cookieSecret'
+  | 'secureCookies'
+  | 'livekitUrl'
+  | 'livekitKey'
+  | 'livekitSecret'
+  | 'publicUrl'
+  | 'mediaTcpPort'
+  | 'mediaUdpPort'
+  | 'media'
+  | 'turn'
+  | 'closeEmptySeconds'
+>;
 
 export type DoctorHandler = (req: Request, url: URL) => Promise<Response | null>;
 
@@ -40,10 +51,12 @@ const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.i
 const bool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
 // Plain text only, capped: the CLI prints these lines.
 const text = (v: unknown, max = 300): string | undefined =>
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: blanking control characters is the point
   typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max) : undefined;
 const ms = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 3_600_000 ? Math.round(v) : undefined;
-const time = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : undefined);
+const time = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : undefined;
 const ipOrNull = (v: unknown): string | null => (typeof v === 'string' && /^[0-9a-fA-F:.]{2,45}$/.test(v) ? v : null);
 
 function step(v: unknown): { ok: boolean; error?: string } | null {
@@ -81,7 +94,8 @@ export function parseReport(body: unknown): DoctorReport | null {
   if (!noTurn && !turn) return null;
   let init: DoctorReport['initial'] = null;
   if (initial) {
-    const protocol = typeof initial.protocol === 'string' && /^[a-z]{1,8}$/.test(initial.protocol) ? initial.protocol : null;
+    const protocol =
+      typeof initial.protocol === 'string' && /^[a-z]{1,8}$/.test(initial.protocol) ? initial.protocol : null;
     if (!protocol) return null;
     init = { protocol, candidateIp: ipOrNull(initial.candidateIp), rttMs: ms(initial.rttMs) ?? null };
   }
@@ -161,7 +175,11 @@ export function createDoctorRoutes(o: {
       // nothing to subscribe to, no data channel, no identity data.
       const at = new AccessToken(c.livekitKey, c.livekitSecret, { identity: room, ttl: '5m' });
       at.addGrant({
-        room, roomJoin: true, canSubscribe: false, canPublish: true, canPublishData: false,
+        room,
+        roomJoin: true,
+        canSubscribe: false,
+        canPublish: true,
+        canPublishData: false,
         canPublishSources: [TrackSource.SCREEN_SHARE],
       });
       return json(200, {
@@ -192,8 +210,14 @@ export function createDoctorRoutes(o: {
       const ip = clientIp(req);
       if (ip) report.client.ip = ip;
       if (!store.report(s.id, report, now())) return json(409, { error: 'done' });
-      log('doctor report', s.id.slice(0, 8), `tcp=${report.tcp.ok} udp=${report.udp.ok} signaling=${report.signaling.ok}${report.turn ? ` turn=${report.turn.ok}` : ''}`);
-      await rooms.deleteRoom(doctorRoom(s.id)).catch((e: unknown) => log('doctor deleteRoom failed', (e as Error).message));
+      log(
+        'doctor report',
+        s.id.slice(0, 8),
+        `tcp=${report.tcp.ok} udp=${report.udp.ok} signaling=${report.signaling.ok}${report.turn ? ` turn=${report.turn.ok}` : ''}`,
+      );
+      await rooms
+        .deleteRoom(doctorRoom(s.id))
+        .catch((e: unknown) => log('doctor deleteRoom failed', (e as Error).message));
       return new Response(null, { status: 204, headers: NO_STORE });
     }
 

@@ -7,7 +7,7 @@
 import { win32 } from 'node:path';
 import type { Paths } from '../paths.ts';
 import { TRAY_DIST, TRAY_EXE } from '../release.ts';
-import { sameExe, type ProcessInfo } from '../supervisor.ts';
+import { type ProcessInfo, sameExe } from '../supervisor.ts';
 import type { ServiceFs, SpawnFn } from './index.ts';
 
 // Windows paths whatever the host (tests run on Linux too).
@@ -23,12 +23,22 @@ export const trayExePath = (paths: Pick<Paths, 'bin'>): string => join(paths.bin
 export const trayStatePath = (paths: Pick<Paths, 'run'>): string => join(paths.run, 'tray.json');
 export const trayDistPath = (paths: Pick<Paths, 'bin'>): string => join(paths.bin, TRAY_DIST);
 
-export interface TrayState { version: string; pid: number; startedAt: number; exe: string }
+export interface TrayState {
+  version: string;
+  pid: number;
+  startedAt: number;
+  exe: string;
+}
 
-export interface TrayLauncher { launch(exe: string, env: Record<string, string>): void }
+export interface TrayLauncher {
+  launch(exe: string, env: Record<string, string>): void;
+}
 
 /** null when the file is missing or is not what the tray writes. */
-export async function readTrayState(fs: Pick<ServiceFs, 'readText'>, paths: Pick<Paths, 'run'>): Promise<TrayState | null> {
+export async function readTrayState(
+  fs: Pick<ServiceFs, 'readText'>,
+  paths: Pick<Paths, 'run'>,
+): Promise<TrayState | null> {
   const text = await fs.readText(trayStatePath(paths)).catch(() => null);
   if (!text) return null;
   try {
@@ -147,7 +157,13 @@ export function trayEnv(env: Record<string, string | undefined>, paths: Pick<Pat
  * directory from being deleted (often the unzipped download setup ran from).
  */
 export function launchTray(exe: string, env: Record<string, string>): void {
-  Bun.spawn([exe], { cwd: win32.dirname(exe), env, detached: true, stdio: ['ignore', 'ignore', 'ignore'], windowsHide: false }).unref();
+  Bun.spawn([exe], {
+    cwd: win32.dirname(exe),
+    env,
+    detached: true,
+    stdio: ['ignore', 'ignore', 'ignore'],
+    windowsHide: false,
+  }).unref();
 }
 
 export const defaultTrayLauncher: TrayLauncher = { launch: launchTray };

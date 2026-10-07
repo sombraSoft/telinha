@@ -5,7 +5,18 @@
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { Locale } from '../src/cli/strings.ts';
 import { frame, paste, press, typeText, until } from './tui-harness.tsx';
-import { at, BAD_TOKEN, DUCK, fakeChecks, fakeDoctor, SECRET, startOffer, startSetup, TOKEN, VPS_NAT } from './tui-setup-fixtures.ts';
+import {
+  at,
+  BAD_TOKEN,
+  DUCK,
+  fakeChecks,
+  fakeDoctor,
+  SECRET,
+  startOffer,
+  startSetup,
+  TOKEN,
+  VPS_NAT,
+} from './tui-setup-fixtures.ts';
 
 setDefaultTimeout(30_000);
 
@@ -13,7 +24,12 @@ const LANGS: Locale[] = ['en', 'pt-BR'];
 // What the run waits for on the last cards, in each language.
 const TEXT = {
   en: { retry: 'Retry', running: 'Telinha is running', welcome: 'Set Telinha up now?', downloading: '52%' },
-  'pt-BR': { retry: 'Tentar de novo', running: 'A Telinha está rodando', welcome: 'Configurar a Telinha agora?', downloading: '52%' },
+  'pt-BR': {
+    retry: 'Tentar de novo',
+    running: 'A Telinha está rodando',
+    welcome: 'Configurar a Telinha agora?',
+    downloading: '52%',
+  },
 } as const;
 
 describe.each(LANGS)('setup frames, %s 120x34', (lang) => {
@@ -21,7 +37,12 @@ describe.each(LANGS)('setup frames, %s 120x34', (lang) => {
     let release!: () => void;
     const binsHold = new Promise<void>((r) => (release = r));
     const r = await startSetup(['--lang', lang, '--no-upnp'], {
-      locale: lang, compiled: true, serviceFails: 1, binsHold, doctor: fakeDoctor(), doctorChecks: fakeChecks({ n: 0 }),
+      locale: lang,
+      compiled: true,
+      serviceFails: 1,
+      binsHold,
+      doctor: fakeDoctor(),
+      doctorChecks: fakeChecks({ n: 0 }),
     });
     const s = r.s;
     expect(await at(r, 'hosting')).toMatchSnapshot('where');
@@ -132,7 +153,15 @@ function fits24(f: string): string {
 
 describe.each(LANGS)('setup frames, %s 80x24 (the smallest terminal)', (lang) => {
   test('a Review with a note, a failed install, the last card: everything that matters fits', async () => {
-    const r = await startSetup(['--lang', lang], { locale: lang, compiled: true, serviceFails: 1, width: 80, height: 24, doctor: fakeDoctor(), doctorChecks: fakeChecks({ n: 0 }) });
+    const r = await startSetup(['--lang', lang], {
+      locale: lang,
+      compiled: true,
+      serviceFails: 1,
+      width: 80,
+      height: 24,
+      doctor: fakeDoctor(),
+      doctorChecks: fakeChecks({ n: 0 }),
+    });
     // A login redirect the app lacks, skipped: a note on the Review.
     r.world.redirects = [];
     await at(r, 'hosting');
@@ -155,7 +184,17 @@ describe.each(LANGS)('setup frames, %s 80x24 (the smallest terminal)', (lang) =>
     await press(r.s, 'enter');
     await at(r, 'redirect');
     await press(r.s, '2');
-    for (const id of ['guild', 'role', 'channels', 'command', 'group', 'media', 'mediaPorts', 'upnp', 'autoUpdate'] as const) {
+    for (const id of [
+      'guild',
+      'role',
+      'channels',
+      'command',
+      'group',
+      'media',
+      'mediaPorts',
+      'upnp',
+      'autoUpdate',
+    ] as const) {
       await at(r, id);
       await press(r.s, ...(id === 'channels' ? ['space', 'enter'] : ['enter']));
     }

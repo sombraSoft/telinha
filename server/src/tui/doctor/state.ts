@@ -2,12 +2,12 @@
 // re-runs with a fresh context, and the phone test (doctor/phone-test.ts: a
 // version signal bumped by its subscribe() makes the reads reactive, as the
 // setup store does for SetupSession).
-import { batch, createComputed, createMemo, createSignal, type Accessor } from 'solid-js';
+import { type Accessor, batch, createComputed, createMemo, createSignal } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import type { Locale } from '../../cli/strings.ts';
 import type { Config } from '../../config.ts';
 import { checkTitle, runChecks } from '../../doctor/checks.ts';
-import { PhoneTest, type DoctorControl, type PhoneTestState } from '../../doctor/phone-test.ts';
+import { type DoctorControl, PhoneTest, type PhoneTestState } from '../../doctor/phone-test.ts';
 import type { Check, CheckContext, CheckResult, CheckStatus } from '../../doctor/types.ts';
 
 export type RowStatus = CheckStatus | 'running';
@@ -35,7 +35,12 @@ export interface PhoneOptions {
 
 // Copies: the store wraps what it is given, and a result's arrays belong to the caller.
 const fromResult = (r: CheckResult, i: number): DoctorRow => ({
-  key: `${i}:${r.id}`, title: r.title, status: r.status, summary: r.summary, detail: [...(r.detail ?? [])], ...(r.fix ? { fix: r.fix } : {}),
+  key: `${i}:${r.id}`,
+  title: r.title,
+  status: r.status,
+  summary: r.summary,
+  detail: [...(r.detail ?? [])],
+  ...(r.fix ? { fix: r.fix } : {}),
 });
 
 export function createDoctorState(o: {
@@ -47,12 +52,26 @@ export function createDoctorState(o: {
   checkTimeoutMs?: number;
 }) {
   const pendingRows = (): DoctorRow[] =>
-    o.checks.map((c, i) => ({ key: `${i}:${c.id}`, title: checkTitle(c.id, o.locale()), status: 'running', summary: '', detail: [] }));
+    o.checks.map((c, i) => ({
+      key: `${i}:${c.id}`,
+      title: checkTitle(c.id, o.locale()),
+      status: 'running',
+      summary: '',
+      detail: [],
+    }));
   const [rows, setRows] = createStore<DoctorRow[]>(o.initial ? o.initial.map(fromResult) : pendingRows());
   const [running, setRunning] = createSignal(false);
   const now = o.phone?.now ?? Date.now;
   const p = o.phone;
-  const test = p ? new PhoneTest({ control: p.control, config: p.config, locale: o.locale(), now, ...(p.waitMs ? { waitMs: p.waitMs } : {}) }) : null;
+  const test = p
+    ? new PhoneTest({
+        control: p.control,
+        config: p.config,
+        locale: o.locale(),
+        now,
+        ...(p.waitMs ? { waitMs: p.waitMs } : {}),
+      })
+    : null;
   const [version, setVersion] = createSignal(0);
   test?.subscribe(() => setVersion((n) => n + 1));
   createComputed(() => test?.setLocale(o.locale()));
@@ -61,7 +80,14 @@ export function createDoctorState(o: {
   const phoneRows = createMemo<DoctorRow[]>(() => {
     const s = phone();
     if (s.kind !== 'done') return [];
-    return s.rows.map((row) => ({ key: `phone:${row.id}`, title: row.label, status: row.status, summary: row.value, detail: [], ...(row.hint ? { fix: row.hint } : {}) }));
+    return s.rows.map((row) => ({
+      key: `phone:${row.id}`,
+      title: row.label,
+      status: row.status,
+      summary: row.value,
+      detail: [],
+      ...(row.hint ? { fix: row.hint } : {}),
+    }));
   });
   let runId = 0;
   let disposed = false;
@@ -76,11 +102,16 @@ export function createDoctorState(o: {
     try {
       const ctx = await o.buildContext();
       if (id !== runId || disposed) return;
-      await runChecks(o.checks, ctx, (r) => {
-        if (id !== runId || disposed) return;
-        const i = index++;
-        setRows(i, fromResult(r, i));
-      }, o.checkTimeoutMs ? { timeoutMs: o.checkTimeoutMs } : {});
+      await runChecks(
+        o.checks,
+        ctx,
+        (r) => {
+          if (id !== runId || disposed) return;
+          const i = index++;
+          setRows(i, fromResult(r, i));
+        },
+        o.checkTimeoutMs ? { timeoutMs: o.checkTimeoutMs } : {},
+      );
     } catch (e) {
       // The context itself could not be built: every row still pending fails with that reason.
       if (id !== runId || disposed) return;

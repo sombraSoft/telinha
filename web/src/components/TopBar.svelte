@@ -1,8 +1,8 @@
 <script lang="ts">
+  import head from '../assets/telinha-head.webp';
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomSession } from '../lib/room.svelte';
-  import head from '../assets/telinha-head.webp';
   import { PEOPLE_ID } from './PeopleList.svelte';
   import SettingsMenu from './SettingsMenu.svelte';
 
@@ -14,13 +14,17 @@
      title sits in the middle of the viewport whatever is beside it. -->
 <header class="top">
   <div class="left">
-    {#if rc.roomName}<span class="muted room">{t('top.room', { name: rc.roomName })}</span>{/if}
+    {#if rc.roomName}
+      <span class="muted room">{t('top.room', { name: rc.roomName })}</span>
+    {/if}
     <button
+      type="button"
       class="btn ghost"
       data-testid="copy-link"
       aria-label={t('top.copyLink')}
       title={t('top.copyLinkTitle')}
-      onclick={() => void rc.copyLink()}>
+      onclick={() => void rc.copyLink()}
+    >
       <span aria-hidden="true">🔗</span><span class="label">{t('top.copyLink')}</span>
     </button>
   </div>
@@ -33,6 +37,7 @@
   <div class="right">
     <!-- 👥 drawn in currentColor (the emoji ignores it): readable on every theme, follows hover. -->
     <button
+      type="button"
       class="btn ghost icon people"
       data-testid="people-toggle"
       aria-label={t('people.toggle')}

@@ -3,11 +3,11 @@
 // room.svelte.ts uses it, and its tests go through the session.
 import {
   AudioPresets,
-  Track,
-  VideoPreset,
   type LocalAudioTrack,
   type LocalParticipant,
   type LocalVideoTrack,
+  Track,
+  VideoPreset,
 } from 'livekit-client';
 import type { Clock, Notice } from './room.svelte';
 import type { Fps, Preset, Res, ShareSettings } from './share';
@@ -44,8 +44,16 @@ function simulcastLayers(width: number, height: number, fps: number): VideoPrese
 }
 
 // Chrome's insertable streams ("breakout box"), not in lib.dom yet.
-declare const MediaStreamTrackProcessor: (new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> }) | undefined;
-declare const MediaStreamTrackGenerator: (new (init: { kind: 'video' }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> }) | undefined;
+declare const MediaStreamTrackProcessor:
+  | (new (init: {
+      track: MediaStreamTrack;
+    }) => { readable: ReadableStream<VideoFrame> })
+  | undefined;
+declare const MediaStreamTrackGenerator:
+  | (new (init: {
+      kind: 'video';
+    }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> })
+  | undefined;
 
 const ALIGN = 8;
 const alignDown = (n: number) => n - (n % ALIGN);
@@ -70,17 +78,30 @@ function alignedTrack(src: MediaStreamTrack): MediaStreamTrack | null {
       const width = alignDown(r.width);
       const height = alignDown(r.height);
       if ((width === r.width && height === r.height) || !width || !height) return ctl.enqueue(frame);
-      ctl.enqueue(new VideoFrame(frame, { visibleRect: { x: r.x, y: r.y, width, height }, displayWidth: width, displayHeight: height }));
+      ctl.enqueue(
+        new VideoFrame(frame, {
+          visibleRect: { x: r.x, y: r.y, width, height },
+          displayWidth: width,
+          displayHeight: height,
+        }),
+      );
       frame.close();
     },
   });
   // Ends by itself when the capture stops (the processor's stream closes).
-  readable.pipeThrough(crop).pipeTo(out.writable).catch(() => {});
+  readable
+    .pipeThrough(crop)
+    .pipeTo(out.writable)
+    .catch(() => {});
   return out;
 }
 
 /** The generator only reports its size once a frame went through. */
-async function settledSize(track: MediaStreamTrack, clock: Clock, timeoutMs = 3000): Promise<{ width: number; height: number }> {
+async function settledSize(
+  track: MediaStreamTrack,
+  clock: Clock,
+  timeoutMs = 3000,
+): Promise<{ width: number; height: number }> {
   for (let waited = 0; ; waited += 50) {
     const { width = 0, height = 0 } = track.getSettings();
     if ((width && height) || waited >= timeoutMs) return { width, height };
@@ -101,7 +122,13 @@ function displayMediaOptions(res: Res, fps: Fps, audio: boolean): DisplayOptions
   if (!audio) return { video: captureConstraints(res, fps), audio: false, ...surfaces };
   return {
     video: captureConstraints(res, fps),
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 },
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 2,
+      sampleRate: 48000,
+    },
     systemAudio: 'include',
     windowAudio: 'window', // Chrome: offer the game window's own audio (no Discord voices)
     ...surfaces,
@@ -119,7 +146,10 @@ async function pickCodec(): Promise<Codec> {
     });
     if (r.supported && r.powerEfficient) return 'av1';
   } catch {}
-  const send = typeof RTCRtpSender === 'undefined' ? [] : (RTCRtpSender.getCapabilities?.('video')?.codecs.map((c) => c.mimeType) ?? []);
+  const send =
+    typeof RTCRtpSender === 'undefined'
+      ? []
+      : (RTCRtpSender.getCapabilities?.('video')?.codecs.map((c) => c.mimeType) ?? []);
   return send.includes('video/H265') ? 'h265' : 'h264';
 }
 
@@ -172,7 +202,7 @@ async function capture(
   const v = stream.getVideoTracks()[0];
   const a = stream.getAudioTracks()[0];
   if (!v) {
-    stream.getTracks().forEach((t) => t.stop());
+    for (const t of stream.getTracks()) t.stop();
     return { kind: 'error', stage: 'capture', message: 'no video track' };
   }
   const codec = await pickCodec();
@@ -215,7 +245,7 @@ async function capture(
     // stopping the capture fires no 'ended', so a published video would linger
     await lp.unpublishTrack(video ?? sent, true).catch(() => {});
     aligned?.stop();
-    stream.getTracks().forEach((t) => t.stop());
+    for (const t of stream.getTracks()) t.stop();
     return { kind: 'error', stage: 'publish', message: messageOf(e) };
   }
 }
@@ -225,7 +255,7 @@ async function unpublish(lp: Publisher, share: Share): Promise<void> {
   for (const track of [share.video, share.audio]) {
     if (track) await lp.unpublishTrack(track, true).catch(() => {});
   }
-  share.stream.getTracks().forEach((t) => t.stop());
+  for (const t of share.stream.getTracks()) t.stop();
 }
 
 /** Change resolution/fps/preset while live, without picking the screen again. Throws on failure. */

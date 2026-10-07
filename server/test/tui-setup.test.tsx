@@ -1,14 +1,36 @@
 // The setup screens driven with keys on OpenTUI's test renderer, wired to the
 // real setup (session, lookups, apply, file write) on a fake machine.
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { run } from '../src/cli/setup.ts';
 import type { TaskId, TaskRow } from '../src/cli/setup/apply.ts';
 import type { SetupUiContext } from '../src/cli/setup/ui.ts';
+import { run } from '../src/cli/setup.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import { frame, paste, press, typeText, until } from './tui-harness.tsx';
 import {
-  APP, at, BAD_TOKEN, CHANNEL, ctxFor, DUCK, defaultsToReview, discordKeys, ENV, fakeChecks, fakeDoctor, GUILD, homeDuckKeys, leak, machine, PUBLIC_IP, ROLE,
-  SECRET, startOffer, startSetup, TOKEN, TUNNEL, VPS_NAT, type Started,
+  APP,
+  at,
+  BAD_TOKEN,
+  CHANNEL,
+  ctxFor,
+  DUCK,
+  defaultsToReview,
+  discordKeys,
+  ENV,
+  fakeChecks,
+  fakeDoctor,
+  GUILD,
+  homeDuckKeys,
+  leak,
+  machine,
+  PUBLIC_IP,
+  ROLE,
+  SECRET,
+  type Started,
+  startOffer,
+  startSetup,
+  TOKEN,
+  TUNNEL,
+  VPS_NAT,
 } from './tui-setup-fixtures.ts';
 
 // Whole runs: a key press is a few renders.
@@ -18,8 +40,15 @@ const QUIET = ['--lang', 'en', '--no-service', '--no-upnp', '--no-doctor'];
 const PAGE_DOWN = '\x1b[6~';
 const PAGE_UP = '\x1b[5~';
 const HOME_DUCK = {
-  HOSTING: 'home', INGRESS: 'direct', PUBLIC_URL: 'https://my-group.duckdns.org:8443', HTTP_PORT: '0', HTTPS_PORT: '8443',
-  ACME_DNS: 'duckdns', DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'my-group', DUCKDNS_TOKEN: DUCK,
+  HOSTING: 'home',
+  INGRESS: 'direct',
+  PUBLIC_URL: 'https://my-group.duckdns.org:8443',
+  HTTP_PORT: '0',
+  HTTPS_PORT: '8443',
+  ACME_DNS: 'duckdns',
+  DDNS_PROVIDER: 'duckdns',
+  DUCKDNS_DOMAIN: 'my-group',
+  DUCKDNS_TOKEN: DUCK,
 };
 
 /** Review -> Apply -> the last card -> Exit; setup's exit code. */
@@ -68,7 +97,15 @@ describe('answering with keys writes telinha.env', () => {
     // The pasted command shares words with the hint; the token itself is what must never show.
     expect(leak(TUNNEL, [...frames, ...r.term.out, ...r.err].join(' | '))).toBeNull();
     const v = vars(r);
-    expect(v).toMatchObject({ HOSTING: 'home', INGRESS: 'tunnel', TUNNEL_TOKEN: TUNNEL, PUBLIC_URL: 'https://t.example.com', CHANNEL_IDS: CHANNEL, GUILD_ID: GUILD, ROLE_ID: ROLE });
+    expect(v).toMatchObject({
+      HOSTING: 'home',
+      INGRESS: 'tunnel',
+      TUNNEL_TOKEN: TUNNEL,
+      PUBLIC_URL: 'https://t.example.com',
+      CHANNEL_IDS: CHANNEL,
+      GUILD_ID: GUILD,
+      ROLE_ID: ROLE,
+    });
     expect(v.HTTP_PORT ?? '').toBe('');
     expect(v.HTTPS_PORT ?? '').toBe('');
   });
@@ -110,7 +147,14 @@ describe('answering with keys writes telinha.env', () => {
     await discordKeys(r);
     expect(await defaultsToReview(r)).not.toContain('Ask the router?');
     expect(await applyAndExit(r)).toBe(0);
-    expect(vars(r)).toMatchObject({ HOSTING: 'vps', INGRESS: 'direct', PUBLIC_URL: 'https://t.example.com', HTTP_PORT: '80', HTTPS_PORT: '443', UPNP: 'off' });
+    expect(vars(r)).toMatchObject({
+      HOSTING: 'vps',
+      INGRESS: 'direct',
+      PUBLIC_URL: 'https://t.example.com',
+      HTTP_PORT: '80',
+      HTTPS_PORT: '443',
+      UPNP: 'off',
+    });
   });
 });
 
@@ -195,7 +239,11 @@ describe('secrets', () => {
   test('never on screen: no four characters of a typed or pasted secret in any frame, nor in what stays after', async () => {
     const frames: string[] = [];
     const shot = () => frames.push(frame(r.s));
-    const r = await startSetup(['--lang', 'en', '--no-upnp'], { compiled: true, doctor: fakeDoctor(), doctorChecks: fakeChecks({ n: 0 }) });
+    const r = await startSetup(['--lang', 'en', '--no-upnp'], {
+      compiled: true,
+      doctor: fakeDoctor(),
+      doctorChecks: fakeChecks({ n: 0 }),
+    });
     await at(r, 'hosting');
     await press(r.s, 'enter');
     await at(r, 'homeCf');
@@ -284,11 +332,18 @@ describe('the install', () => {
     await press(r.s, 'down', 'down', 'down');
     await press(r.s, 'down', 'enter');
     expect(await r.code).toBe(0);
-    expect(r.term.out).toContain('– Install the service: Service install failed: systemctl enable --now telinha.service exited with 1');
+    expect(r.term.out).toContain(
+      '– Install the service: Service install failed: systemctl enable --now telinha.service exited with 1',
+    );
   });
 
-  test('Back to questions lands on the failed task\'s question; sudo gets the terminal; applying again works', async () => {
-    const r = await startSetup(['--lang', 'en', '--no-upnp', '--no-doctor'], { compiled: true, serviceFails: 1, nat: VPS_NAT, isRoot: false });
+  test("Back to questions lands on the failed task's question; sudo gets the terminal; applying again works", async () => {
+    const r = await startSetup(['--lang', 'en', '--no-upnp', '--no-doctor'], {
+      compiled: true,
+      serviceFails: 1,
+      nat: VPS_NAT,
+      isRoot: false,
+    });
     await at(r, 'hosting');
     await press(r.s, '2');
     await at(r, 'vpsAddress');
@@ -335,7 +390,9 @@ describe('the install', () => {
     expect(f).toContain('Working…');
     expect(f).toMatch(/ ctrl\+c quit\n$/);
     await press(r.s, 'escape');
-    expect(await until(r.s, '! Installing: going back is disabled until this finishes.')).toContain('Installing Telinha');
+    expect(await until(r.s, '! Installing: going back is disabled until this finishes.')).toContain(
+      'Installing Telinha',
+    );
     await press(r.s, 'ctrl+c');
     f = await until(r.s, 'Press Ctrl+C again to stop: the install may be left half done.');
     expect(r.session().screen()).toBe('review');
@@ -407,13 +464,18 @@ describe('the install', () => {
     await press(r.s, 'ctrl+c');
     expect(await r.code).toBe(130);
     expect(r.err).not.toContain('Nothing was written.');
-    expect(r.term.out).toContain('warn This attempt wrote nothing; /opt/telinha/config/telinha.env is the one an earlier attempt wrote.');
+    expect(r.term.out).toContain(
+      'warn This attempt wrote nothing; /opt/telinha/config/telinha.env is the one an earlier attempt wrote.',
+    );
     expect(r.files.has(ENV)).toBe(true);
   });
 
-  test('what stays after the screens: each task\'s result, then what is left to do by hand', async () => {
+  test("what stays after the screens: each task's result, then what is left to do by hand", async () => {
     const r = await startSetup(['--lang', 'en', '--no-doctor'], {
-      compiled: true, nat: VPS_NAT, isRoot: false, serviceHints: ['loginctl enable-linger me'],
+      compiled: true,
+      nat: VPS_NAT,
+      isRoot: false,
+      serviceHints: ['loginctl enable-linger me'],
     });
     await at(r, 'hosting');
     await press(r.s, '2');
@@ -434,7 +496,9 @@ describe('the install', () => {
     expect(out).toContain('warn Install the service: Service installed (systemd-user)');
     expect(out).toContain('    ! Still to do by hand: loginctl enable-linger me');
     expect(out).toContain('Without it Telinha stops whenever you log out of this machine');
-    expect(out).toContain("ok Router and firewall: Open these ports in your provider's firewall (security group / security list) and in this machine's own firewall: TCP 7881, UDP 7882, TCP 443, TCP 80");
+    expect(out).toContain(
+      "ok Router and firewall: Open these ports in your provider's firewall (security group / security list) and in this machine's own firewall: TCP 7881, UDP 7882, TCP 443, TCP 80",
+    );
   });
 
   test('Discord refuses at install time: Back to questions opens the token question', async () => {
@@ -455,10 +519,14 @@ describe('the install', () => {
     expect(r.files.has(ENV)).toBe(false);
   });
 
-  test('the doctor report from the last card: the install\'s results, a row\'s fix, r runs it again, q goes back', async () => {
+  test("the doctor report from the last card: the install's results, a row's fix, r runs it again, q goes back", async () => {
     const runs = { n: 0 };
     const builds = { n: 0 };
-    const r = await startSetup(['--lang', 'en', '--no-upnp'], { compiled: true, doctor: fakeDoctor(builds), doctorChecks: fakeChecks(runs) });
+    const r = await startSetup(['--lang', 'en', '--no-upnp'], {
+      compiled: true,
+      doctor: fakeDoctor(builds),
+      doctorChecks: fakeChecks(runs),
+    });
     await homeDuckKeys(r);
     await discordKeys(r);
     await defaultsToReview(r);
@@ -660,9 +728,27 @@ describe('language, re-runs and flags', () => {
   test('--yes on a re-run opens at the Review; secrets show as kept', async () => {
     // A first, plain run leaves the file.
     const first = machine();
-    const plain = ctxFor(['setup', '--non-interactive', ...QUIET, '--host', 'home', '--duckdns-domain', 'my-group', '--guild', GUILD, '--role', ROLE, '--channels', CHANNEL], {
-      tty: false, env: { DISCORD_TOKEN: TOKEN, DISCORD_CLIENT_SECRET: SECRET, DUCKDNS_TOKEN: DUCK },
-    });
+    const plain = ctxFor(
+      [
+        'setup',
+        '--non-interactive',
+        ...QUIET,
+        '--host',
+        'home',
+        '--duckdns-domain',
+        'my-group',
+        '--guild',
+        GUILD,
+        '--role',
+        ROLE,
+        '--channels',
+        CHANNEL,
+      ],
+      {
+        tty: false,
+        env: { DISCORD_TOKEN: TOKEN, DISCORD_CLIENT_SECRET: SECRET, DUCKDNS_TOKEN: DUCK },
+      },
+    );
     expect(await run({ flags: {}, positionals: [], rest: [] }, plain.ctx, first.deps)).toBe(0);
     const text = first.files.get(ENV)!;
     const r = await startSetup(['--no-service', '--no-upnp', '--no-doctor'], { yes: true, files: { [ENV]: text } });
@@ -696,7 +782,7 @@ describe('language, re-runs and flags', () => {
 
   test('telinha alone without a telinha.env: the welcome card, Quit declines', async () => {
     let r = await startOffer();
-    let f = await until(r.s, 'Set Telinha up now?');
+    const f = await until(r.s, 'Set Telinha up now?');
     expect(f).toContain('No configuration yet (/opt/telinha/config/telinha.env).');
     expect(f).toContain('screen sharing for a Discord group');
     await press(r.s, '2');
@@ -733,7 +819,9 @@ describe('small terminals, Docker and progress', () => {
   });
 
   test('--docker: the file only, the host path, and how to start it on the host', async () => {
-    const r = await startSetup([...QUIET, '--docker'], { env: { TELINHA_HOST_ENV: '/srv/telinha/config/telinha.env' } });
+    const r = await startSetup([...QUIET, '--docker'], {
+      env: { TELINHA_HOST_ENV: '/srv/telinha/config/telinha.env' },
+    });
     await homeDuckKeys(r);
     await discordKeys(r);
     let f = await defaultsToReview(r);
@@ -753,17 +841,34 @@ describe('small terminals, Docker and progress', () => {
   test('task rows: downloads without a size, the UAC wait, the certificate wait and the checks count', async () => {
     let finish!: () => void;
     const gate = new Promise<void>((res) => (finish = res));
-    const row = (id: TaskId, o: Partial<TaskRow>): TaskRow => ({ id, status: 'running', detail: '', spinning: false, lines: [], progress: null, result: null, todo: [], ...o });
+    const row = (id: TaskId, o: Partial<TaskRow>): TaskRow => ({
+      id,
+      status: 'running',
+      detail: '',
+      spinning: false,
+      lines: [],
+      progress: null,
+      result: null,
+      todo: [],
+      ...o,
+    });
     let changed = () => {};
     const tasks: SetupUiContext['tasks'] = {
       wroteAny: false,
       rows: [
         row('binaries', { progress: { done: 5 * 1024 * 1024, total: null, unit: 'bytes', label: 'caddy' } }),
         row('service', { detail: 'Approve the Windows administrator prompt…', spinning: true }),
-        row('cert', { detail: 'Waiting for the HTTPS certificate', spinning: true, progress: { done: 45_000, total: 90_000, unit: 'ms' } }),
+        row('cert', {
+          detail: 'Waiting for the HTTPS certificate',
+          spinning: true,
+          progress: { done: 45_000, total: 90_000, unit: 'ms' },
+        }),
         row('doctor', { detail: '3 of 18 checks', spinning: true, progress: { done: 3, total: 18, unit: 'items' } }),
       ],
-      subscribe: (fn) => ((changed = fn), () => {}),
+      subscribe: (fn) => {
+        changed = fn;
+        return () => {};
+      },
     };
     const r = await startSetup(QUIET, {
       tasks,

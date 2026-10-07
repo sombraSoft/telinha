@@ -1,11 +1,12 @@
 // Argument parsing and the context every subcommand runs with. No dependency:
 // boolean / string / string[] flags, --k=v, --k v, --no-k, positionals, `--`.
-import { join } from 'node:path';
+
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { loadEnvFile, mergeEnv } from '../envfile.ts';
-import { homeOfExe, resolvePaths, type Paths } from '../paths.ts';
+import { homeOfExe, type Paths, resolvePaths } from '../paths.ts';
 import { isCompiled, version } from '../version.ts';
-import { pickLocale, ts, type Locale } from './strings.ts';
+import { type Locale, pickLocale, ts } from './strings.ts';
 
 type Env = Record<string, string | undefined>;
 
@@ -56,12 +57,18 @@ export const SECRET_FLAGS: Readonly<Record<string, string>> = {
 };
 
 export function secretRejections(locale: Locale = 'en'): Record<string, string> {
-  return Object.fromEntries(Object.entries(SECRET_FLAGS).map(([flag, env]) => [flag, ts(locale, 'argSecretFlag', { flag: `--${flag}`, env })]));
+  return Object.fromEntries(
+    Object.entries(SECRET_FLAGS).map(([flag, env]) => [flag, ts(locale, 'argSecretFlag', { flag: `--${flag}`, env })]),
+  );
 }
 
 const kindOf = (d: FlagDef): FlagKind => (typeof d === 'string' ? d : d.type);
 
-export function parseArgs<const S extends ArgSpec>(argv: string[], spec: S, o: { locale?: Locale } = {}): ParsedArgs<S> {
+export function parseArgs<const S extends ArgSpec>(
+  argv: string[],
+  spec: S,
+  o: { locale?: Locale } = {},
+): ParsedArgs<S> {
   const locale = o.locale ?? 'en';
   const rejected = { ...secretRejections(locale), ...spec.rejected };
   const shorts = new Map<string, string>();
@@ -107,7 +114,12 @@ export function parseArgs<const S extends ArgSpec>(argv: string[], spec: S, o: {
       const inline = eq < 0 ? undefined : a.slice(eq + 1);
       const base = name.slice(3);
       // --no-x: an explicit flag of that name wins, else it turns boolean x off.
-      if (name.startsWith('no-') && !Object.hasOwn(spec.flags, name) && Object.hasOwn(spec.flags, base) && kindOf(spec.flags[base]!) === 'boolean') {
+      if (
+        name.startsWith('no-') &&
+        !Object.hasOwn(spec.flags, name) &&
+        Object.hasOwn(spec.flags, base) &&
+        kindOf(spec.flags[base]!) === 'boolean'
+      ) {
         if (inline !== undefined) throw new UsageError(ts(locale, 'argNoValue', { flag: `--${name}` }));
         flags[base] = false;
         continue;
@@ -199,7 +211,11 @@ const readStdin = async () => await Bun.stdin.text();
  * as --<name>-file (`-` = stdin); trimmed like telinha.env values. null when
  * neither is set or the source is empty.
  */
-export async function readSecretSource(o: { env?: string | undefined; file?: string | undefined; stdin?: () => Promise<string> }): Promise<string | null> {
+export async function readSecretSource(o: {
+  env?: string | undefined;
+  file?: string | undefined;
+  stdin?: () => Promise<string>;
+}): Promise<string | null> {
   const clean = (s: string) => s.replace(/^﻿/, '').trim() || null;
   if (o.env) return clean(o.env);
   if (!o.file) return null;

@@ -1,8 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { en } from './i18n/en';
-import { parseMembers, poll, splitMembers, statusKey, type Member, type Timers, type Visibility } from './members';
+import { type Member, parseMembers, poll, splitMembers, statusKey, type Timers, type Visibility } from './members';
 
-const m = (id: string, name: string, status: Member['status'], avatar: string | null = null): Member => ({ id, name, avatar, status });
+const m = (id: string, name: string, status: Member['status'], avatar: string | null = null): Member => ({
+  id,
+  name,
+  avatar,
+  status,
+});
 
 describe('parseMembers', () => {
   test('a valid body', () => {
@@ -10,15 +15,20 @@ describe('parseMembers', () => {
     expect(parseMembers({ members: list })).toEqual(list);
   });
   test('not a member list: null, so the last good one stays', () => {
-    for (const b of [null, undefined, 'x', {}, { members: 'x' }, { error: 'login' }]) expect(parseMembers(b)).toBeNull();
+    for (const b of [null, undefined, 'x', {}, { members: 'x' }, { error: 'login' }])
+      expect(parseMembers(b)).toBeNull();
   });
   test('drops broken entries, unknown status counts as offline', () => {
-    expect(parseMembers({ members: [null, { id: 1, name: 'x' }, { id: '3' }, { id: '4', name: 'Duda', avatar: 5, status: 'invisible' }] }))
-      .toEqual([m('4', 'Duda', 'offline')]);
+    expect(
+      parseMembers({
+        members: [null, { id: 1, name: 'x' }, { id: '3' }, { id: '4', name: 'Duda', avatar: 5, status: 'invisible' }],
+      }),
+    ).toEqual([m('4', 'Duda', 'offline')]);
   });
   test('a repeated id keeps the first entry', () => {
-    expect(parseMembers({ members: [m('1', 'Ana', 'online'), m('2', 'Bia', 'idle'), m('1', 'Ana 2', 'offline')] }))
-      .toEqual([m('1', 'Ana', 'online'), m('2', 'Bia', 'idle')]);
+    expect(
+      parseMembers({ members: [m('1', 'Ana', 'online'), m('2', 'Bia', 'idle'), m('1', 'Ana 2', 'offline')] }),
+    ).toEqual([m('1', 'Ana', 'online'), m('2', 'Bia', 'idle')]);
   });
 });
 
@@ -97,7 +107,15 @@ describe('poll', () => {
       await flush();
     };
     return {
-      doc, timers, run, pending, signals, listeners, fire, flush, setVisible,
+      doc,
+      timers,
+      run,
+      pending,
+      signals,
+      listeners,
+      fire,
+      flush,
+      setVisible,
       failing: (v: boolean) => (fail = v),
       holding: (v: boolean) => (hold = v),
       release: async () => {

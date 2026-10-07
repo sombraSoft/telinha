@@ -9,31 +9,69 @@ import type { Config } from '../../config.ts';
 import type { CheckResult } from '../../doctor/types.ts';
 import { helpersOf } from '../../footprint.ts';
 import type { Out } from '../term.ts';
-import { at, type AKey } from './apply-strings.ts';
+import { type AKey, at } from './apply-strings.ts';
 import { checkDiscord } from './discord.ts';
 import type { PreviousEnv } from './envwrite.ts';
 import type { QuestionId } from './model.ts';
 import {
-  doctorCli, downloadBinaries, generateSecrets, publicPorts, routerStep, serviceStep, startService, validateValues, waitForCertificate, writeConfig,
-  type StartOutcome, type Values, type WithTerminal, type Wizard,
+  doctorCli,
+  downloadBinaries,
+  generateSecrets,
+  publicPorts,
+  routerStep,
+  type StartOutcome,
+  serviceStep,
+  startService,
+  type Values,
+  validateValues,
+  type WithTerminal,
+  type Wizard,
+  waitForCertificate,
+  writeConfig,
 } from './steps.ts';
 import type { SKey } from './strings.ts';
-import { trayStep, type TrayChoice } from './tray.ts';
+import { type TrayChoice, trayStep } from './tray.ts';
 
-export type TaskId = 'discord' | 'duckdns' | 'config' | 'binaries' | 'service' | 'tray' | 'router' | 'start' | 'cert' | 'doctor';
+export type TaskId =
+  | 'discord'
+  | 'duckdns'
+  | 'config'
+  | 'binaries'
+  | 'service'
+  | 'tray'
+  | 'router'
+  | 'start'
+  | 'cert'
+  | 'doctor';
 export type TaskStatus = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skipped';
-export interface TaskLine { kind: 'info' | 'ok' | 'warn' | 'fail'; text: string }
+export interface TaskLine {
+  kind: 'info' | 'ok' | 'warn' | 'fail';
+  text: string;
+}
 /** A download's bytes, the certificate wait's milliseconds or the doctor's checks. */
-export interface TaskProgress { done: number; total: number | null; unit: 'bytes' | 'items' | 'ms'; label?: string }
+export interface TaskProgress {
+  done: number;
+  total: number | null;
+  unit: 'bytes' | 'items' | 'ms';
+  label?: string;
+}
 
 /** Where the file goes: inside the image `shown` is the host's path (install-docker.sh passes it). */
-export interface ApplyTarget { file: string; shown: string; previous: PreviousEnv | null }
+export interface ApplyTarget {
+  file: string;
+  shown: string;
+  previous: PreviousEnv | null;
+}
 
 /** Secrets a run of this session generated: a retry or a re-apply writes the same ones. */
-export interface SecretMemo { made: Values; rotated?: string }
+export interface SecretMemo {
+  made: Values;
+  rotated?: string;
+}
 
 export interface ApplyOptions {
-  docker: boolean; compiled: boolean;
+  docker: boolean;
+  compiled: boolean;
   flags: { noService: boolean; noFirewall: boolean; noUpnp: boolean; noDoctor: boolean; offline: boolean };
   sysctl: 'sudo' | 'manual' | 'auto';
   rotateCookie: boolean;
@@ -110,7 +148,12 @@ export interface TaskRow {
 }
 
 /** A finished task as the summary prints it: the line that says it all, then what else is left to do. */
-export interface SummaryRow { id: TaskId; status: 'ok' | 'warn' | 'fail' | 'skipped'; headline: TaskLine | null; todo: TaskLine[] }
+export interface SummaryRow {
+  id: TaskId;
+  status: 'ok' | 'warn' | 'fail' | 'skipped';
+  headline: TaskLine | null;
+  todo: TaskLine[];
+}
 
 /** What runApply tells its TaskList. */
 type TaskEvent =
@@ -125,7 +168,15 @@ type TaskEvent =
 let feed!: (list: TaskList, e: TaskEvent) => void;
 
 type Row = Omit<TaskRow, 'todo'>;
-const fresh = (id: TaskId, status: TaskStatus): Row => ({ id, status, detail: '', spinning: false, lines: [], progress: null, result: null });
+const fresh = (id: TaskId, status: TaskStatus): Row => ({
+  id,
+  status,
+  detail: '',
+  spinning: false,
+  lines: [],
+  progress: null,
+  result: null,
+});
 
 /** The line a finished task's summary row shows: what its spinner ended with, the failure, or the line that says it all. */
 function headline(r: Row): TaskLine | null {
@@ -158,7 +209,11 @@ export class TaskList {
   get rows(): TaskRow[] {
     const copy = (l: TaskLine) => ({ ...l });
     return this.#rows.map((r) => ({
-      ...r, lines: r.lines.map(copy), progress: r.progress && { ...r.progress }, result: r.result && copy(r.result), todo: todoLines(r.id, r.lines).map(copy),
+      ...r,
+      lines: r.lines.map(copy),
+      progress: r.progress && { ...r.progress },
+      result: r.result && copy(r.result),
+      todo: todoLines(r.id, r.lines).map(copy),
     }));
   }
 
@@ -254,9 +309,17 @@ export function silentOut(): Out {
   const id = (s: string) => s;
   const nop = () => {};
   return {
-    info: nop, ok: nop, warn: nop, fail: nop, step: nop, line: nop, table: nop,
+    info: nop,
+    ok: nop,
+    warn: nop,
+    fail: nop,
+    step: nop,
+    line: nop,
+    table: nop,
     spinner: () => ({ update: nop, stop: nop, fail: nop }),
-    link: id, colors: false, style: { bold: id, dim: id, red: id, green: id, yellow: id, cyan: id },
+    link: id,
+    colors: false,
+    style: { bold: id, dim: id, red: id, green: id, yellow: id, cyan: id },
   };
 }
 
@@ -343,11 +406,22 @@ type Outcome = { status: 'ok' | 'warn' | 'fail' | 'skipped'; error?: string };
  * what the install learns (the client id from Discord, the generated secrets);
  * tasks gets the rows (the plain run needs none: its lines are the output).
  */
-export async function runApply(w: Wizard, target: ApplyTarget, values: Values, plan: TaskId[], o: ApplyOptions, hooks: ApplyHooks, tasks = new TaskList()): Promise<ApplyResult> {
+export async function runApply(
+  w: Wizard,
+  target: ApplyTarget,
+  values: Values,
+  plan: TaskId[],
+  o: ApplyOptions,
+  hooks: ApplyHooks,
+  tasks = new TaskList(),
+): Promise<ApplyResult> {
   const { deps, ctx, s } = w;
   const tell = (e: TaskEvent) => feed(tasks, e);
   const memo = o.secrets ?? { made: {} };
-  const status = Object.fromEntries((Object.keys(TASKS) as TaskId[]).map((id) => [id, 'skipped'])) as Record<TaskId, TaskStatus>;
+  const status = Object.fromEntries((Object.keys(TASKS) as TaskId[]).map((id) => [id, 'skipped'])) as Record<
+    TaskId,
+    TaskStatus
+  >;
   let config: Config | null = null;
   let wrote = false;
   let installed = false;
@@ -404,7 +478,11 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
     },
     async service(tw) {
       await running();
-      installed = await serviceStep(tw, values, { firewall: !o.flags.noFirewall, sysctl: o.sysctl, withTerminal: hooks.withTerminal });
+      installed = await serviceStep(tw, values, {
+        firewall: !o.flags.noFirewall,
+        sysctl: o.sysctl,
+        withTerminal: hooks.withTerminal,
+      });
       if (!ctx.compiled) return { status: 'skipped' };
       return { status: installed ? 'ok' : 'fail' };
     },
@@ -422,7 +500,9 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
       return { status: started === 'notAnswering' ? 'fail' : 'warn' };
     },
     async cert(tw) {
-      const ok = await waitForCertificate(tw, values, (waited, limit) => tell({ kind: 'progress', id: 'cert', progress: { done: waited, total: limit, unit: 'ms' } }));
+      const ok = await waitForCertificate(tw, values, (waited, limit) =>
+        tell({ kind: 'progress', id: 'cert', progress: { done: waited, total: limit, unit: 'ms' } }),
+      );
       return { status: ok ? 'ok' : 'warn' };
     },
     async doctor(tw) {
@@ -481,7 +561,10 @@ export async function runApply(w: Wizard, target: ApplyTarget, values: Values, p
       status[id] = ended;
       tell({ kind: 'end', id, status: ended });
       if (ended !== 'fail') break;
-      const error = r.error ?? [...seen].reverse().find((l) => l.kind === 'fail' || l.kind === 'warn')?.text ?? at(w.locale, TASKS[id].hint);
+      const error =
+        r.error ??
+        [...seen].reverse().find((l) => l.kind === 'fail' || l.kind === 'warn')?.text ??
+        at(w.locale, TASKS[id].hint);
       const next = await hooks.decide(id, error);
       if (next === 'retry') continue;
       if (next === 'back') return { kind: 'back', to: id };

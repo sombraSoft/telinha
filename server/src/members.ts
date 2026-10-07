@@ -52,8 +52,10 @@ const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
 
 /** Online, then idle, then do-not-disturb, then offline; by name inside each. */
 export function sortMembers<T extends Pick<DirMember, 'id' | 'name' | 'status'>>(list: readonly T[]): T[] {
-  return [...list].sort((a, b) =>
-    RANK[a.status] - RANK[b.status] || collator.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return [...list].sort(
+    (a, b) =>
+      RANK[a.status] - RANK[b.status] || collator.compare(a.name, b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
 }
 
 export interface Directory {

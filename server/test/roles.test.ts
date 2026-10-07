@@ -16,7 +16,13 @@ function setup(answers: Array<string[] | number>) {
       return { roles: a };
     },
   });
-  return { isMember, tick: (ms: number) => { clock += ms; }, calls: () => calls };
+  return {
+    isMember,
+    tick: (ms: number) => {
+      clock += ms;
+    },
+    calls: () => calls,
+  };
 }
 
 test('caches the answer for the TTL', async () => {

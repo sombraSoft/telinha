@@ -48,7 +48,12 @@ export function parseQuality(v: unknown): QualityChoice {
  * A named preset whose values don't match falls back the same way.
  */
 export function parseShareSettings(v: unknown): ShareSettings {
-  const o = (v && typeof v === 'object' ? v : {}) as { res?: unknown; fps?: unknown; preset?: unknown; audio?: unknown };
+  const o = (v && typeof v === 'object' ? v : {}) as {
+    res?: unknown;
+    fps?: unknown;
+    preset?: unknown;
+    audio?: unknown;
+  };
   const r = Number(o.res);
   const f = Number(o.fps);
   const res = (RESOLUTIONS as readonly number[]).includes(r) ? (r as Res) : DEFAULT_SHARE.res;

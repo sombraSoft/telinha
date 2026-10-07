@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ControlStatus, UpdateMode, UpdateResult } from '../src/cli/control.ts';
 import { createControlClient } from '../src/cli/control.ts';
-import { createControl, type ControlDeps } from '../src/control.ts';
+import { type ControlDeps, createControl } from '../src/control.ts';
 import { setup } from './helpers.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'telinha-control-'));
@@ -13,8 +13,19 @@ let n = 0;
 
 const TOKEN = 'f'.repeat(64);
 const STATUS: ControlStatus = {
-  version: '9.9.9', startedAt: 1, pid: 42, ingress: 'direct', media: 'self', rooms: 0, children: { livekit: 'up' }, childStatus: { livekit: { state: 'up', pid: 7, restarts: 0, recentRestarts: 0, since: 1 } },
-  publicIp: null, upnp: null, ddns: null, update: null, supervised: false,
+  version: '9.9.9',
+  startedAt: 1,
+  pid: 42,
+  ingress: 'direct',
+  media: 'self',
+  rooms: 0,
+  children: { livekit: 'up' },
+  childStatus: { livekit: { state: 'up', pid: 7, restarts: 0, recentRestarts: 0, since: 1 } },
+  publicIp: null,
+  upnp: null,
+  ddns: null,
+  update: null,
+  supervised: false,
 };
 const RESULT = { action: 'none', message: 'up to date' } as UpdateResult;
 
@@ -76,7 +87,9 @@ describe('control endpoint', () => {
     const { req, calls } = make();
     const created = await req('/internal/doctor/sessions', { method: 'POST', body: '{}' });
     expect(await created.json()).toEqual({ id: 'a'.repeat(32), url: 'https://t.example/doctor?t=x', expiresAt: 5 });
-    expect(await (await req(`/internal/doctor/sessions/${'b'.repeat(32)}?wait=90000`)).json()).toEqual({ state: 'pending' });
+    expect(await (await req(`/internal/doctor/sessions/${'b'.repeat(32)}?wait=90000`)).json()).toEqual({
+      state: 'pending',
+    });
     await req(`/internal/doctor/sessions/${'b'.repeat(32)}`);
     expect((await req('/internal/doctor/sessions/xyz?wait=1')).status).toBe(404);
     expect(calls).toEqual([['create'], ['wait', 'b'.repeat(32), 30_000], ['wait', 'b'.repeat(32), 0]]);
@@ -92,7 +105,11 @@ describe('control endpoint', () => {
     }
     expect((await req('/internal/update', { method: 'POST', body: '{"mode":"force"}' })).status).toBe(400);
     expect((await req('/internal/update', { method: 'POST', body: 'nope' })).status).toBe(400);
-    expect(calls).toEqual([['update', 'check'], ['update', 'scheduled'], ['update', 'now']]);
+    expect(calls).toEqual([
+      ['update', 'check'],
+      ['update', 'scheduled'],
+      ['update', 'now'],
+    ]);
   });
 
   test('shutdown: 202 first, then the callback with the reason', async () => {
@@ -138,7 +155,12 @@ describe('through the HTTP handler and the CLI client', () => {
     const s = setup({ control });
     const run = join(tokenFile, '..');
     const fetchVia = async (url: string, init?: RequestInit) => (await s.handler(new Request(url, init)))!;
-    const client = createControlClient({ paths: { run }, envFile: join(dir, 'none.env'), env: { LISTEN: '127.0.0.1:8081' }, fetch: fetchVia });
+    const client = createControlClient({
+      paths: { run },
+      envFile: join(dir, 'none.env'),
+      env: { LISTEN: '127.0.0.1:8081' },
+      fetch: fetchVia,
+    });
     expect(await client.available()).toBe(false);
     control.writeToken();
     expect(await client.available()).toBe(true);
@@ -155,10 +177,18 @@ describe('over a real listener', () => {
   // anywhere up to ~4 s in; the answer has to come after that.
   const longPoll = async (lift: boolean) => {
     const { control } = make({
-      doctor: { create: () => ({ id: 'a'.repeat(32), url: '', expiresAt: 0 }), wait: async () => (await Bun.sleep(6000), { state: 'pending' }) },
+      doctor: {
+        create: () => ({ id: 'a'.repeat(32), url: '', expiresAt: 0 }),
+        wait: async () => (await Bun.sleep(6000), { state: 'pending' }),
+      },
     });
     const handler = setup({ control, timeout: lift ? (req, s) => server.timeout(req, s) : undefined }).handler;
-    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 1, fetch: async (req) => (await handler(req))! });
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      idleTimeout: 1,
+      fetch: async (req) => (await handler(req))!,
+    });
     try {
       const r = await fetch(`http://127.0.0.1:${server.port}/internal/doctor/sessions/${'a'.repeat(32)}?wait=25000`, {
         headers: { authorization: `Bearer ${TOKEN}` },

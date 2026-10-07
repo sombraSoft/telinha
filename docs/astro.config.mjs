@@ -1,5 +1,5 @@
-import { defineConfig, passthroughImageService } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { defineConfig, passthroughImageService } from 'astro/config';
 import starlightLinksValidator from 'starlight-links-validator';
 
 export default defineConfig({
@@ -22,10 +22,22 @@ export default defineConfig({
       customCss: ['./src/styles/custom.css'],
       // Each group lists its own locale's folder; page order comes from `sidebar.order`.
       sidebar: [
-        { label: 'Start here', translations: { 'pt-BR': 'Comece aqui' }, items: [{ autogenerate: { directory: 'start' } }] },
+        {
+          label: 'Start here',
+          translations: { 'pt-BR': 'Comece aqui' },
+          items: [{ autogenerate: { directory: 'start' } }],
+        },
         { label: 'Guides', translations: { 'pt-BR': 'Guias' }, items: [{ autogenerate: { directory: 'guides' } }] },
-        { label: 'Routers', translations: { 'pt-BR': 'Roteadores' }, items: [{ autogenerate: { directory: 'routers' } }] },
-        { label: 'Reference', translations: { 'pt-BR': 'Referência' }, items: [{ autogenerate: { directory: 'reference' } }] },
+        {
+          label: 'Routers',
+          translations: { 'pt-BR': 'Roteadores' },
+          items: [{ autogenerate: { directory: 'routers' } }],
+        },
+        {
+          label: 'Reference',
+          translations: { 'pt-BR': 'Referência' },
+          items: [{ autogenerate: { directory: 'reference' } }],
+        },
         { label: 'FAQ', translations: { 'pt-BR': 'Perguntas frequentes' }, slug: 'faq' },
         { label: 'Development', translations: { 'pt-BR': 'Desenvolvimento' }, slug: 'development' },
       ],

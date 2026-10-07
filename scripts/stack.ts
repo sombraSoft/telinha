@@ -86,7 +86,11 @@ async function pipe(name: string, stream: ReadableStream<Uint8Array>, out: NodeJ
 
 /** Polls `url` until it answers 2xx with a body `ok` accepts; a dead child fails fast. */
 async function waitFor(
-  what: string, url: string, children: Map<string, Bun.Subprocess>, ok: (body: unknown) => boolean, timeoutMs = 60_000,
+  what: string,
+  url: string,
+  children: Map<string, Bun.Subprocess>,
+  ok: (body: unknown) => boolean,
+  timeoutMs = 60_000,
 ) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -188,8 +192,12 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     spawn('server', opts.watch ? [process.execPath, '--watch', entry] : [process.execPath, entry], ROOT, env);
 
     // The server listens only once LiveKit answered; the state check keeps that a contract.
-    await waitFor('server', `http://127.0.0.1:${SERVER_PORT}/healthz`, children,
-      (b) => (b as { children?: Record<string, string> }).children?.livekit === 'up');
+    await waitFor(
+      'server',
+      `http://127.0.0.1:${SERVER_PORT}/healthz`,
+      children,
+      (b) => (b as { children?: Record<string, string> }).children?.livekit === 'up',
+    );
   } catch (e) {
     stop();
     throw e;
@@ -206,7 +214,10 @@ export async function placeholderWebDir(): Promise<string> {
   const dir = join(ROOT, '.cache', 'placeholder-web');
   await mkdir(dir, { recursive: true });
   // </head> is required: the server writes the command name into it.
-  await Bun.write(join(dir, 'index.html'), '<!doctype html><head></head><p>dev: the page is served by Vite on http://localhost:5173/r/</p>');
+  await Bun.write(
+    join(dir, 'index.html'),
+    '<!doctype html><head></head><p>dev: the page is served by Vite on http://localhost:5173/r/</p>',
+  );
   return dir;
 }
 
@@ -226,7 +237,8 @@ if (import.meta.main) {
   // livekit-server left over from a run that was killed hard.
   const dataDir = join(ROOT, '.cache', 'e2e-data');
   const entries = await readdir(dataDir).catch(() => [] as string[]);
-  for (const name of entries.filter((n) => n.startsWith('telinha.sqlite'))) await rm(join(dataDir, name), { force: true });
+  for (const name of entries.filter((n) => n.startsWith('telinha.sqlite')))
+    await rm(join(dataDir, name), { force: true });
   try {
     await startStack({
       publicUrl: 'http://localhost:8081',

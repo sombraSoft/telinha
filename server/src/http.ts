@@ -5,14 +5,14 @@
 // (/livekit/*), the room page (/r/<code>) and /healthz.
 // Everything external is injected so tests drive it with plain Request objects.
 import { randomBytes } from 'node:crypto';
-import { cookie, parseCookies, safeNext, SESSION, sign, STATE, verify, type Session } from './auth.ts';
+import { cookie, parseCookies, SESSION, type Session, STATE, safeNext, sign, verify } from './auth.ts';
+import { ROOM_RE } from './codes.ts';
 import type { Config } from './config.ts';
 import type { Control } from './control.ts';
 import { DOCTOR_COOKIE } from './doctor/session.ts';
-import { fromAcceptLanguage, resolveLocale, type Locale } from './i18n.ts';
-import { ROOM_RE } from './codes.ts';
+import { fromAcceptLanguage, type Locale, resolveLocale } from './i18n.ts';
 import { createToken, newIdentity } from './livekit.ts';
-import { devMembers, type DirMember } from './members.ts';
+import { type DirMember, devMembers } from './members.ts';
 import * as pages from './pages.ts';
 import type { LivekitProxy, ProxyData } from './proxy.ts';
 import type { IsMember } from './roles.ts';
@@ -61,7 +61,11 @@ export interface Deps {
   doctorCookie?: (value: string | undefined, now: number) => { id: string } | null;
 }
 
-interface OAuthState { s: string; next: string; exp: number }
+interface OAuthState {
+  s: string;
+  next: string;
+  exp: number;
+}
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
@@ -73,9 +77,11 @@ const withHeaders = (base: HeadersInit, extra: Record<string, string>) => {
 };
 const html = (status: number, body: string, headers: HeadersInit = {}) =>
   new Response(body, {
-    status, headers: withHeaders(headers, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }),
+    status,
+    headers: withHeaders(headers, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }),
   });
-const json = (status: number, body: unknown) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+const json = (status: number, body: unknown) =>
+  Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const redirect = (status: number, location: string, headers: HeadersInit = {}) =>
   new Response(null, { status, headers: withHeaders(headers, { Location: location, 'Cache-Control': 'no-store' }) });
 
@@ -92,8 +98,17 @@ export function uaFamily(ua: string | null): string {
   if (!ua) return 'none';
   if (/Discord/i.test(ua)) return 'discord-app';
   const mobile = /Mobile|Android|iPhone|iPad/i.test(ua) ? '-mobile' : '';
-  const name = /Edg\//.test(ua) ? 'edge' : /OPR\//.test(ua) ? 'opera' : /Firefox\//.test(ua) ? 'firefox'
-    : /Chrome\//.test(ua) ? 'chrome' : /Safari\//.test(ua) ? 'safari' : 'other';
+  const name = /Edg\//.test(ua)
+    ? 'edge'
+    : /OPR\//.test(ua)
+      ? 'opera'
+      : /Firefox\//.test(ua)
+        ? 'firefox'
+        : /Chrome\//.test(ua)
+          ? 'chrome'
+          : /Safari\//.test(ua)
+            ? 'safari'
+            : 'other';
   return name + mobile;
 }
 
@@ -129,7 +144,14 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
     // hit LISTEN directly, without a proxy's forwarding headers.
     if (path === '/healthz') {
       if (FORWARDED.some((h) => req.headers.has(h))) return json(200, { ok: true });
-      return json(200, { ok: true, version, discord: discordReady(), dev: Boolean(c.dev), rooms: openRooms(), children: children() });
+      return json(200, {
+        ok: true,
+        version,
+        discord: discordReady(),
+        dev: Boolean(c.dev),
+        rooms: openRooms(),
+        children: children(),
+      });
     }
 
     if (path === '/internal' || path.startsWith('/internal/')) {
@@ -163,7 +185,10 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       const next = safeNext(url.searchParams.get('next'));
       if (c.dev) {
         const s: Session = {
-          id: c.dev.id, name: c.dev.name, avatar: null, locale: c.devLocale ?? acceptLocale,
+          id: c.dev.id,
+          name: c.dev.name,
+          avatar: null,
+          locale: c.devLocale ?? acceptLocale,
           exp: now() + c.sessionSeconds * 1000,
         };
         log('dev login', c.dev.id);
@@ -172,7 +197,12 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       const state = Buffer.from(random(16)).toString('base64url');
       const v = sign(c.cookieSecret, { s: state, next, exp: now() + 10 * 60_000 } satisfies OAuthState);
       const q = new URLSearchParams({
-        client_id: c.clientId, response_type: 'code', redirect_uri: redirectUri, scope: 'identify', state, prompt: 'none',
+        client_id: c.clientId,
+        response_type: 'code',
+        redirect_uri: redirectUri,
+        scope: 'identify',
+        state,
+        prompt: 'none',
       });
       return redirect(302, `https://discord.com/oauth2/authorize?${q}`, {
         'Set-Cookie': ck(STATE, v, { maxAge: 600, path: '/auth' }),
@@ -186,21 +216,32 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       const fail = (why: string) => log('login failed', why, `ua=${uaFamily(req.headers.get('user-agent'))}`);
       const discordError = url.searchParams.get('error');
       if (discordError) {
-        fail(`discord ${discordError}${url.searchParams.get('error_description') ? `: ${url.searchParams.get('error_description')!.slice(0, 120)}` : ''}`);
+        fail(
+          `discord ${discordError}${url.searchParams.get('error_description') ? `: ${url.searchParams.get('error_description')!.slice(0, 120)}` : ''}`,
+        );
         return html(400, pages.expired(acceptLocale));
       }
       if (!st || !code || url.searchParams.get('state') !== st.s) {
-        fail(!cookies[STATE] ? 'no state cookie (callback opened in another browser?)'
-          : !st ? 'state cookie invalid or expired'
-            : !code ? 'no code' : 'state mismatch');
+        fail(
+          !cookies[STATE]
+            ? 'no state cookie (callback opened in another browser?)'
+            : !st
+              ? 'state cookie invalid or expired'
+              : !code
+                ? 'no code'
+                : 'state mismatch',
+        );
         return html(400, pages.expired(acceptLocale));
       }
       const tok = await doFetch(`${DISCORD_API}/oauth2/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          grant_type: 'authorization_code', code, redirect_uri: redirectUri,
-          client_id: c.clientId, client_secret: c.clientSecret,
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+          client_id: c.clientId,
+          client_secret: c.clientSecret,
         }),
       });
       if (!tok.ok) {
@@ -215,11 +256,18 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
         throw new Error(`users/@me ${me.status}`);
       }
       const user = (await me.json()) as {
-        id: string; username: string; global_name?: string | null; avatar?: string | null; locale?: string;
+        id: string;
+        username: string;
+        global_name?: string | null;
+        avatar?: string | null;
+        locale?: string;
       };
       const name = user.global_name || user.username;
       const s: Session = {
-        id: user.id, name, avatar: user.avatar ?? null, exp: now() + c.sessionSeconds * 1000,
+        id: user.id,
+        name,
+        avatar: user.avatar ?? null,
+        exp: now() + c.sessionSeconds * 1000,
         ...(user.locale ? { locale: user.locale } : {}),
       };
       const locale = localeOf(s);
@@ -260,10 +308,20 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       const name = me?.name ?? s.name;
       const avatar = me?.avatar ?? s.avatar ?? null;
       const token = await createToken({
-        key: c.livekitKey, secret: c.livekitSecret, room, identity, name, id: s.id, avatar,
+        key: c.livekitKey,
+        secret: c.livekitSecret,
+        room,
+        identity,
+        name,
+        id: s.id,
+        avatar,
       });
       return json(200, {
-        url: c.livekitUrl, token, identity, user: { id: s.id, name, avatar, locale }, group: group(locale),
+        url: c.livekitUrl,
+        token,
+        identity,
+        user: { id: s.id, name, avatar, locale },
+        group: group(locale),
       });
     }
 

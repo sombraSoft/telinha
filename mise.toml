@@ -33,6 +33,10 @@ shellcheck = "0.11.0"
 hadolint = "2.15.1"
 gitleaks = "8.30.1"
 editorconfig-checker = "4.0.2"
+# Lints and formats the TypeScript, JavaScript, Svelte, Astro, JSON and CSS
+# (biome.json). Renovate never automerges it: a new release can change which
+# code the lint job accepts.
+biome = "2.5.15"
 
 [hooks]
 postinstall = "bun scripts/setup-dev.ts"

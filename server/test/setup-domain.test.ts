@@ -1,15 +1,40 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  currentChoice, DEFAULT_HOME_HTTPS_PORT, extractTunnelToken, homeChoice, listenPort, parseDuckDomain, parseHost, sslipHost, takenPort, validTunnelToken,
+  currentChoice,
+  DEFAULT_HOME_HTTPS_PORT,
+  extractTunnelToken,
+  homeChoice,
+  listenPort,
+  parseDuckDomain,
+  parseHost,
+  sslipHost,
+  takenPort,
+  validTunnelToken,
 } from '../src/cli/setup/domain.ts';
-import { guessHosting, inferHosting, type HostInfo } from '../src/cli/setup/host.ts';
+import { guessHosting, type HostInfo, inferHosting } from '../src/cli/setup/host.ts';
 import type { NatProbe } from '../src/nat/index.ts';
 
 const TUNNEL = Buffer.from(JSON.stringify({ a: 'acct', t: 'tunnel-id', s: 'c2VjcmV0' })).toString('base64');
 
-const host = (o: { localIp?: string | null; gateway?: boolean; publicIp?: string | null; nat?: boolean } = {}): HostInfo => ({
-  kind: 'linux-root', platform: 'linux', arch: 'x64', isRoot: true, docker: false, osName: 'Linux', publicIp: o.publicIp === undefined ? '203.0.113.9' : o.publicIp,
-  nat: o.nat === false ? null : { gateway: o.gateway ? ({ kind: 'natpmp', gatewayIp: '10.0.0.1' } as NatProbe['gateway']) : null, externalIp: null, localIp: o.localIp ?? null, errors: [] },
+const host = (
+  o: { localIp?: string | null; gateway?: boolean; publicIp?: string | null; nat?: boolean } = {},
+): HostInfo => ({
+  kind: 'linux-root',
+  platform: 'linux',
+  arch: 'x64',
+  isRoot: true,
+  docker: false,
+  osName: 'Linux',
+  publicIp: o.publicIp === undefined ? '203.0.113.9' : o.publicIp,
+  nat:
+    o.nat === false
+      ? null
+      : {
+          gateway: o.gateway ? ({ kind: 'natpmp', gatewayIp: '10.0.0.1' } as NatProbe['gateway']) : null,
+          externalIp: null,
+          localIp: o.localIp ?? null,
+          errors: [],
+        },
 });
 
 describe('parsers', () => {
@@ -28,7 +53,7 @@ describe('parsers', () => {
   test('sslip host from an IP', () => {
     expect(sslipHost('203.0.113.9')).toBe('203-0-113-9.sslip.io');
   });
-  test('the token out of a pasted install command (what the dashboard\'s copy button copies)', () => {
+  test("the token out of a pasted install command (what the dashboard's copy button copies)", () => {
     expect(extractTunnelToken(`cloudflared.exe service install ${TUNNEL}`)).toBe(TUNNEL);
     expect(extractTunnelToken(`sudo cloudflared service install ${TUNNEL}\n`)).toBe(TUNNEL);
     expect(extractTunnelToken(`  ${TUNNEL}  `)).toBe(TUNNEL);
@@ -52,7 +77,7 @@ describe('re-run defaults', () => {
     expect(guessHosting(host({ localIp: '203.0.113.9', publicIp: null }))).toBe('home');
   });
 
-  test('inferHosting: the file\'s answer, else its VPS-only keys, else the machine', () => {
+  test("inferHosting: the file's answer, else its VPS-only keys, else the machine", () => {
     const vpsLike = host({ localIp: '203.0.113.9' });
     expect(inferHosting({ HOSTING: 'home' }, vpsLike)).toBe('home');
     expect(inferHosting({ HOSTING: 'vps' }, host())).toBe('vps');
@@ -74,7 +99,7 @@ describe('re-run defaults', () => {
     expect(homeChoice({ HOSTING: 'vps', INGRESS: 'tunnel' })).toBe('yes');
   });
 
-  test('currentChoice reads the VPS list\'s default from the file', () => {
+  test("currentChoice reads the VPS list's default from the file", () => {
     expect(currentChoice({ INGRESS: 'tunnel' })).toBe('tunnel');
     expect(currentChoice({ INGRESS: 'direct', DDNS_PROVIDER: 'duckdns' })).toBe('duckdns');
     expect(currentChoice({ PUBLIC_URL: 'https://1-2-3-4.sslip.io' })).toBe('sslip');

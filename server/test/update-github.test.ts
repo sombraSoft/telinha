@@ -25,15 +25,23 @@ describe('createGitHubReleases', () => {
   });
 
   test('latestTag: no release (404) or offline -> null', async () => {
-    expect(await createGitHubReleases({ fetch: fakeFetch(() => new Response('', { status: 404 })).fetch }).latestTag()).toBeNull();
+    expect(
+      await createGitHubReleases({ fetch: fakeFetch(() => new Response('', { status: 404 })).fetch }).latestTag(),
+    ).toBeNull();
     expect(await createGitHubReleases({ fetch: fakeFetch(() => new Error('ENOTFOUND')).fetch }).latestTag()).toBeNull();
   });
 
   test('assetUrl under releases/download/<tag>/', () => {
     const gh = createGitHubReleases({ fetch: fakeFetch(() => new Response('')).fetch });
-    expect(gh.assetUrl('v0.8.0', 'telinha-linux-x64.tar.gz')).toBe('https://github.com/sombraSoft/telinha/releases/download/v0.8.0/telinha-linux-x64.tar.gz');
-    expect(gh.assetUrl('v0.8.0-rc.1', 'SHA256SUMS')).toBe('https://github.com/sombraSoft/telinha/releases/download/v0.8.0-rc.1/SHA256SUMS');
-    expect(createGitHubReleases({ repo: 'me/fork' }).assetUrl('v1.0.0', 'x')).toBe('https://github.com/me/fork/releases/download/v1.0.0/x');
+    expect(gh.assetUrl('v0.8.0', 'telinha-linux-x64.tar.gz')).toBe(
+      'https://github.com/sombraSoft/telinha/releases/download/v0.8.0/telinha-linux-x64.tar.gz',
+    );
+    expect(gh.assetUrl('v0.8.0-rc.1', 'SHA256SUMS')).toBe(
+      'https://github.com/sombraSoft/telinha/releases/download/v0.8.0-rc.1/SHA256SUMS',
+    );
+    expect(createGitHubReleases({ repo: 'me/fork' }).assetUrl('v1.0.0', 'x')).toBe(
+      'https://github.com/me/fork/releases/download/v1.0.0/x',
+    );
   });
 
   test('sums: parsed when present; 404 and network errors are PendingError', async () => {
@@ -54,7 +62,9 @@ describe('createGitHubReleases', () => {
     expect(res.ok).toBe(true);
     expect(await res.text()).toBe('zipbytes');
     expect((await gh.asset('v0.8.0', 'telinha-linux-x64.tar.gz')).status).toBe(404);
-    await expect(createGitHubReleases({ fetch: fakeFetch(() => new Error('reset')).fetch }).asset('v1', 'a')).rejects.toBeInstanceOf(PendingError);
+    await expect(
+      createGitHubReleases({ fetch: fakeFetch(() => new Error('reset')).fetch }).asset('v1', 'a'),
+    ).rejects.toBeInstanceOf(PendingError);
   });
 
   test('latestStable hides prereleases', async () => {

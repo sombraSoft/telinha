@@ -3,19 +3,53 @@
 // both end there); defaultAnswers() reads a re-run's answers back from the
 // file; answersFromFlags() turns the command line (flags over environment over
 // file) into answers with the non-interactive rules and messages.
-import { inferHosting, SSLIP_RE, type HostInfo, type Hosting } from './host.ts';
+
+import type { Locale } from '../strings.ts';
 import { SNOWFLAKE_RE, validCommand } from './discord.ts';
-import { currentChoice, DEFAULT_HOME_HTTPS_PORT, extractTunnelToken, homeChoice, parseDuckDomain, parseHost, takenPort, validTunnelToken } from './domain.ts';
 import {
-  addressChoice, addressValues, ALWAYS_COUNTED, cloudUrl, directLow, fileHosting, flowIds, mediaPorts, QUESTIONS, trayHere, turnAuto, turnBlocked, txt,
-  type AddressChoice, type AnswerId, type Answers, type ModelEnv, type QuestionId, type Text,
+  currentChoice,
+  DEFAULT_HOME_HTTPS_PORT,
+  extractTunnelToken,
+  homeChoice,
+  parseDuckDomain,
+  parseHost,
+  takenPort,
+  validTunnelToken,
+} from './domain.ts';
+import { type HostInfo, type Hosting, inferHosting, SSLIP_RE } from './host.ts';
+import {
+  type AddressChoice,
+  ALWAYS_COUNTED,
+  type AnswerId,
+  type Answers,
+  addressChoice,
+  addressValues,
+  cloudUrl,
+  directLow,
+  fileHosting,
+  flowIds,
+  type ModelEnv,
+  mediaPorts,
+  QUESTIONS,
+  type QuestionId,
+  type Text,
+  trayHere,
+  turnAuto,
+  turnBlocked,
+  txt,
 } from './model.ts';
 import { q } from './qstrings.ts';
 import type { Values } from './steps.ts';
 import type { TrayChoice } from './tray.ts';
-import type { Locale } from '../strings.ts';
 
-export interface ResolveBase { file: Values; host: HostInfo | null; locale: Locale; langFlag: boolean; docker: boolean; compiled: boolean }
+export interface ResolveBase {
+  file: Values;
+  host: HostInfo | null;
+  locale: Locale;
+  langFlag: boolean;
+  docker: boolean;
+  compiled: boolean;
+}
 
 const str = (v: string | string[] | undefined): string => (typeof v === 'string' ? v : '');
 
@@ -28,7 +62,7 @@ export function resolveValues(a: Answers, env: ModelEnv, base: ResolveBase): Val
   const c: Answers = {};
   for (const id of new Set<AnswerId>([...flowIds(a, env), ...ALWAYS_COUNTED])) if (a[id] !== undefined) c[id] = a[id];
   const v: Values = { ...base.file };
-  v.LOCALE = c.lang !== undefined ? str(c.lang) : base.langFlag ? base.locale : base.file.LOCALE ?? '';
+  v.LOCALE = c.lang !== undefined ? str(c.lang) : base.langFlag ? base.locale : (base.file.LOCALE ?? '');
   v.HOSTING = str(c.hosting);
   Object.assign(v, addressValues(c, { host: env.host ?? base.host }));
   // A VPS has no router to ask: no "forward the ports by hand" at every start.
@@ -68,7 +102,7 @@ export function resolveValues(a: Answers, env: ModelEnv, base: ResolveBase): Val
   set('CHANNEL_IDS', 'channels');
   set('COMMAND_NAME', 'command');
   set('GROUP_NAME', 'group');
-  v.AUTO_UPDATE = c.autoUpdate !== undefined ? str(c.autoUpdate) : base.file.AUTO_UPDATE ?? '';
+  v.AUTO_UPDATE = c.autoUpdate !== undefined ? str(c.autoUpdate) : (base.file.AUTO_UPDATE ?? '');
   return v;
 }
 
@@ -79,9 +113,15 @@ export function webAddress(a: Answers, env: ModelEnv, base: ResolveBase): string
 
 /** The leaf answers that make each address, compared before a hidden URL is reused. */
 const LEAVES: Record<AddressChoice, QuestionId[]> = {
-  domain: ['domain'], duckdns: ['duckName'], 'duckdns-home': ['duckName', 'httpsPort'], sslip: ['nodeIp'], tunnel: ['tunnelHost'], external: ['externalUrl'],
+  domain: ['domain'],
+  duckdns: ['duckName'],
+  'duckdns-home': ['duckName', 'httpsPort'],
+  sslip: ['nodeIp'],
+  tunnel: ['tunnelHost'],
+  external: ['externalUrl'],
 };
-const same = (x: string | string[] | undefined, y: string | string[] | undefined) => JSON.stringify(x) === JSON.stringify(y);
+const same = (x: string | string[] | undefined, y: string | string[] | undefined) =>
+  JSON.stringify(x) === JSON.stringify(y);
 
 /**
  * The hidden answers `source` (the file's defaults, or the flags) carries that still fit `a`:
@@ -98,7 +138,8 @@ export function keepHidden(a: Answers, source: Answers): Answers {
   }
   const sameMode = choice !== null && choice === was && a.hosting === source.hosting;
   if (sameMode && source.pinnedIp !== undefined) out.pinnedIp = source.pinnedIp;
-  if (sameMode && source.publicUrl !== undefined && LEAVES[choice].every((id) => same(a[id], source[id]))) out.publicUrl = source.publicUrl;
+  if (sameMode && source.publicUrl !== undefined && LEAVES[choice].every((id) => same(a[id], source[id])))
+    out.publicUrl = source.publicUrl;
   return out;
 }
 
@@ -112,14 +153,24 @@ export function defaultAnswers(env: ModelEnv): Answers {
   const f = env.file;
   const choice = addressChoice(a);
   // Custom direct ports survive a re-run of the same mode (a VPS, or an advanced home).
-  if (f.HOSTING === a.hosting && (f.INGRESS || 'direct') === 'direct' && f.ACME_DNS !== 'duckdns' && directLow(choice)) {
+  if (
+    f.HOSTING === a.hosting &&
+    (f.INGRESS || 'direct') === 'direct' &&
+    f.ACME_DNS !== 'duckdns' &&
+    directLow(choice)
+  ) {
     if (f.HTTP_PORT && f.HTTP_PORT !== '80') a.httpPort = f.HTTP_PORT;
     if (f.HTTPS_PORT && f.HTTPS_PORT !== '443') a.httpsPortDirect = f.HTTPS_PORT;
   }
   // A pinned IP outside sslip.io stays while the mode does; DuckDNS follows the IP, so never there.
-  if (f.LIVEKIT_NODE_IP && (choice === 'domain' || choice === 'tunnel' || choice === 'external')) a.pinnedIp = f.LIVEKIT_NODE_IP;
+  if (f.LIVEKIT_NODE_IP && (choice === 'domain' || choice === 'tunnel' || choice === 'external'))
+    a.pinnedIp = f.LIVEKIT_NODE_IP;
   // The file's own address when the answers cannot spell it (a port, a path): kept until it changes.
-  if (f.PUBLIC_URL && (choice === 'domain' || choice === 'tunnel' || choice === 'external') && addressValues(a, env).PUBLIC_URL !== f.PUBLIC_URL) {
+  if (
+    f.PUBLIC_URL &&
+    (choice === 'domain' || choice === 'tunnel' || choice === 'external') &&
+    addressValues(a, env).PUBLIC_URL !== f.PUBLIC_URL
+  ) {
     a.publicUrl = f.PUBLIC_URL;
   }
   return a;
@@ -127,20 +178,42 @@ export function defaultAnswers(env: ModelEnv): Answers {
 
 /** `ParsedArgs<typeof SETUP_SPEC>['flags']`, structurally: the flags the answers come from. */
 export interface SetupFlagValues {
-  host?: string; 'public-url'?: string; ingress?: string; advanced?: boolean;
-  'http-port'?: string; 'https-port'?: string; 'duckdns-domain'?: string;
-  'media-tcp'?: string; 'media-udp'?: string; 'node-ip'?: string;
-  'client-id'?: string; guild?: string; role?: string; channels?: string; command?: string; group?: string;
-  upnp?: string; 'auto-update'?: string; lang?: string;
-  'no-discord-check'?: boolean; 'no-tray'?: boolean; 'tray-autostart'?: boolean;
-  media?: string; 'cloud-url'?: string; 'livekit-key'?: string; turn?: string;
+  host?: string;
+  'public-url'?: string;
+  ingress?: string;
+  advanced?: boolean;
+  'http-port'?: string;
+  'https-port'?: string;
+  'duckdns-domain'?: string;
+  'media-tcp'?: string;
+  'media-udp'?: string;
+  'node-ip'?: string;
+  'client-id'?: string;
+  guild?: string;
+  role?: string;
+  channels?: string;
+  command?: string;
+  group?: string;
+  upnp?: string;
+  'auto-update'?: string;
+  lang?: string;
+  'no-discord-check'?: boolean;
+  'no-tray'?: boolean;
+  'tray-autostart'?: boolean;
+  media?: string;
+  'cloud-url'?: string;
+  'livekit-key'?: string;
+  turn?: string;
 }
 
 /**
  * The tray icon from the flags; null where there is none. Without --tray-autostart
  * the sign-in value stays as it is; --no-tray removes it with the icon.
  */
-export function trayFromFlags(flags: SetupFlagValues, env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>): TrayChoice | null {
+export function trayFromFlags(
+  flags: SetupFlagValues,
+  env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>,
+): TrayChoice | null {
   if (!trayHere(env)) return null;
   if (flags['no-tray']) return { install: false, autostart: false };
   return { install: true, autostart: flags['tray-autostart'] ? true : null };
@@ -148,7 +221,10 @@ export function trayFromFlags(flags: SetupFlagValues, env: Pick<ModelEnv, 'platf
 
 type SecretKey = 'DISCORD_TOKEN' | 'DISCORD_CLIENT_SECRET' | 'TUNNEL_TOKEN' | 'DUCKDNS_TOKEN' | 'LIVEKIT_API_SECRET';
 const SECRETS: readonly [SecretKey, string][] = [
-  ['DISCORD_TOKEN', 'discord-token-file'], ['DISCORD_CLIENT_SECRET', 'client-secret-file'], ['TUNNEL_TOKEN', 'tunnel-token-file'], ['DUCKDNS_TOKEN', 'duckdns-token-file'],
+  ['DISCORD_TOKEN', 'discord-token-file'],
+  ['DISCORD_CLIENT_SECRET', 'client-secret-file'],
+  ['TUNNEL_TOKEN', 'tunnel-token-file'],
+  ['DUCKDNS_TOKEN', 'duckdns-token-file'],
   ['LIVEKIT_API_SECRET', 'livekit-secret-file'],
 ];
 
@@ -198,7 +274,12 @@ function urlOrigin(url: string): string {
   }
 }
 
-interface Collected { values: Values; errors: { text: Text; blame: string[] }[]; missing: string[]; hosting: Hosting | null }
+interface Collected {
+  values: Values;
+  errors: { text: Text; blame: string[] }[];
+  missing: string[];
+  hosting: Hosting | null;
+}
 
 /**
  * The non-interactive rules on a copy of the file's values: flags over environment over
@@ -226,12 +307,14 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
     if (v !== undefined) values[key] = v.trim();
   };
   const oneOf = (flag: string, v: string | undefined, allowed: string[]) => {
-    if (v !== undefined && !allowed.includes(v)) err(txt('badFlagValue', { flag: `--${flag}`, value: v, allowed: allowed.join(' | ') }), flag);
+    if (v !== undefined && !allowed.includes(v))
+      err(txt('badFlagValue', { flag: `--${flag}`, value: v, allowed: allowed.join(' | ') }), flag);
     return v;
   };
   const port = (flag: string, key: string, v: string | undefined) => {
     if (v === undefined) return;
-    if (!/^\d+$/.test(v) || Number(v) > 65535) err(txt('badFlagValue', { flag: `--${flag}`, value: v, allowed: '0-65535' }), flag);
+    if (!/^\d+$/.test(v) || Number(v) > 65535)
+      err(txt('badFlagValue', { flag: `--${flag}`, value: v, allowed: '0-65535' }), flag);
     values[key] = v;
   };
 
@@ -246,7 +329,14 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   set('DISCORD_CLIENT_ID', flags['client-id']);
   set('GUILD_ID', flags.guild);
   set('ROLE_ID', flags.role);
-  set('CHANNEL_IDS', flags.channels?.split(',').map((c) => c.trim()).filter(Boolean).join(','));
+  set(
+    'CHANNEL_IDS',
+    flags.channels
+      ?.split(',')
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .join(','),
+  );
   set('COMMAND_NAME', flags.command);
   set('GROUP_NAME', flags.group);
   set('UPNP', oneOf('upnp', flags.upnp, ['auto', 'off']));
@@ -258,7 +348,11 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   if (flags.lang) values.LOCALE = o.locale;
   if (flags['duckdns-domain'] !== undefined) {
     const d = parseDuckDomain(flags['duckdns-domain']);
-    if (!d) err(txt('badFlagValue', { flag: '--duckdns-domain', value: flags['duckdns-domain'], allowed: 'a-z 0-9 -' }), 'duckdns-domain');
+    if (!d)
+      err(
+        txt('badFlagValue', { flag: '--duckdns-domain', value: flags['duckdns-domain'], allowed: 'a-z 0-9 -' }),
+        'duckdns-domain',
+      );
     else {
       values.DDNS_PROVIDER = 'duckdns';
       values.DUCKDNS_DOMAIN = d;
@@ -266,7 +360,10 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
       // DuckDNS lives in direct mode only: a tunnel or proxy file switching to it becomes direct.
       if (flags.ingress === undefined) values.INGRESS = 'direct';
       else if (flags.ingress === 'tunnel' || flags.ingress === 'external') {
-        err(txt('badFlagValue', { flag: '--ingress', value: flags.ingress, allowed: 'direct (with --duckdns-domain)' }), 'ingress');
+        err(
+          txt('badFlagValue', { flag: '--ingress', value: flags.ingress, allowed: 'direct (with --duckdns-domain)' }),
+          'ingress',
+        );
       }
       // At home the name means the high port unless --advanced says 80/443.
       if (!advancedFlag) values.ACME_DNS = 'duckdns';
@@ -281,21 +378,40 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   if (values.TUNNEL_TOKEN) values.TUNNEL_TOKEN = extractTunnelToken(values.TUNNEL_TOKEN);
   // A --public-url on another host leaves DuckDNS: its keys go, or the updater
   // keeps writing the old name and the rules below take the file's name as given.
-  if (flags['public-url'] !== undefined && flags['duckdns-domain'] === undefined && values.DUCKDNS_DOMAIN && urlHost(values.PUBLIC_URL) !== `${values.DUCKDNS_DOMAIN}.duckdns.org`) {
+  if (
+    flags['public-url'] !== undefined &&
+    flags['duckdns-domain'] === undefined &&
+    values.DUCKDNS_DOMAIN &&
+    urlHost(values.PUBLIC_URL) !== `${values.DUCKDNS_DOMAIN}.duckdns.org`
+  ) {
     values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.ACME_DNS = '';
   }
   // A switch to a tunnel or a proxy needs that path's own address: the old one
   // (a DuckDNS name, an IP) is not what Cloudflare or the proxy serves.
-  if ((values.INGRESS === 'tunnel' || values.INGRESS === 'external') && values.INGRESS !== was.ingress && flags['public-url'] === undefined) values.PUBLIC_URL = '';
+  if (
+    (values.INGRESS === 'tunnel' || values.INGRESS === 'external') &&
+    values.INGRESS !== was.ingress &&
+    flags['public-url'] === undefined
+  )
+    values.PUBLIC_URL = '';
   // Where it runs: --host or HOSTING, else the VPS-only keys (read before the node IP
   // below may go), else the machine. The pre-pass enforces the home rules only when
   // the hosting is stated: otherwise the hosting question decides.
   const stated = values.HOSTING === 'home' || values.HOSTING === 'vps' ? values.HOSTING : null;
-  const hosting: Hosting | null = o.lenient ? stated : env.host ? inferHosting(values, env.host) : fileHosting(values) ?? 'home';
+  const hosting: Hosting | null = o.lenient
+    ? stated
+    : env.host
+      ? inferHosting(values, env.host)
+      : (fileHosting(values) ?? 'home');
   // A pinned IP belongs to sslip.io: switching away (or to DuckDNS, which follows
   // the IP) without --node-ip drops it, or DuckDNS and LiveKit keep a stale one.
-  const modeChanged = flags.ingress !== undefined || flags['duckdns-domain'] !== undefined || flags['public-url'] !== undefined;
-  if (flags['node-ip'] === undefined && (modeChanged || values.DDNS_PROVIDER === 'duckdns') && !SSLIP_RE.test(values.PUBLIC_URL ?? '')) {
+  const modeChanged =
+    flags.ingress !== undefined || flags['duckdns-domain'] !== undefined || flags['public-url'] !== undefined;
+  if (
+    flags['node-ip'] === undefined &&
+    (modeChanged || values.DDNS_PROVIDER === 'duckdns') &&
+    !SSLIP_RE.test(values.PUBLIC_URL ?? '')
+  ) {
     values.LIVEKIT_NODE_IP = '';
   }
 
@@ -307,14 +423,24 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
     if (hosting === 'home') {
       // A plain re-run of an advanced home file (--guild, a new token) is already
       // confirmed; a run that changes the address or the ports must say so again.
-      const advanced = advancedFlag || (was.advanced && !modeChanged && flags['https-port'] === undefined && flags['http-port'] === undefined);
+      const advanced =
+        advancedFlag ||
+        (was.advanced && !modeChanged && flags['https-port'] === undefined && flags['http-port'] === undefined);
       if (ingress === 'direct' && values.DUCKDNS_DOMAIN && !advanced) {
         // Home connections block 80/443: HTTPS on a high port that the URL carries, the certificate through the DuckDNS API.
-        const https = flags['https-port'] ?? (was.highPort ? before.HTTPS_PORT || undefined : undefined) ?? DEFAULT_HOME_HTTPS_PORT;
+        const https =
+          flags['https-port'] ?? (was.highPort ? before.HTTPS_PORT || undefined : undefined) ?? DEFAULT_HOME_HTTPS_PORT;
         const taken = takenPort(values, Number(https));
         if (Number(https) < 1024 || (flags['http-port'] !== undefined && flags['http-port'] !== '0')) {
-          err(txt('homeNeedsAdvanced'), ...(given('https-port', 'http-port').length ? given('https-port', 'http-port') : ['host']));
-        } else if (taken) err(txt('badFlagValue', { flag: '--https-port', value: https, allowed: `1024-65535, != ${taken}` }), 'https-port');
+          err(
+            txt('homeNeedsAdvanced'),
+            ...(given('https-port', 'http-port').length ? given('https-port', 'http-port') : ['host']),
+          );
+        } else if (taken)
+          err(
+            txt('badFlagValue', { flag: '--https-port', value: https, allowed: `1024-65535, != ${taken}` }),
+            'https-port',
+          );
         const url = `https://${values.DUCKDNS_DOMAIN}.duckdns.org:${https}`;
         if (flags['public-url'] !== undefined && urlOrigin(values.PUBLIC_URL ?? '') !== urlOrigin(url)) {
           err(txt('badFlagValue', { flag: '--public-url', value: flags['public-url'], allowed: url }), 'public-url');
@@ -333,14 +459,16 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
         values.HTTPS_PORT = flags['https-port'] ?? ((was.advanced && values.HTTPS_PORT) || '443');
         values.HTTP_PORT = flags['http-port'] ?? ((was.advanced && values.HTTP_PORT) || '80');
         values.ACME_DNS = '';
-        if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined) values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
+        if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined)
+          values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
       }
     } else if (ingress === 'direct') {
       // A VPS has 80/443: the certificate comes over them, DuckDNS included.
       values.HTTPS_PORT = flags['https-port'] ?? ((was.vpsDirect && values.HTTPS_PORT) || '443');
       values.HTTP_PORT = flags['http-port'] ?? ((was.vpsDirect && values.HTTP_PORT) || '80');
       values.ACME_DNS = '';
-      if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined) values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
+      if (values.DUCKDNS_DOMAIN && flags['public-url'] === undefined)
+        values.PUBLIC_URL = `https://${values.DUCKDNS_DOMAIN}.duckdns.org`;
     }
   }
   if (flags.upnp === undefined) {
@@ -373,13 +501,25 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
 
   // Keys the chosen mode does not use go away (a re-run may switch modes).
   if (ingress !== 'tunnel') values.TUNNEL_TOKEN = '';
-  if (ingress !== 'direct') values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.HTTP_PORT = values.HTTPS_PORT = values.ACME_DNS = '';
+  if (ingress !== 'direct')
+    values.DDNS_PROVIDER =
+      values.DUCKDNS_DOMAIN =
+      values.DUCKDNS_TOKEN =
+      values.HTTP_PORT =
+      values.HTTPS_PORT =
+      values.ACME_DNS =
+        '';
   if (values.ACME_DNS !== 'duckdns') values.ACME_DNS = '';
   if (flags.turn === undefined) dropImpossibleTurn(values);
   if (values.COMMAND_NAME && !validCommand(values.COMMAND_NAME)) err(txt('commandBad'), 'command');
   if (values.TUNNEL_TOKEN && !validTunnelToken(values.TUNNEL_TOKEN)) err(txt('tunnelTokenBad'), 'TUNNEL_TOKEN');
-  for (const [key, flag] of [['DISCORD_CLIENT_ID', 'client-id'], ['GUILD_ID', 'guild'], ['ROLE_ID', 'role']] as const) {
-    if (values[key] && !SNOWFLAKE_RE.test(values[key]!)) err(txt('badFlagValue', { flag: `--${flag}`, value: values[key]!, allowed: s('idAllowed') }), flag);
+  for (const [key, flag] of [
+    ['DISCORD_CLIENT_ID', 'client-id'],
+    ['GUILD_ID', 'guild'],
+    ['ROLE_ID', 'role'],
+  ] as const) {
+    if (values[key] && !SNOWFLAKE_RE.test(values[key]!))
+      err(txt('badFlagValue', { flag: `--${flag}`, value: values[key]!, allowed: s('idAllowed') }), flag);
   }
   if (values.CHANNEL_IDS && !values.CHANNEL_IDS.split(',').every((c) => SNOWFLAKE_RE.test(c))) {
     err(txt('badFlagValue', { flag: '--channels', value: values.CHANNEL_IDS, allowed: s('idAllowed') }), 'channels');
@@ -389,7 +529,8 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   const need = (key: string, what: string) => {
     if (!values[key]) missing.push(what);
   };
-  const secret = (key: SecretKey) => s('missingSecret', { env: key, flag: `--${SECRETS.find(([k]) => k === key)![1]}` });
+  const secret = (key: SecretKey) =>
+    s('missingSecret', { env: key, flag: `--${SECRETS.find(([k]) => k === key)![1]}` });
   need('PUBLIC_URL', '--public-url');
   need('DISCORD_TOKEN', secret('DISCORD_TOKEN'));
   need('DISCORD_CLIENT_SECRET', secret('DISCORD_CLIENT_SECRET'));
@@ -399,7 +540,8 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   need('CHANNEL_IDS', '--channels');
   if (ingress === 'tunnel') need('TUNNEL_TOKEN', secret('TUNNEL_TOKEN'));
   // The same token serves the DNS record and the certificate.
-  if (values.DDNS_PROVIDER === 'duckdns' || values.ACME_DNS === 'duckdns') need('DUCKDNS_TOKEN', secret('DUCKDNS_TOKEN'));
+  if (values.DDNS_PROVIDER === 'duckdns' || values.ACME_DNS === 'duckdns')
+    need('DUCKDNS_TOKEN', secret('DUCKDNS_TOKEN'));
   if (media === 'cloud') {
     need('LIVEKIT_CLOUD_URL', '--cloud-url');
     need('LIVEKIT_API_KEY', '--livekit-key');
@@ -416,7 +558,12 @@ function answersOf(values: Values, hosting: Hosting, env: ModelEnv): Answers {
     if (ingress === 'tunnel') a.homeCf = 'yes';
     else if (ingress === 'external') Object.assign(a, { homeCf: 'advanced', homeAdvanced: 'proxy' });
     else if (values.ACME_DNS === 'duckdns') a.homeCf = 'no';
-    else Object.assign(a, { homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: values.DDNS_PROVIDER === 'duckdns' ? 'duckdns' : 'domain' });
+    else
+      Object.assign(a, {
+        homeCf: 'advanced',
+        homeAdvanced: 'ports',
+        advancedAddress: values.DDNS_PROVIDER === 'duckdns' ? 'duckdns' : 'domain',
+      });
   } else {
     a.vpsAddress = currentChoice(values);
   }
@@ -498,7 +645,10 @@ function presetOf(flags: SetupFlagValues, o: FlagOptions, blamed: Set<string>): 
     put('externalUrl', url);
   } else if (duck) {
     Object.assign(a, { duckName: duck, vpsAddress: 'duckdns' });
-    Object.assign(a, advanced ? { homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: 'duckdns' } : { homeCf: 'no' });
+    Object.assign(
+      a,
+      advanced ? { homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: 'duckdns' } : { homeCf: 'no' },
+    );
   } else if (url && SSLIP_RE.test(url)) {
     a.vpsAddress = 'sslip';
   } else if (url && parseHost(url)) {
@@ -528,7 +678,14 @@ function presetOf(flags: SetupFlagValues, o: FlagOptions, blamed: Set<string>): 
   if (ok('client-id')) put('clientId', flags['client-id']!.trim());
   if (ok('guild')) put('guild', flags.guild!.trim());
   if (ok('role')) put('role', flags.role!.trim());
-  if (ok('channels')) put('channels', flags.channels!.split(',').map((c) => c.trim()).filter(Boolean));
+  if (ok('channels'))
+    put(
+      'channels',
+      flags
+        .channels!.split(',')
+        .map((c) => c.trim())
+        .filter(Boolean),
+    );
   put('discordToken', o.secrets.DISCORD_TOKEN);
   put('clientSecret', o.secrets.DISCORD_CLIENT_SECRET);
   put('duckToken', o.secrets.DUCKDNS_TOKEN);
@@ -542,7 +699,11 @@ function presetOf(flags: SetupFlagValues, o: FlagOptions, blamed: Set<string>): 
  * lenient=true is the setup screens' pre-pass: the flags become the questions' defaults,
  * nothing is missing, and an error leaves its flags out of those defaults.
  */
-export function answersFromFlags(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): { answers: Answers; errors: Text[]; missing: string[] } {
+export function answersFromFlags(
+  flags: SetupFlagValues,
+  env: ModelEnv,
+  o: FlagOptions,
+): { answers: Answers; errors: Text[]; missing: string[] } {
   const r = collect(flags, env, o);
   const errors = r.errors.map((e) => e.text);
   if (o.lenient) return { answers: presetOf(flags, o, new Set(r.errors.flatMap((e) => e.blame))), errors, missing: [] };

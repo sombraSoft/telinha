@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { basename } from 'node:path';
-import { runLoop, type RunLoopChild, type RunLoopOptions } from '../src/service/runloop.ts';
+import { type RunLoopChild, type RunLoopOptions, runLoop } from '../src/service/runloop.ts';
 import type { UpdateFs } from '../src/update/types.ts';
 
 const T0 = 1_700_000_000_000;
@@ -20,7 +20,9 @@ function memFs() {
   const fs: UpdateFs = {
     async readdir(dir) {
       const d = `${n(dir).replace(/\/$/, '')}/`;
-      return [...files.keys()].filter((k) => k.startsWith(d) && !k.slice(d.length).includes('/')).map((k) => k.slice(d.length));
+      return [...files.keys()]
+        .filter((k) => k.startsWith(d) && !k.slice(d.length).includes('/'))
+        .map((k) => k.slice(d.length));
     },
     async rename(from, to) {
       const e = files.get(n(from));
@@ -55,7 +57,10 @@ function memFs() {
     async mkdir() {},
     async openWrite(p) {
       const chunks: Uint8Array[] = [];
-      return { write: async (c) => void chunks.push(c), close: async () => void files.set(n(p), { data: Buffer.concat(chunks), mtimeMs: ++clock }) };
+      return {
+        write: async (c) => void chunks.push(c),
+        close: async () => void files.set(n(p), { data: Buffer.concat(chunks), mtimeMs: ++clock }),
+      };
     },
   };
   const put = (p: string, text: string, mtimeMs = ++clock) => files.set(n(p), { data: enc.encode(text), mtimeMs });
@@ -63,8 +68,20 @@ function memFs() {
     const e = files.get(n(p));
     return e ? dec.decode(e.data) : null;
   };
-  const names = (dir: string) => [...files.keys()].filter((k) => k.startsWith(`${dir}/`)).map((k) => basename(k)).sort();
-  return { fs, ops, put, text, names, has: (p: string) => files.has(n(p)), state: () => JSON.parse(text(STATE) ?? '{}') as Record<string, any> };
+  const names = (dir: string) =>
+    [...files.keys()]
+      .filter((k) => k.startsWith(`${dir}/`))
+      .map((k) => basename(k))
+      .sort();
+  return {
+    fs,
+    ops,
+    put,
+    text,
+    names,
+    has: (p: string) => files.has(n(p)),
+    state: () => JSON.parse(text(STATE) ?? '{}') as Record<string, any>,
+  };
 }
 
 interface FakeChild extends RunLoopChild {
@@ -88,13 +105,29 @@ function harness(o: { platform?: NodeJS.Platform; withStdout?: boolean } = {}) {
   const m = memFs();
   const spawn: RunLoopOptions['spawn'] = (cmd, env) => {
     let resolveExit!: (code: number | null) => void;
-    const exited = new Promise<number | null>((r) => { resolveExit = r; });
+    const exited = new Promise<number | null>((r) => {
+      resolveExit = r;
+    });
     let out: ReadableStreamDefaultController<Uint8Array> | null = null;
-    const stdout = o.withStdout ? new ReadableStream<Uint8Array>({ start(c) { out = c; } }) : null;
+    const stdout = o.withStdout
+      ? new ReadableStream<Uint8Array>({
+          start(c) {
+            out = c;
+          },
+        })
+      : null;
     let done = false;
     const c: FakeChild = {
-      cmd, env, pid: ++nextPid, exited, stdout, stderr: null, kills: [],
-      kill(s) { c.kills.push(s); },
+      cmd,
+      env,
+      pid: ++nextPid,
+      exited,
+      stdout,
+      stderr: null,
+      kills: [],
+      kill(s) {
+        c.kills.push(s);
+      },
       exit(code) {
         if (done) return;
         done = true;
@@ -106,27 +139,49 @@ function harness(o: { platform?: NodeJS.Platform; withStdout?: boolean } = {}) {
     children.push(c);
     return c;
   };
-  const sleep: RunLoopOptions['sleep'] = (ms, sig) => new Promise<void>((resolve) => {
-    const s = { ms, resolve, aborted: false };
-    sleeps.push(s);
-    sig?.addEventListener('abort', () => {
-      s.aborted = true;
-      resolve();
-    }, { once: true });
-  });
-  const run = (extra: Partial<RunLoopOptions> = {}) => runLoop({
-    cmd: CMD, env: { PATH: '/bin', TELINHA_HOME: '/t' }, paths: PATHS, platform: o.platform ?? 'linux', pid: 4242,
-    log: (...a) => logs.push(a.join(' ')), spawn, fs: m.fs, now: () => clock.t, sleep,
-    onSignal: (fn) => {
-      signal = fn;
-      return () => { unsubscribed = true; };
-    },
-    taskkill: (pid) => void killed.push(pid),
-    graceMs: 8000,
-    ...extra,
-  });
+  const sleep: RunLoopOptions['sleep'] = (ms, sig) =>
+    new Promise<void>((resolve) => {
+      const s = { ms, resolve, aborted: false };
+      sleeps.push(s);
+      sig?.addEventListener(
+        'abort',
+        () => {
+          s.aborted = true;
+          resolve();
+        },
+        { once: true },
+      );
+    });
+  const run = (extra: Partial<RunLoopOptions> = {}) =>
+    runLoop({
+      cmd: CMD,
+      env: { PATH: '/bin', TELINHA_HOME: '/t' },
+      paths: PATHS,
+      platform: o.platform ?? 'linux',
+      pid: 4242,
+      log: (...a) => logs.push(a.join(' ')),
+      spawn,
+      fs: m.fs,
+      now: () => clock.t,
+      sleep,
+      onSignal: (fn) => {
+        signal = fn;
+        return () => {
+          unsubscribed = true;
+        };
+      },
+      taskkill: (pid) => void killed.push(pid),
+      graceMs: 8000,
+      ...extra,
+    });
   return {
-    children, logs, sleeps, killed, clock, m, run,
+    children,
+    logs,
+    sleeps,
+    killed,
+    clock,
+    m,
+    run,
     signal: (s: NodeJS.Signals) => signal?.(s),
     unsubscribed: () => unsubscribed,
     /** Latest sleep, resolved as if the time passed. */
@@ -152,7 +207,12 @@ describe('runLoop', () => {
     expect(h.children).toHaveLength(1);
     const c = h.children[0]!;
     expect(c.cmd).toEqual(CMD);
-    expect(c.env).toEqual({ PATH: '/bin', TELINHA_HOME: '/t', TELINHA_SUPERVISED: '1', TELINHA_SUPERVISOR_PID: '4242' });
+    expect(c.env).toEqual({
+      PATH: '/bin',
+      TELINHA_HOME: '/t',
+      TELINHA_SUPERVISED: '1',
+      TELINHA_SUPERVISOR_PID: '4242',
+    });
     expect(h.m.text(PIDFILE)).toBe('4242\n');
     c.exit(0);
     expect(await done).toBe(0);
@@ -219,7 +279,10 @@ describe('runLoop', () => {
     await settle();
     expect(h.m.text(`${PATHS.bin}/telinha`)).toBe('good v0.7.0');
     expect(h.m.text(`${PATHS.bin}/telinha.failed-v0.8.0`)).toBe('bad v0.8.0');
-    expect(h.m.state()).toEqual({ lastCheck: 7, failed: { tag: 'v0.8.0', at: h.clock.t, reason: 'start failed twice (exit 1)' } });
+    expect(h.m.state()).toEqual({
+      lastCheck: 7,
+      failed: { tag: 'v0.8.0', at: h.clock.t, reason: 'start failed twice (exit 1)' },
+    });
     expect(h.sleeps[h.sleeps.length - 1]!.ms).toBe(2000);
     h.wake();
     await settle();

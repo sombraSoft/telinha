@@ -16,17 +16,28 @@ function fakeUdp(answer: (data: Uint8Array, reply: Reply) => void) {
         expect([port, address]).toEqual([5351, GW]);
         const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
         sent.push(bytes);
-        answer(bytes, (d) => queueMicrotask(() => { if (!closed) o.onMessage(d, 5351, GW); }));
+        answer(bytes, (d) =>
+          queueMicrotask(() => {
+            if (!closed) o.onMessage(d, 5351, GW);
+          }),
+        );
       },
-      close() { closed = true; },
+      close() {
+        closed = true;
+      },
     };
   };
   return { udp, sent };
 }
-const sleep = async () => { await new Promise((r) => setTimeout(r, 0)); };
+const sleep = async () => {
+  await new Promise((r) => setTimeout(r, 0));
+};
 
 /** A PCP server's MAP answer to `req`: the request's MAP payload echoed with the assigned port and IP. */
-function mapReply(req: Uint8Array, o: { result?: number; lifetime?: number; port?: number; ip?: number[] } = {}): Uint8Array {
+function mapReply(
+  req: Uint8Array,
+  o: { result?: number; lifetime?: number; port?: number; ip?: number[] } = {},
+): Uint8Array {
   const r = new Uint8Array(60);
   const v = new DataView(r.buffer);
   r[0] = 2;
@@ -45,7 +56,15 @@ const base = { sleep, gatewayIp: GW, localIp: LOCAL };
 describe('PCP', () => {
   test('MAP request layout and success', async () => {
     const net = fakeUdp((req, reply) => reply(mapReply(req)));
-    const r = await pcpMap({ ...base, udp: net.udp, protocol: 'udp', internalPort: 7882, externalPort: 7882, lifetime: 3600, nonce: NONCE });
+    const r = await pcpMap({
+      ...base,
+      udp: net.udp,
+      protocol: 'udp',
+      internalPort: 7882,
+      externalPort: 7882,
+      lifetime: 3600,
+      nonce: NONCE,
+    });
     expect(r).toEqual({ externalPort: 7882, externalIp: '203.0.113.9', lifetime: 3600 });
     const req = net.sent[0]!;
     const v = new DataView(req.buffer, req.byteOffset);
@@ -59,7 +78,15 @@ describe('PCP', () => {
 
   test('server-shortened lifetime is reported; TCP is protocol 6', async () => {
     const net = fakeUdp((req, reply) => reply(mapReply(req, { lifetime: 600 })));
-    const r = await pcpMap({ ...base, udp: net.udp, protocol: 'tcp', internalPort: 7881, externalPort: 7881, lifetime: 3600, nonce: NONCE });
+    const r = await pcpMap({
+      ...base,
+      udp: net.udp,
+      protocol: 'tcp',
+      internalPort: 7881,
+      externalPort: 7881,
+      lifetime: 3600,
+      nonce: NONCE,
+    });
     expect(r.lifetime).toBe(600);
     expect(net.sent[0]![36]).toBe(6);
   });
@@ -71,28 +98,70 @@ describe('PCP', () => {
       reply(other);
       reply(mapReply(req));
     });
-    expect((await pcpMap({ ...base, udp: net.udp, protocol: 'tcp', internalPort: 7881, externalPort: 7881, lifetime: 3600, nonce: NONCE })).externalPort).toBe(7881);
+    expect(
+      (
+        await pcpMap({
+          ...base,
+          udp: net.udp,
+          protocol: 'tcp',
+          internalPort: 7881,
+          externalPort: 7881,
+          lifetime: 3600,
+          nonce: NONCE,
+        })
+      ).externalPort,
+    ).toBe(7881);
   });
 
   test('UNSUPP_VERSION from a NAT-PMP-only gateway', async () => {
     // RFC 6887 §9: a NAT-PMP server answers in its own framing, version 0, result 1.
     const pmp = fakeUdp((_req, reply) => reply(new Uint8Array([0, 0x81, 0, 1, 0, 0, 0, 1])));
-    const err = await pcpMap({ ...base, udp: pmp.udp, protocol: 'tcp', internalPort: 7881, externalPort: 7881, lifetime: 3600, nonce: NONCE }).catch((e) => e);
+    const err = await pcpMap({
+      ...base,
+      udp: pmp.udp,
+      protocol: 'tcp',
+      internalPort: 7881,
+      externalPort: 7881,
+      lifetime: 3600,
+      nonce: NONCE,
+    }).catch((e) => e);
     expect([err.code, err.message]).toEqual([1, 'PCP result 1 (UNSUPP_VERSION)']);
     expect(await pcpAnnounce({ ...base, udp: pmp.udp })).toBe('unsupported');
   });
 
   test('error result codes', async () => {
-    for (const [code, text] of [[8, 'NO_RESOURCES'], [11, 'CANNOT_PROVIDE_EXTERNAL'], [2, 'NOT_AUTHORIZED']] as const) {
+    for (const [code, text] of [
+      [8, 'NO_RESOURCES'],
+      [11, 'CANNOT_PROVIDE_EXTERNAL'],
+      [2, 'NOT_AUTHORIZED'],
+    ] as const) {
       const net = fakeUdp((req, reply) => reply(mapReply(req, { result: code, lifetime: 30 })));
-      const err = await pcpMap({ ...base, udp: net.udp, protocol: 'tcp', internalPort: 7881, externalPort: 7881, lifetime: 3600, nonce: NONCE }).catch((e) => e);
+      const err = await pcpMap({
+        ...base,
+        udp: net.udp,
+        protocol: 'tcp',
+        internalPort: 7881,
+        externalPort: 7881,
+        lifetime: 3600,
+        nonce: NONCE,
+      }).catch((e) => e);
       expect(err.message).toBe(`PCP result ${code} (${text})`);
     }
   });
 
   test('a different assigned port is deleted (same nonce, lifetime 0) and fails', async () => {
-    const net = fakeUdp((req, reply) => reply(mapReply(req, { port: new DataView(req.buffer, req.byteOffset).getUint32(4) ? 40000 : 0 })));
-    const err = await pcpMap({ ...base, udp: net.udp, protocol: 'tcp', internalPort: 443, externalPort: 443, lifetime: 3600, nonce: NONCE }).catch((e) => e);
+    const net = fakeUdp((req, reply) =>
+      reply(mapReply(req, { port: new DataView(req.buffer, req.byteOffset).getUint32(4) ? 40000 : 0 })),
+    );
+    const err = await pcpMap({
+      ...base,
+      udp: net.udp,
+      protocol: 'tcp',
+      internalPort: 443,
+      externalPort: 443,
+      lifetime: 3600,
+      nonce: NONCE,
+    }).catch((e) => e);
     expect(err.message).toBe('PCP gave external port 40000 instead of 443');
     const del = net.sent[1]!;
     expect(new DataView(del.buffer, del.byteOffset).getUint32(4)).toBe(0);

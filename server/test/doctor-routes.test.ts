@@ -20,7 +20,9 @@ const REPORT: DoctorReport = {
 
 const DOCTOR_HTML = '<!doctype html><html><head><title>Telinha doctor</title></head><body></body></html>';
 
-function setup(o: { pageBuilt?: boolean; ensureRoom?: (room: string) => Promise<void>; env?: Record<string, string> } = {}) {
+function setup(
+  o: { pageBuilt?: boolean; ensureRoom?: (room: string) => Promise<void>; env?: Record<string, string> } = {},
+) {
   const config = loadConfig({ ...PROD_ENV, ...o.env });
   const store = createDoctorStore({ cookieSecret: config.cookieSecret, now: () => NOW });
   const entries: [string, Uint8Array][] = [...ENTRIES];
@@ -29,9 +31,15 @@ function setup(o: { pageBuilt?: boolean; ensureRoom?: (room: string) => Promise<
   const deleted: string[] = [];
   const logs: unknown[][] = [];
   const handle = createDoctorRoutes({
-    store, config, files: staticFromEntries(entries, { command: 'telinha' }),
-    rooms: { ensureRoom: o.ensureRoom ?? (async (r) => void ensured.push(r)), deleteRoom: async (r) => void deleted.push(r) },
-    now: () => NOW, log: (...a) => void logs.push(a),
+    store,
+    config,
+    files: staticFromEntries(entries, { command: 'telinha' }),
+    rooms: {
+      ensureRoom: o.ensureRoom ?? (async (r) => void ensured.push(r)),
+      deleteRoom: async (r) => void deleted.push(r),
+    },
+    now: () => NOW,
+    log: (...a) => void logs.push(a),
   });
   const call = (path: string, init: RequestInit = {}) => {
     const req = new Request(`${config.publicUrl}${path}`, init);
@@ -49,7 +57,9 @@ function setup(o: { pageBuilt?: boolean; ensureRoom?: (room: string) => Promise<
 }
 
 const post = (cookie: string, body?: unknown, headers: Record<string, string> = {}): RequestInit => ({
-  method: 'POST', headers: { cookie, 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body),
+  method: 'POST',
+  headers: { cookie, 'content-type': 'application/json', ...headers },
+  body: body === undefined ? undefined : JSON.stringify(body),
 });
 
 describe('doctor routes', () => {
@@ -131,7 +141,9 @@ describe('doctor routes', () => {
   test('ping: the phone address as the proxy saw it', async () => {
     const { call, opened } = setup();
     const s = await opened();
-    const r = (await call('/doctor/api/ping', { headers: { cookie: s.cookie, 'x-forwarded-for': '198.51.100.9, 10.0.0.1' } }))!;
+    const r = (await call('/doctor/api/ping', {
+      headers: { cookie: s.cookie, 'x-forwarded-for': '198.51.100.9, 10.0.0.1' },
+    }))!;
     expect(r.status).toBe(200);
     expect(r.headers.get('cache-control')).toBe('no-store');
     expect(await r.json()).toEqual({ ok: true, ip: '198.51.100.9', at: NOW });
@@ -145,7 +157,13 @@ describe('doctor routes', () => {
     const r = (await call('/doctor/api/token', post(s.cookie)))!;
     expect(r.status).toBe(200);
     expect(r.headers.get('cache-control')).toBe('no-store');
-    const body = (await r.json()) as { url: string; token: string; media: string; ports: { tcp: number; udp: number }; turn: unknown };
+    const body = (await r.json()) as {
+      url: string;
+      token: string;
+      media: string;
+      ports: { tcp: number; udp: number };
+      turn: unknown;
+    };
     expect(body.url).toBe(config.livekitUrl);
     expect(body.media).toBe('self');
     expect(body.ports).toEqual({ tcp: config.mediaTcpPort, udp: config.mediaUdpPort });
@@ -158,7 +176,12 @@ describe('doctor routes', () => {
     expect(jwt.name).toBeUndefined();
     expect(jwt.metadata).toBeUndefined();
     expect(jwt.video).toEqual({
-      room, roomJoin: true, canSubscribe: false, canPublish: true, canPublishData: false, canPublishSources: ['screen_share'],
+      room,
+      roomJoin: true,
+      canSubscribe: false,
+      canPublish: true,
+      canPublishData: false,
+      canPublishSources: ['screen_share'],
     });
     expect(jwt.video.hidden).toBeUndefined();
     const again = (await call('/doctor/api/token', post(s.cookie)))!;
@@ -177,12 +200,20 @@ describe('doctor routes', () => {
     const { call, opened } = setup({ env: { HOSTING: 'vps', TURN: 'on' } });
     const s = await opened();
     const body = (await (await call('/doctor/api/token', post(s.cookie)))!.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ media: 'self', ports: { tcp: 7881, udp: 7882 }, turn: { host: 'turn.telinha.example.com' } });
+    expect(body).toMatchObject({
+      media: 'self',
+      ports: { tcp: 7881, udp: 7882 },
+      turn: { host: 'turn.telinha.example.com' },
+    });
   });
 
   test('token: LiveKit down is a 503 and does not use up the grant', async () => {
     let fail = true;
-    const { call, opened } = setup({ ensureRoom: async () => { if (fail) throw new Error('down'); } });
+    const { call, opened } = setup({
+      ensureRoom: async () => {
+        if (fail) throw new Error('down');
+      },
+    });
     const s = await opened();
     expect((await call('/doctor/api/token', post(s.cookie)))!.status).toBe(503);
     fail = false;
@@ -192,7 +223,10 @@ describe('doctor routes', () => {
   test('report: stored with the proxy-seen ip, room deleted, 204; a second one is refused', async () => {
     const { store, call, opened, deleted } = setup();
     const s = await opened();
-    const r = (await call('/doctor/api/report', post(s.cookie, { ...REPORT, extra: 'dropped' }, { 'cf-connecting-ip': '198.51.100.20' })))!;
+    const r = (await call(
+      '/doctor/api/report',
+      post(s.cookie, { ...REPORT, extra: 'dropped' }, { 'cf-connecting-ip': '198.51.100.20' }),
+    ))!;
     expect(r.status).toBe(204);
     expect(deleted).toEqual([`doctor-${s.id}`]);
     const st = store.state(s.id);
@@ -215,7 +249,9 @@ describe('doctor routes', () => {
     const s = await opened();
     const big = { ...REPORT, client: { ua: 'x'.repeat(MAX_REPORT_BYTES) } };
     expect((await call('/doctor/api/report', post(s.cookie, big)))!.status).toBe(413);
-    expect((await call('/doctor/api/report', { method: 'POST', headers: { cookie: s.cookie }, body: '{not json' }))!.status).toBe(400);
+    expect(
+      (await call('/doctor/api/report', { method: 'POST', headers: { cookie: s.cookie }, body: '{not json' }))!.status,
+    ).toBe(400);
     expect((await call('/doctor/api/report', post(s.cookie, { ...REPORT, tcp: { ok: 'yes' } })))!.status).toBe(400);
   });
 
@@ -230,14 +266,20 @@ describe('doctor routes', () => {
 
 describe('parseReport', () => {
   test('accepts a full report and keeps only known fields', () => {
-    expect(parseReport({ ...REPORT, evil: 1, client: { ua: 'a', ip: '1.2.3.4', x: 1 } })).toEqual({ ...REPORT, client: { ua: 'a' } });
+    expect(parseReport({ ...REPORT, evil: 1, client: { ua: 'a', ip: '1.2.3.4', x: 1 } })).toEqual({
+      ...REPORT,
+      client: { ua: 'a' },
+    });
   });
 
   test('turn: absent or null means no TURN step; a step is kept with its rtt and error', () => {
     expect(parseReport(REPORT)).not.toHaveProperty('turn');
     expect(parseReport({ ...REPORT, turn: null })).toEqual(REPORT);
     expect(parseReport({ ...REPORT, turn: { ok: true, rttMs: 91.6, x: 1 } })?.turn).toEqual({ ok: true, rttMs: 92 });
-    expect(parseReport({ ...REPORT, turn: { ok: false, error: 'relayed over udp, not TLS' } })?.turn).toEqual({ ok: false, error: 'relayed over udp, not TLS' });
+    expect(parseReport({ ...REPORT, turn: { ok: false, error: 'relayed over udp, not TLS' } })?.turn).toEqual({
+      ok: false,
+      error: 'relayed over udp, not TLS',
+    });
   });
 
   test('turn: a malformed step rejects the report', () => {
@@ -246,8 +288,9 @@ describe('parseReport', () => {
 
   test('initial may be null; a bad candidate ip becomes null', () => {
     expect(parseReport({ ...REPORT, initial: null })?.initial).toBeNull();
-    expect(parseReport({ ...REPORT, initial: { protocol: 'tcp', candidateIp: '<script>', rttMs: 'x' } })?.initial)
-      .toEqual({ protocol: 'tcp', candidateIp: null, rttMs: null });
+    expect(
+      parseReport({ ...REPORT, initial: { protocol: 'tcp', candidateIp: '<script>', rttMs: 'x' } })?.initial,
+    ).toEqual({ protocol: 'tcp', candidateIp: null, rttMs: null });
   });
 
   test('control characters are stripped from text and long text is capped', () => {
@@ -257,8 +300,17 @@ describe('parseReport', () => {
   });
 
   test('rejects missing or malformed required fields', () => {
-    for (const bad of [null, [], 'x', { ...REPORT, https: undefined }, { ...REPORT, udp: {} }, { ...REPORT, startedAt: 'now' },
-      { ...REPORT, initial: { protocol: 'UDP!' } }, { ...REPORT, client: null }, { ...REPORT, publish: { ok: 1 } }]) {
+    for (const bad of [
+      null,
+      [],
+      'x',
+      { ...REPORT, https: undefined },
+      { ...REPORT, udp: {} },
+      { ...REPORT, startedAt: 'now' },
+      { ...REPORT, initial: { protocol: 'UDP!' } },
+      { ...REPORT, client: null },
+      { ...REPORT, publish: { ok: 1 } },
+    ]) {
       expect(parseReport(bad)).toBeNull();
     }
   });
