@@ -180,8 +180,8 @@ function make(o: Opts = {}) {
       available: async () => o.available ?? false,
       shutdown: async () => {},
       status: async () => ({ supervised: true }),
-      doctorSession: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
-      doctorWait: async () => ({ state: 'expired' }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
+      phoneTestWait: async () => ({ state: 'expired' }),
     },
     bins: o.bins ?? (async () => {}),
     spawn: async (cmd: string[]) => {
@@ -451,8 +451,8 @@ describe('runApply', () => {
       r.tasks,
     );
     expect(r.decided).toEqual([
-      ['discord', 'Role 999999999999999999 does not exist in the server.'],
-      ['discord', 'Role 999999999999999999 does not exist in the server.'],
+      ['discord', 'Role 999999999999999999 does not exist in the Discord server.'],
+      ['discord', 'Role 999999999999999999 does not exist in the Discord server.'],
     ]);
     expect(r.statuses('discord')).toEqual(['pending', 'running', 'fail', 'running', 'fail', 'skipped']);
     expect(result).toMatchObject({ kind: 'done', tasks: { discord: 'skipped', config: 'ok' } });
@@ -742,7 +742,7 @@ describe('TaskList', () => {
     await runApply(w, target, VALUES({ ROLE_ID: '999999999999999999' }), ['discord', 'config'], OPTS(), hooks, tasks);
     const lines = [
       'ok Bot: Telinha Bot (app id 111111111111111111)',
-      'fail Role 999999999999999999 does not exist in the server.',
+      'fail Role 999999999999999999 does not exist in the Discord server.',
     ];
     expect(atDecide.map((r) => [r.status, ...r.lines.map((l) => `${l.kind} ${l.text}`)])).toEqual([
       ['fail', ...lines],

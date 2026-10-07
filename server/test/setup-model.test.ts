@@ -644,8 +644,8 @@ describe('question strings', () => {
   test('no ufw automation is offered, and the flag errors match the non-interactive ones', () => {
     for (const d of [q.en, q.ptBR] as Record<string, string>[])
       expect(Object.values(d).join('\n')).not.toMatch(/open them in ufw|abrir no ufw/i);
-    expect(q.en.homeNeedsAdvanced).toEndWith('; on a rented server pass --host vps');
-    expect(q.ptBR.homeNeedsAdvanced).toEndWith('; num servidor alugado passe --host vps');
+    expect(q.en.homeNeedsAdvanced).toEndWith('; on a rented machine pass --host vps');
+    expect(q.ptBR.homeNeedsAdvanced).toEndWith('; numa máquina alugada passe --host vps');
     expect(q('en', 'badFlagValue', { flag: '--x', value: 'y', allowed: 'z' })).toBe('--x: y is not valid (want z)');
   });
 });

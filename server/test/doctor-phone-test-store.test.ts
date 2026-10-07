@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { sign, verify } from '../src/auth.ts';
 import {
   COOKIE_TTL_MS,
-  createDoctorStore,
+  createPhoneTestStore,
   type DoctorReport,
   deriveDoctorKey,
-  MAX_SESSIONS,
-  SESSION_TTL_MS,
-} from '../src/doctor/session.ts';
+  MAX_PHONE_TESTS,
+  PHONE_TEST_TTL_MS,
+} from '../src/doctor/phone-test-store.ts';
 
 const NOW = 1_700_000_000_000;
 const SECRET = 'cookie-secret';
@@ -29,17 +29,17 @@ function make() {
   let n = 0;
   // Distinct, predictable bytes per call.
   const random = (len: number) => new Uint8Array(len).fill(0xa0 + ++n);
-  const store = createDoctorStore({ cookieSecret: SECRET, now: () => now, random });
+  const store = createPhoneTestStore({ cookieSecret: SECRET, now: () => now, random });
   return { store, tick: (ms: number) => (now += ms), at: () => now };
 }
 
-describe('doctor sessions', () => {
+describe('phone test store', () => {
   test('create: hex id, base64url token, 10 minute expiry, pending', () => {
     const { store } = make();
     const s = store.create();
     expect(s.id).toMatch(/^[0-9a-f]{32}$/);
     expect(s.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(s.expiresAt).toBe(NOW + SESSION_TTL_MS);
+    expect(s.expiresAt).toBe(NOW + PHONE_TEST_TTL_MS);
     expect(store.state(s.id)).toEqual({ state: 'pending' });
   });
 
@@ -55,15 +55,15 @@ describe('doctor sessions', () => {
   test('an unopened link expires after 10 minutes', () => {
     const { store, tick } = make();
     const s = store.create();
-    tick(SESSION_TTL_MS);
+    tick(PHONE_TEST_TTL_MS);
     expect(store.claim(s.token)).toBeNull();
     expect(store.state(s.id)).toEqual({ state: 'expired' });
   });
 
-  test('opening extends the session to the cookie lifetime', () => {
+  test('opening extends the phone test to the cookie lifetime', () => {
     const { store, tick } = make();
     const s = store.create();
-    tick(SESSION_TTL_MS - 1000);
+    tick(PHONE_TEST_TTL_MS - 1000);
     expect(store.claim(s.token)).not.toBeNull();
     const cookie = store.cookieFor(s.id);
     tick(COOKIE_TTL_MS - 1000);
@@ -72,7 +72,7 @@ describe('doctor sessions', () => {
     expect(store.verifyCookie(cookie)).toBeNull();
   });
 
-  test('cookie: verifies for a live session only', () => {
+  test('cookie: verifies for a live phone test only', () => {
     const { store } = make();
     const s = store.create();
     store.claim(s.token);
@@ -133,9 +133,9 @@ describe('doctor sessions', () => {
     expect(store.takeGrant('0'.repeat(32))).toBe(false);
   });
 
-  test('at most 5 live sessions: the oldest goes', () => {
+  test('at most 5 live phone tests: the oldest goes', () => {
     const { store } = make();
-    const all = Array.from({ length: MAX_SESSIONS + 1 }, () => store.create());
+    const all = Array.from({ length: MAX_PHONE_TESTS + 1 }, () => store.create());
     expect(store.state(all[0]!.id)).toEqual({ state: 'expired' });
     expect(store.claim(all[0]!.token)).toBeNull();
     for (const s of all.slice(1)) expect(store.state(s.id)).toEqual({ state: 'pending' });
@@ -167,11 +167,11 @@ describe('doctor sessions', () => {
     expect(await store.wait(s.id, 20)).toEqual({ state: 'pending' });
   });
 
-  test('gc drops expired sessions and wakes their waiters', async () => {
+  test('gc drops expired phone tests and wakes their waiters', async () => {
     const { store, tick } = make();
     const s = store.create();
     const p = store.wait(s.id, 5000);
-    tick(SESSION_TTL_MS);
+    tick(PHONE_TEST_TTL_MS);
     store.gc();
     expect(await p).toEqual({ state: 'expired' });
     expect(store.takeGrant(s.id)).toBe(false);

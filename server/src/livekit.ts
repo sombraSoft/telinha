@@ -1,5 +1,5 @@
 // LiveKit access tokens (members may join, watch and only publish screen
-// share) and the RoomService calls the Room module (rooms.ts) needs.
+// share) and the LiveKit room API calls the Room module (rooms.ts) needs.
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 
 // One identity per tab: LiveKit kicks the older connection on a duplicate

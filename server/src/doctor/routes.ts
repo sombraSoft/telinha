@@ -1,13 +1,13 @@
 // /doctor and /doctor/api/*: the phone test page and its three calls. Reached
 // with a one-time link from `telinha doctor`; the cookie it sets opens these
-// routes and the LiveKit relay, nothing else. Anything without a valid cookie
+// routes and the signaling proxy, nothing else. Anything without a valid cookie
 // gets the same 404 as an unknown path.
 import { AccessToken, TrackSource } from 'livekit-server-sdk';
 import { cookie, parseCookies } from '../auth.ts';
 import type { Config } from '../config.ts';
 import { type RoomService, roomTimeouts } from '../livekit.ts';
 import type { StaticFiles } from '../static.ts';
-import { COOKIE_TTL_MS, DOCTOR_COOKIE, type DoctorReport, type DoctorStore } from './session.ts';
+import { COOKIE_TTL_MS, DOCTOR_COOKIE, type DoctorReport, type PhoneTestStore } from './phone-test-store.ts';
 
 export { DOCTOR_COOKIE };
 
@@ -116,7 +116,7 @@ export function parseReport(body: unknown): DoctorReport | null {
 // ---------------------------------------------------------------- routes
 
 export function createDoctorRoutes(o: {
-  store: DoctorStore;
+  store: PhoneTestStore;
   config: DoctorConfig;
   files: StaticFiles;
   rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>;
@@ -130,19 +130,19 @@ export function createDoctorRoutes(o: {
   return async (req, url) => {
     const path = url.pathname;
     if (path !== '/doctor' && !path.startsWith('/doctor/')) return null;
-    const session = () => store.verifyCookie(parseCookies(req.headers.get('cookie'))[DOCTOR_COOKIE], now());
+    const phoneTest = () => store.verifyCookie(parseCookies(req.headers.get('cookie'))[DOCTOR_COOKIE], now());
 
     if (path === '/doctor' && req.method === 'GET') {
       const t = url.searchParams.get('t');
       if (t !== null) {
         const claimed = store.claim(t, now());
         // A used link opened again in the browser that already has the cookie: just the page.
-        if (!claimed) return session() ? redirect() : notFound();
+        if (!claimed) return phoneTest() ? redirect() : notFound();
         log('phone test opened', claimed.id.slice(0, 8));
         const value = store.cookieFor(claimed.id, now());
         return redirect(cookie(DOCTOR_COOKIE, value, { maxAge: COOKIE_TTL_MS / 1000, secure: c.secureCookies }));
       }
-      if (!session()) return notFound();
+      if (!phoneTest()) return notFound();
       const page = files.get('/r/doctor.html');
       if (!page) {
         log('doctor page missing from WEB_DIR (doctor.html)');
@@ -154,12 +154,12 @@ export function createDoctorRoutes(o: {
     }
 
     if (path === '/doctor/api/ping' && req.method === 'GET') {
-      if (!session()) return notFound();
+      if (!phoneTest()) return notFound();
       return json(200, { ok: true, ip: clientIp(req), at: now() });
     }
 
     if (path === '/doctor/api/token' && req.method === 'POST') {
-      const s = session();
+      const s = phoneTest();
       if (!s) return notFound();
       if (!store.takeGrant(s.id)) return json(429, { error: 'used' });
       const room = doctorRoom(s.id);
@@ -171,7 +171,7 @@ export function createDoctorRoutes(o: {
         log('doctor ensureRoom failed', (e as Error).message);
         return json(503, { error: 'livekit' });
       }
-      // A private room only this session can join; publish screen share only,
+      // A private room only this phone test can join; publish screen share only,
       // nothing to subscribe to, no data channel, no identity data.
       const at = new AccessToken(c.livekitKey, c.livekitSecret, { identity: room, ttl: '5m' });
       at.addGrant({
@@ -193,7 +193,7 @@ export function createDoctorRoutes(o: {
     }
 
     if (path === '/doctor/api/report' && req.method === 'POST') {
-      const s = session();
+      const s = phoneTest();
       if (!s) return notFound();
       const declared = Number(req.headers.get('content-length') ?? 0);
       if (declared > MAX_REPORT_BYTES) return json(413, { error: 'too large' });

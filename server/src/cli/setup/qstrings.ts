@@ -1,7 +1,7 @@
 // The setup questions' own dictionary (EN + pt-BR): titles, questions, hints,
 // option labels and previews, lookup notes, step labels and the flag errors of
 // a non-interactive run. Keys starting with `vps` or `adv` belong to a rented
-// server or to the explicit "Advanced" home choice: only those may talk about
+// machine or to the explicit "Advanced" home choice: only those may talk about
 // letting 80/443 in (a test holds every other key to that).
 import { defineStrings } from '../strings.ts';
 
@@ -44,10 +44,10 @@ export const q = defineStrings(
     hostingTitle: 'Where will Telinha run?',
     hostingQ: 'Pick the machine that stays on and hosts the rooms.',
     hostingHome: 'A computer at home',
-    hostingHomeDesc: 'Your PC or a home server, behind your internet router',
+    hostingHomeDesc: 'Your PC or another machine at home, behind your internet router',
     hostingHomePreview:
       'Good for a group of friends: Telinha runs on a machine you already have.\n\nHome internet connections usually do not let the web ports 80 and 443 in, so Telinha does not count on them. Next you pick how people reach this machine: a Cloudflare Tunnel (if you have a domain on Cloudflare) or a free DuckDNS address with HTTPS on port 8443.',
-    vpsHosting: 'A rented server (VPS)',
+    vpsHosting: 'A rented machine (VPS)',
     vpsHostingDesc: 'Hetzner, DigitalOcean, Oracle Cloud and the like: it has its own public IP',
     vpsHostingPreview:
       "A VPS has a public IP and the web ports 80 and 443 reach it, so Telinha gets its HTTPS certificate the usual way.\n\nThe provider's firewall must let Telinha's ports through; setup lists them.",
@@ -96,7 +96,7 @@ export const q = defineStrings(
     vpsAddressTitle: 'How will people reach Telinha?',
     vpsAddressQ: 'Pick the web address Telinha uses.',
     vpsSslip: 'No domain: sslip.io',
-    vpsSslipDesc: "A name made from the server's fixed IP",
+    vpsSslipDesc: "A name made from this machine's fixed IP",
     vpsSslipPreview:
       "sslip.io is a shared domain: Let's Encrypt may refuse certificates when too many are issued for it in a week. A domain of your own (or DuckDNS) is more reliable.",
     vpsSslipPreviewUrl:
@@ -143,7 +143,7 @@ export const q = defineStrings(
     httpsPortLow: 'Use a port from 1024 up: home connections usually do not let 80 or 443 in.',
     httpsPortTaken: 'That port is already used by Telinha ({what}).',
     vpsNodeIpTitle: 'Public IPv4',
-    vpsNodeIpQ: 'The public IPv4 of this server (setup could not find it).',
+    vpsNodeIpQ: 'The public IPv4 of this machine (setup could not find it).',
     vpsNodeIpPlaceholder: '203.0.113.9',
     ipBad: 'That is not an IPv4 address like 203.0.113.9.',
     tunnelTokenTitle: 'Cloudflare Tunnel token',
@@ -188,25 +188,25 @@ export const q = defineStrings(
     redirectOk: 'Redirect URI is registered.',
     redirectMissing: 'Not there yet (did you press Save Changes?).',
     redirectSkipped: 'Login will fail until {uri} is a redirect of the app (telinha doctor checks it).',
-    guildTitle: 'Which server?',
+    guildTitle: 'Which Discord server?',
     guildQ: 'Which Discord server is Telinha for?',
-    guildOther: 'Another server (add the bot)',
-    guildsLoading: 'Loading the servers the bot is in…',
-    guildNone: 'The bot is not in any server yet.',
-    guildMissing: 'The bot is not in server {id}.',
-    inviteHelp: 'Add the bot to your server with this link (you need Manage Server there):',
-    guildIdQ: 'Server (guild) id.',
+    guildOther: 'Another Discord server (add the bot)',
+    guildsLoading: 'Loading the Discord servers the bot is in…',
+    guildNone: 'The bot is not in any Discord server yet.',
+    guildMissing: 'The bot is not in Discord server {id}.',
+    inviteHelp: 'Add the bot to your Discord server with this link (you need Manage Server there):',
+    guildIdQ: 'Discord server id.',
     roleTitle: 'Who may enter the rooms?',
     roleQ: 'Pick the role whose members may enter the rooms.',
-    roleHelp: 'Members with this role may enter the rooms; @everyone lets the whole server in.',
-    roleEveryone: 'Everyone in the server (@everyone)',
-    rolesLoading: "Loading the server's roles…",
+    roleHelp: 'Members with this role may enter the rooms; @everyone lets the whole Discord server in.',
+    roleEveryone: 'Everyone in the Discord server (@everyone)',
+    rolesLoading: "Loading the Discord server's roles…",
     roleIdQ: 'Role id.',
     channelsTitle: 'Where does the command work?',
     channelsQ: 'Pick one or more text channels.',
     channelsHelp: 'The slash command works only in these channels.',
     channelsMin: 'Pick at least one channel.',
-    channelsLoading: "Loading the server's channels…",
+    channelsLoading: "Loading the Discord server's channels…",
     channelsNone: 'The bot sees no text channel in {guild}; give it access to one, then check again.',
     channelIdsQ: 'Channel ids, comma separated.',
     commandTitle: 'Command name',
@@ -254,10 +254,10 @@ export const q = defineStrings(
       'This network is behind carrier-grade NAT (CGNAT): the internet cannot reach its media ports, so LiveKit Cloud is picked for you.',
     turnDnsHint: 'First add a DNS record: {host} → {ip} (A record, DNS only). Yes then checks that it resolves.',
     turnDnsHintNoIp:
-      "First add a DNS record: {host} → this server's public IP (A record, DNS only). Yes then checks that it resolves.",
-    turnAutoHint: '{host} already points at this server: nothing to add.',
+      "First add a DNS record: {host} → this machine's public IP (A record, DNS only). Yes then checks that it resolves.",
+    turnAutoHint: '{host} already points at this machine: nothing to add.',
     turnChecking: 'Looking up {host}…',
-    turnKept: '{host} does not resolve to this server yet; the turn check of telinha doctor says when it does.',
+    turnKept: '{host} does not resolve to this machine yet; the turn check of telinha doctor says when it does.',
     actionTurnCheck: 'I added it: check again',
     actionTurnKeep: 'Keep it on anyway',
     cgnatCloud:
@@ -334,7 +334,7 @@ export const q = defineStrings(
 
     // sidebar summaries and review
     sumHome: 'A computer at home',
-    sumVps: 'Rented server (VPS)',
+    sumVps: 'Rented machine (VPS)',
     sumTunnel: 'Cloudflare Tunnel',
     sumDuckHome: 'DuckDNS :{port}',
     sumDuck: 'DuckDNS',
@@ -361,7 +361,7 @@ export const q = defineStrings(
     badFlagValue: '{flag}: {value} is not valid (want {allowed})',
     idAllowed: 'a Discord id: 17-20 digits',
     homeNeedsAdvanced:
-      'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+      'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
   },
   {
     stepWhere: 'Onde',
@@ -398,10 +398,10 @@ export const q = defineStrings(
     hostingTitle: 'Onde a Telinha vai rodar?',
     hostingQ: 'Escolha a máquina que fica ligada e hospeda as salas.',
     hostingHome: 'Um computador em casa',
-    hostingHomeDesc: 'Seu PC ou um servidor caseiro, atrás do roteador da sua internet',
+    hostingHomeDesc: 'Seu PC ou outra máquina em casa, atrás do roteador da sua internet',
     hostingHomePreview:
       'Bom pra um grupo de amigos: a Telinha roda numa máquina que você já tem.\n\nA internet de casa em geral não deixa as portas web 80 e 443 entrarem, então a Telinha não conta com elas. Em seguida você escolhe como o pessoal chega nesta máquina: um Cloudflare Tunnel (se você tem um domínio na Cloudflare) ou um endereço grátis do DuckDNS com HTTPS na porta 8443.',
-    vpsHosting: 'Um servidor alugado (VPS)',
+    vpsHosting: 'Uma máquina alugada (VPS)',
     vpsHostingDesc: 'Hetzner, DigitalOcean, Oracle Cloud e parecidos: tem IP público próprio',
     vpsHostingPreview:
       'Uma VPS tem IP público e as portas web 80 e 443 chegam nela, então a Telinha pega o certificado HTTPS do jeito de sempre.\n\nO firewall do provedor precisa deixar as portas da Telinha passarem; o setup lista quais são.',
@@ -447,7 +447,7 @@ export const q = defineStrings(
     vpsAddressTitle: 'Como o pessoal vai chegar na Telinha?',
     vpsAddressQ: 'Escolha o endereço web que a Telinha usa.',
     vpsSslip: 'Sem domínio: sslip.io',
-    vpsSslipDesc: 'Um nome feito a partir do IP fixo do servidor',
+    vpsSslipDesc: 'Um nome feito a partir do IP fixo desta máquina',
     vpsSslipPreview:
       "sslip.io é um domínio compartilhado: o Let's Encrypt pode recusar certificados quando muitos são emitidos pra ele na semana. Um domínio seu (ou o DuckDNS) é mais confiável.",
     vpsSslipPreviewUrl:
@@ -495,7 +495,7 @@ export const q = defineStrings(
     httpsPortLow: 'Use uma porta a partir da 1024: a internet de casa em geral não deixa a 80 nem a 443 entrarem.',
     httpsPortTaken: 'Essa porta já é usada pela Telinha ({what}).',
     vpsNodeIpTitle: 'IPv4 público',
-    vpsNodeIpQ: 'O IPv4 público deste servidor (o setup não conseguiu descobrir).',
+    vpsNodeIpQ: 'O IPv4 público desta máquina (o setup não conseguiu descobrir).',
     vpsNodeIpPlaceholder: '203.0.113.9',
     ipBad: 'Isso não é um endereço IPv4 como 203.0.113.9.',
     tunnelTokenTitle: 'Token do Cloudflare Tunnel',
@@ -540,25 +540,25 @@ export const q = defineStrings(
     redirectOk: 'O redirect URI está cadastrado.',
     redirectMissing: 'Ainda não está lá (clicou em Save Changes?).',
     redirectSkipped: 'O login vai falhar até {uri} ser um redirect do app (o telinha doctor verifica).',
-    guildTitle: 'Qual servidor?',
+    guildTitle: 'Qual servidor do Discord?',
     guildQ: 'A Telinha é pra qual servidor do Discord?',
-    guildOther: 'Outro servidor (adicionar o bot)',
-    guildsLoading: 'Carregando os servidores em que o bot está…',
-    guildNone: 'O bot ainda não está em nenhum servidor.',
-    guildMissing: 'O bot não está no servidor {id}.',
-    inviteHelp: 'Adicione o bot ao seu servidor com este link (precisa de Gerenciar Servidor lá):',
-    guildIdQ: 'Id do servidor (guild).',
+    guildOther: 'Outro servidor do Discord (adicionar o bot)',
+    guildsLoading: 'Carregando os servidores do Discord em que o bot está…',
+    guildNone: 'O bot ainda não está em nenhum servidor do Discord.',
+    guildMissing: 'O bot não está no servidor do Discord {id}.',
+    inviteHelp: 'Adicione o bot ao seu servidor do Discord com este link (precisa de Gerenciar Servidor lá):',
+    guildIdQ: 'Id do servidor do Discord.',
     roleTitle: 'Quem pode entrar nas salas?',
     roleQ: 'Escolha o cargo cujos membros podem entrar nas salas.',
-    roleHelp: 'Quem tem este cargo pode entrar nas salas; @everyone deixa o servidor inteiro entrar.',
-    roleEveryone: 'Todo mundo do servidor (@everyone)',
-    rolesLoading: 'Carregando os cargos do servidor…',
+    roleHelp: 'Quem tem este cargo pode entrar nas salas; @everyone deixa o servidor do Discord inteiro entrar.',
+    roleEveryone: 'Todo mundo do servidor do Discord (@everyone)',
+    rolesLoading: 'Carregando os cargos do servidor do Discord…',
     roleIdQ: 'Id do cargo.',
     channelsTitle: 'Onde o comando funciona?',
     channelsQ: 'Escolha um ou mais canais de texto.',
     channelsHelp: 'O comando de barra só funciona nestes canais.',
     channelsMin: 'Escolha pelo menos um canal.',
-    channelsLoading: 'Carregando os canais do servidor…',
+    channelsLoading: 'Carregando os canais do servidor do Discord…',
     channelsNone: 'O bot não vê nenhum canal de texto em {guild}; dê acesso a um e verifique de novo.',
     channelIdsQ: 'Ids dos canais, separados por vírgula.',
     commandTitle: 'Nome do comando',
@@ -609,10 +609,10 @@ export const q = defineStrings(
       'Esta rede está atrás de CGNAT da operadora: a internet não chega nas portas de mídia dela, então o LiveKit Cloud já vem escolhido.',
     turnDnsHint: 'Antes crie um registro DNS: {host} → {ip} (registro A, só DNS). O sim então confere se ele resolve.',
     turnDnsHintNoIp:
-      'Antes crie um registro DNS: {host} → o IP público deste servidor (registro A, só DNS). O sim então confere se ele resolve.',
-    turnAutoHint: '{host} já aponta pra este servidor: nada a criar.',
+      'Antes crie um registro DNS: {host} → o IP público desta máquina (registro A, só DNS). O sim então confere se ele resolve.',
+    turnAutoHint: '{host} já aponta pra esta máquina: nada a criar.',
     turnChecking: 'Consultando {host}…',
-    turnKept: '{host} ainda não resolve pra este servidor; a verificação turn do telinha doctor avisa quando resolver.',
+    turnKept: '{host} ainda não resolve pra esta máquina; a verificação turn do telinha doctor avisa quando resolver.',
     actionTurnCheck: 'Criei: verificar de novo',
     actionTurnKeep: 'Manter ligado assim mesmo',
     cgnatCloud:
@@ -688,7 +688,7 @@ export const q = defineStrings(
     trayAutoYesDesc: 'O ícone está lá depois de cada reinício',
 
     sumHome: 'Computador em casa',
-    sumVps: 'Servidor (VPS)',
+    sumVps: 'VPS alugada',
     sumTunnel: 'Cloudflare Tunnel',
     sumDuckHome: 'DuckDNS :{port}',
     sumDuck: 'DuckDNS',
@@ -714,7 +714,7 @@ export const q = defineStrings(
     badFlagValue: '{flag}: {value} não vale (esperado {allowed})',
     idAllowed: 'um id do Discord: 17-20 dígitos',
     homeNeedsAdvanced:
-      'em casa a Telinha nunca depende das portas 80/443: use --duckdns-domain (HTTPS numa porta alta), --ingress tunnel, ou --advanced pra confirmar que você mesmo abriu a 80 e a 443 (ou tem seu próprio proxy); num servidor alugado passe --host vps',
+      'em casa a Telinha nunca depende das portas 80/443: use --duckdns-domain (HTTPS numa porta alta), --ingress tunnel, ou --advanced pra confirmar que você mesmo abriu a 80 e a 443 (ou tem seu próprio proxy); numa máquina alugada passe --host vps',
   },
 );
 

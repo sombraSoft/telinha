@@ -11,8 +11,8 @@ exports[`setup frames, en 120x34 a home install from the first question to the l
  │ ○ Address              │ │  Pick the machine that stays on and hosts the rooms.                                    │
  │                        │ │                                                                                         │
  │ ○ Discord              │ │  ❯ 1. A computer at home                                                                │
- │                        │ │       Your PC or a home server, behind your internet router                             │
- │ ○ Video                │ │    2. A rented server (VPS)                                                             │
+ │                        │ │       Your PC or another machine at home, behind your internet router                   │
+ │ ○ Video                │ │    2. A rented machine (VPS)                                                            │
  │                        │ │       Hetzner, DigitalOcean, Oracle Cloud and the like: it has its own public IP        │
  │ ○ Ports                │ │                                                                                         │
  │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
@@ -235,13 +235,13 @@ exports[`setup frames, en 120x34 a home install from the first question to the l
  ╰───╯
  ╭────────────────────────╮ ╭─ Discord · Step 3 of 8 ─────────────────────────────────────────────────────────────────╮
  │ ✔ Where                │ │                                                                                         │
- │   A computer at home   │ │  Which server?                                                                          │
+ │   A computer at home   │ │  Which Discord server?                                                                  │
  │                        │ │  Which Discord server is Telinha for?                                                   │
  │ ✔ Address              │ │                                                                                         │
  │   DuckDNS :8443        │ │  ❯ 1. Gurizada                                                                          │
  │                        │ │    2. Clube do Livro                                                                    │
  │ ❯ Discord              │ │                                                                                         │
- │                        │ │    3. Another server (add the bot)                                                      │
+ │                        │ │    3. Another Discord server (add the bot)                                              │
  │ ○ Video                │ │                                                                                         │
  │                        │ │  › Client secret accepted.                                                              │
  │ ○ Ports                │ │                                                                                         │
@@ -399,7 +399,7 @@ exports[`setup frames, en 120x34 a home install from the first question to the l
  │   this computer        │ │             Web address                           https://my-group.duckdns.org:8443     │
  │                        │ │  Discord    Discord bot token                     set                                   │
  │ ✔ Ports                │ │             Client secret                         set                                   │
- │   TCP 7881, 8443       │ │             Which server?                         Gurizada                              │
+ │   TCP 7881, 8443       │ │             Which Discord server?                 Gurizada                              │
  │   UDP 7882             │ │             Who may enter the rooms?              @Membro                               │
  │                        │ │             Where does the command work?          #telinha                              │
  │ ✔ Updates              │ │             Command name                          telinha                               │
@@ -539,7 +539,7 @@ exports[`setup frames, en 120x34 a VPS: the address choices: vps-address 1`] = `
  ╰───╯
  ╭────────────────────────╮ ╭─ Address · Step 2 of 8 ─────────────────────────────────────────────────────────────────╮
  │ ✔ Where                │ │                                                                                         │
- │   Rented server (VPS)  │ │  How will people reach Telinha?                                                         │
+ │   Rented machine (VPS) │ │  How will people reach Telinha?                                                         │
  │                        │ │  Pick the web address Telinha uses.                                                     │
  │ ❯ Address              │ │                                                                                         │
  │                        │ │  ❯ 1. My own domain                                                                     │
@@ -547,7 +547,7 @@ exports[`setup frames, en 120x34 a VPS: the address choices: vps-address 1`] = `
  │                        │ │    2. A free DuckDNS address                                                            │
  │ ○ Video                │ │       <name>.duckdns.org, follows a changing IP                                         │
  │                        │ │    3. No domain: sslip.io                                                               │
- │ ○ Ports                │ │       A name made from the server's fixed IP                                            │
+ │ ○ Ports                │ │       A name made from this machine's fixed IP                                          │
  │                        │ │    4. Cloudflare Tunnel                                                                 │
  │ ○ Updates              │ │       Needs a domain on Cloudflare; no web ports to open                                │
  │                        │ │                                                                                         │
@@ -619,8 +619,8 @@ exports[`setup frames, pt-BR 120x34 a home install from the first question to th
  │ ○ Endereço             │ │  Escolha a máquina que fica ligada e hospeda as salas.                                  │
  │                        │ │                                                                                         │
  │ ○ Discord              │ │  ❯ 1. Um computador em casa                                                             │
- │                        │ │       Seu PC ou um servidor caseiro, atrás do roteador da sua internet                  │
- │ ○ Vídeo                │ │    2. Um servidor alugado (VPS)                                                         │
+ │                        │ │       Seu PC ou outra máquina em casa, atrás do roteador da sua internet                │
+ │ ○ Vídeo                │ │    2. Uma máquina alugada (VPS)                                                         │
  │                        │ │       Hetzner, DigitalOcean, Oracle Cloud e parecidos: tem IP público próprio           │
  │ ○ Portas               │ │                                                                                         │
  │                        │ ╰─────────────────────────────────────────────────────────────────────────────────────────╯
@@ -843,13 +843,13 @@ exports[`setup frames, pt-BR 120x34 a home install from the first question to th
  ╰───╯
  ╭────────────────────────╮ ╭─ Discord · Passo 3 de 8 ────────────────────────────────────────────────────────────────╮
  │ ✔ Onde                 │ │                                                                                         │
- │   Computador em casa   │ │  Qual servidor?                                                                         │
+ │   Computador em casa   │ │  Qual servidor do Discord?                                                              │
  │                        │ │  A Telinha é pra qual servidor do Discord?                                              │
  │ ✔ Endereço             │ │                                                                                         │
  │   DuckDNS :8443        │ │  ❯ 1. Gurizada                                                                          │
  │                        │ │    2. Clube do Livro                                                                    │
  │ ❯ Discord              │ │                                                                                         │
- │                        │ │    3. Outro servidor (adicionar o bot)                                                  │
+ │                        │ │    3. Outro servidor do Discord (adicionar o bot)                                       │
  │ ○ Vídeo                │ │                                                                                         │
  │                        │ │  › Client secret aceito.                                                                │
  │ ○ Portas               │ │                                                                                         │
@@ -1007,7 +1007,7 @@ exports[`setup frames, pt-BR 120x34 a home install from the first question to th
  │   este computador      │ │               Endereço web                          https://my-group.duckdns.org:8443   │
  │                        │ │  Discord      Token do bot do Discord               definido                            │
  │ ✔ Portas               │ │               Client secret                         definido                            │
- │   TCP 7881, 8443       │ │               Qual servidor?                        Gurizada                            │
+ │   TCP 7881, 8443       │ │               Qual servidor do Discord?             Gurizada                            │
  │   UDP 7882             │ │               Quem pode entrar nas salas?           @Membro                             │
  │                        │ │               Onde o comando funciona?              #telinha                            │
  │ ✔ Atualizações         │ │               Nome do comando                       telinha                             │
@@ -1147,7 +1147,7 @@ exports[`setup frames, pt-BR 120x34 a VPS: the address choices: vps-address 1`] 
  ╰───╯
  ╭────────────────────────╮ ╭─ Endereço · Passo 2 de 8 ───────────────────────────────────────────────────────────────╮
  │ ✔ Onde                 │ │                                                                                         │
- │   Servidor (VPS)       │ │  Como o pessoal vai chegar na Telinha?                                                  │
+ │   VPS alugada          │ │  Como o pessoal vai chegar na Telinha?                                                  │
  │                        │ │  Escolha o endereço web que a Telinha usa.                                              │
  │ ❯ Endereço             │ │                                                                                         │
  │                        │ │  ❯ 1. Meu próprio domínio                                                               │
@@ -1155,7 +1155,7 @@ exports[`setup frames, pt-BR 120x34 a VPS: the address choices: vps-address 1`] 
  │                        │ │    2. Um endereço grátis do DuckDNS                                                     │
  │ ○ Vídeo                │ │       <nome>.duckdns.org, acompanha IP que muda                                         │
  │                        │ │    3. Sem domínio: sslip.io                                                             │
- │ ○ Portas               │ │       Um nome feito a partir do IP fixo do servidor                                     │
+ │ ○ Portas               │ │       Um nome feito a partir do IP fixo desta máquina                                   │
  │                        │ │    4. Cloudflare Tunnel                                                                 │
  │ ○ Atualizações         │ │       Precisa de um domínio na Cloudflare; sem portas web pra abrir                     │
  │                        │ │                                                                                         │
@@ -1228,9 +1228,9 @@ exports[`setup frames, en 80x30 the first question and a pasted token: the hint 
  │                        │ │  rooms.                                         │
  │ ○ Discord              │ │                                                 │
  │                        │ │  ❯ 1. A computer at home                        │
- │ ○ Video                │ │       Your PC or a home server, behind your     │
- │                        │ │       internet router                           │
- │ ○ Ports                │ │    2. A rented server (VPS)                     │
+ │ ○ Video                │ │       Your PC or another machine at home,       │
+ │                        │ │       behind your internet router               │
+ │ ○ Ports                │ │    2. A rented machine (VPS)                    │
  │                        │ │       Hetzner, DigitalOcean, Oracle Cloud and   │
  │ ○ Review               │ │       the like: it has its own public IP        │
  │                        │ │                                                 │

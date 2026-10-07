@@ -83,7 +83,7 @@ describe('control endpoint', () => {
     expect(calls).toEqual([]);
   });
 
-  test('doctor sessions: create, and wait capped at 30 s; bad ids 404', async () => {
+  test('phone tests: create, and wait capped at 30 s; bad ids 404', async () => {
     const { req, calls } = make();
     const created = await req('/internal/doctor/sessions', { method: 'POST', body: '{}' });
     expect(await created.json()).toEqual({ id: 'a'.repeat(32), url: 'https://t.example/doctor?t=x', expiresAt: 5 });
