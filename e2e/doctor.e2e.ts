@@ -28,7 +28,7 @@ test('doctor link: one use, the page runs the test and reports', async ({ page, 
   await expect(page).toHaveURL(/\/doctor$/);
   await expect(page.locator('.footer .done')).toBeVisible({ timeout: 60_000 });
 
-  const state = await control.doctorWait(phoneTest.id, 1000);
+  const state = await control.phoneTestWait(phoneTest.id, 1000);
   expect(state.state).toBe('done');
   expect(state.report?.signaling.ok).toBe(true);
   expect(state.report?.publish.ok).toBe(true);

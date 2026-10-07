@@ -93,7 +93,7 @@ function control(o: { available?: boolean; states?: (PhoneTestPoll | 'hang')[] }
     available: async () => (calls.push('available'), o.available ?? true),
     status: async () => ({}) as never,
     phoneTestLink: async () => (calls.push('link'), { id: 'abc', url: URL, expiresAt: NOW + 600_000 }),
-    doctorWait: (id) => {
+    phoneTestWait: (id) => {
       calls.push(`wait ${id}`);
       const next = states.shift() ?? 'hang';
       return next === 'hang' ? new Promise<PhoneTestPoll>((r) => pending.push(r)) : Promise.resolve(next);

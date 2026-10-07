@@ -181,7 +181,7 @@ function make(o: Opts = {}) {
       shutdown: async () => {},
       status: async () => ({ supervised: true }),
       phoneTestLink: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
-      doctorWait: async () => ({ state: 'expired' }),
+      phoneTestWait: async () => ({ state: 'expired' }),
     },
     bins: o.bins ?? (async () => {}),
     spawn: async (cmd: string[]) => {

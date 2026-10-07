@@ -78,7 +78,7 @@ function control(o: { available?: boolean; states?: (PhoneTestPoll | 'hang')[] }
       calls.push('link'),
       { id: 'abc', url: 'https://telinha.example.com/doctor?t=TOKEN', expiresAt: Date.now() + 600_000 }
     ),
-    doctorWait: async (id, ms) => {
+    phoneTestWait: async (id, ms) => {
       calls.push(`wait ${id} ${ms}`);
       const next = states.shift() ?? { state: 'expired' };
       return next === 'hang' ? new Promise<PhoneTestPoll>(() => {}) : next;

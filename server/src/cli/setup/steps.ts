@@ -66,8 +66,8 @@ export interface SetupDeps {
   discord: (token: string) => DiscordSetup;
   /** Linux: user = a user unit. null on hosts without a service manager. */
   serviceManager: (o: { user: boolean }) => ServiceManager | null;
-  /** phoneTestLink/doctorWait: the phone test on the doctor screen after the install. */
-  control: Pick<ControlClient, 'available' | 'shutdown' | 'status' | 'phoneTestLink' | 'doctorWait'>;
+  /** phoneTestLink/phoneTestWait: the phone test on the doctor screen after the install. */
+  control: Pick<ControlClient, 'available' | 'shutdown' | 'status' | 'phoneTestLink' | 'phoneTestWait'>;
   /** progress: bytes per tool while downloading (the setup screens draw a bar). */
   bins: (
     config: Pick<Config, 'media' | 'ingress'>,

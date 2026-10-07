@@ -288,7 +288,7 @@ export function machine(o: MachineOptions = {}) {
       shutdown: async () => {},
       status: async () => ({ supervised: true }) as Awaited<ReturnType<SetupDeps['control']['status']>>,
       phoneTestLink: async () => ({ id: 's', url: 'https://my-group.duckdns.org:8443/doctor/s', expiresAt: 0 }),
-      doctorWait: async () => ({ state: 'expired' }),
+      phoneTestWait: async () => ({ state: 'expired' }),
     },
     bins: async (_config, _paths, _log, progress) => {
       const total = 22_020_096;
@@ -422,7 +422,7 @@ export function fakeDoctor(builds: { n: number } = { n: 0 }): NonNullable<SetupU
       available: async () => false,
       status: async () => ({}) as never,
       phoneTestLink: async () => ({ id: 's', url: 'https://x/doctor/s', expiresAt: 0 }),
-      doctorWait: async () => ({ state: 'expired' }),
+      phoneTestWait: async () => ({ state: 'expired' }),
     },
     config: () => null,
   };

@@ -34,7 +34,7 @@ function control(o: { available?: () => Promise<boolean>; link?: 'throw'; polls?
       if (o.link) throw new Error('503 from the service');
       return { id: 'abc', url: URL, expiresAt: 0 };
     },
-    doctorWait: (id, ms) => {
+    phoneTestWait: (id, ms) => {
       calls.push(`wait ${id} ${ms}`);
       o.onWait?.();
       const next = polls.shift() ?? 'hang';

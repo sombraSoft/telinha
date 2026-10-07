@@ -140,7 +140,7 @@ describe('createControlClient', () => {
     });
     const c = createControlClient({ ...h, fetch: f.fetch, env: {} });
     expect(await c.phoneTestLink()).toEqual({ id: 'ab', url: 'https://x.test/doctor?t=1', expiresAt: 5 });
-    expect(await c.doctorWait('ab', 60_000)).toEqual({ state: 'opened', openedAt: 3 });
+    expect(await c.phoneTestWait('ab', 60_000)).toEqual({ state: 'opened', openedAt: 3 });
     expect(f.calls[1]!.url).toBe('http://127.0.0.1:8081/internal/doctor/sessions/ab?wait=30000');
     expect((await c.update('scheduled')).action).toBe('deferred');
     expect(f.calls[2]!.body).toEqual({ mode: 'scheduled' });

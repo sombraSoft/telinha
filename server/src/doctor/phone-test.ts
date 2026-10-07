@@ -10,7 +10,7 @@ import type { Config, Media } from '../config.ts';
 import type { CheckStatus } from './types.ts';
 
 /** What the doctor needs from the running service: its status for the checks, the phone test's link and long-poll. */
-export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'phoneTestLink' | 'doctorWait'>;
+export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'phoneTestLink' | 'phoneTestWait'>;
 
 /** How long the doctor waits for the phone. */
 export const PHONE_WAIT_MS = 10 * 60_000;
@@ -139,7 +139,7 @@ export class PhoneTest {
     try {
       while (!cancelled && this.#now() < deadline) {
         const next = await Promise.race([
-          ctl.doctorWait(link.id, Math.min(PHONE_POLL_MS, deadline - this.#now())),
+          ctl.phoneTestWait(link.id, Math.min(PHONE_POLL_MS, deadline - this.#now())),
           interrupted,
         ]);
         if (!next || stale()) return;
