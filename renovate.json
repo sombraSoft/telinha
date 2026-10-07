@@ -50,6 +50,14 @@
       "matchStrings": ["\"cloudflared\":\\s*\\{\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "cloudflare/cloudflared"
+    },
+    {
+      "description": "PSScriptAnalyzer that the lint job installs to check install.ps1 (ci.yml), looked up on the PowerShell Gallery",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["Install-Module (?<depName>PSScriptAnalyzer) -RequiredVersion (?<currentValue>\\S+)"],
+      "datasourceTemplate": "nuget",
+      "registryUrlTemplate": "https://www.powershellgallery.com/api/v2/"
     }
   ],
   "packageRules": [
@@ -90,6 +98,12 @@
       "description": "The SignPath action holds the signing token and returns the files that ship: pinned to a commit, every bump reviewed by hand",
       "matchPackageNames": ["signpath/github-action-submit-signing-request"],
       "groupName": "signpath",
+      "automerge": false
+    },
+    {
+      "description": "global.json's sdk.version is a floor, not a pin: rollForward latestFeature already uses the newest installed 10.0.x SDK, and raising the floor breaks tray builds on machines with an older SDK (10.0.300 locally), so a bump is a deliberate choice made by hand, kept out of the allNonMajor group",
+      "matchDepNames": ["dotnet-sdk"],
+      "groupName": "dotnet-sdk",
       "automerge": false
     },
     {
