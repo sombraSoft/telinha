@@ -121,7 +121,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
-      - run: bun install --frozen-lockfile
+      # Every OS/CPU's native packages: the arm64 cross build embeds that target's OpenTUI library.
+      - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - run: bun run build
       # Tests first: dotnet test rebuilds the tray without -p:Version.
       - name: tray
@@ -177,6 +178,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      # build-binary.ts imports the Solid plugin: install it from the lockfile
+      # rather than letting Bun auto-install whatever npm has today.
+      - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@v8
         with:
           name: windows-unsigned
@@ -277,6 +281,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
       - run: bun scripts/build-binary.ts pack-caddy --target "${{ matrix.target }}" --from dist-caddy
       - uses: actions/upload-artifact@v7
         with:
