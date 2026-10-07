@@ -2,13 +2,14 @@
   import { toggleFullscreen } from '../lib/fullscreen';
   import { t } from '../lib/i18n/i18n.svelte';
   import { prefs } from '../lib/prefs.svelte';
-  import type { Peer } from '../lib/room.svelte';
+  import type { Participant } from '../lib/room.svelte';
   import { QUALITY, QUALITY_CHOICES, parseQuality } from '../lib/share';
   import { qualityLabel, type VideoStats } from '../lib/stats';
 
   type Props = {
-    peer: Peer;
-    viewers: Peer[];
+    participant: Participant;
+    /** the participants that have this tile on screen */
+    watchers: Participant[];
     focused: boolean;
     /** small tile under a focused one: compact controls */
     strip: boolean;
@@ -16,15 +17,15 @@
     onfocus: () => void;
     onstop: () => void;
   };
-  let { peer, viewers, focused, strip, stats, onfocus, onstop }: Props = $props();
+  let { participant, watchers, focused, strip, stats, onfocus, onstop }: Props = $props();
 
   // Deriveds keep the same track/publication object across snapshots, so the
   // effects below only re-run when the track itself changes.
-  const video = $derived(peer.stream?.video);
-  const audio = $derived(peer.stream?.audio ?? null);
-  const pub = $derived(peer.stream?.pub ?? null);
-  const volume = $derived(prefs.volume(peer.identity));
-  const muted = $derived(prefs.muted(peer.identity));
+  const video = $derived(participant.stream?.video);
+  const audio = $derived(participant.stream?.audio ?? null);
+  const pub = $derived(participant.stream?.pub ?? null);
+  const volume = $derived(prefs.volume(participant.identity));
+  const muted = $derived(prefs.muted(participant.identity));
   const badge = $derived(qualityLabel(stats));
 
   let tileEl = $state<HTMLElement>();
@@ -105,10 +106,10 @@
   class="tile"
   class:focused
   class:strip
-  class:local={peer.local}
+  class:local={participant.local}
   data-testid="tile"
-  data-identity={peer.identity}
-  data-local={peer.local ? 'true' : 'false'}
+  data-identity={participant.identity}
+  data-local={participant.local ? 'true' : 'false'}
 >
   <video
     bind:this={videoEl}
@@ -125,7 +126,7 @@
   <button
     class="hit"
     aria-pressed={focused}
-    aria-label={focused ? t('tile.unfocus') : t('tile.focus', { name: peer.name })}
+    aria-label={focused ? t('tile.unfocus') : t('tile.focus', { name: participant.label })}
     onclick={(e) => {
       // A mouse click should not leave the overlays pinned by :focus-within.
       if (e.detail > 0) e.currentTarget.blur();
@@ -140,27 +141,27 @@
     <pre class="stats">{statLines}</pre>
   {/if}
 
-  {#if viewers.length}
-    <div class="viewers overlay" data-testid="tile-viewers" title={t('tile.watching', { names: viewers.map((v) => v.name).join(', ') })}>
-      {#each viewers.slice(0, 5) as v (v.identity)}
+  {#if watchers.length}
+    <div class="viewers overlay" data-testid="tile-viewers" title={t('tile.watching', { names: watchers.map((v) => v.name).join(', ') })}>
+      {#each watchers.slice(0, 5) as v (v.identity)}
         <img class="avatar" src={v.avatar} alt="" />
       {/each}
       <span aria-hidden="true">👁</span>
-      <span>{viewers.length}</span>
-      <span class="sr-only">{t('tile.viewers', { count: viewers.length })}</span>
+      <span>{watchers.length}</span>
+      <span class="sr-only">{t('tile.viewers', { count: watchers.length })}</span>
     </div>
   {/if}
 
   <!-- One bottom row: the controls wrap above the label instead of covering it. -->
   <div class="bottom">
     <div class="label overlay">
-      <img class="avatar" src={peer.avatar} alt="" />
-      <span class="name">{peer.name}{peer.local ? ` ${t('you')}` : ''}</span>
+      <img class="avatar" src={participant.avatar} alt="" />
+      <span class="name">{participant.label}{participant.local ? ` ${t('you')}` : ''}</span>
       <span class="quality" data-testid="tile-quality">{badge}</span>
     </div>
 
     <div class="controls overlay">
-      {#if peer.local}
+      {#if participant.local}
         <button class="btn danger" aria-label={t('tile.stop')} title={t('tile.stop')} onclick={onstop}>
           <span aria-hidden="true">⏹</span>
           {#if !strip}<span aria-hidden="true">{t('tile.stop')}</span>{/if}
@@ -173,7 +174,7 @@
               aria-label={muted ? t('tile.unmute') : t('tile.mute')}
               title={muted ? t('tile.unmute') : t('tile.mute')}
               aria-pressed={muted}
-              onclick={() => prefs.toggleMute(peer.identity)}
+              onclick={() => prefs.toggleMute(participant.identity)}
             >{muted ? '🔇' : '🔊'}</button>
             {#if !strip}
               <input
@@ -182,8 +183,8 @@
                 min="0"
                 max="100"
                 value={volume}
-                aria-label={t('tile.volume', { name: peer.name })}
-                oninput={(e) => prefs.setVolume(peer.identity, Number(e.currentTarget.value))}
+                aria-label={t('tile.volume', { name: participant.label })}
+                oninput={(e) => prefs.setVolume(participant.identity, Number(e.currentTarget.value))}
               />
             {/if}
           </div>

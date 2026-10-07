@@ -1,3 +1,4 @@
+// editorconfig-checker-disable-file: the expected Caddyfiles are tab-indented, as Caddy formats them.
 import { describe, expect, test } from 'bun:test';
 import { loadConfig } from '../src/config.ts';
 import { renderCaddyfile, renderLivekitYaml, upstreamHost } from '../src/render.ts';

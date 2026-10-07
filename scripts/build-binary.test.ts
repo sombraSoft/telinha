@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { archiveFiles, assetName, buildConfig, packSources, parseArgs } from './build-binary.ts';
+import { archiveFiles } from '../server/src/release.ts';
+import { buildConfig, packSources, parseArgs } from './build-binary.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
 const opts = { version: '0.7.0-rc.1', commit: 'abc1234', outfile: '/tmp/out/telinha' };
@@ -59,11 +60,6 @@ describe('parseArgs', () => {
     expect(parseArgs(['--target', 'host', '--version', '1.2.3'], 'linux').targets).toEqual(['linux-x64']);
     expect(parseArgs(['--target', 'linux-x64', '--version', '1.2.3'], 'win32').targets).toEqual(['linux-x64']);
     expect(() => parseArgs(['--target', 'windows'], 'linux')).toThrow('compile Windows targets on Windows');
-  });
-
-  test('archive names', () => {
-    expect(assetName('linux-arm64')).toBe('telinha-linux-arm64.tar.gz');
-    expect(assetName('windows-x64')).toBe('telinha-windows-x64.zip');
   });
 });
 
@@ -188,7 +184,6 @@ describe('archiveFiles', () => {
   const files = { exe: 'E', tray: 'T', license: 'L' };
 
   test('Windows zips: telinha.exe, telinha-tray.exe, LICENSE', () => {
-    expect(assetName('windows-x64')).toBe('telinha-windows-x64.zip');
     expect(archiveFiles('windows-x64', files)).toEqual([
       { path: 'telinha.exe', mode: 0o755, source: 'E' },
       { path: 'telinha-tray.exe', mode: 0o755, source: 'T' },

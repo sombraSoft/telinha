@@ -43,6 +43,89 @@ url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x
 checksum = "sha256:78c221c2376f79731ccf4e4af0b3bb46d81fefa3296c5abee09ad8a1b21e68c6"
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64-baseline.zip"
 
+[[tools.editorconfig-checker]]
+version = "4.0.2"
+backend = "github:editorconfig-checker/editorconfig-checker"
+specifiers = ["4.0.2"]
+
+[tools.editorconfig-checker."platforms.linux-arm64"]
+checksum = "sha256:abad76da8c9950fdc2a314bcd66969172aa823e9c595fa7e3a389a91e34d025e"
+url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/v4.0.2/editorconfig-checker-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/574675779"
+provenance = "github-attestations"
+
+[tools.editorconfig-checker."platforms.linux-x64"]
+checksum = "sha256:44efaef3ed14c6ab52eb87481d78e5e5c204796dccf26e2f4598a61ba17f8003"
+url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/v4.0.2/editorconfig-checker-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/574675771"
+provenance = "github-attestations"
+
+[tools.editorconfig-checker."platforms.macos-arm64"]
+checksum = "sha256:ff59f57717d95fc62b8e372c8051dbbb766f7d660942409a85d027b0feb2422c"
+url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/v4.0.2/editorconfig-checker-darwin-all.tar.gz"
+url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/574675773"
+provenance = "github-attestations"
+
+[tools.editorconfig-checker."platforms.windows-x64"]
+checksum = "sha256:857f8f74dfc259d73dac93573e37cf3ce01150787d7b139bf839549cc6b5beb9"
+url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/v4.0.2/editorconfig-checker-windows-amd64.zip"
+url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/574675794"
+provenance = "github-attestations"
+
+[[tools."github:jdx/jactionlint"]]
+version = "1.8.2"
+backend = "github:jdx/jactionlint"
+specifiers = ["1.8.2"]
+
+[tools."github:jdx/jactionlint"."platforms.linux-arm64"]
+checksum = "sha256:7d618749dbddd762a14bd491ea97bc4f6599626f830a11edc6c6522ead8bcd05"
+url = "https://github.com/jdx/jactionlint/releases/download/v1.8.2/jactionlint_1.8.2_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/611338576"
+provenance = "github-attestations"
+
+[tools."github:jdx/jactionlint"."platforms.linux-x64"]
+checksum = "sha256:6533bd8047fc012a3f66238d84f65cacdac669da00b9f6cf042c1734c252bc93"
+url = "https://github.com/jdx/jactionlint/releases/download/v1.8.2/jactionlint_1.8.2_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/611338580"
+provenance = "github-attestations"
+
+[tools."github:jdx/jactionlint"."platforms.macos-arm64"]
+checksum = "sha256:de9eb05af3cde409dc0b37fe2fd6a21b875a575374e7b26c02d45a7086645c28"
+url = "https://github.com/jdx/jactionlint/releases/download/v1.8.2/jactionlint_1.8.2_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/611338605"
+provenance = "github-attestations"
+
+[tools."github:jdx/jactionlint"."platforms.windows-x64"]
+checksum = "sha256:fd7be539cd3276d5178f85ef140c1bb52395b1ec1f59b1585050e1be3b0b194b"
+url = "https://github.com/jdx/jactionlint/releases/download/v1.8.2/jactionlint_1.8.2_windows_amd64.zip"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/611338616"
+provenance = "github-attestations"
+
+[[tools.gitleaks]]
+version = "8.30.1"
+backend = "aqua:gitleaks/gitleaks"
+specifiers = ["8.30.1"]
+
+[tools.gitleaks."platforms.linux-arm64"]
+checksum = "sha256:e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332057"
+
+[tools.gitleaks."platforms.linux-x64"]
+checksum = "sha256:551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332058"
+
+[tools.gitleaks."platforms.macos-arm64"]
+checksum = "sha256:b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332059"
+
+[tools.gitleaks."platforms.windows-x64"]
+checksum = "sha256:d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378333178"
+
 [[tools.go]]
 version = "1.25.14"
 backend = "core:go"
@@ -63,3 +146,28 @@ url = "https://dl.google.com/go/go1.25.14.darwin-arm64.tar.gz"
 [tools.go."platforms.windows-x64"]
 checksum = "sha256:119044a92b3987c341cd6aebb256676dd4780d292f7b4e72a3e9976677841697"
 url = "https://dl.google.com/go/go1.25.14.windows-amd64.zip"
+
+[[tools.shellcheck]]
+version = "0.11.0"
+backend = "aqua:koalaman/shellcheck"
+specifiers = ["0.11.0"]
+
+[tools.shellcheck."platforms.linux-arm64"]
+checksum = "sha256:12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.aarch64.tar.xz"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056934"
+
+[tools.shellcheck."platforms.linux-x64"]
+checksum = "sha256:8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056942"
+
+[tools.shellcheck."platforms.macos-arm64"]
+checksum = "sha256:56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0a79"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.aarch64.tar.xz"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056932"
+
+[tools.shellcheck."platforms.windows-x64"]
+checksum = "sha256:8a4e35ab0b331c85d73567b12f2a444df187f483e5079ceffa6bda1faa2e740e"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056944"

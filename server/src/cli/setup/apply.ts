@@ -4,9 +4,9 @@
 // the plain run (lines as they come). A task's lines are the steps' own
 // output, captured per task; what happens after a failure is the caller's
 // decide().
-import { toolsFor } from '../../bins.ts';
 import type { Config } from '../../config.ts';
 import type { CheckResult } from '../../doctor/types.ts';
+import { helpersOf } from '../../footprint.ts';
 import type { Out } from '../term.ts';
 import { at, type AKey } from './apply-strings.ts';
 import { checkDiscord } from './discord.ts';
@@ -114,7 +114,7 @@ export function planTasks(values: Values, o: ApplyOptions): TaskId[] {
   if (o.docker) return plan;
   const ingress = (values.INGRESS || 'direct') as Config['ingress'];
   // LiveKit Cloud behind a proxy runs no child; behind a tunnel nothing reaches this machine.
-  if (toolsFor({ media: values.MEDIA === 'cloud' ? 'cloud' : 'self', ingress }).length) plan.push('binaries');
+  if (helpersOf({ media: values.MEDIA === 'cloud' ? 'cloud' : 'self', ingress }).length) plan.push('binaries');
   if (!o.flags.noService) plan.push('service');
   // Early, so the icon shows the service coming up while the rest runs.
   if (o.tray) plan.push('tray');

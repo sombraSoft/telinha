@@ -211,7 +211,7 @@ proxy, o padrão já faz tudo isso:
 
 ```
 telinha.example.com {
-	reverse_proxy 127.0.0.1:8081
+  reverse_proxy 127.0.0.1:8081
 }
 ```
 

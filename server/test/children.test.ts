@@ -38,6 +38,7 @@ const specsFor = (ingress: 'direct' | 'tunnel' | 'external', extra: Record<strin
   return { config, paths, specs: childSpecs(config, paths, find, free) };
 };
 
+// Which helpers a mode runs, and the ports each probes, is footprint.test.ts's.
 describe('childSpecs', () => {
   test('direct: livekit then caddy', () => {
     const { paths, specs } = specsFor('direct');
@@ -70,16 +71,6 @@ describe('childSpecs', () => {
     expect(cf!.env).toEqual({ TUNNEL_TOKEN: SECRETS.TUNNEL_TOKEN });
     expect(lk!.env).not.toHaveProperty('TUNNEL_TOKEN');
     expect(cf!.ready).toBeUndefined();
-  });
-
-  test('external: livekit only', () => {
-    expect(specsFor('external').specs.map((s) => s.name)).toEqual(['livekit']);
-  });
-
-  test('cloud: no livekit, only the ingress child', () => {
-    expect(specsFor('direct', CLOUD).specs.map((s) => s.name)).toEqual(['caddy']);
-    expect(specsFor('tunnel', CLOUD).specs.map((s) => s.name)).toEqual(['cloudflared']);
-    expect(specsFor('external', CLOUD).specs).toEqual([]);
   });
 
   test('cloud direct: caddy renders its Caddyfile, no livekit.yaml', async () => {
@@ -147,15 +138,6 @@ describe('childSpecs', () => {
     const [lk] = childSpecs(config, paths, fake, async (p) => { probed.push(p); return p === 5349; });
     await expect(lk!.prepare!()).rejects.toThrow('port 5349 (TURN_PORT) already in use (another LiveKit?)');
     expect(probed).toEqual([7880, 7881, 5349]);
-  });
-
-  test('with TURN off, TURN_PORT is not probed', async () => {
-    const { config, paths } = setup('direct');
-    expect(config.turn).toBeNull();
-    const probed: number[] = [];
-    const [lk] = childSpecs(config, paths, fake, async (p) => { probed.push(p); return false; });
-    await lk!.prepare!();
-    expect(probed).toEqual([7880, 7881]);
   });
 
   test('portInUse: true for a listener, false for a free port', async () => {

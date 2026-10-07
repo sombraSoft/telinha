@@ -1,12 +1,12 @@
 <script lang="ts">
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
-  import type { RoomController } from '../lib/room.svelte';
+  import type { RoomSession } from '../lib/room.svelte';
   import head from '../assets/telinha-head.webp';
   import { PEOPLE_ID } from './PeopleList.svelte';
   import SettingsMenu from './SettingsMenu.svelte';
 
-  let { rc, peopleOpen, ontogglepeople }: { rc: RoomController; peopleOpen: boolean; ontogglepeople: () => void } =
+  let { rc, peopleOpen, ontogglepeople }: { rc: RoomSession; peopleOpen: boolean; ontogglepeople: () => void } =
     $props();
 </script>
 

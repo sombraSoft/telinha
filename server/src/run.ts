@@ -23,11 +23,12 @@ import { createDuckDns, startDdnsLoop, type Ddns } from './ddns.ts';
 import { createDoctorRoutes } from './doctor/routes.ts';
 import { createDoctorStore } from './doctor/session.ts';
 import { loadEnvFile, mergeEnv } from './envfile.ts';
+import { footprintOf } from './footprint.ts';
 import { createHandler } from './http.ts';
 import { t, type Locale } from './i18n.ts';
 import { createIpWatch, type IpWatch } from './ipwatch.ts';
 import { createLifecycle } from './lifecycle.ts';
-import { roomService } from './livekit.ts';
+import { roomService, type RoomService } from './livekit.ts';
 import { acquireLock, AlreadyRunningError, type Lock } from './lock.ts';
 import { createLogger } from './log.ts';
 import { createDirectory } from './members.ts';
@@ -35,7 +36,7 @@ import { createPortMapper, type PortMapper } from './nat/index.ts';
 import { lookupPublicIp } from './netinfo.ts';
 import { createLivekitProxy, type ProxyData } from './proxy.ts';
 import { createRoleChecker, devIsMember, restGetMember, type IsMember } from './roles.ts';
-import { openRegistry, type Registry } from './rooms.ts';
+import { createRooms, type Rooms } from './rooms.ts';
 import { loadStatic } from './static.ts';
 import { createSupervisor, type Supervisor } from './supervisor.ts';
 import { createGitHubReleases } from './update/github.ts';
@@ -55,6 +56,17 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export interface RunOptions {
   /** Started by double-click (a console of its own, no arguments): wait for Enter before exiting on an error, or the window vanishes. */
   pauseOnError: boolean;
+}
+
+/** The Room module for this config; dev has no slash command, so admit opens a room for any code. */
+export function roomModuleFor(config: Pick<Config, 'dataDir' | 'closeEmptySeconds' | 'dev'>, livekit: RoomService, log: (...a: unknown[]) => void): Rooms {
+  return createRooms({
+    path: join(config.dataDir, 'telinha.sqlite'),
+    livekit,
+    closeEmptySeconds: config.closeEmptySeconds,
+    devAutoOpen: Boolean(config.dev),
+    log,
+  });
 }
 
 /** telinha.env (+ the environment over it) -> Config, logging where it came from and every warning. */
@@ -103,7 +115,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   }
 
   let supervisor: Supervisor | undefined;
-  let registry: Registry | undefined;
+  let roomModule: Rooms | undefined;
   let server: ReturnType<typeof Bun.serve<ProxyData>> | undefined;
   let mapper: PortMapper | null = null;
   let control: Control | undefined;
@@ -126,7 +138,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
         supervisor?.stop().catch((e: unknown) => log('stopping children failed', message(e))),
       ]);
       void server?.stop(true);
-      registry?.closeDb();
+      roomModule?.closeDb();
       control?.removeToken();
       lock.release();
       logger.close();
@@ -174,6 +186,8 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     }
   }
 
+  // The doctor's phone test asks LiveKit for its own room through it too.
+  const livekit = roomService({ url: config.livekitApiUrl, key: config.livekitKey, secret: config.livekitSecret });
   let files: ReturnType<typeof loadStatic>;
   try {
     // The native binary fetches its own livekit/caddy/cloudflared (a new pin after an update lands here).
@@ -182,7 +196,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
       if (r.changed.length) log(`binaries updated: ${r.changed.join(', ')}`);
     }
     files = loadStatic(config.webDir, { command: config.commandName });
-    registry = openRegistry(join(config.dataDir, 'telinha.sqlite'));
+    roomModule = roomModuleFor(config, livekit, log);
     supervisor = createSupervisor({
       specs: childSpecs(config, paths),
       log,
@@ -210,12 +224,8 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     if (o.pauseOnError) await waitForEnter(ts(ctx.locale, 'pressEnter'));
     process.exit(1);
   }
-  const reg = registry;
+  const rooms = roomModule;
   const sup = supervisor;
-
-  const rooms = roomService({
-    url: config.livekitApiUrl, key: config.livekitKey, secret: config.livekitSecret, closeEmptySeconds: config.closeEmptySeconds,
-  });
 
   let isMember: IsMember;
   let discordReady = () => false;
@@ -226,7 +236,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   const group = (l: Locale) => config.groupName ?? guildName() ?? t(l, 'members');
   const render = (rec: Parameters<typeof renderCard>[0], live: Parameters<typeof renderCard>[1] = { streamers: [], viewers: [] }) =>
     renderCard(rec, live, { publicUrl: config.publicUrl, group: group(rec.locale) });
-  // Dev rooms have no Discord message; the lifecycle still opens and closes them.
+  // Dev rooms have no Discord message; rooms.ts still opens and closes them.
   let editMessage = async (_c: string, _m: string, _card: Card) => {};
 
   if (config.dev) {
@@ -235,25 +245,26 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   } else {
     const rest = new REST().setToken(config.discordToken);
     isMember = createRoleChecker({ getMember: restGetMember(rest, config.guildId), roleId: config.roleId, ttlMs: config.roleTtlMs });
-    const client = startBot({ config, rest, group, log, registry: reg, rooms, render: (rec) => render(rec), directory });
+    const client = startBot({ config, rest, group, log, rooms, render: (rec) => render(rec), directory });
     discordReady = () => client.isReady();
     guildName = () => client.guilds.cache.get(config.guildId)?.name;
     editMessage = editCard(rest);
   }
 
   stoppers.push(createLifecycle({
-    registry: reg, rooms, render, editMessage: (c, m, card) => editMessage(c, m, card), closeEmptyMs: config.closeEmptySeconds * 1000, log,
+    rooms, render, editMessage: (c, m, card) => editMessage(c, m, card), log,
   }).start(config.pollSeconds * 1000));
 
   const ddns: Ddns | null = config.ddns ? createDuckDns({ domain: config.ddns.domain, token: config.ddns.token, fetch, log }) : null;
   // With nothing to map (LiveKit Cloud behind a tunnel) the mapper only drops what a previous run left.
   if (config.upnp) mapper = createPortMapper({ mappings: upnpMappings(config), statePath: join(paths.run, 'upnp.json'), log });
 
+  const footprint = footprintOf(config);
   // LiveKit picks the public IP once at start; a residential IP change needs a
   // restart. Cloud has no local LiveKit but still wants the mappings and DuckDNS renewed.
   let ipWatch: IpWatch | null = null;
-  if (config.ipWatchSeconds > 0 && !config.livekitNodeIp) {
-    const self = config.media === 'self';
+  if (footprint.ipWatch) {
+    const self = footprint.helpers.some((h) => h.name === 'livekit');
     ipWatch = createIpWatch({
       fetch, intervalMs: config.ipWatchSeconds * 1000, log,
       labels: self
@@ -296,7 +307,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
       maxDeferMs: config.updateMaxDeferHours * 3_600_000,
       paths,
       target,
-      openRooms: () => reg.open().length,
+      openRooms: () => rooms.openRooms().length,
       github: createGitHubReleases(),
       log,
       compiled: ctx.compiled,
@@ -310,7 +321,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   const updater = makeUpdater();
 
   const doctorStore = createDoctorStore({ cookieSecret: config.cookieSecret });
-  const doctor = createDoctorRoutes({ store: doctorStore, config, files, rooms, log });
+  const doctor = createDoctorRoutes({ store: doctorStore, config, files, rooms: livekit, log });
   const children = () => Object.fromEntries(sup.status().map((s) => [s.name, s.state]));
   const childStatus = () => Object.fromEntries(sup.status().map((s) => [s.name, { state: s.state, pid: s.pid, restarts: s.restarts, recentRestarts: s.recentRestarts, since: s.since }]));
   const status = (): ControlStatus => ({
@@ -319,7 +330,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     pid: process.pid,
     ingress: config.ingress,
     media: config.media,
-    rooms: reg.open().length,
+    rooms: rooms.openRooms().length,
     children: children(),
     childStatus: childStatus(),
     publicIp: ipWatch?.current() ?? config.livekitNodeIp ?? ddns?.last()?.ip ?? null,
@@ -345,15 +356,15 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   });
 
   // Cloud: browsers reach LiveKit Cloud directly, so /livekit/* stays a 404.
-  const proxy = config.media === 'self' ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
+  const proxy = footprint.relay ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
   // Bun.serve wants a handler even when nothing ever upgrades.
   const noSockets: WebSocketHandler<ProxyData> = { message() {} };
   const handler = createHandler({
-    config, isMember, files, group, registry: reg, rooms, discordReady: () => discordReady(), members: () => directory.list(), log,
+    config, isMember, files, group, rooms, discordReady: () => discordReady(), members: () => directory.list(), log,
     proxy,
     upgrade: (req, data) => server?.upgrade(req, { data }) ?? false,
     timeout: (req, seconds) => server?.timeout(req, seconds),
-    openRooms: () => reg.open().length,
+    openRooms: () => rooms.openRooms().length,
     children,
     version: ctx.version,
     control,

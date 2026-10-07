@@ -1,9 +1,10 @@
-// Which child processes a mode needs, as data for the supervisor.
+// The child process of each helper the footprint names, as data for the supervisor.
 // Secrets reach a child only through its own env, never argv (world-readable in
 // ps/tasklist and printed in the "spawning" log line) and never a rendered file.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { KNOWN_KEYS, type Config } from './config.ts';
+import { footprintOf } from './footprint.ts';
 import { findBinary as defaultFindBinary, type Paths } from './paths.ts';
 import { renderCaddyfile, renderLivekitYaml } from './render.ts';
 import type { ChildSpec } from './supervisor.ts';
@@ -56,66 +57,60 @@ export function childBaseEnv(processEnv: Record<string, string | undefined>): Re
 export function childSpecs(
   config: Config, paths: Paths, findBinary: FindBinary = defaultFindBinary, inUse: PortInUse = portInUse,
 ): ChildSpec[] {
-  // tool = the bins.ts name that downloads it
-  const bin = (name: string, tool: string) => {
-    const found = findBinary(name, paths);
-    if (!found) throw new Error(`${name} not found: put it in ${paths.bin} (bun scripts/bins.ts ${tool}) or on PATH`);
-    return found;
-  };
-  const specs: ChildSpec[] = [];
-
-  // Cloud: the SFU is remote, only the ingress child (if any) runs here.
-  if (config.media === 'self') {
-    const file = join(paths.run, 'livekit.yaml');
-    specs.push({
-      name: 'livekit',
-      cmd: [bin('livekit-server', 'livekit'), '--config', file],
-      env: { LIVEKIT_KEYS: `${config.livekitKey}: ${config.livekitSecret}` },
-      // Rewritten on every (re)start, so a config reload is just restart().
-      prepare: async () => {
-        // Runs after our own previous livekit exited, so a listener here is someone
-        // else's (an old tela stack, an orphan, a second telinha): it would answer
-        // the ready probe while ours fails to bind, and telinha would use the wrong SFU.
-        // A taken TURN_PORT means a second TURN would answer Caddy's forwarded streams.
-        const probes: [string, number][] = [['LIVEKIT_PORT', config.livekitPort], ['MEDIA_TCP_PORT', config.mediaTcpPort]];
-        if (config.turn) probes.push(['TURN_PORT', config.turn.port]);
-        for (const [key, port] of probes) {
-          if (await inUse(port)) throw new Error(`port ${port} (${key}) already in use (another LiveKit?)`);
-        }
-        await mkdir(paths.run, { recursive: true });
-        await writeFile(file, renderLivekitYaml(config));
-      },
-      ready: { url: `http://127.0.0.1:${config.livekitPort}/`, timeoutMs: 30_000 },
-    });
-  }
-
-  if (config.ingress === 'direct') {
-    const file = join(paths.run, 'Caddyfile');
-    const storage = join(paths.data, 'caddy');
-    specs.push({
-      name: 'caddy',
-      cmd: [bin('caddy', 'caddy'), 'run', '--config', file, '--adapter', 'caddyfile'],
-      // Certificates must survive restarts and live on the data volume.
-      env: {
-        XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage,
-        ...(config.acmeDns ? { DUCKDNS_TOKEN: config.acmeDns.token } : {}),
-      },
-      // Caddy's failed DNS challenges log the DuckDNS URL, token included.
-      ...(config.acmeDns ? { redact: [config.acmeDns.token] } : {}),
-      prepare: async () => {
-        await mkdir(paths.run, { recursive: true });
-        await mkdir(storage, { recursive: true });
-        await writeFile(file, renderCaddyfile(config));
-      },
-    });
-  } else if (config.ingress === 'tunnel') {
-    specs.push({
-      name: 'cloudflared',
-      // cloudflared reads TUNNEL_TOKEN itself; never --token (argv is public).
-      cmd: [bin('cloudflared', 'cloudflared'), 'tunnel', '--no-autoupdate', 'run'],
-      env: { TUNNEL_TOKEN: config.tunnelToken ?? '' },
-    });
-  }
-
-  return specs;
+  // Every helper the footprint names; bins.ts downloads each under its name.
+  return footprintOf(config).helpers.map((h): ChildSpec => {
+    const found = findBinary(h.binary, paths);
+    if (!found) throw new Error(`${h.binary} not found: put it in ${paths.bin} (bun scripts/bins.ts ${h.name}) or on PATH`);
+    switch (h.name) {
+      case 'livekit': {
+        const file = join(paths.run, 'livekit.yaml');
+        return {
+          name: 'livekit',
+          cmd: [found, '--config', file],
+          env: { LIVEKIT_KEYS: `${config.livekitKey}: ${config.livekitSecret}` },
+          // Rewritten on every (re)start, so a config reload is just restart().
+          prepare: async () => {
+            // Runs after our own previous livekit exited, so a listener here is someone
+            // else's (an old tela stack, an orphan, a second telinha): it would answer
+            // the ready probe while ours fails to bind, and telinha would use the wrong SFU.
+            // A taken TURN_PORT means a second TURN would answer Caddy's forwarded streams.
+            // A connect probes TCP only.
+            for (const { key, port } of h.ports.filter((p) => p.protocol === 'tcp')) {
+              if (await inUse(port)) throw new Error(`port ${port} (${key}) already in use (another LiveKit?)`);
+            }
+            await mkdir(paths.run, { recursive: true });
+            await writeFile(file, renderLivekitYaml(config));
+          },
+          ready: { url: `http://127.0.0.1:${config.livekitPort}/`, timeoutMs: 30_000 },
+        };
+      }
+      case 'caddy': {
+        const file = join(paths.run, 'Caddyfile');
+        const storage = join(paths.data, 'caddy');
+        return {
+          name: 'caddy',
+          cmd: [found, 'run', '--config', file, '--adapter', 'caddyfile'],
+          // Certificates must survive restarts and live on the data volume.
+          env: {
+            XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage,
+            ...(config.acmeDns ? { DUCKDNS_TOKEN: config.acmeDns.token } : {}),
+          },
+          // Caddy's failed DNS challenges log the DuckDNS URL, token included.
+          ...(config.acmeDns ? { redact: [config.acmeDns.token] } : {}),
+          prepare: async () => {
+            await mkdir(paths.run, { recursive: true });
+            await mkdir(storage, { recursive: true });
+            await writeFile(file, renderCaddyfile(config));
+          },
+        };
+      }
+      case 'cloudflared':
+        return {
+          name: 'cloudflared',
+          // cloudflared reads TUNNEL_TOKEN itself; never --token (argv is public).
+          cmd: [found, 'tunnel', '--no-autoupdate', 'run'],
+          env: { TUNNEL_TOKEN: config.tunnelToken ?? '' },
+        };
+    }
+  });
 }

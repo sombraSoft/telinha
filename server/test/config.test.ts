@@ -379,11 +379,6 @@ describe('port collisions', () => {
   test('HTTP_PORT=0 is not a port', () => {
     expect(loadConfig({ ...PROD_ENV, HTTP_PORT: '0', LISTEN: '127.0.0.1:8081' }).httpPort).toBe(0);
   });
-
-  test('HTTPS_PORT and HTTP_PORT are free outside direct mode', () => {
-    expect(loadConfig({ ...TUNNEL_ENV, HTTPS_PORT: '8081', HTTP_PORT: '7880' }).httpsPort).toBe(8081);
-    expect(loadConfig({ ...PROD_ENV, INGRESS: 'external', HTTPS_PORT: '7881', HTTP_PORT: '7882' }).ingress).toBe('external');
-  });
 });
 
 describe('MEDIA=cloud', () => {
@@ -441,19 +436,8 @@ describe('MEDIA=cloud', () => {
     expect(loadConfig({ ...CLOUD_ENV, LIVEKIT_NODE_IP: '203.0.113.7' })).toMatchObject({ livekitNodeIp: '203.0.113.7', ipWatchSeconds: 0, warnings: [] });
   });
 
-  test('media and LiveKit ports are not bound, so they do not collide', () => {
-    expect(() => loadConfig({ ...CLOUD_ENV, MEDIA_UDP_PORT: '7881' })).not.toThrow();
-    expect(() => loadConfig({ ...CLOUD_ENV, LISTEN: '127.0.0.1:7880' })).not.toThrow();
-    expect(() => loadConfig({ ...CLOUD_ENV, HTTP_PORT: '7881' })).not.toThrow();
-    expect(() => loadConfig({ ...CLOUD_ENV, HTTPS_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTPS_PORT=8081');
-    expect(() => loadConfig({ ...CLOUD_ENV, HTTP_PORT: '8081' })).toThrow('ports collide: LISTEN=8081, HTTP_PORT=8081');
-  });
-
-  test('works with a tunnel and asks the router for no media port', () => {
-    const c = loadConfig({ ...CLOUD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' });
-    expect(c.livekitUrl).toBe('wss://proj-abc123.livekit.cloud');
-    expect(upnpMappings(c)).toEqual([]);
-    expect(upnpMappings(loadConfig({ ...HOME_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' })).map((m) => m.externalPort)).toEqual([8443]);
+  test('works with a tunnel', () => {
+    expect(loadConfig({ ...CLOUD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' }).livekitUrl).toBe('wss://proj-abc123.livekit.cloud');
   });
 });
 
@@ -655,10 +639,5 @@ describe('upnpMappings', () => {
       expect(external).not.toContain(80);
       expect(external).not.toContain(443);
     }
-  });
-
-  test('tunnel and external: the media ports only', () => {
-    expect(ports(TUNNEL_ENV)).toEqual(['tcp 7881->7881', 'udp 7882->7882']);
-    expect(ports({ ...PROD_ENV, INGRESS: 'external', MEDIA_TCP_PORT: '7000', MEDIA_UDP_PORT: '7001' })).toEqual(['tcp 7000->7000', 'udp 7001->7001']);
   });
 });

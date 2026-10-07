@@ -6,5 +6,7 @@ linker = "hoisted"
 [test]
 # Without this bun test loads Solid's server build: the first frame renders but
 # signals and useKeyboard never react. Not a top-level preload: `telinha run`
-# must not load Babel.
+# must not load Babel. The page's runes preload (web/test/svelte-runes.ts) is
+# passed by the root `test` script instead: the image runs `bun test server/test`
+# with this file and has neither web/test nor svelte.
 preload = ["@opentui/solid/preload"]
