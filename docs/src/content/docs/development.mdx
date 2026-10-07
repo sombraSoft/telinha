@@ -5,15 +5,15 @@ description: Build, test and change Telinha and this documentation site from a c
 
 import { FileTree } from '@astrojs/starlight/components';
 
-You only need [Bun](https://bun.sh) 1.4.2 (no Node). It works on Windows and Linux.
+You only need [mise](https://mise.jdx.dev/getting-started.html), activated in your shell. It works on Windows and Linux. `mise install` installs the versions `mise.toml` pins (Bun, Go and the linters CI runs), then the dependencies with `bun install`; run it again after a pull.
 
 ## Run from a clone
 
-Use a clone for development, or on a platform without a release build. Run from source there is no service install and no self-update: update with `git pull`, `bun install`, `bun run build`, then restart.
+Use a clone for development, or on a platform without a release build. Run from source there is no service install and no self-update: update with `git pull`, `mise install`, `bun run build`, then restart.
 
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
-bun install --frozen-lockfile && bun run build
+mise install && bun run build
 bun server/src/index.ts setup    # same setup; downloads the helper binaries into <home>/bin
 bun server/src/index.ts          # run in this console
 ```
@@ -21,7 +21,7 @@ bun server/src/index.ts          # run in this console
 ## Scripts
 
 ```
-bun install --frozen-lockfile
+mise install
 bun run dev
 bun run typecheck
 bun run test
@@ -45,7 +45,7 @@ bun run docs:build
 | `bun run e2e` | Playwright; run `bun run build` first, and install a Chromium with `bunx playwright install chromium` |
 | `bun run image` | Builds `telinha:dev` with docker or podman (Caddy is compiled in a Go stage of the `Dockerfile`), then runs the smoke test, which also checks the Caddy version and modules and has Caddy validate the DuckDNS `Caddyfile` |
 | `bun run bins` | Downloads the three helper binaries for this host into `.cache/telinha/bin`: `livekit-server` and `cloudflared` from upstream, `caddy` from the newest Telinha release (`bun scripts/bins.ts --release vX.Y.Z caddy` takes another release's). A release without a `caddy` asset is a warning, not a failure, when caddy was not named; build it with `bun run caddy` instead |
-| `bun run caddy` | Builds Telinha's Caddy (upstream Caddy plus the modules in `versions.json`) with xcaddy into `.cache/telinha/bin` (or `BIN_DIR`, or `--out DIR`), next to what `bun run bins` downloads; needs Go on `PATH`. On the host's own platform it also checks the version and the modules |
+| `bun run caddy` | Builds Telinha's Caddy (upstream Caddy plus the modules in `versions.json`) with xcaddy into `.cache/telinha/bin` (or `BIN_DIR`, or `--out DIR`), next to what `bun run bins` downloads; it uses the Go that mise installs. On the host's own platform it also checks the version and the modules |
 | `bun run versions check` | Validates `versions.json` (`refresh` recomputes the livekit and cloudflared hashes) |
 | `bun run compile --smoke` | Builds the native binaries for this OS into `dist-bin/` (run `bun run build` first) |
 | `bun run docs:dev` | Serves this site at `http://localhost:4321/telinha/` |
@@ -128,6 +128,8 @@ The site is [Starlight](https://starlight.astro.build) in the `docs/` workspace,
 - .signpath/ The artifact configuration the release's code signing uses
 - Dockerfile Multi-stage, multi-arch image build, with a Go stage that builds Caddy
 - versions.json Pinned `livekit-server` and `cloudflared` with their hashes, and the `caddy` build recipe: version, xcaddy, modules
+- mise.toml The dev and CI toolchain: Bun, Go and the linters, at the versions every other copy follows
+- mise.lock The exact downloads and checksums of that toolchain
 - package.json Workspaces and the scripts above
 - bun.lock
 - bunfig.toml

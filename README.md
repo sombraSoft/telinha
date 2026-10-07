@@ -46,11 +46,11 @@ Both download the program for this machine from the newest stable release,
 check its sha256 against the release's `SHA256SUMS` and start `telinha setup`.
 
 **From a clone** (development, or a platform without a release build): needs
-[Bun](https://bun.sh) 1.4.2.
+[mise](https://mise.jdx.dev/getting-started.html), activated in your shell.
 
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
-bun install --frozen-lockfile && bun run build
+mise install && bun run build    # the toolchain mise.toml pins, then bun install
 bun server/src/index.ts setup    # same setup screens; downloads the helper binaries into <home>/bin
 bun server/src/index.ts          # run in this console
 ```
@@ -244,6 +244,7 @@ those are served without a login (hashed build output, no data).
 | `server/` | Bun TypeScript server, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` plain output (colours, spinner, tables, links; no prompts), `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` the entry (flags, the file, the machine, the screens or the plain run) and `setup/` what it runs: `model.ts` the questions as data, `resolve.ts` answers to `telinha.env` values and flags to answers, `lookups.ts` the read-only Discord, DNS and port lookups, `session.ts` the navigation state, `apply.ts` the install tasks with their retry/skip/back decisions, `steps.ts` their side effects, `ui.ts` the contract the screens implement, `qstrings.ts` and `apply-strings.ts` the texts, plus `discord.ts`, `domain.ts`, `host.ts` and `envwrite.ts`; `doctor.ts` and `doctor-strings.ts`, `update.ts`, `service.ts`, `tray.ts` the `tray` command; `setup/tray.ts` the install's tray task), `tui/` the OpenTUI + Solid screens of setup and doctor (`runtime.tsx` the renderer and terminal safety, `theme.ts`, `keys.ts`, `ui/` the widgets, `setup/` and `doctor/` the screens, `load.ts`, `smoke.tsx`; loaded only on a terminal, through a dynamic import, so `run` never pulls it in), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` home dirs and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile (with the TURN `layer4` listener-wrapper block), `lock.ts` one run per home, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall, the `service run` loop and `tray.ts` (the tray's file, Run value, launch and stop), `update/` release lookup, download, swap, rollback, `proxy.ts` `/livekit/*` relay, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `codes.ts` room codes, `rooms.ts` the Room module (open, admit, observe; owns the SQLite registry and the LiveKit rooms), `lifecycle.ts` card pacing, flushing and retries, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
 | `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`), served under `/r/`, plus the doctor page (`doctor.html`, `src/doctor/`, plain TypeScript); `bun run build` writes `web/dist` |
 | `versions.json` | Pinned `livekit-server` and `cloudflared` versions with the sha256 of every asset (linux amd64/arm64, windows amd64/arm64; cloudflared has no windows arm64 build, the amd64 one is used), and the `caddy` build recipe: Caddy `version`, `xcaddy` and `modules` (no hashes: each release's `SHA256SUMS` pins its Caddy) |
+| `mise.toml`, `mise.lock` | The dev and CI toolchain: Bun, Go and the linters, with each tool's download and checksum for every platform in the lock. `mise install` installs it, then runs `scripts/setup-dev.ts` (`bun install`). `scripts/toolchain.test.ts` holds every other Bun and Go copy (`packageManager`, each `@types/bun`, the `Dockerfile` images) to these versions |
 | `scripts/bins.ts` | `bun run bins`: downloads and verifies the helper binaries (dev, the Docker build): `livekit-server` and `cloudflared` against `versions.json`, `caddy` from a Telinha release (`--release vX.Y.Z`, default the latest) against its `SHA256SUMS` |
 | `scripts/caddy-build.ts` | `bun run caddy`: builds Telinha's Caddy with xcaddy (needs Go), cross-compiling with `--os`/`--arch`; on the host's own platform it asserts the version and the `dns.providers.duckdns` and `layer4` modules. Imports only `node:*`, so the Docker Go stage needs just it and `versions.json` |
 | `tray/` | The Windows tray icon: C# on .NET Framework 4.8 (WinForms), one `telinha-tray.exe` (`Program.cs` start-up, `TrayApp.cs` icon and menu, `Monitor.cs` the state machine behind the dot and the notifications, `ControlClient.cs` the control endpoint, `Actions.cs`, `Autostart.cs` the Run value, `Relaunch.cs` the hand-over after an update, `Strings.cs` EN/pt-BR), MSTest tests in `tray/tests/`, `telinha.ico` |
@@ -262,10 +263,13 @@ those are served without a login (hashed build output, no data).
 
 ## Development
 
-Needs only [Bun](https://bun.sh) 1.4.2 (no Node). Works on Windows and Linux.
+Needs only [mise](https://mise.jdx.dev/getting-started.html), activated in
+your shell. Works on Windows and Linux. `mise install` installs the versions
+`mise.toml` pins (Bun, Go and the linters CI runs), then the dependencies with
+`bun install`; run it again after a pull.
 
 ```
-bun install --frozen-lockfile
+mise install               # the toolchain mise.toml pins, then bun install
 bun run dev                # http://localhost:5173/r/ (Vite HMR + Bun server, which runs LiveKit)
 bun run typecheck          # tsc and svelte-check in every workspace
 bun run test               # bun test: server, web, docs and scripts unit tests (the screens render in a test terminal)
@@ -273,7 +277,7 @@ bun run build              # web/dist
 bun run e2e                # Playwright; needs bun run build first, and a Chromium (bunx playwright install chromium)
 bun run image              # build telinha:dev with docker or podman, then run the smoke test
 bun run bins               # download all three helper binaries for this host into .cache/telinha/bin (caddy from the latest release; a warning if it has none)
-bun run caddy              # build Telinha's Caddy with xcaddy into .cache/telinha/bin (needs Go on PATH)
+bun run caddy              # build Telinha's Caddy with xcaddy into .cache/telinha/bin (uses the Go that mise installs)
 bun run versions check     # validate versions.json (refresh: recompute the livekit and cloudflared hashes)
 bun run compile --smoke    # native binaries for this OS into dist-bin/ (needs bun run build first); --smoke also runs the terminal UI smoke
 dotnet test tray/tests/telinha-tray.tests.csproj -c Release           # the tray's unit tests (Windows, .NET SDK 8+)
