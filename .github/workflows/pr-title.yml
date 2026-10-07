@@ -1,7 +1,8 @@
-# Checks that every PR title is a Conventional Commit. PRs are squash-merged
-# with the title as the commit message, and release-please reads those
-# messages, so a bad title becomes a bad changelog entry. The job name is a
-# required check in branch protection, so keep it stable.
+# Checks that every PR title is a Conventional Commit. The repository allows
+# squash merges only, and the squash commit's subject is the PR title
+# (squash_merge_commit_title=PR_TITLE). release-please reads those subjects on
+# main, so a bad title becomes a bad (or missing) changelog entry. The job name
+# is a required check in ruleset `main`, so keep it stable.
 name: pr-title
 
 on:
