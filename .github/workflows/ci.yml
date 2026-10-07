@@ -100,12 +100,28 @@ jobs:
       # Bun at the version mise.toml names, from the URL and checksum mise.lock
       # records (the action installs with --locked). The Actions cache is at its
       # size cap, so only pushes to main save the mise cache; PRs restore it.
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - id: mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.3
           install_args: bun
           cache_save: ${{ github.event_name == 'push' }}
+      # Bun's package cache, under the same rule: every job restores the newest
+      # entry for its OS and Bun, and only a push to main saves a new one (when
+      # bun.lock changed), so PR runs stop filling the 10 GB budget. A missed
+      # restore only means a full download.
+      - id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ steps.mise.outputs.bun }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ steps.mise.outputs.bun }}-
       - run: bun install --frozen-lockfile
+      - if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
@@ -129,18 +145,50 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - id: mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.3
           install_args: bun
           cache_save: ${{ github.event_name == 'push' }}
+      # Bun's package cache, restored here and saved by pushes to main only (see
+      # the test job).
+      - id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ steps.mise.outputs.bun }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ steps.mise.outputs.bun }}-
       - run: bun install --frozen-lockfile
+      - if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       # versions.json pins the child binaries (and their hashes), so it is the key.
       - uses: actions/cache@v6
         with:
           path: .cache/telinha/bin
           key: livekit-${{ runner.os }}-${{ hashFiles('versions.json') }}
-      - run: bunx playwright install --with-deps chromium
+      # The browsers, keyed on the Playwright that bun.lock resolved rather
+      # than on bun.lock itself, which changes with every dependency bump. The
+      # system libraries live outside the cache, so a hit still installs them.
+      - id: pw-version
+        run: echo "version=$(jq -r .version node_modules/playwright-core/package.json)" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+      - if: github.event_name == 'push' && steps.pw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.pw-cache.outputs.cache-primary-key }}
       - run: bun run build
       - run: bun run e2e
         env:
@@ -201,18 +249,23 @@ jobs:
           install_args: bun
           cache_save: ${{ github.event_name == 'push' }}
       # The compile targets (bun-<target>-v<version>) land in the install cache
-      # too: they change with Bun, the packages with bun.lock.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # too: they change with Bun, the packages with bun.lock. As in the test
+      # job, PRs restore both and only pushes to main save them. The packages
+      # get their own bun-all prefix: this install takes every OS and CPU, about
+      # four times the other jobs' entry, and neither should be served the other.
+      - id: bun-targets
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache/bun-*-v${{ steps.mise.outputs.bun }}
           key: bun-targets-${{ runner.os }}-${{ steps.mise.outputs.bun }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.bun/install/cache
             !~/.bun/install/cache/bun-*-v${{ steps.mise.outputs.bun }}
-          key: bun-install-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-install-${{ runner.os }}-
+          key: bun-all-${{ runner.os }}-${{ steps.mise.outputs.bun }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-all-${{ runner.os }}-${{ steps.mise.outputs.bun }}-
       # The binary downloads livekit-server into <TELINHA_HOME>/bin itself;
       # versions.json pins it.
       - uses: actions/cache@v6
@@ -222,6 +275,13 @@ jobs:
       # Every OS/CPU's native packages (OpenTUI's per-target library): the
       # cross builds embed the target's, not the runner's.
       - run: bun install --frozen-lockfile --os='*' --cpu='*'
+      - if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.bun/install/cache
+            !~/.bun/install/cache/bun-*-v${{ steps.mise.outputs.bun }}
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       - run: bun run build
       - if: runner.os == 'Windows'
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -240,6 +300,12 @@ jobs:
       - name: compile
         shell: bash
         run: bun scripts/build-binary.ts --target ${{ matrix.target }} --smoke ${{ matrix.args }}
+      # The compile above is what downloads the targets, so they save after it.
+      - if: github.event_name == 'push' && steps.bun-targets.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache/bun-*-v${{ steps.mise.outputs.bun }}
+          key: ${{ steps.bun-targets.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.target }}
@@ -313,8 +379,11 @@ jobs:
           timeout 30 dist-bin/linux-x64/telinha setup --home "$RUNNER_TEMP/nt" --lang en </dev/null || rc=$?
           [ "$rc" = 2 ] || { echo "non-TTY setup exit $rc, want 2"; exit 1; }
       # No arm64 runner: QEMU runs the arm64 binary's --version and terminal UI smoke.
+      # Its binfmt image is cached on main only, as in the image job.
       - if: runner.os == 'Linux'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        with:
+          cache-image: ${{ github.event_name == 'push' }}
       - name: --version (linux-arm64)
         if: runner.os == 'Linux'
         run: docker run --rm --platform linux/arm64 -e TELINHA_SMOKE_TUI=1 -v "$PWD/dist-bin:/b:ro" debian:bookworm-slim /b/linux-arm64/telinha --version
@@ -599,12 +668,26 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - id: mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.3
           install_args: bun
           cache_save: ${{ github.event_name == 'push' }}
+      # Bun's package cache, restored here and saved by pushes to main only (see
+      # the test job).
+      - id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ steps.mise.outputs.bun }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ steps.mise.outputs.bun }}-
       - run: bun install --frozen-lockfile
+      - if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       # The link validator runs inside the build and fails it on a broken link.
       - run: bun run docs:build
 
@@ -655,18 +738,29 @@ jobs:
         with:
           persist-credentials: false
       # arm64's final stage (apk, setcap) runs emulated; the heavy stages run natively.
-      - uses: docker/setup-qemu-action@v3
+      # The action caches the binfmt image it pulls; only pushes to main use
+      # that cache, and a PR pulls the small image instead of adding an entry.
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        with:
+          cache-image: ${{ github.event_name == 'push' }}
       - uses: docker/setup-buildx-action@v4
       # Both release platforms build, so an arm64 break shows up before release.
-      - uses: docker/build-push-action@v7
+      # Layers come from the Actions cache that pushes to main write (mode=max:
+      # every stage, so a change rebuilds only from the layer it touches). PRs
+      # read it and never write, which keeps them out of the 10 GB budget, and
+      # a failed export only warns.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           # Local checkout, not the default git context, so the PR's tree is built.
           context: .
           platforms: linux/amd64,linux/arm64
           push: false
-      # amd64 again (cache hit), loaded into the daemon for the smoke test.
+          cache-from: type=gha,scope=telinha-image
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=telinha-image,ignore-error=true' || '' }}
+      # amd64 again, loaded into the daemon for the smoke test. The builder
+      # still holds the layers from the call above, so it needs no cache-from.
       - id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
@@ -711,10 +805,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      # Its own cache scope, written by pushes to main only as in the image job,
+      # so the Go build stays cached until versions.json or the Dockerfile changes.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           target: caddy-export
+          cache-from: type=gha,scope=caddy-windows
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=caddy-windows,ignore-error=true' || '' }}
           build-args: |
             CADDY_OS=windows
             CADDY_ARCH=amd64
