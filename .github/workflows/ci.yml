@@ -97,7 +97,7 @@ jobs:
         os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Bun at the version mise.toml names, from the URL and checksum mise.lock
@@ -145,7 +145,7 @@ jobs:
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - id: mise
@@ -169,7 +169,7 @@ jobs:
           path: ~/.bun/install/cache
           key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       # versions.json pins the child binaries (and their hashes), so it is the key.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/telinha/bin
           key: livekit-${{ runner.os }}-${{ hashFiles('versions.json') }}
@@ -197,7 +197,7 @@ jobs:
         env:
           CI: "true"
       - if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright
           path: |
@@ -242,7 +242,7 @@ jobs:
       LIVEKIT_API_KEY: smoke
       LIVEKIT_API_SECRET: smoke-secret-of-at-least-32-chars # gitleaks:allow
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - id: mise
@@ -271,7 +271,7 @@ jobs:
           restore-keys: bun-all-${{ runner.os }}-${{ steps.mise.outputs.bun }}-
       # The binary downloads livekit-server into <TELINHA_HOME>/bin itself;
       # versions.json pins it.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/th/bin
           key: telinha-bin-${{ runner.os }}-${{ hashFiles('versions.json') }}
@@ -309,7 +309,7 @@ jobs:
         with:
           path: ~/.bun/install/cache/bun-*-v${{ steps.mise.outputs.bun }}
           key: ${{ steps.bun-targets.outputs.cache-primary-key }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-${{ matrix.target }}
           path: |
@@ -382,14 +382,15 @@ jobs:
           timeout 30 dist-bin/linux-x64/telinha setup --home "$RUNNER_TEMP/nt" --lang en </dev/null || rc=$?
           [ "$rc" = 2 ] || { echo "non-TTY setup exit $rc, want 2"; exit 1; }
       # No arm64 runner: QEMU runs the arm64 binary's --version and terminal UI smoke.
-      # Its binfmt image is cached on main only, as in the image job.
+      # Its binfmt image is cached on main only, as in the image job. The debian
+      # image is pinned to a digest, which a renovate.json regex manager refreshes.
       - if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
           cache-image: ${{ github.event_name == 'push' }}
       - name: --version (linux-arm64)
         if: runner.os == 'Linux'
-        run: docker run --rm --platform linux/arm64 -e TELINHA_SMOKE_TUI=1 -v "$PWD/dist-bin:/b:ro" debian:bookworm-slim /b/linux-arm64/telinha --version
+        run: docker run --rm --platform linux/arm64 -e TELINHA_SMOKE_TUI=1 -v "$PWD/dist-bin:/b:ro" debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 /b/linux-arm64/telinha --version
 
       - name: run (windows-x64)
         if: runner.os == 'Windows'
@@ -606,7 +607,7 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # mise only, no tools yet: a --locked install of a tool mise.lock lacks
@@ -675,7 +676,7 @@ jobs:
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - id: mise
@@ -707,7 +708,7 @@ jobs:
   gitleaks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -746,7 +747,7 @@ jobs:
     if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # arm64's final stage (apk, setcap) runs emulated; the heavy stages run natively.
@@ -755,7 +756,7 @@ jobs:
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
           cache-image: ${{ github.event_name == 'push' }}
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Both release platforms build, so an arm64 break shows up before release.
       # Layers come from the Actions cache that pushes to main write (mode=max:
       # every stage, so a change rebuilds only from the layer it touches). PRs
@@ -813,10 +814,10 @@ jobs:
     name: caddy (windows-x64)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Its own cache scope, written by pushes to main only as in the image job,
       # so the Go build stays cached until versions.json or the Dockerfile changes.
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0

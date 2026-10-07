@@ -36,7 +36,7 @@ jobs:
     steps:
       # An app token (not GITHUB_TOKEN) so the Release PR triggers ci.yml.
       - id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
@@ -45,7 +45,7 @@ jobs:
           # release-please labels its PRs through the issues API.
           permission-issues: write
       - id: release
-        uses: googleapis/release-please-action@v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
@@ -73,7 +73,7 @@ jobs:
       contents: read
     # No caches, mise-action's included: release builds start from a clean runner.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
@@ -92,7 +92,7 @@ jobs:
         env:
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: bun scripts/build-binary.ts --target "${{ matrix.target }}" --version "${TAG#v}" --smoke
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-${{ matrix.target }}
           path: |
@@ -113,7 +113,7 @@ jobs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
     # No caches, mise-action's included: release builds start from a clean runner.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
@@ -122,7 +122,7 @@ jobs:
           version: 2026.10.3
           install_args: bun
           cache: false
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x
       # Every OS/CPU's native packages: the arm64 cross build embeds that target's OpenTUI library.
@@ -148,7 +148,7 @@ jobs:
       # The artifact drops the common dist-bin/ prefix: these are the paths
       # .signpath/artifact-configuration.xml names.
       - id: upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-unsigned
           path: |
@@ -175,7 +175,7 @@ jobs:
       # The SignPath action downloads the artifact through the API with this token.
       actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
@@ -187,7 +187,7 @@ jobs:
       # build-binary.ts imports the Solid plugin: install it from the lockfile
       # rather than letting Bun auto-install whatever npm has today.
       - run: bun install --frozen-lockfile
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-unsigned
           path: unsigned
@@ -244,7 +244,7 @@ jobs:
           src=unsigned
           if [ "$SIGNED" = true ]; then src=signed; fi
           bun scripts/build-binary.ts pack --target windows --from "$src" --out dist-bin
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-windows
           path: dist-bin/telinha-windows-*.zip
@@ -269,12 +269,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           # The checked-out release commit, not the default git context (which is main).
           context: .
@@ -291,7 +291,7 @@ jobs:
           cache: false
       - run: bun install --frozen-lockfile
       - run: bun scripts/build-binary.ts pack-caddy --target "${{ matrix.target }}" --from dist-caddy
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: caddy-${{ matrix.target }}
           path: |
@@ -312,12 +312,12 @@ jobs:
     env:
       IMAGE: ghcr.io/sombrasoft/telinha
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
       - id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
           # The run is a push to main, so the tag comes from release-please.
@@ -325,16 +325,16 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # arm64's final stage (apk, setcap) runs emulated; the heavy stages run natively.
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           # The checked-out release commit, not the default git context (which is main).
           context: .
@@ -346,7 +346,7 @@ jobs:
           # Provenance comes from actions/attest; skip buildx's own so the index
           # lists only the two platform images.
           provenance: false
-      - uses: actions/attest@v4
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -367,7 +367,7 @@ jobs:
           tar czf telinha-deploy.tar.gz -C deploy compose.yml compose.journald.yml \
             telinha.env.example install-docker.sh telinha-update \
             telinha-update.service telinha-update.timer telinha-image.digest
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-assets
           path: |
@@ -386,7 +386,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
@@ -395,7 +395,7 @@ jobs:
           version: 2026.10.3
           install_args: bun
           cache: false
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: binaries-*
           merge-multiple: true
@@ -404,12 +404,12 @@ jobs:
       # install fetches its release's Caddy and checks it against the sums),
       # the Docker bundle and the image digest (install.sh verifies the bundle
       # before running it as root).
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: caddy-*
           merge-multiple: true
           path: dist-bin
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image-assets
           path: dist-bin
@@ -417,7 +417,7 @@ jobs:
         run: bun scripts/build-binary.ts sums
       # One provenance attestation for every archive (the deploy bundle
       # included), the image digest and the sums file.
-      - uses: actions/attest-build-provenance@v4
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist-bin/telinha-*.tar.gz
@@ -429,7 +429,7 @@ jobs:
       # Its own token: release-please's is a masked job output (arrives empty),
       # and GITHUB_TOKEN here is contents: read on purpose.
       - id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

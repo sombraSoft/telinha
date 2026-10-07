@@ -599,10 +599,14 @@ lists which paths each job builds): a Dockerfile-only PR runs `image`,
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
 Dockerfile (its `golang` and bun images included), `deploy/compose.yml`,
 GitHub Actions and everything in `versions.json`: the two downloaded binaries,
-and Caddy, xcaddy and the Caddy modules of our build. Non-major updates are
-grouped and automerge through a PR once checks pass. Anything LiveKit
-(`livekit-client`, `livekit-server-sdk`, `livekit/livekit`) and all majors are
-manual. `versions.json` bumps never automerge. A Caddy, xcaddy or module bump
+and Caddy, xcaddy and the Caddy modules of our build. Every action is pinned
+to a commit SHA (with a `# vX.Y.Z` comment) and every third-party image to a
+digest; Renovate keeps both current. A release must be 3 days old before
+Renovate opens a PR for it (until then it waits on the Dependency Dashboard);
+security fixes and digest pins skip the wait. Non-major updates are grouped and
+automerge through a PR once checks pass. Anything LiveKit
+(`livekit-client`, `livekit-server-sdk`, `livekit/livekit`), Biome and all
+majors are manual. `versions.json` bumps never automerge. A Caddy, xcaddy or module bump
 is judged by the `image` job, which builds it and smoke-tests the version and
 modules. A cloudflared or LiveKit bump changes only the `version`, so the
 hashes are stale and the `image` and `e2e` jobs fail until someone refreshes
