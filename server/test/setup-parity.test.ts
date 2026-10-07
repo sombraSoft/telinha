@@ -133,7 +133,7 @@ function machine() {
       available: async () => false,
       shutdown: async () => {},
       status: async () => ({ supervised: true }) as Awaited<ReturnType<SetupDeps['control']['status']>>,
-      doctorSession: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
       doctorWait: async () => ({ state: 'expired' }),
     },
     bins: async () => {},

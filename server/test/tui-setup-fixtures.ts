@@ -287,7 +287,7 @@ export function machine(o: MachineOptions = {}) {
       available: async () => installed,
       shutdown: async () => {},
       status: async () => ({ supervised: true }) as Awaited<ReturnType<SetupDeps['control']['status']>>,
-      doctorSession: async () => ({ id: 's', url: 'https://my-group.duckdns.org:8443/doctor/s', expiresAt: 0 }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://my-group.duckdns.org:8443/doctor/s', expiresAt: 0 }),
       doctorWait: async () => ({ state: 'expired' }),
     },
     bins: async (_config, _paths, _log, progress) => {
@@ -421,7 +421,7 @@ export function fakeDoctor(builds: { n: number } = { n: 0 }): NonNullable<SetupU
     control: {
       available: async () => false,
       status: async () => ({}) as never,
-      doctorSession: async () => ({ id: 's', url: 'https://x/doctor/s', expiresAt: 0 }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://x/doctor/s', expiresAt: 0 }),
       doctorWait: async () => ({ state: 'expired' }),
     },
     config: () => null,

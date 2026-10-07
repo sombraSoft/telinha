@@ -10,7 +10,7 @@ import type { Config, Media } from '../config.ts';
 import type { CheckStatus } from './types.ts';
 
 /** What the doctor needs from the running service: its status for the checks, the phone test's link and long-poll. */
-export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'doctorSession' | 'doctorWait'>;
+export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'phoneTestLink' | 'doctorWait'>;
 
 /** How long the doctor waits for the phone. */
 export const PHONE_WAIT_MS = 10 * 60_000;
@@ -127,7 +127,7 @@ export class PhoneTest {
     if (!up) return this.#set({ kind: 'notRunning' });
     let link: { id: string; url: string };
     try {
-      link = await ctl.doctorSession();
+      link = await ctl.phoneTestLink();
     } catch (e) {
       if (!stale()) this.#set({ kind: 'error', message: (e as Error).message });
       return;

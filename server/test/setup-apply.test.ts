@@ -180,7 +180,7 @@ function make(o: Opts = {}) {
       available: async () => o.available ?? false,
       shutdown: async () => {},
       status: async () => ({ supervised: true }),
-      doctorSession: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://x', expiresAt: 0 }),
       doctorWait: async () => ({ state: 'expired' }),
     },
     bins: o.bins ?? (async () => {}),

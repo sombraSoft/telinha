@@ -92,7 +92,7 @@ function control(o: { available?: boolean; states?: (PhoneTestPoll | 'hang')[] }
   const client: DoctorControl = {
     available: async () => (calls.push('available'), o.available ?? true),
     status: async () => ({}) as never,
-    doctorSession: async () => (calls.push('session'), { id: 'abc', url: URL, expiresAt: NOW + 600_000 }),
+    phoneTestLink: async () => (calls.push('link'), { id: 'abc', url: URL, expiresAt: NOW + 600_000 }),
     doctorWait: (id) => {
       calls.push(`wait ${id}`);
       const next = states.shift() ?? 'hang';
@@ -235,7 +235,7 @@ describe('doctor screen', () => {
       f = frame(s);
       expect(f).toContain('❯ ▾ ✖ UDP 7882');
       expect(f).toContain('open TCP 7881 and UDP 7882 to this machine');
-      expect(ctl.calls.filter((x) => x === 'session')).toHaveLength(2);
+      expect(ctl.calls.filter((x) => x === 'link')).toHaveLength(2);
       await press(s, 'q');
       // The checks passed; the phone test failed.
       expect(exits).toEqual([1]);

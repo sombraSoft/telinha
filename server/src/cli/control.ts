@@ -161,7 +161,7 @@ export interface ControlClient {
   /** Token file present and GET /internal/status answers. */
   available(): Promise<boolean>;
   status(): Promise<ControlStatus>;
-  doctorSession(): Promise<PhoneTestLink>;
+  phoneTestLink(): Promise<PhoneTestLink>;
   doctorWait(id: string, waitMs: number): Promise<PhoneTestPoll>;
   update(mode: UpdateMode): Promise<UpdateResult>;
   shutdown(reason: 'stop' | 'restart'): Promise<void>;
@@ -254,7 +254,7 @@ export function createControlClient(o: {
       }
     },
     status: () => call<ControlStatus>('GET', '/internal/status', { timeoutMs: 5000 }),
-    doctorSession: () => call<PhoneTestLink>('POST', '/internal/doctor/sessions', { body: {}, timeoutMs: 5000 }),
+    phoneTestLink: () => call<PhoneTestLink>('POST', '/internal/doctor/sessions', { body: {}, timeoutMs: 5000 }),
     doctorWait(id, waitMs) {
       const wait = Math.max(0, Math.min(30_000, Math.round(waitMs)));
       return call<PhoneTestPoll>('GET', `/internal/doctor/sessions/${encodeURIComponent(id)}?wait=${wait}`, {

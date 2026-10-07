@@ -21,8 +21,8 @@ import { waitForEnter } from './cli/term.ts';
 import { type Config, KNOWN_KEYS, loadConfig, upnpMappings } from './config.ts';
 import { type Control, createControl } from './control.ts';
 import { createDuckDns, type Ddns, startDdnsLoop } from './ddns.ts';
+import { createPhoneTestStore } from './doctor/phone-test-store.ts';
 import { createDoctorRoutes } from './doctor/routes.ts';
-import { createDoctorStore } from './doctor/session.ts';
 import { loadEnvFile, mergeEnv } from './envfile.ts';
 import { footprintOf } from './footprint.ts';
 import { createHandler } from './http.ts';
@@ -351,7 +351,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   };
   const updater = makeUpdater();
 
-  const doctorStore = createDoctorStore({ cookieSecret: config.cookieSecret });
+  const doctorStore = createPhoneTestStore({ cookieSecret: config.cookieSecret });
   const doctor = createDoctorRoutes({ store: doctorStore, config, files, rooms: livekit, log });
   const children = () => Object.fromEntries(sup.status().map((s) => [s.name, s.state]));
   const childStatus = () =>
