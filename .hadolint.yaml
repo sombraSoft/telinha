@@ -1,0 +1,13 @@
+# CI's lint job runs hadolint (the version mise.toml pins) on the Dockerfile.
+# Each ignored rule says why it does not apply here.
+ignored:
+  # Pin versions in apk add. The base images are pinned to a digest, so their
+  # Alpine release is fixed. Alpine's repositories keep only the newest build
+  # of each package, so a pinned version would stop the build at its next
+  # security update instead of holding the version.
+  - DL3018
+  # Non-numeric USER. bun is the user the oven/bun base image creates, and the
+  # Dockerfile's chown and --chown name it too. Switching to its uid would
+  # change the image config and gain nothing: the image runs under Docker or
+  # Podman, which resolve the name inside the image.
+  - DL3066
