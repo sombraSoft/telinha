@@ -14,7 +14,9 @@ lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
 # The tray's .NET SDK is not here: global.json picks it. mise's dotnet install
 # fails its own check on Windows whenever a system .NET is on PATH.
 [tools]
-# Must equal packageManager in package.json and the Dockerfile's oven/bun tag.
+# Must equal every other bun pin: packageManager in package.json, the
+# Dockerfile's BUN_IMAGE ARG (the oven/bun tag), and setup-bun's bun-version in
+# the workflows until mise-action replaces it.
 bun = "1.4.2"
 # Must equal the Dockerfile's golang image, which builds Caddy.
 go = "1.25.14"

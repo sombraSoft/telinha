@@ -93,6 +93,12 @@
       "automerge": false
     },
     {
+      "description": "global.json's sdk.version is a floor, not a pin: rollForward latestFeature already uses the newest installed 10.0.x SDK, and raising the floor breaks tray builds on machines with an older SDK (10.0.300 locally), so a bump is a deliberate choice made by hand, kept out of the allNonMajor group",
+      "matchDepNames": ["dotnet-sdk"],
+      "groupName": "dotnet-sdk",
+      "automerge": false
+    },
+    {
       "description": "Majors are reviewed by hand",
       "matchUpdateTypes": ["major"],
       "automerge": false
