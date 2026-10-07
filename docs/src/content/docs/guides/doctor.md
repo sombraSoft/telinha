@@ -104,7 +104,8 @@ details dimmed and the fix after an arrow:
 
 The icons are `✓`, `!`, `✗` and `–`, with the same meanings as above. The phone
 test is skipped without a terminal (its link needs someone to open it), unless
-`--json` runs on one.
+`--json` runs on one; its rows then print the same way, each hint under the row
+it explains.
 
 Two rows depend on the media setup. **LiveKit Cloud** (`livekit-cloud`) runs
 only with `MEDIA=cloud`: it lists the project's rooms with the API key and

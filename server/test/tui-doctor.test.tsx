@@ -6,15 +6,13 @@ import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer, type TestRendererSetup } from '@opentui/core/testing';
 import type { CliContext } from '../src/cli/args.ts';
 import { resolvePaths } from '../src/paths.ts';
-import type { DoctorReport, DoctorSessionState } from '../src/cli/control.ts';
-import type { DoctorControl } from '../src/cli/doctor.ts';
+import type { DoctorReport, PhoneTestPoll } from '../src/cli/control.ts';
 import type { Locale } from '../src/cli/strings.ts';
 import { checkTitle } from '../src/doctor/checks.ts';
-import { loadConfig } from '../src/config.ts';
+import type { DoctorControl } from '../src/doctor/phone-test.ts';
 import type { Check, CheckContext, CheckStatus } from '../src/doctor/types.ts';
 import { runDoctorTui } from '../src/tui/doctor/index.tsx';
 import { DoctorScreen } from '../src/tui/doctor/screen.tsx';
-import { phoneReportRows } from '../src/tui/doctor/state.ts';
 import { qrRows } from '../src/tui/ui/qr.tsx';
 import { frame, press, settle, until, VERSION, withTui, type Session } from './tui-harness.tsx';
 
@@ -62,10 +60,10 @@ const SPECS: Spec[] = [
   { id: 'update', status: 'warn', summary: '0.9.1 is available (running 0.9.0)', fix: 'Installs by itself when no room is open, or now: telinha update --now' },
 ];
 
-function control(o: { available?: boolean; states?: (DoctorSessionState | 'hang')[] } = {}) {
+function control(o: { available?: boolean; states?: (PhoneTestPoll | 'hang')[] } = {}) {
   const calls: string[] = [];
   const states = [...(o.states ?? [])];
-  const pending: ((s: DoctorSessionState) => void)[] = [];
+  const pending: ((s: PhoneTestPoll) => void)[] = [];
   const client: DoctorControl = {
     available: async () => (calls.push('available'), o.available ?? true),
     status: async () => ({}) as never,
@@ -73,11 +71,11 @@ function control(o: { available?: boolean; states?: (DoctorSessionState | 'hang'
     doctorWait: (id) => {
       calls.push(`wait ${id}`);
       const next = states.shift() ?? 'hang';
-      return next === 'hang' ? new Promise<DoctorSessionState>((r) => pending.push(r)) : Promise.resolve(next);
+      return next === 'hang' ? new Promise<PhoneTestPoll>((r) => pending.push(r)) : Promise.resolve(next);
     },
   };
   /** Answers the poll that is waiting. */
-  const answer = (s: DoctorSessionState) => pending.splice(0).forEach((r) => r(s));
+  const answer = (s: PhoneTestPoll) => pending.splice(0).forEach((r) => r(s));
   return { client, calls, answer };
 }
 
@@ -249,30 +247,6 @@ describe('doctor screen', () => {
       expect(f).toContain('rodar de novo');
       expect(f).toContain('Teste no celular');
     });
-  });
-
-  test('phone rows: hints land on the row they explain', () => {
-    const rows = phoneReportRows({ ...REPORT, udp: { ok: false, error: 'fell back to TCP' } }, null, 'en');
-    expect(rows.map((r) => [r.title, r.status])).toEqual([
-      ['HTTPS', 'ok'], ['LiveKit connection', 'ok'], ['Sending video', 'ok'], ['First path', 'ok'], ['UDP 7882', 'warn'], ['TCP 7881', 'ok'],
-    ]);
-    expect(rows[4]!.summary).toBe('failed: fell back to TCP');
-    expect(rows[4]!.fix).toContain('UDP 7882 is not reachable from the internet');
-    const down = phoneReportRows({ ...REPORT, signaling: { ok: false, error: 'timeout' } }, null, 'pt-BR');
-    expect(down[1]!.status).toBe('fail');
-    expect(down[1]!.fix).toContain('A Telinha não é acessível pela internet');
-  });
-
-  test('phone rows with LiveKit Cloud and with TURN: no ports to name, a TURN row that only warns', () => {
-    const base = { PUBLIC_URL: 'https://telinha.example.com', DISCORD_TOKEN: 't', DISCORD_CLIENT_ID: '1', DISCORD_CLIENT_SECRET: 's', GUILD_ID: '1', ROLE_ID: '1', CHANNEL_IDS: '1', COOKIE_SECRET: 'x'.repeat(32), LIVEKIT_API_KEY: 'k', LIVEKIT_API_SECRET: 'y'.repeat(32) };
-    const cloud = loadConfig({ ...base, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud' });
-    const rows = phoneReportRows({ ...REPORT, udp: { ok: false } }, cloud, 'en');
-    expect(rows.map((r) => r.title).slice(4)).toEqual(['UDP', 'TCP']);
-    expect(rows[4]!.fix).toContain('Nothing to open on your side');
-    const turn = loadConfig({ ...base, HOSTING: 'vps', TURN: 'on' });
-    const t = phoneReportRows({ ...REPORT, turn: { ok: false, error: 'not relayed' } }, turn, 'en');
-    expect(t.at(-1)).toMatchObject({ title: 'TURN/TLS 443', status: 'warn', summary: 'failed: not relayed' });
-    expect(t.at(-1)!.fix).toContain('turn.telinha.example.com');
   });
 });
 

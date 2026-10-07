@@ -31,6 +31,27 @@ Letting a member into a room before their token is minted: the room is open, kep
 A person in the group: holds the gate role and is not a bot.
 _Avoid_: Using it for Discord's notion, which is a guild member
 
+**Person**:
+A Discord user in a room, however many tabs they have open. The card counts persons.
+
+**Participant**:
+One tab connected to a room, by its LiveKit identity. Each tile on the page belongs to a participant.
+
+**Streamer**:
+A person sharing their screen. If a person streams from several participants, each extra tile is labelled apart (`Ana (2)`).
+
+**Viewer**:
+A person present in a room and not streaming.
+_Avoid_: Watching (reserved for which tiles a participant has on screen)
+
+**Session**:
+The login session: the signed cookie a member gets after logging in with Discord.
+_Avoid_: Using it for the phone test, the bot's gateway connection or setup state
+
+**Gateway connection**:
+The bot's live connection to Discord, over which it hears `/telinha` and the group's members coming and going.
+_Avoid_: Session
+
 ### Installs
 
 **Install**:
@@ -75,3 +96,11 @@ A replaced program file renamed out of the way, never deleted (`telinha.old-<ver
 
 **Exposure**:
 A port a helper opens to the outside, by protocol, that the firewall and the router must let in.
+
+**Phone test**:
+The doctor's check run from a phone: a one-time link and cookie that open a test page and report media connectivity from outside the network.
+_Avoid_: Doctor session
+
+**Setup state**:
+What `telinha setup` holds while it asks its questions: the answers so far, the question on screen and the lookups running.
+_Avoid_: Setup session

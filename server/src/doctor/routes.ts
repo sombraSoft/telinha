@@ -124,7 +124,7 @@ export function createDoctorRoutes(o: {
         const claimed = store.claim(t, now());
         // A used link opened again in the browser that already has the cookie: just the page.
         if (!claimed) return session() ? redirect() : notFound();
-        log('doctor session opened', claimed.id.slice(0, 8));
+        log('phone test opened', claimed.id.slice(0, 8));
         const value = store.cookieFor(claimed.id, now());
         return redirect(cookie(DOCTOR_COOKIE, value, { maxAge: COOKIE_TTL_MS / 1000, secure: c.secureCookies }));
       }

@@ -130,13 +130,15 @@ export interface DoctorReport {
   finishedAt: number;
 }
 
-export interface DoctorSessionState {
+/** A phone test's long-poll answer. The routes keep their older "sessions" name: an older service talks to a newer CLI. */
+export interface PhoneTestPoll {
   state: 'pending' | 'opened' | 'done' | 'expired';
   openedAt?: number;
   report?: DoctorReport;
 }
 
-export interface DoctorSession { id: string; url: string; expiresAt: number }
+/** The phone test's one-time link. */
+export interface PhoneTestLink { id: string; url: string; expiresAt: number }
 
 // ---------------------------------------------------------------- client
 
@@ -144,8 +146,8 @@ export interface ControlClient {
   /** Token file present and GET /internal/status answers. */
   available(): Promise<boolean>;
   status(): Promise<ControlStatus>;
-  doctorSession(): Promise<DoctorSession>;
-  doctorWait(id: string, waitMs: number): Promise<DoctorSessionState>;
+  doctorSession(): Promise<PhoneTestLink>;
+  doctorWait(id: string, waitMs: number): Promise<PhoneTestPoll>;
   update(mode: UpdateMode): Promise<UpdateResult>;
   shutdown(reason: 'stop' | 'restart'): Promise<void>;
 }
@@ -229,10 +231,10 @@ export function createControlClient(o: {
       }
     },
     status: () => call<ControlStatus>('GET', '/internal/status', { timeoutMs: 5000 }),
-    doctorSession: () => call<DoctorSession>('POST', '/internal/doctor/sessions', { body: {}, timeoutMs: 5000 }),
+    doctorSession: () => call<PhoneTestLink>('POST', '/internal/doctor/sessions', { body: {}, timeoutMs: 5000 }),
     doctorWait(id, waitMs) {
       const wait = Math.max(0, Math.min(30_000, Math.round(waitMs)));
-      return call<DoctorSessionState>('GET', `/internal/doctor/sessions/${encodeURIComponent(id)}?wait=${wait}`, { timeoutMs: wait + 10_000 });
+      return call<PhoneTestPoll>('GET', `/internal/doctor/sessions/${encodeURIComponent(id)}?wait=${wait}`, { timeoutMs: wait + 10_000 });
     },
     // The service downloads and stages synchronously: allow a slow link.
     update: (mode) => call<UpdateResult>('POST', '/internal/update', { body: { mode }, timeoutMs: 6 * 60_000 }),

@@ -1,4 +1,4 @@
-// The local control endpoint (/internal/* on LISTEN): status, doctor sessions,
+// The local control endpoint (/internal/* on LISTEN): status, the phone test,
 // updates and shutdown for the CLI on this machine (cli/control.ts is the
 // client). Callers prove they are local and allowed by reading a token only
 // this process's user can read: <data>/run/control.token. Anything that is not
@@ -7,17 +7,17 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { ControlStatus, DoctorSession, DoctorSessionState, UpdateMode, UpdateResult } from './cli/control.ts';
+import type { ControlStatus, PhoneTestLink, PhoneTestPoll, UpdateMode, UpdateResult } from './cli/control.ts';
 import { FORWARDED } from './http.ts';
 
 export interface ControlDeps {
   /** <data>/run/control.token */
   tokenFile: string;
   status: () => ControlStatus;
-  /** Doctor sessions; null when the service has none (the routes then 404). */
+  /** The phone test's links; null when the service has none (the routes then 404). */
   doctor?: {
-    create(): DoctorSession;
-    wait(id: string, maxMs: number): Promise<DoctorSessionState>;
+    create(): PhoneTestLink;
+    wait(id: string, maxMs: number): Promise<PhoneTestPoll>;
   } | null;
   update?: ((mode: UpdateMode) => Promise<UpdateResult>) | null;
   /** Called after the 202 is on its way. */
