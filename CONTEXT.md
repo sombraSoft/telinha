@@ -31,6 +31,14 @@ Letting a member into a room before their token is minted: the room is open, kep
 A person in the group: holds the gate role and is not a bot.
 _Avoid_: Using it for Discord's notion, which is a guild member
 
+**Group**:
+The members a Telinha install serves, named on the page and the card.
+_Avoid_: Server, community
+
+**Discord server**:
+The Discord community the bot is in and the group belongs to; one per install.
+_Avoid_: Server (bare), guild (the code's word, not for user-facing text)
+
 **Person**:
 A Discord user in a room, however many tabs they have open. The card counts persons.
 
@@ -58,6 +66,25 @@ _Avoid_: Session
 One Telinha folder plus its `telinha.env`, set up and run as a unit on one machine.
 _Avoid_: Deployment
 
+**Telinha folder**:
+The folder an install lives in: the program, `telinha.env` and the data it keeps.
+_Avoid_: Home, data dir
+
+**Machine**:
+The computer an install runs on, a home PC or a VPS.
+_Avoid_: Server, host (unqualified)
+
+**Hosting**:
+What kind of machine an install is on: `home` (behind a router on a home connection) or `vps` (a rented machine with its own public address).
+
+**Service**:
+The registration with the operating system that starts an install at boot and keeps it running: a systemd unit on Linux, a Task Scheduler task on Windows.
+_Avoid_: Daemon, Windows service (it is a Task Scheduler task)
+
+**Telinha process**:
+The running Telinha program of an install: the web page, the bot and the supervisor of its children.
+_Avoid_: Server
+
 **Helper**:
 A third-party program an install runs next to Telinha: livekit-server, caddy or cloudflared.
 _Avoid_: Tool, child binary
@@ -71,6 +98,7 @@ Where the SFU runs: `self` (the bundled livekit-server helper) or `cloud` (a Liv
 
 **Ingress mode**:
 How web traffic reaches the install: `direct` (the caddy helper terminates TLS), `tunnel` (cloudflared) or `external` (the user's own proxy).
+_Avoid_: Direct for anything but this ingress mode
 
 **Footprint**:
 What an install puts on its machine for a given media mode, ingress mode and TURN: the helpers it runs, the ports it binds and the exposures it opens.
@@ -81,6 +109,31 @@ Setup's write-and-run phase, after the questions: it writes `telinha.env` and ru
 **Apply task**:
 One step Apply runs and shows as a row, e.g. downloading a helper or registering the service.
 _Avoid_: Step (the setup screens' sidebar steps)
+
+### Network
+
+**SFU**:
+The media server a room's video goes through: the livekit-server helper or LiveKit Cloud.
+_Avoid_: Server, media server
+
+**Relay**:
+TURN: carrying a participant's media through the install's TURN when it cannot reach the SFU directly. The page's stats say "via TURN".
+_Avoid_: Using it for the signaling proxy
+
+**Signaling proxy**:
+The path through the Telinha process that carries the page's LiveKit signaling, so the page needs only the install's own address.
+_Avoid_: Relay
+
+**Public host**:
+The domain name people open to reach an install.
+_Avoid_: Host, domain (unqualified)
+
+**TURN host**:
+The domain name the install's TURN answers on, `turn.` before the public host.
+
+**Router**:
+The device between a home network and the internet, which setup asks to forward the exposures.
+_Avoid_: Gateway (in user-facing text, where it reads as the gateway connection)
 
 ### Releases
 
