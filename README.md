@@ -550,7 +550,10 @@ Required checks on `main`: `test (ubuntu-latest)`, `test (windows-latest)`,
 `deploy/telinha-update` and `scripts/smoke.sh`, a PowerShell parse and
 PSScriptAnalyzer run of `deploy/install.ps1`, actionlint,
 `bun scripts/versions.ts check`), `gitleaks`, `image` (builds both
-architectures, smoke-tests amd64). Four jobs also run on every PR but are not
+architectures, smoke-tests amd64), `pr-title` (`pr-title.yml`: the PR title is
+a Conventional Commit with one of the types `feat`, `fix`, `docs`, `refactor`,
+`perf`, `test`, `build`, `ci`, `chore`, `revert`; it runs again when the title
+is edited). Four jobs also run on every PR but are not
 required yet: `docs` (builds the docs site, link validator included), `e2e`
 (Playwright on ubuntu), `caddy (windows-x64)` (the Windows Caddy through the
 same Dockerfile stage the release uses) and `binaries (ubuntu-latest)` /
