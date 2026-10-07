@@ -211,6 +211,10 @@ export async function writeConfig(w: Wizard, file: string, text: string, shown =
 
 // --- binaries
 
+const TOOL_NAMES = { livekit: 'LiveKit', caddy: 'Caddy', cloudflared: 'cloudflared' } as const;
+/** The programs this config runs, by name ("LiveKit, Caddy"). */
+const toolNames = (config: Pick<Config, 'media' | 'ingress'>) => toolsFor(config).map((t) => TOOL_NAMES[t]).join(', ');
+
 export async function downloadBinaries(w: Wizard, config: Pick<Config, 'media' | 'ingress'>): Promise<boolean> {
   const { out, s } = w;
   if (!toolsFor(config).length) return true; // LiveKit Cloud behind an external proxy runs no child
@@ -220,11 +224,11 @@ export async function downloadBinaries(w: Wizard, config: Pick<Config, 'media' |
   if (w.deps.platform === 'linux' && w.deps.isRoot && !w.docker) {
     const bin = await w.deps.fs.stat(w.ctx.paths.bin);
     if (bin && bin.uid !== 0) {
-      out.info(s('binsByService'));
+      out.info(s('binsByService', { tools: toolNames(config) }));
       return true;
     }
   }
-  const spin = out.spinner(s('binsChecking'));
+  const spin = out.spinner(s('binsChecking', { tools: toolNames(config) }));
   try {
     await w.deps.bins(config, w.ctx.paths, (m) => spin.update(m.replace(/^\[bins\]\s*/, '')), (tool, received, total) => out.progress?.(received, total, tool));
     spin.stop(s('binsOk', { dir: w.ctx.paths.bin }));
@@ -479,6 +483,7 @@ export async function routerStep(w: Wizard, values: Values, hosting: Hosting = '
   const { out, s } = w;
   if (!routerEntries(values).length) return; // LiveKit Cloud behind a tunnel or a proxy: nothing to open
   const ports = publicPorts(values).join(', ');
+  if (values.MEDIA === 'cloud') out.info(s('routerNoMedia'));
   // A VPS has no router: its provider's firewall and its own are what block.
   if (hosting === 'vps') {
     out.info(s('routerVps', { ports }));
@@ -497,7 +502,8 @@ export async function routerStep(w: Wizard, values: Values, hosting: Hosting = '
   }
   out.ok(s('routerFound', { router: routerLabel(nat) ?? '?', ip: nat.externalIp ?? '?' }));
   const ext = nat.externalIp;
-  if (ext && isCgnatIpv4(ext)) lines(out, s('cgnat'), 'warn');
+  // LiveKit Cloud takes the media ports off the router; the HTTPS port still needs it.
+  if (ext && isCgnatIpv4(ext)) lines(out, s(values.MEDIA === 'cloud' ? 'cgnatCloud' : 'cgnat'), 'warn');
   else if (ext && isPrivateIpv4(ext)) lines(out, s('doubleNat'), 'warn');
   if (values.UPNP === 'off') {
     out.info(s('forwardByHand', { ports }));

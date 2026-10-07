@@ -208,6 +208,25 @@ describe('video: this computer or LiveKit Cloud, and TURN on 443', () => {
     expect(question('turn').default(vps({ vpsAddress: 'duckdns', duckName: 'x' }), envOf({ host: VPS, file: { HOSTING: 'vps', PUBLIC_URL: 'https://x.duckdns.org' } }))).toBe('on');
   });
 
+  test('at home behind CGNAT LiveKit Cloud comes picked, with the reason; the router hint says what still fails', () => {
+    const cgnat = envOf({ host: { ...HOME, nat: { ...NAT, externalIp: '100.64.12.34' } } });
+    expect(question('media').default({ hosting: 'home' }, cgnat)).toBe('cloud');
+    expect(question('media').hint!({ hosting: 'home' }, cgnat).map((t) => ('key' in t ? t.key : t.raw))).toContain('mediaCgnat');
+    expect(question('media').default({ hosting: 'vps' }, cgnat)).toBe('self');
+    // A self file behind CGNAT is asked again.
+    expect(question('media').fromFile!({ hosting: 'home' }, { ...cgnat, file: { PUBLIC_URL: 'https://x.duckdns.org:8443' } })).toBe(false);
+    const keys = (a: Answers) => question('upnp').hint!(a, cgnat).map((t) => ('key' in t ? t.key : ''));
+    expect(keys({ hosting: 'home', homeCf: 'no', duckName: 'x', media: 'self' })).toContain('cgnat');
+    expect(keys({ hosting: 'home', homeCf: 'no', duckName: 'x', media: 'cloud' })).toContain('cgnatCloud');
+  });
+
+  test('the TURN hint: the record to add for an own domain, nothing for DuckDNS', () => {
+    const env = envOf({ host: VPS });
+    const hint = (a: Answers) => question('turn').hint!(a, env).at(-1)!;
+    expect(hint(vps({ vpsAddress: 'domain', domain: 't.example.com' }))).toEqual({ key: 'turnDnsHint', params: { host: 'turn.t.example.com', ip: '203.0.113.9' } });
+    expect(hint(vps({ vpsAddress: 'duckdns', duckName: 'x' }))).toEqual({ key: 'turnAutoHint', params: { host: 'turn.x.duckdns.org' } });
+  });
+
   test('at home LiveKit Cloud behind a tunnel leaves nothing for the router', () => {
     expect(flowOf({ hosting: 'home', homeCf: 'yes', media: 'cloud' })).not.toContain('upnp');
     expect(flowOf({ hosting: 'home', homeCf: 'no', media: 'cloud' })).toContain('upnp');

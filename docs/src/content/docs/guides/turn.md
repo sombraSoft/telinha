@@ -104,7 +104,9 @@ TURN=on
 ```
 
 in `telinha.env` and restart (`telinha service restart`), or run
-`telinha setup --non-interactive --turn on`. On a VPS with your own domain the
+`telinha setup` and answer yes to *Also serve video through port 443 for
+strict networks?* in its Video step (it shows the record to create and checks
+that it resolves), or `telinha setup --non-interactive --turn on`. On a VPS with your own domain the
 `turn` row of `telinha doctor` reminds you of both steps, with the record to
 create.
 
@@ -151,7 +153,7 @@ DNS record and the certificate. See
 
 ## Turning it off
 
-Set `TURN=off` in `telinha.env` and restart, or run
-`telinha setup --non-interactive --turn off`. Caddy then stops taking
+Set `TURN=off` in `telinha.env` and restart, or answer no to the TURN
+question of `telinha setup`, or run `telinha setup --non-interactive --turn off`. Caddy then stops taking
 `turn.<host>` aside and LiveKit stops offering the relay; viewers on strict
 networks lose the video, everyone else notices nothing.

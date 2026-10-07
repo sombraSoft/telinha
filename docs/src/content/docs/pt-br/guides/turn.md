@@ -104,8 +104,10 @@ não existe. Crie o registro DNS primeiro, depois ponha:
 TURN=on
 ```
 
-no `telinha.env` e reinicie (`telinha service restart`), ou rode
-`telinha setup --non-interactive --turn on`. Numa VPS com domínio próprio, a
+no `telinha.env` e reinicie (`telinha service restart`), ou rode o
+`telinha setup` e responda sim a *Também passar o vídeo pela porta 443 para
+redes rígidas?* no passo Vídeo (ele mostra o registro a criar e confere se ele
+resolve), ou `telinha setup --non-interactive --turn on`. Numa VPS com domínio próprio, a
 linha `turn` do `telinha doctor` lembra os dois passos, com o registro a
 criar.
 
@@ -154,7 +156,7 @@ teste inteiro (os caminhos diretos podem estar funcionando); olhe a linha
 
 ## Como desligar
 
-Ponha `TURN=off` no `telinha.env` e reinicie, ou rode
-`telinha setup --non-interactive --turn off`. Aí o Caddy para de separar o
+Ponha `TURN=off` no `telinha.env` e reinicie, ou responda não à pergunta do
+TURN no `telinha setup`, ou rode `telinha setup --non-interactive --turn off`. Aí o Caddy para de separar o
 `turn.<host>` e o LiveKit para de oferecer a retransmissão; quem está numa
 rede rígida perde o vídeo, e o resto não percebe nada.

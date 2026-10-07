@@ -78,7 +78,11 @@ the limits.
 
 ## Set it up
 
-On an installed Telinha, switch with the non-interactive setup. The secret
+Run `telinha setup` and choose *LiveKit Cloud* in its Video step: it asks
+the project URL, the API key and the secret (pasted into a masked field), and
+skips the media ports. At home behind CGNAT the setup picks Cloud for you.
+
+Without the setup screens, switch with the non-interactive setup. The secret
 never goes on the command line: pass it as a file (`-` reads stdin) or as the
 `LIVEKIT_API_SECRET` environment variable.
 

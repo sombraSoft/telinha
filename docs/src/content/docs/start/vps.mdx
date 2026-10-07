@@ -179,21 +179,29 @@ like this:
    *I added it: check again*. [Discord app](/telinha/start/discord/) walks
    through every screen.
 
-4. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+4. **Video.** *Where does the video go through?* Keep *This computer*
+   (*LiveKit Cloud* asks its project's URL, API key and secret instead; see
+   [LiveKit Cloud](/telinha/guides/livekit-cloud/)). With the address on
+   443, it then asks *Also serve video through port 443 for strict
+   networks?*: say yes (see [Strict networks](#strict-networks) below). With
+   your own domain, add the DNS record it shows first, `turn.<host>` pointing
+   at the VPS; yes checks that it resolves.
+
+5. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
    something else on the server uses them. The hint lists the ports the
    provider's firewall must let in, with the ufw and firewalld commands.
 
-5. **Updates.** Say yes: new stable releases then install themselves when no
+6. **Updates.** Say yes: new stable releases then install themselves when no
    room is open.
 
-6. **Review.** Every answer on one screen, grouped by step, with the web
+7. **Review.** Every answer on one screen, grouped by step, with the web
    address highlighted and secrets shown only as set, kept or generated. Page
    with PgUp and PgDn when the list is long. Choose *Apply* (or *Apply with a
    new cookie secret*, offered on a re-run, which logs everyone out of the
    pages), *Back to the questions* or *Quit without writing*. Nothing has
    changed on this server until you apply.
 
-7. **Install.** A live list: the Discord app (checked, and its intents
+8. **Install.** A live list: the Discord app (checked, and its intents
    switched on), the DuckDNS address if you picked one, `telinha.env`
    (`/opt/telinha/config/telinha.env`, owned by root and readable by the
    service), the helper programs (with a bar for each download), the service

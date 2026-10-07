@@ -83,7 +83,11 @@ cloud.livekit.io mostra o consumo; os planos pagos aumentam os limites.
 
 ## Configure
 
-Numa Telinha instalada, troque com o setup não interativo. O segredo nunca vai
+Rode o `telinha setup` e escolha *LiveKit Cloud* no passo Vídeo: ele pede a
+URL do projeto, a chave de API e o segredo (colado num campo mascarado), e pula
+as portas de mídia. Em casa atrás de CGNAT o setup já escolhe o Cloud para você.
+
+Sem as telas do setup, troque com o setup não interativo. O segredo nunca vai
 na linha de comando: passe como arquivo (`-` lê do stdin) ou pela variável de
 ambiente `LIVEKIT_API_SECRET`.
 

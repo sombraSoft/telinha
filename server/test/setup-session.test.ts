@@ -687,6 +687,32 @@ describe('hidden answers and apply options', () => {
     expect(s.applyOptions().tray).toEqual({ install: false, autostart: false });
   });
 
+  test('TURN with an own domain: yes checks turn.<host> first; a missing record stays, or is kept with a note', async () => {
+    const vpsDomain = async (s: SetupSession) => {
+      await answer(s, 'hosting', 'vps');
+      await answer(s, 'vpsAddress', 'domain');
+      await answer(s, 'domain', 't.example.com');
+      await discord(s);
+      await answer(s, 'media', 'self');
+    };
+    const good = make({ host: VPS });
+    await vpsDomain(good.s);
+    await answer(good.s, 'turn', 'on');
+    expect(good.s.current().id).toBe('mediaPorts');
+    expect(good.s.values().TURN).toBe('on');
+
+    const { s } = make({ host: VPS, dns: [] });
+    await vpsDomain(s);
+    expect(s.current().hint.at(-1)).toBe('First add a DNS record: turn.t.example.com → 203.0.113.9 (A record, DNS only). Yes then checks that it resolves.');
+    expect(await s.submit('on')).toBe('stayed');
+    expect(s.current().actions.map((a) => a.label)).toEqual(['I added it: check again', 'Keep it on anyway']);
+    await s.action('keep');
+    await settle();
+    expect(s.current().id).toBe('mediaPorts');
+    expect(s.values().TURN).toBe('on');
+    expect(s.reviewNotes().join('\n')).toContain('turn.t.example.com does not resolve to this server yet');
+  });
+
   test('custom media ports are checked against the HTTPS port and written', async () => {
     const { s } = make({ host: VPS });
     await answer(s, 'hosting', 'vps');

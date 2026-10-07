@@ -142,28 +142,34 @@ at home it goes like this:
    *I added it: check again*. [Discord app](/telinha/start/discord/) walks
    through every screen.
 
-4. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+4. **Video.** *Where does the video go through?* Keep *This computer*.
+   *LiveKit Cloud* is for a connection that nothing from the internet can
+   reach (CGNAT, which the setup detects and then picks Cloud for you): it
+   asks the project's URL, API key and secret, and there are no media ports to
+   open; see [LiveKit Cloud](/telinha/guides/livekit-cloud/).
+
+5. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
    something else on the PC uses them. Then *Ask the router?*: say yes to let
    Telinha ask the router for the ports through UPnP, or no if you will
    forward them yourself.
 
-5. **Updates.** Say yes: new stable releases then install themselves when no
+6. **Updates.** Say yes: new stable releases then install themselves when no
    room is open.
 
-6. **Tray icon.** *Show a Telinha icon next to the clock?* Say yes: the
+7. **Tray icon.** *Show a Telinha icon next to the clock?* Say yes: the
    [tray icon](/telinha/guides/tray/) shows whether Telinha is running and
    opens the room page, the logs and updates. When you say yes, *Start the
    icon when you sign in to Windows?* decides whether it comes back by itself
    after a restart (no by default; `telinha tray start` shows it any time).
 
-7. **Review.** Every answer on one screen, grouped by step, with the web
+8. **Review.** Every answer on one screen, grouped by step, with the web
    address highlighted and secrets shown only as set, kept or generated. Page
    with PgUp and PgDn when the list is long. Choose *Apply* (or *Apply with a
    new cookie secret*, offered on a re-run, which logs everyone out of the
    pages), *Back to the questions* or *Quit without writing*. Nothing has
    changed on this PC until you apply.
 
-8. **Install.** A live list: the Discord app (checked, and its intents
+9. **Install.** A live list: the Discord app (checked, and its intents
    switched on), the DuckDNS address if you picked one, `telinha.env`, the
    helper programs (with a bar for each download), the service, the tray icon,
    the router and firewall, the start, the HTTPS certificate (with a DuckDNS address) and the

@@ -151,22 +151,28 @@ teclas. Numa máquina Linux em casa, o caminho é este:
    verificar de novo*. [Aplicativo do Discord](/telinha/pt-br/start/discord/)
    mostra cada tela.
 
-4. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
+4. **Vídeo.** *Por onde passa o vídeo?* Mantenha *Este computador*. O
+   *LiveKit Cloud* é para uma conexão que nada da internet consegue alcançar
+   (CGNAT, que o setup detecta e aí já escolhe o Cloud para você): ele pede a
+   URL, a chave de API e o segredo do projeto, e não há portas de mídia para
+   abrir; veja [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/).
+
+5. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
    que outro programa da máquina já use alguma. Depois vem *Pedir pro
    roteador?*: diga que sim para a Telinha pedir as portas ao roteador por
    UPnP, ou que não se você mesmo vai encaminhar.
 
-5. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
+6. **Atualizações.** Diga que sim: as versões estáveis novas se instalam
    sozinhas quando nenhuma sala está aberta.
 
-6. **Revisão.** Todas as respostas numa tela só, agrupadas por passo, com o
+7. **Revisão.** Todas as respostas numa tela só, agrupadas por passo, com o
    endereço web em destaque e os segredos aparecendo apenas como definido,
    mantido ou gerado. Role com PgUp e PgDn quando a lista for longa. Escolha
    *Aplicar* (ou *Aplicar com um novo segredo de cookie*, oferecido numa nova
    rodada, que desconecta todo mundo das páginas), *Voltar pras perguntas* ou
    *Sair sem gravar*. Nada mudou nesta máquina até você aplicar.
 
-7. **Instalação.** Uma lista ao vivo: o app do Discord (conferido, com os
+8. **Instalação.** Uma lista ao vivo: o app do Discord (conferido, com os
    intents ligados), o endereço do DuckDNS se você escolheu um, o
    `telinha.env`, os programas auxiliares (com uma barra para cada download), o
    serviço, o roteador e firewall, o início, o certificado HTTPS (com um

@@ -1162,7 +1162,7 @@ describe('non-interactive', () => {
     deps.fs.stat = async (p) => (p === '/opt/telinha/bin' ? { uid: 998, gid: 998, mode: 0o40755, dir: true } : stat(p));
     expect(await go(ctxFor([...ARGS, '--no-upnp', '--no-doctor'], { compiled: true, env: SECRETS }).ctx, deps)).toBe(0);
     expect(rec.bins).toEqual([]);
-    expect(term.text_()).toContain('The service downloads LiveKit, Caddy / cloudflared itself, as its own user, when it starts.');
+    expect(term.text_()).toContain('The service downloads LiveKit, Caddy itself, as its own user, when it starts.');
     expect(rec.spawn).toContainEqual(['runuser', '-u', 'telinha', '--', 'install', '-m', '755', '/usr/local/lib/telinha/telinha', '/opt/telinha/bin/telinha']);
     expect(rec.fsCalls.some((c) => c.startsWith('copy '))).toBe(false);
   });
@@ -1233,6 +1233,7 @@ describe('non-interactive', () => {
       const { deps } = fakeDeps(term);
       expect(await go(ctx, deps)).toBe(0);
       expect(term.text_()).toContain('Telinha asks the router for TCP 8443 while it runs');
+      expect(term.text_()).toContain('LiveKit Cloud carries the video: no media ports to open here.');
       expect(term.text_()).not.toMatch(/7881|7882/);
     });
 

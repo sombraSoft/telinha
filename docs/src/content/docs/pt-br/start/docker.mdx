@@ -133,16 +133,24 @@ Ctrl+R mostra ou esconde) e Ctrl+C sai.
    Portal do Desenvolvedor.
    [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
 
-4. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
+4. **Vídeo.** *Por onde passa o vídeo?* Mantenha *Este computador*. O
+   *LiveKit Cloud* é para uma conexão que nada da internet consegue alcançar
+   (CGNAT, que o setup detecta e aí já escolhe o Cloud para você): ele pede a
+   URL, a chave de API e o segredo do projeto, e não há portas de mídia para
+   abrir; veja [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/). Numa
+   VPS com o endereço na 443 ele também oferece passar o vídeo pela porta 443
+   para redes rígidas ([TURN sobre TLS](/telinha/pt-br/guides/turn/)).
+
+5. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
    que outro programa do host já use alguma. Em casa ele pergunta depois se a
    Telinha pode abrir as portas no roteador por UPnP (funciona de dentro do
    contêiner, graças à rede do host).
 
-5. **Revisão.** Todas as respostas numa tela só, agrupadas por passo; escolha
+6. **Revisão.** Todas as respostas numa tela só, agrupadas por passo; escolha
    *Aplicar* para gravar `/opt/telinha/config/telinha.env` (modo 600), ou volte
    para mudar algo. Nada é gravado antes disso.
 
-6. **Instalação.** No Docker a lista é curta: o app do Discord é conferido (com
+7. **Instalação.** No Docker a lista é curta: o app do Discord é conferido (com
    os intents ligados), o endereço do DuckDNS é atualizado se você escolheu um,
    e o arquivo é gravado. Sem programas para baixar, sem serviço, sem firewall,
    sem olhar o roteador. Se uma tarefa falha a tela oferece *Tentar de novo*,

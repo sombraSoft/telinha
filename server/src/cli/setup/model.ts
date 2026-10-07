@@ -261,7 +261,8 @@ function upnpHint(a: Answers, env: ModelEnv): Text[] {
     const router = routerLabel(nat);
     out.push(raw(''), router ? txt('hostRouter', { router }) : txt('routerNone'));
     const ext = nat.externalIp;
-    if (ext && isCgnatIpv4(ext)) out.push(txt('cgnat'));
+    // LiveKit Cloud takes the media ports off the router; the HTTPS port still needs it.
+    if (ext && isCgnatIpv4(ext)) out.push(txt(isCloud(a) ? 'cgnatCloud' : 'cgnat'));
     else if (ext && isPrivateIpv4(ext)) out.push(txt('doubleNat'));
   }
   return out;
@@ -302,6 +303,8 @@ const sameGuild = (a: Answers, env: ModelEnv) => !env.file.GUILD_ID || a.guild =
 const select = (value: string, label: Text, more: Omit<OptionDef, 'value' | 'label'> = {}): OptionDef => ({ value, label, ...more });
 const isHome = (a: Answers) => a.hosting === 'home';
 const isCloud = (a: Answers) => a.media === 'cloud';
+/** At home behind carrier-grade NAT nothing reaches this machine: LiveKit Cloud is the way out for the video. */
+const behindCgnat = (a: Answers, env: ModelEnv) => isHome(a) && isCgnatIpv4(env.host?.nat?.externalIp ?? '');
 /** The file's LiveKit Cloud answers (a self file's generated pair is not a Cloud project's). */
 const cloudFile = (env: ModelEnv, key: string) => (env.file.MEDIA === 'cloud' && env.file[key]) || undefined;
 /** The tray icon exists for the native Windows binary only. */
@@ -572,13 +575,14 @@ export const QUESTIONS: readonly QuestionDef[] = [
   {
     id: 'media', step: 'media', kind: 'select', visible: () => true,
     title: txt('mediaChoiceTitle'), question: txt('mediaChoiceQ'),
-    hint: () => [txt('mediaChoiceHelp')],
+    hint: (a, env) => [txt('mediaChoiceHelp'), ...(behindCgnat(a, env) ? [raw(''), txt('mediaCgnat')] : [])],
     options: () => [
       select('self', txt('mediaSelf'), { desc: txt('mediaSelfDesc'), preview: txt('mediaSelfPreview') }),
       select('cloud', txt('mediaCloud'), { desc: txt('mediaCloudDesc'), preview: txt('mediaCloudPreview') }),
     ],
-    default: (_a, env) => (env.file.MEDIA === 'cloud' ? 'cloud' : 'self'),
-    fromFile: (_a, env) => !!env.file.PUBLIC_URL,
+    default: (a, env) => (env.file.MEDIA === 'cloud' || behindCgnat(a, env) ? 'cloud' : 'self'),
+    // Behind CGNAT a self file is asked again: its media ports never worked.
+    fromFile: (a, env) => !!env.file.PUBLIC_URL && (env.file.MEDIA === 'cloud' || !behindCgnat(a, env)),
   },
   {
     id: 'cloudUrl', step: 'media', kind: 'text', visible: isCloud,
@@ -607,7 +611,14 @@ export const QUESTIONS: readonly QuestionDef[] = [
     // A VPS in direct mode on 443 with a name, and LiveKit on this machine: loadConfig's own rule.
     visible: (a, env) => !isCloud(a) && !turnBlocked(portsValues(a, env)),
     title: txt('turnTitle'), question: txt('turnQ'),
-    hint: () => [txt('turnHelp')],
+    hint: (a, env) => {
+      const host = hostOf(addressValues(a, env).PUBLIC_URL);
+      // An own domain needs the record first; DuckDNS and sslip.io names resolve by themselves.
+      const dns = addressChoice(a) === 'domain'
+        ? (env.host?.publicIp ? txt('turnDnsHint', { host: `turn.${host}`, ip: env.host.publicIp }) : txt('turnDnsHintNoIp', { host: `turn.${host}` }))
+        : txt('turnAutoHint', { host: `turn.${host}` });
+      return [txt('turnHelp'), raw(''), dns];
+    },
     options: () => [select('on', txt('turnOn'), { desc: txt('turnOnDesc') }), select('off', txt('turnOff'), { desc: txt('turnOffDesc') })],
     // A fresh install says yes; a re-run says what the file does (auto is off where the name needs a record).
     default: (a, env) => {
