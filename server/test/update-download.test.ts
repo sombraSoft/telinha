@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { basename, join } from 'node:path';
-import { writeTarGz, writeZip, type Entry } from '../src/archive.ts';
+import { writeArchive } from '../../scripts/build-binary.ts';
+import type { Entry } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
 import { assetName, parseSums } from '../src/release.ts';
 import { downloadRelease } from '../src/update/download.ts';
@@ -67,12 +68,11 @@ function memFs() {
   return { fs, files, text, names };
 }
 
-/** One release of one target: its archive (zip on Windows, tar.gz on Linux) and a SHA256SUMS that matches it. */
+/** One release of one target: its archive and a SHA256SUMS that matches it. */
 function github(target: Target, members: Record<string, string>): GitHubReleases {
-  const windows = target.startsWith('windows');
   const asset = assetName(target);
   const entries: Entry[] = Object.entries(members).map(([path, content]) => ({ path, mode: 0o755, data: enc.encode(content) }));
-  const bytes = windows ? writeZip(entries) : writeTarGz(entries);
+  const bytes = writeArchive(target, entries);
   return {
     latestTag: async () => TAG,
     assetUrl: (tag, name) => `https://example.test/${tag}/${name}`,

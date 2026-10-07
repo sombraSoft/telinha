@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validate } from '../../scripts/versions.ts';
+import { upstreamChecksums, validate } from '../../scripts/versions.ts';
 import { writeTarGz, writeZip } from '../src/archive.ts';
 import {
   HELPERS, PLATFORMS, assetSpec, caddyRelease, download, ensureBinaries, ensureBinariesForConfig, isPinned, loadVersions, resolveCaddyRelease, sha256,
@@ -124,6 +124,39 @@ describe('assetSpec', () => {
     ]);
     v.caddy = { version: '2.11.4', xcaddy: 'v0.4.7', modules: { duckdns: 'v0.5.0', 'github.com/mholt/caddy-l4': 'latest' } };
     expect(validate(v)).toEqual(['caddy: duckdns is not a Go module path', 'caddy: github.com/mholt/caddy-l4 needs a tag like v1.2.3']);
+  });
+});
+
+describe('versions refresh: upstream checksums', () => {
+  const LIVEKIT_SUMS = 'https://github.com/livekit/livekit/releases/download/v1.13.7/checksums.txt';
+  const fake = (text: string) => {
+    const urls: string[] = [];
+    const get = async (url: string) => {
+      urls.push(url);
+      return enc.encode(text);
+    };
+    return { urls, get };
+  };
+
+  test("LiveKit's checksums.txt (sha256sum lines) parses into asset -> hex", async () => {
+    const a = 'ab'.repeat(32);
+    const b = 'CD'.repeat(32);
+    const f = fake(`${a}  livekit_1.13.7_linux_amd64.tar.gz\n${b}  livekit_1.13.7_windows_arm64.zip\n`);
+    expect(await upstreamChecksums('livekit', '1.13.7', f.get)).toEqual({
+      'livekit_1.13.7_linux_amd64.tar.gz': a, 'livekit_1.13.7_windows_arm64.zip': b.toLowerCase(),
+    });
+    expect(f.urls).toEqual([LIVEKIT_SUMS]);
+  });
+
+  test('a sha512 list has no sha256 line: refused, never an unchecked pin', async () => {
+    const f = fake(`${'ab'.repeat(64)}  livekit_1.13.7_linux_amd64.tar.gz\n`);
+    await expect(upstreamChecksums('livekit', '1.13.7', f.get)).rejects.toThrow(`livekit 1.13.7: upstream checksums at ${LIVEKIT_SUMS} list nothing`);
+  });
+
+  test('cloudflared publishes none: null, nothing fetched', async () => {
+    const f = fake('');
+    expect(await upstreamChecksums('cloudflared', '2026.9.3', f.get)).toBeNull();
+    expect(f.urls).toEqual([]);
   });
 });
 

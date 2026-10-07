@@ -9,11 +9,9 @@
 // one is kept as telinha-tray.dist.exe, so setup can install it again offline.
 import { join } from 'node:path';
 import type { UpdateFailed, UpdateStaged } from '../cli/control.ts';
-import { ASIDE_RE, TRAY_DIST, TRAY_EXE, TRAY_NEW, asideBase, exeName, newExeName } from '../release.ts';
+import { ASIDE_RE, TRAY_DIST, TRAY_EXE, TRAY_NEW, asideBase, exeName, exeSuffix, newExeName } from '../release.ts';
 import { readState, writeState } from './state.ts';
 import { errorMessage, type UpdateFs } from './types.ts';
-
-const ext = (platform: NodeJS.Platform) => (platform === 'win32' ? '.exe' : '');
 
 type Log = (...a: unknown[]) => void;
 const quiet: Log = () => {};
@@ -35,7 +33,7 @@ export async function sweep(fs: UpdateFs, bin: string, log: Log = quiet): Promis
 
 /** The newest telinha.old-* for this platform by mtime, or null. */
 export async function newestOld(fs: UpdateFs, bin: string, platform: NodeJS.Platform): Promise<string | null> {
-  const suffix = ext(platform);
+  const suffix = exeSuffix(platform);
   const prefix = asideBase('telinha', 'old', '');
   let best: { name: string; mtimeMs: number } | null = null;
   for (const name of await fs.readdir(bin)) {
@@ -74,7 +72,7 @@ export async function stage(o: StageOptions): Promise<UpdateStaged> {
   const fresh = join(o.bin, newExeName(o.platform));
   if (!(await o.fs.stat(fresh))) throw new Error(`nothing to install: ${fresh} is missing`);
   await sweep(o.fs, o.bin, log);
-  const oldName = await freeName(o.fs, o.bin, asideBase('telinha', 'old', o.current), ext(o.platform), o.now());
+  const oldName = await freeName(o.fs, o.bin, asideBase('telinha', 'old', o.current), exeSuffix(o.platform), o.now());
   const current = join(o.bin, exe);
   const old = join(o.bin, oldName);
   const hadCurrent = !!(await o.fs.stat(current));
@@ -157,7 +155,7 @@ export async function rollback(o: RollbackOptions): Promise<UpdateFailed> {
     log(`update: ${o.staged.tag} failed to start twice and no previous executable exists; keeping it`);
     return failed;
   }
-  const failedName = await freeName(o.fs, o.bin, asideBase('telinha', 'failed', o.staged.tag), ext(o.platform), o.now());
+  const failedName = await freeName(o.fs, o.bin, asideBase('telinha', 'failed', o.staged.tag), exeSuffix(o.platform), o.now());
   const aside = join(o.bin, failedName);
   try {
     await o.fs.rename(current, aside);

@@ -47,7 +47,8 @@ type Target = `${'linux' | 'windows'}-${'x64' | 'arm64'}`;
 /** Names that depend on the OS only take whatever the caller has: a target, an OS or a Node platform. */
 type OsOf = Target | 'linux' | 'windows' | NodeJS.Platform;
 const onWindows = (os: OsOf) => os.startsWith('win');
-const exe = (os: OsOf) => (onWindows(os) ? '.exe' : '');
+/** '.exe' on Windows: what every program name and its aside copies end in. */
+export const exeSuffix = (os: OsOf): string => (onWindows(os) ? '.exe' : '');
 
 /** Linux gets tar.gz (minimal Debian/Alpine have tar but no unzip), Windows zip. */
 export const archiveType = (t: Target): 'tar.gz' | 'zip' => (onWindows(t) ? 'zip' : 'tar.gz');
@@ -57,9 +58,9 @@ export const assetName = (t: Target): string => `telinha-${t}.${archiveType(t)}`
 export const caddyAssetName = (t: Target): string => `caddy-${t}.${archiveType(t)}`;
 
 /** The program's file name, in an archive and in an install's bin folder alike. */
-export const exeName = (os: OsOf): string => `telinha${exe(os)}`;
+export const exeName = (os: OsOf): string => `telinha${exeSuffix(os)}`;
 /** The one file in a caddy archive. */
-export const caddyExeName = (os: OsOf): string => `caddy${exe(os)}`;
+export const caddyExeName = (os: OsOf): string => `caddy${exeSuffix(os)}`;
 export const TRAY_EXE = 'telinha-tray.exe';
 
 /** What Telinha's archive for a target holds: the program, the tray (Windows only; optional, older releases lack it), LICENSE. */
@@ -67,7 +68,7 @@ export const archiveContents = (t: Target): { exe: string; tray: string | null; 
   ({ exe: exeName(t), tray: onWindows(t) ? TRAY_EXE : null, license: 'LICENSE' });
 
 /** A downloaded program waiting in bin for the swap. */
-export const newExeName = (os: OsOf): string => `telinha.new${exe(os)}`;
+export const newExeName = (os: OsOf): string => `telinha.new${exeSuffix(os)}`;
 export const TRAY_NEW = 'telinha-tray.new.exe';
 /** The release's tray kept uninstalled: never run, kept current by the updater and install.ps1. */
 export const TRAY_DIST = 'telinha-tray.dist.exe';

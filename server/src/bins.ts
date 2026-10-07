@@ -13,7 +13,7 @@ import { readTarGz, readZip } from './archive.ts';
 import type { Config } from './config.ts';
 import { helpersOf } from './footprint.ts';
 import type { Paths } from './paths.ts';
-import { REPO, SUMS, caddyAssetName, caddyExeName, latestReleaseTag, parseSums, releaseAssetUrl } from './release.ts';
+import { REPO, SUMS, archiveType, caddyAssetName, caddyExeName, latestReleaseTag, parseSums, releaseAssetUrl } from './release.ts';
 import { isCompiled, version } from './version.ts';
 
 export const HELPERS = ['livekit', 'caddy', 'cloudflared'] as const;
@@ -57,16 +57,18 @@ export const isPinned = (helper: Helper): helper is PinnedHelper => helper !== '
 // `member` is the file inside the archive (or the saved name for a raw binary).
 export function assetSpec(helper: Helper, version: string, os: Os, arch: Arch): Spec {
   const exe = os === 'windows' ? '.exe' : '';
-  const archive = os === 'windows' ? 'zip' : 'tar.gz';
   switch (helper) {
     case 'livekit': {
+      // LiveKit's own naming, which happens to match ours.
+      const archive = os === 'windows' ? 'zip' : 'tar.gz';
       const asset = `livekit_${version}_${os}_${arch}.${archive}`;
       return { url: `${GH}/livekit/livekit/releases/download/v${version}/${asset}`, asset, archive, member: `livekit-server${exe}`, hashKey: `${os}-${arch}`, verify: 'pinned' };
     }
     case 'caddy': {
       // Named after Telinha's targets, which say x64 where Go says amd64.
-      const asset = caddyAssetName(`${os}-${arch === 'amd64' ? 'x64' : arch}`);
-      return { url: releaseAssetUrl(version, asset), asset, archive, member: caddyExeName(os), hashKey: `${os}-${arch}`, verify: 'release-sums' };
+      const target = `${os}-${arch === 'amd64' ? 'x64' : arch}` as const;
+      const asset = caddyAssetName(target);
+      return { url: releaseAssetUrl(version, asset), asset, archive: archiveType(target), member: caddyExeName(os), hashKey: `${os}-${arch}`, verify: 'release-sums' };
     }
     case 'cloudflared': {
       // No windows-arm64 build upstream; Windows 11 on ARM runs the x64 one emulated.
