@@ -1,0 +1,48 @@
+# Checks that every PR title is a Conventional Commit. The repository allows
+# squash merges only, and the squash commit's subject is the PR title
+# (squash_merge_commit_title=PR_TITLE). release-please reads those subjects on
+# main, so a bad title becomes a bad (or missing) changelog entry. The job name
+# is a required check in ruleset `main`, so keep it stable.
+name: pr-title
+
+on:
+  # pull_request, not pull_request_target: every PR comes from a branch of this
+  # repository, and nothing here needs secrets or write access. `edited` runs
+  # the check again when a title is fixed; `synchronize` reports it on every
+  # new head commit, which the required check needs.
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+# A newer edit or push supersedes the previous run.
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: read
+    steps:
+      # The types release-please and Renovate emit (`chore(main): release`,
+      # `chore(deps)`, `fix(deps)`) plus the ones in our history. A breaking
+      # change is marked with `!` (`feat!: ...`).
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
