@@ -1,10 +1,10 @@
 // `telinha run`: the service. Reads telinha.env, supervises livekit-server (with
 // MEDIA=self; MEDIA=cloud uses LiveKit Cloud) and caddy or cloudflared (per
-// INGRESS), gates every page behind the Discord login, relays LiveKit signaling
-// at /livekit (self only), serves rooms at /r/<code>, runs
-// the slash command and the room lifecycle, keeps the router's port mappings
-// and the DuckDNS record fresh, answers the local control endpoint and, in the
-// native binary, updates itself. See README.md.
+// INGRESS), gates every page behind the Discord login, carries LiveKit signaling
+// through the signaling proxy at /livekit (self only), serves rooms at
+// /r/<code>, runs the slash command and the room lifecycle, keeps the router's
+// port mappings and the DuckDNS record fresh, answers the local control
+// endpoint and, in the native binary, updates itself. See README.md.
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -395,7 +395,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   });
 
   // Cloud: browsers reach LiveKit Cloud directly, so /livekit/* stays a 404.
-  const proxy = footprint.relay ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
+  const proxy = footprint.signalingProxy ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
   // Bun.serve wants a handler even when nothing ever upgrades.
   const noSockets: WebSocketHandler<ProxyData> = { message() {} };
   const handler = createHandler({
@@ -419,13 +419,13 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   });
   try {
     server = Bun.serve<ProxyData>({
-      hostname: config.host,
+      hostname: config.listenHost,
       port: config.port,
       fetch: handler,
       websocket: proxy?.websocket ?? noSockets,
     });
   } catch (e) {
-    log(`start-up failed: cannot listen on ${config.host}:${config.port}: ${message(e)}`);
+    log(`start-up failed: cannot listen on ${config.listenHost}:${config.port}: ${message(e)}`);
     exit(1, 'no listener');
     return;
   }

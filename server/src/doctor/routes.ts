@@ -1,6 +1,6 @@
 // /doctor and /doctor/api/*: the phone test page and its three calls. Reached
 // with a one-time link from `telinha doctor`; the cookie it sets opens these
-// routes and the LiveKit relay, nothing else. Anything without a valid cookie
+// routes and the signaling proxy, nothing else. Anything without a valid cookie
 // gets the same 404 as an unknown path.
 import { AccessToken, TrackSource } from 'livekit-server-sdk';
 import { cookie, parseCookies } from '../auth.ts';

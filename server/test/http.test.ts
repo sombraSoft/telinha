@@ -651,7 +651,7 @@ describe('/doctor', () => {
     expect((await s.get('/doctorx')).status).toBe(302);
   });
 
-  test('the doctor cookie opens the /livekit relay only', async () => {
+  test('the doctor cookie opens the /livekit signaling proxy only', async () => {
     const calls: string[] = [];
     const proxy: NonNullable<Deps['proxy']> = {
       allows: (rest) => rest === '/rtc',
