@@ -1,68 +1,65 @@
-// Windows Firewall rules for the children that accept connections from the
-// internet: livekit-server on the media ports (MEDIA=self only; Cloud runs no
+// Windows Firewall rules for the footprint's exposures, the helpers that accept
+// connections from the internet: livekit-server on the media ports (MEDIA=self only; Cloud runs no
 // local SFU), caddy on HTTPS/HTTP in direct mode. Created by the elevated
 // `service install --firewall`, removed by `uninstall --firewall`. Install first
 // deletes every Telinha rule, so a re-run after a port or MEDIA change leaves
 // nothing stale, then clears every inbound rule scoped to the programs: a
 // dismissed Windows Security Alert (a console `telinha run` before the service)
 // leaves Block rules for them, and Block beats Allow.
-import { loadConfig, type Ingress, type Media } from '../config.ts';
+import { loadConfig } from '../config.ts';
 import { loadEnvFile, mergeEnv } from '../envfile.ts';
+import { footprintOf, type ExposedKey, type FootprintInput } from '../footprint.ts';
 import type { SpawnFn } from './index.ts';
 
 export interface FirewallRule { name: string; program: string; protocol: 'TCP' | 'UDP'; port: number }
 
-export interface FirewallPorts {
-  media: Media;
-  mediaTcpPort: number;
-  mediaUdpPort: number;
-  ingress: Ingress;
-  httpsPort: number;
-  /** 0 = no HTTP listener. */
-  httpPort: number;
-}
-
 export const RULE_NAMES = ['Telinha LiveKit TCP', 'Telinha LiveKit UDP', 'Telinha HTTPS', 'Telinha HTTP'] as const;
+const RULE_FOR: Record<ExposedKey, (typeof RULE_NAMES)[number]> = {
+  MEDIA_TCP_PORT: 'Telinha LiveKit TCP', MEDIA_UDP_PORT: 'Telinha LiveKit UDP', HTTPS_PORT: 'Telinha HTTPS', HTTP_PORT: 'Telinha HTTP',
+};
 
-export function firewallRules(bin: string, p: FirewallPorts): FirewallRule[] {
-  const livekit = `${bin}\\livekit-server.exe`;
-  const caddy = `${bin}\\caddy.exe`;
-  const rules: FirewallRule[] = [];
-  if (p.media === 'self') {
-    rules.push(
-      { name: 'Telinha LiveKit TCP', program: livekit, protocol: 'TCP', port: p.mediaTcpPort },
-      { name: 'Telinha LiveKit UDP', program: livekit, protocol: 'UDP', port: p.mediaUdpPort },
-    );
-  }
-  // Tunnel and external modes never expose caddy.
-  if (p.ingress === 'direct') {
-    rules.push({ name: 'Telinha HTTPS', program: caddy, protocol: 'TCP', port: p.httpsPort });
-    if (p.httpPort !== 0) rules.push({ name: 'Telinha HTTP', program: caddy, protocol: 'TCP', port: p.httpPort });
-  }
-  return rules;
+/** One Allow rule per exposure, scoped to the helper's program in bin. */
+export function firewallRules(bin: string, c: FootprintInput): FirewallRule[] {
+  const { helpers, exposures } = footprintOf(c);
+  return exposures.map((e) => ({
+    name: RULE_FOR[e.key],
+    program: `${bin}\\${helpers.find((h) => h.name === e.helper)!.binary}.exe`,
+    protocol: e.protocol === 'tcp' ? 'TCP' : 'UDP',
+    port: e.port,
+  }));
 }
 
 /**
- * Ports from the merged environment, the way `run` reads them. A telinha.env
- * that does not load yet (setup half done) still gets rules from the port keys
- * and their defaults, so the firewall never blocks a later start.
+ * The footprint input from the merged environment, the way `run` reads it. A
+ * telinha.env that does not load yet (setup half done) still gets one from
+ * the keys and their defaults, so the firewall never blocks a later start.
  */
-export function portsFromEnv(env: Record<string, string | undefined>, o: { compiled?: boolean } = {}): FirewallPorts {
+export function portsFromEnv(env: Record<string, string | undefined>, o: { compiled?: boolean } = {}): FootprintInput {
   try {
-    const c = loadConfig(env, { compiled: o.compiled });
-    return { media: c.media, mediaTcpPort: c.mediaTcpPort, mediaUdpPort: c.mediaUdpPort, ingress: c.ingress, httpsPort: c.httpsPort, httpPort: c.httpPort };
+    return loadConfig(env, { compiled: o.compiled });
   } catch {
     const port = (k: string, d: number) => {
       const n = Number(env[k]);
       return env[k] && Number.isInteger(n) && n >= 0 && n <= 65535 ? n : d;
     };
-    const ingress = env.INGRESS === 'tunnel' || env.INGRESS === 'external' ? env.INGRESS : 'direct';
-    const media = env.MEDIA === 'cloud' ? 'cloud' : 'self';
-    return { media, mediaTcpPort: port('MEDIA_TCP_PORT', 7881), mediaUdpPort: port('MEDIA_UDP_PORT', 7882), ingress, httpsPort: port('HTTPS_PORT', 443), httpPort: port('HTTP_PORT', 80) };
+    // A rule names a local port only: PUBLIC_URL is left out, and LISTEN,
+    // LIVEKIT_PORT, TURN and the IP watch (never exposed) keep loadConfig's defaults.
+    return {
+      media: env.MEDIA === 'cloud' ? 'cloud' : 'self',
+      ingress: env.INGRESS === 'tunnel' || env.INGRESS === 'external' ? env.INGRESS : 'direct',
+      turn: null,
+      port: 8081,
+      livekitPort: 7880,
+      mediaTcpPort: port('MEDIA_TCP_PORT', 7881),
+      mediaUdpPort: port('MEDIA_UDP_PORT', 7882),
+      httpsPort: port('HTTPS_PORT', 443),
+      httpPort: port('HTTP_PORT', 80),
+      ipWatchSeconds: 300,
+    };
   }
 }
 
-export function loadFirewallPorts(envFile: string, env: Record<string, string | undefined>, o: { compiled?: boolean } = {}): FirewallPorts {
+export function loadFirewallPorts(envFile: string, env: Record<string, string | undefined>, o: { compiled?: boolean } = {}): FootprintInput {
   let vars: Record<string, string> = {};
   try {
     vars = loadEnvFile(envFile)?.vars ?? {};

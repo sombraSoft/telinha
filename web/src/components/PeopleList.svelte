@@ -8,7 +8,7 @@
   import { t } from '../lib/i18n/i18n.svelte';
   import { splitMembers, statusKey, type Member } from '../lib/members';
   import { prefs } from '../lib/prefs.svelte';
-  import type { Peer, RoomController } from '../lib/room.svelte';
+  import type { Participant, RoomSession } from '../lib/room.svelte';
   import { qualityLabel } from '../lib/stats';
 
   let {
@@ -16,24 +16,24 @@
     members,
     open,
     ontoggle,
-  }: { rc: RoomController; members: Member[]; open: boolean; ontoggle: () => void } = $props();
+  }: { rc: RoomSession; members: Member[]; open: boolean; ontoggle: () => void } = $props();
 
-  const byId = $derived(new Map(rc.peers.map((p) => [p.identity, p])));
+  const byId = $derived(new Map(rc.participants.map((p) => [p.identity, p])));
   // Whoever is in the room is listed above, with what they are doing. Never
   // ourselves (the list usually arrives before we are connected), so nothing
   // until the token says who we are.
   const split = $derived(
     rc.user
-      ? splitMembers(members, new Set([rc.user.id, ...rc.peers.map((p) => p.id)]))
+      ? splitMembers(members, new Set([rc.user.id, ...rc.participants.map((p) => p.id)]))
       : { online: [], offline: [] },
   );
 
-  function status(p: Peer): { text: string; live: boolean } {
+  function status(p: Participant): { text: string; live: boolean } {
     if (p.stream) {
       const q = qualityLabel(rc.stats[p.identity]);
       return { text: `🔴 ${t('people.streaming')}${q ? ` · ${q}` : ''}`, live: true };
     }
-    const names = p.watching.map((id) => byId.get(id)?.name).filter(Boolean);
+    const names = p.watching.map((id) => byId.get(id)?.label).filter(Boolean);
     return { text: names.length ? t('people.watching', { names: names.join(', ') }) : t('people.idle'), live: false };
   }
 </script>
@@ -65,14 +65,14 @@
   >
   <div class="clip">
     <aside class="side" id={PEOPLE_ID} inert={!open}>
-      <h2>{t('people.title')} <span class="muted">— {rc.peers.length}</span></h2>
+      <h2>{t('people.title')} <span class="muted">— {rc.participants.length}</span></h2>
       <ul data-testid="people-list">
-        {#each rc.peers as p (p.identity)}
+        {#each rc.participants as p (p.identity)}
           {@const s = status(p)}
           <li data-testid="people-item">
             <img class="avatar lg" src={p.avatar} alt="" />
             <div class="who">
-              <div class="name">{p.name}{p.local ? ` ${t('you')}` : ''}</div>
+              <div class="name">{p.label}{p.local ? ` ${t('you')}` : ''}</div>
               <div class="sub" class:live={s.live}>{s.text}</div>
             </div>
           </li>

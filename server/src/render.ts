@@ -3,12 +3,14 @@
 // here: LiveKit gets its keys from the LIVEKIT_KEYS env of its process, Caddy
 // its DuckDNS token from DUCKDNS_TOKEN through an {env.*} placeholder.
 import type { Config } from './config.ts';
+import { roomTimeouts } from './livekit.ts';
 
 const HEADER = '# Rendered by telinha from telinha.env; do not edit.';
 
 export function renderLivekitYaml(
   c: Pick<Config, 'livekitPort' | 'mediaTcpPort' | 'mediaUdpPort' | 'livekitNodeIp' | 'closeEmptySeconds' | 'turn'>,
 ): string {
+  const timeouts = roomTimeouts(c.closeEmptySeconds);
   return [
     HEADER,
     `port: ${c.livekitPort}`,
@@ -24,9 +26,8 @@ export function renderLivekitYaml(
     'room:',
     // Only telinha creates rooms: a token for a closed room must not bring it back.
     '  auto_create: false',
-    // Mirrors roomService.ensureRoom's emptyTimeout so one setting moves both.
-    `  empty_timeout: ${c.closeEmptySeconds + 120}`,
-    '  departure_timeout: 20',
+    `  empty_timeout: ${timeouts.emptyTimeout}`,
+    `  departure_timeout: ${timeouts.departureTimeout}`,
     ...(c.turn
       ? [
         // Caddy terminates TLS on 443 for this name and forwards plain TCP here
