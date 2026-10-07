@@ -1,5 +1,5 @@
-// Doctor sessions in the running service: the CLI asks for one (control
-// endpoint), shows the one-time link as a QR code, the phone opens it, gets a
+// The phone test in the running service: the CLI asks for a link (control
+// endpoint), shows that one-time link as a QR code, the phone opens it, gets a
 // short-lived cookie scoped to /doctor, runs the media test and posts a report
 // the CLI is long-polling for. Everything is in memory: a restart forgets them.
 import { createHmac, randomBytes } from 'node:crypto';
@@ -11,7 +11,7 @@ export type { DoctorReport, PhoneTestPoll };
 export const DOCTOR_COOKIE = 'telinha_doctor';
 /** An unopened link dies after this. */
 export const SESSION_TTL_MS = 10 * 60_000;
-/** The page's cookie, and how long an opened session stays alive. */
+/** The page's cookie, and how long an opened link stays alive. */
 export const COOKIE_TTL_MS = 15 * 60_000;
 export const MAX_SESSIONS = 5;
 
@@ -25,22 +25,22 @@ interface Entry {
   expiresAt: number;
   openedAt?: number;
   report?: DoctorReport;
-  /** The LiveKit token was handed out (one per session). */
+  /** The LiveKit token was handed out (one per link). */
   granted: boolean;
   waiters: Set<() => void>;
 }
 
 export interface DoctorStore {
-  /** id 16 random bytes hex, token 32 bytes base64url; the oldest session goes when MAX_SESSIONS are live. */
+  /** id 16 random bytes hex, token 32 bytes base64url; the oldest link goes when MAX_SESSIONS are live. */
   create(now?: number): { id: string; token: string; expiresAt: number };
   /** One-time: the token is gone after the first use. */
   claim(token: string, now?: number): { id: string } | null;
   /** Value for the telinha_doctor cookie. */
   cookieFor(id: string, now?: number): string;
   verifyCookie(value: unknown, now?: number): { id: string } | null;
-  /** false when the session is gone or already has a report. */
+  /** false when the link is gone or already has a report. */
   report(id: string, report: DoctorReport, now?: number): boolean;
-  /** The media token may be handed out once per session: true the first time. */
+  /** The media token may be handed out once per link: true the first time. */
   takeGrant(id: string): boolean;
   /** Gives the grant back (the room could not be created). */
   returnGrant(id: string): void;
@@ -149,7 +149,7 @@ export function createDoctorStore(o: {
       const first = store.state(id);
       if (first.state === 'done' || first.state === 'expired') return first;
       const e = sessions.get(id)!;
-      // Woken early when the phone opens the link, reports, or the session goes.
+      // Woken early when the phone opens the link, reports, or the link goes.
       await new Promise<void>((resolve) => {
         const done = () => {
           clearTimeout(timer);
@@ -164,7 +164,7 @@ export function createDoctorStore(o: {
 
     gc(now = clock()) {
       for (const e of [...sessions.values()]) {
-        // A finished session stays until its expiry so a late wait() still gets the report.
+        // A finished test stays until its expiry so a late wait() still gets the report.
         if (e.expiresAt <= now) drop(e);
       }
     },

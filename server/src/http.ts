@@ -51,7 +51,7 @@ export interface Deps {
   control?: Pick<Control, 'handle'> & Partial<Pick<Control, 'authorized'>>;
   /**
    * run.ts: (req, s) => server.timeout(req, s). Bun closes a request that has
-   * sent nothing for 10 s; the control routes long-poll (doctor sessions) or
+   * sent nothing for 10 s; the control routes long-poll (the phone test) or
    * run for minutes (an update), so an authorized one gets no idle timeout.
    */
   timeout?: (req: Request, seconds: number) => void;
