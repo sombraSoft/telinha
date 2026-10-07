@@ -25,7 +25,11 @@ Os da família do Chrome. O vídeo usa AV1 quando o navegador tem um codificador
 
 ## Dá para usar sem domínio?
 
-Dá. Em casa, use um nome gratuito do DuckDNS, que também acompanha um IP que muda. Numa VPS com IPv4 público fixo, o sslip.io não exige configuração nenhuma. Veja [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/) e [Escolha a sua instalação](/telinha/pt-br/start/choose/).
+Dá. Em casa, responda *Não* a *Você tem um domínio na Cloudflare?* no setup: a Telinha usa um nome grátis do DuckDNS, que também acompanha um IP que muda, e serve HTTPS na porta 8443 com um certificado que ela pega pelo DuckDNS, então nada precisa abrir na 80 ou na 443. Os links passam a levar a porta (`https://my-group.duckdns.org:8443/r/...`), e algumas redes rígidas (empresas, escolas) só deixam o navegador chegar na porta 443, então quem estiver nelas não abre; um domínio na Cloudflare (Cloudflare Tunnel) evita isso. Numa VPS com IPv4 público fixo, o sslip.io não exige configuração nenhuma. Veja [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/) e [Escolha a sua instalação](/telinha/pt-br/start/choose/).
+
+## Por que o meu link tem :8443?
+
+Porque a Telinha roda em casa com um endereço do DuckDNS. A internet de casa em geral não deixa as portas web 80 e 443 entrarem, então a Telinha serve HTTPS numa porta própria, a 8443 (ou a que você escolheu), e o endereço precisa dizer qual. É um endereço HTTPS normal, com certificado válido. Se quem está numa rede rígida não consegue abrir, use um domínio na Cloudflare: rode `telinha setup` de novo e responda *Sim* a *Você tem um domínio na Cloudflare?* Veja [DuckDNS na porta 8443](/telinha/pt-br/guides/domains/#duckdns-na-porta-8443).
 
 ## Dá para rodar atrás de CGNAT?
 
@@ -56,7 +60,7 @@ Dentro dela (`TELINHA_HOME`, ou `--home DIR` em qualquer comando, aponta para ou
 | --- | --- |
 | `bin/telinha[.exe]` | O programa (os instaladores e o atualizador escrevem nele) |
 | `bin/telinha.old-<version>[.exe]`, `bin/telinha.failed-<tag>[.exe]` | O executável que uma atualização substituiu, ou um que foi revertido; apagado depois da próxima partida bem-sucedida (no Windows, um que o serviço ainda usa fica até o serviço reiniciar) |
-| `bin/livekit-server`, `caddy`, `cloudflared` (`.exe` no Windows) e `<tool>.version` | Os binários auxiliares de que esta configuração precisa, conferidos por sha256 quando baixados (pelo setup, ou num início que não os encontra ou os encontra numa versão fixada mais antiga); o `PATH` é consultado depois do `bin/` |
+| `bin/livekit-server`, `caddy`, `cloudflared` (`.exe` no Windows) e `<tool>.version` | Os binários auxiliares de que esta configuração precisa, conferidos por sha256 quando baixados (pelo setup, ou num início que não os encontra ou os encontra numa versão fixada mais antiga); o `PATH` é consultado depois do `bin/`. O `caddy` é o build do Caddy da própria Telinha (com o módulo DNS do DuckDNS e o layer4), baixado da versão da Telinha e conferido com o `SHA256SUMS` dela |
 | `config/telinha.env` | A configuração, só do dono: Linux, instalação de usuário, modo 0600; Linux, instalação como root, `root:telinha` 0640 numa `config/` `root:telinha` 0750 (o serviço lê pelo grupo); no Windows uma ACL só com você, SYSTEM e Administradores |
 | `data/telinha.sqlite` | O registro das salas. Se ele se perder, só os links das salas abertas naquele momento deixam de funcionar |
 | `data/run/` | O `livekit.yaml` e o `Caddyfile` gerados (reescritos antes de cada início: edite o `telinha.env`, nunca estes) e o estado da execução: `children.json`, `public-ip`, `telinha.pid` (um `run` por pasta), `service.pid`, `control.token`, `update.json`, `upnp.json` |
@@ -66,7 +70,7 @@ Dentro dela (`TELINHA_HOME`, ou `--home DIR` em qualquer comando, aponta para ou
 
 ## É seguro deixar exposto?
 
-Todas as páginas ficam atrás do login do Discord e da verificação de cargo. A própria Telinha repassa a sinalização do LiveKit e encaminha só `/livekit/rtc`, então a API do LiveKit nunca fica acessível de fora. Segredos nunca vão na linha de comando (o setup recusa `--discord-token` e parecidos e lê do ambiente ou de um arquivo), e o `telinha.env` só pode ser lido pelo dono (e pelo grupo do serviço numa instalação como root no Linux). Os binários auxiliares são fixados por sha256, e cada versão traz o `SHA256SUMS` e uma atestação de proveniência do build que você pode conferir à mão, veja [Atualizações](/telinha/pt-br/guides/updates/).
+Todas as páginas ficam atrás do login do Discord e da verificação de cargo. A própria Telinha repassa a sinalização do LiveKit e encaminha só `/livekit/rtc`, então a API do LiveKit nunca fica acessível de fora. Segredos nunca vão na linha de comando (o setup recusa `--discord-token` e parecidos e lê do ambiente ou de um arquivo), e o `telinha.env` só pode ser lido pelo dono (e pelo grupo do serviço numa instalação como root no Linux). Os binários auxiliares são fixados por sha256, e cada versão traz o `SHA256SUMS` e uma atestação de proveniência do build que você pode conferir à mão; os dois cobrem também o build do Caddy da Telinha, veja [Atualizações](/telinha/pt-br/guides/updates/).
 
 ## Como removo?
 
@@ -92,6 +96,6 @@ O `down -v` também remove o volume `telinha-data` (o registro das salas e os ce
 ## O que está planejado?
 
 - Windows: um app de bandeja e binários assinados.
-- Mídia: LiveKit Cloud (`MEDIA=cloud`) para quem não consegue abrir portas, e TURN sobre TLS na 443.
+- Mídia: LiveKit Cloud (`MEDIA=cloud`) para quem não consegue abrir portas, e TURN sobre TLS na 443 (o módulo layer4 de que isso precisa já está no build do Caddy da Telinha).
 
 Nada disso tem data.

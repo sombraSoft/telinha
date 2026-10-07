@@ -14,8 +14,9 @@ ingress mode, gates every page behind the Discord login, relays the LiveKit
 signaling WebSocket at `/livekit/*` itself, restarts LiveKit when the public IP
 changes, asks the router to forward its ports (UPnP / NAT-PMP / PCP) and keeps
 a DuckDNS name current. It runs as a native program on Windows and Linux (one
-executable that downloads the three helper binaries it needs, pinned by
-sha256, and updates itself) or as one Docker container that bundles them.
+executable that downloads `livekit-server` and `cloudflared` from upstream and
+Telinha's own Caddy build from the release, all pinned by sha256, and updates
+itself) or as one Docker container that bundles them.
 
 **Docs:** https://sombrasoft.github.io/telinha/ (English and Portuguese):
 installing, choosing a setup, Discord app, domains, port forwarding
@@ -58,7 +59,8 @@ Telinha is the only HTTP front in every mode: Caddy (direct mode) only
 terminates TLS, cloudflared (tunnel mode) only carries traffic. The login gate
 and all routing live in telinha.
 
-`INGRESS=direct` (bundled Caddy gets a Let's Encrypt certificate):
+`INGRESS=direct` on a VPS (bundled Caddy gets a Let's Encrypt certificate over
+ports 80 and 443):
 
 ```
 browser --> caddy :443 (TLS; :80 redirects)           child of telinha
@@ -73,8 +75,27 @@ browser --> caddy :443 (TLS; :80 redirects)           child of telinha
                       /r/<code>     --> room page
                       /             --> redirect to /r/
 
-media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP)
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (opened in the provider's firewall)
 ```
+
+`INGRESS=direct` at home with DuckDNS (`ACME_DNS=duckdns`; home connections
+usually block inbound 80/443, so Telinha never relies on them there):
+
+```
+browser --> caddy :8443 (TLS, Let's Encrypt via DuckDNS DNS-01; no :80)   child of telinha
+              --> telinha 127.0.0.1:8081 --> (same routes as above)
+
+media: browser <--> LiveKit   TCP 7881 / UDP 7882, plus TCP 8443 (forwarded on the router or by UPnP)
+```
+
+The Caddy that runs is Telinha's own build: upstream Caddy plus
+`caddy-dns/duckdns` (the DNS challenge above) and `caddy-l4`, compiled with
+xcaddy from the recipe in `versions.json`. The Docker image builds it in a Go
+stage; every release ships it per os/arch next to the telinha archives, and a
+native install fetches the one of its own release and checks it against that
+release's `SHA256SUMS`. The DuckDNS token reaches Caddy only through its
+environment (the Caddyfile says `{env.DUCKDNS_TOKEN}`) and is blanked out of
+Caddy's forwarded log lines.
 
 `INGRESS=tunnel` (Cloudflare Tunnel, no inbound HTTP ports):
 
@@ -123,14 +144,15 @@ those are served without a login (hashed build output, no data).
 | --- | --- |
 | `server/` | Bun TypeScript server, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` prompts, `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` and `setup/` the wizard, `doctor.ts`, `update.ts`, `service.ts`), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` home dirs and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile, `lock.ts` one run per home, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall and the `service run` loop, `update/` release lookup, download, swap, rollback, `proxy.ts` `/livekit/*` relay, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `codes.ts` room codes, `rooms.ts` room registry (SQLite), `lifecycle.ts` room poller, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
 | `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`), served under `/r/`, plus the doctor page (`doctor.html`, `src/doctor/`, plain TypeScript); `bun run build` writes `web/dist` |
-| `versions.json` | Pinned `livekit-server`, `caddy` and `cloudflared` versions with the sha256 of every asset (linux amd64/arm64, windows amd64/arm64; cloudflared has no windows arm64 build, the amd64 one is used) |
-| `scripts/bins.ts` | `bun run bins`: downloads and sha256-verifies the helper binaries (dev, the Docker build) |
-| `scripts/build-binary.ts` | Native binaries: compile, package, `SHA256SUMS` |
-| `scripts/versions.ts` | `check` (CI) and `refresh` (after a version bump) for `versions.json` |
+| `versions.json` | Pinned `livekit-server` and `cloudflared` versions with the sha256 of every asset (linux amd64/arm64, windows amd64/arm64; cloudflared has no windows arm64 build, the amd64 one is used), and the `caddy` build recipe: Caddy `version`, `xcaddy` and `modules` (no hashes: each release's `SHA256SUMS` pins its Caddy) |
+| `scripts/bins.ts` | `bun run bins`: downloads and verifies the helper binaries (dev, the Docker build): `livekit-server` and `cloudflared` against `versions.json`, `caddy` from a Telinha release (`--release vX.Y.Z`, default the latest) against its `SHA256SUMS` |
+| `scripts/caddy-build.ts` | `bun run caddy`: builds Telinha's Caddy with xcaddy (needs Go), cross-compiling with `--os`/`--arch`; on the host's own platform it asserts the version and the `dns.providers.duckdns` and `layer4` modules. Imports only `node:*`, so the Docker Go stage needs just it and `versions.json` |
+| `scripts/build-binary.ts` | Native binaries: compile, package, `SHA256SUMS`; `pack-caddy` packs a built Caddy as its release archive |
+| `scripts/versions.ts` | `check` (CI) and `refresh` (after a version bump) for `versions.json`; the caddy recipe is validated, never hashed |
 | `scripts/dev.ts`, `stack.ts` | Local dev: fetches `livekit-server`, starts the Bun server (which supervises it) and Vite, cleans up on exit; `stack.ts --e2e` is Playwright's web server |
-| `scripts/image.ts`, `smoke.sh` | `bun run image`: local container build plus the smoke test (`smoke.sh` ships in the image) |
+| `scripts/image.ts`, `smoke.sh` | `bun run image`: local container build plus the smoke test (`smoke.sh` ships in the image; it also checks the Caddy version and modules and has Caddy validate the DNS-01 Caddyfile) |
 | `e2e/` | Playwright specs (`*.e2e.ts`): login, routes and redirects, screen share between two browser contexts, language and theme, the member list, room closing, the phone test page |
-| `Dockerfile` | Multi-stage, multi-arch build (page build, prod deps, binaries, Bun alpine runtime with the three binaries); entrypoint `bun server/src/index.ts`, command `run` |
+| `Dockerfile` | Multi-stage, multi-arch build (page build, prod deps, downloaded binaries, a `golang` stage that builds Caddy with `scripts/caddy-build.ts` and a `caddy-export` target the release uses for the per-platform assets, Bun alpine runtime with the three binaries); entrypoint `bun server/src/index.ts`, command `run` |
 | `deploy/` | `install.sh`, `install.ps1` (the native installers), the Docker host side: `compose.yml`, `compose.journald.yml`, `telinha.env.example`, `install-docker.sh`, `telinha-update` and its systemd service/timer |
 | `docs/` | The docs site (Astro Starlight, English and pt-BR): pages in `src/content/docs/` (pt-BR under `pt-br/`), the reference generator and the drift and lint tests in `scripts/`, the reference descriptions in `src/data/reference.ts`, components in `src/components/` |
 | `.github/workflows/` | `ci.yml`, `release.yml` |
@@ -148,8 +170,9 @@ bun run test               # bun test: server, web and docs unit tests
 bun run build              # web/dist
 bun run e2e                # Playwright; needs bun run build first, and a Chromium (bunx playwright install chromium)
 bun run image              # build telinha:dev with docker or podman, then run the smoke test
-bun run bins               # download all three helper binaries for this host into .cache/telinha/bin
-bun run versions check     # validate versions.json (refresh: recompute every hash)
+bun run bins               # download all three helper binaries for this host into .cache/telinha/bin (caddy from the latest release; a warning if it has none)
+bun run caddy              # build Telinha's Caddy with xcaddy into .cache/telinha/bin (needs Go on PATH)
+bun run versions check     # validate versions.json (refresh: recompute the livekit and cloudflared hashes)
 bun run compile --smoke    # native binaries for this OS into dist-bin/ (needs bun run build first)
 bun run docs:dev           # the docs site at http://localhost:4321/telinha/
 bun run docs:build         # docs/dist; the link validator fails the build on a broken link
@@ -191,15 +214,23 @@ with `web/dist` embedded (run `bun run build` first) and writes
 default: this OS's two targets), `--version X.Y.Z` (default `package.json`),
 `--out DIR`, `--smoke` (runs the host binary's `--version`).
 `bun run compile sums` rewrites `SHA256SUMS` for whatever archives
-are in `dist-bin/`. Linux targets cross-compile from any host; Windows targets
+are in `dist-bin/`, the `caddy-<target>` ones included, and
+`bun run compile pack-caddy --target <t> --from DIR` packs a built Caddy as the
+release archive of one target. Linux targets cross-compile from any host; Windows targets
 build only on Windows, where Bun can write their version resource (product
 name, publisher, version). The x64 targets are Bun's baseline builds. The
 binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
 
 **Image.** `bun run image` picks docker, else podman (starting the podman
-machine if it is stopped). The smoke test (`scripts/smoke.sh`, also run by the
-CI `image` job) runs inside the image: the server tests, the built page,
-`--version` of the three binaries, then the real entry point in `DEV_USER` mode
+machine if it is stopped). Caddy is compiled inside the build by the
+`caddy-build` stage (`golang` alpine plus the bun binary running
+`scripts/caddy-build.ts`, `GOTOOLCHAIN=auto` so a Caddy that needs a newer Go
+still builds), on the build platform for the target one. The smoke test
+(`scripts/smoke.sh`, also run by the CI `image` job) runs inside the image:
+the server tests, the built page, `--version` of the three binaries, the
+Caddy version against `versions.json` and its `dns.providers.duckdns` and
+`layer4` modules, `caddy validate` of the DNS-01 Caddyfile rendered by the real
+code (without the token in the file), then the real entry point in `DEV_USER` mode
 until `/healthz` reports `"livekit":"up"`, a forwarded `/healthz` without
 `children`, the gate (`/r/` redirects to the login, then serves the page with
 the command meta), a 404 for `/livekit/` outside the `/rtc` allowlist, page
@@ -304,15 +335,20 @@ members' presences are cached.
 4. `binaries` (matrix: `ubuntu-latest` builds `linux-x64` and `linux-arm64`,
    `windows-latest` builds `windows-x64` and `windows-arm64`, where Bun writes
    the Windows version resource) runs `bun scripts/build-binary.ts --target
-   linux|windows --version X.Y.Z --smoke`. In parallel `image` builds
-   `linux/amd64` and `linux/arm64` and pushes `ghcr.io/sombrasoft/telinha`
-   tagged `X.Y.Z`, `X.Y` and `latest`, with a provenance attestation on the
-   index digest.
-5. `release-assets` writes `SHA256SUMS` for the four archives,
-   `telinha-deploy.tar.gz` and `telinha-image.digest`, attests all of them and
-   `SHA256SUMS` (one GitHub build provenance attestation), uploads
+   linux|windows --version X.Y.Z --smoke`. In parallel `caddy` (matrix:
+   `linux-x64`, `linux-arm64`, `windows-x64`, `windows-arm64`, all on
+   `ubuntu-latest`, since Go cross-compiles) builds our Caddy through the
+   Dockerfile's `caddy-export` target and packs it as `caddy-<target>.tar.gz`
+   or `.zip`, and `image` builds `linux/amd64` and `linux/arm64` and pushes
+   `ghcr.io/sombrasoft/telinha` tagged `X.Y.Z`, `X.Y` and `latest`, with a
+   provenance attestation on the index digest.
+5. `release-assets` writes `SHA256SUMS` for the four telinha archives, the
+   four `caddy-*` archives, `telinha-deploy.tar.gz` and `telinha-image.digest`,
+   attests all of them and `SHA256SUMS` (one GitHub build provenance
+   attestation), uploads
    `telinha-linux-x64.tar.gz`, `telinha-linux-arm64.tar.gz`,
-   `telinha-windows-x64.zip`, `telinha-windows-arm64.zip`, `SHA256SUMS`,
+   `telinha-windows-x64.zip`, `telinha-windows-arm64.zip`, the `caddy-*`
+   archives, `SHA256SUMS`,
    `telinha-image.digest` (the index digest, one `sha256:...` line;
    `telinha-update` trusts nothing else), `telinha-deploy.tar.gz`
    (`compose.yml`, `compose.journald.yml`, `telinha.env.example`,
@@ -338,9 +374,10 @@ Required checks on `main`: `test (ubuntu-latest)`, `test (windows-latest)`,
 `deploy/telinha-update` and `scripts/smoke.sh`, a PowerShell parse and
 PSScriptAnalyzer run of `deploy/install.ps1`, actionlint,
 `bun scripts/versions.ts check`), `gitleaks`, `image` (builds both
-architectures, smoke-tests amd64). Three jobs also run on every PR but are not
+architectures, smoke-tests amd64). Four jobs also run on every PR but are not
 required yet: `docs` (builds the docs site, link validator included), `e2e`
-(Playwright on ubuntu) and `binaries (ubuntu-latest)` /
+(Playwright on ubuntu), `caddy (windows-x64)` (the Windows Caddy through the
+same Dockerfile stage the release uses) and `binaries (ubuntu-latest)` /
 `binaries (windows-latest)`, which compile the native targets and smoke-test
 them: `--version`, then a real `run` in `DEV_USER` mode until `/healthz`
 reports LiveKit up (the binary downloads `livekit-server` itself), the gate and
@@ -348,13 +385,16 @@ reports LiveKit up (the binary downloads `livekit-server` itself), the gate and
 version resource (`ProductName` Telinha) of both Windows binaries.
 
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
-Dockerfile, `deploy/compose.yml`, GitHub Actions and the three binaries in
-`versions.json`. Non-major updates are grouped and automerge through a PR once
-checks pass. Anything LiveKit (`livekit-client`, `livekit-server-sdk`,
-`livekit/livekit`) and all majors are manual. `versions.json` bumps never
-automerge: Renovate changes only the `version`, so the hashes are stale and
-the `image` and `e2e` jobs fail until someone refreshes them on the Renovate
-branch:
+Dockerfile (its `golang` and bun images included), `deploy/compose.yml`,
+GitHub Actions and everything in `versions.json`: the two downloaded binaries,
+and Caddy, xcaddy and the Caddy modules of our build. Non-major updates are
+grouped and automerge through a PR once checks pass. Anything LiveKit
+(`livekit-client`, `livekit-server-sdk`, `livekit/livekit`) and all majors are
+manual. `versions.json` bumps never automerge. A Caddy, xcaddy or module bump
+is judged by the `image` job, which builds it and smoke-tests the version and
+modules. A cloudflared or LiveKit bump changes only the `version`, so the
+hashes are stale and the `image` and `e2e` jobs fail until someone refreshes
+them on the Renovate branch:
 
 ```
 git fetch origin && git switch <renovate branch>
@@ -362,7 +402,7 @@ bun scripts/versions.ts refresh    # downloads every asset, rewrites the sha256 
 git commit -am "fix(deps): refresh versions.json hashes" && git push
 ```
 
-Caddy and cloudflared bumps come as one `child-binaries` PR, LiveKit's in the
+Caddy (with xcaddy and the modules) and cloudflared bumps come as one `child-binaries` PR, LiveKit's in the
 `livekit` group, Astro and Starlight in the `docs-site` group (merged by hand:
 Starlight is 0.x and the `docs` job is not required); all `versions.json` bumps are `fix` commits so they cut a
 release, and native installs download the new helper binaries on their next
@@ -376,7 +416,7 @@ only happens when a commit carries a `Release-As: 1.0.0` footer.
 
 - Windows: a tray app, and code-signed binaries.
 - Media: LiveKit Cloud (`MEDIA=cloud`) for hosts that cannot open ports, and
-  TURN over TLS on 443 via caddy-l4.
+  TURN over TLS on 443 via caddy-l4 (the module is already in our Caddy build).
 
 ## License
 

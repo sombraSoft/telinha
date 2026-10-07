@@ -8,17 +8,19 @@ sidebar:
 import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
 
 Responda três perguntas, nesta ordem. Cada resposta leva a um guia de início
-rápido ou a um guia detalhado, e o assistente (`telinha setup`) pergunta as
-mesmas coisas; então nada do que você decidir aqui é definitivo.
+rápido ou a um guia detalhado, e o assistente (`telinha setup`) faz as duas
+primeiras com as mesmas palavras; então nada do que você decidir aqui é
+definitivo.
 
 <Steps>
 
-1. [Onde ela vai rodar?](#onde-ela-vai-rodar) Um PC com Windows, uma
-   máquina Linux em casa, Docker ou um servidor alugado.
+1. [Onde ela vai rodar?](#onde-ela-vai-rodar) Um computador em casa (um PC
+   com Windows, uma máquina Linux, ou Docker num deles) ou um servidor alugado
+   (VPS).
 
-2. [Como as pessoas acessam a Telinha?](#como-as-pessoas-acessam-a-telinha)
-   Um domínio seu, um nome gratuito, um Cloudflare Tunnel ou o proxy reverso
-   que você já usa.
+2. [Qual endereço?](#qual-endereço) Em casa: você tem um domínio na
+   Cloudflare? Numa VPS: um domínio seu, um nome grátis ou um feito a partir
+   do IP do servidor.
 
 3. [A internet consegue chegar na sua rede?](#a-internet-consegue-chegar-na-sua-rede)
    Se a sua linha está atrás de CGNAT, uma instalação em casa não funciona e
@@ -30,33 +32,62 @@ mesmas coisas; então nada do que você decidir aqui é definitivo.
 
 A máquina precisa ficar ligada enquanto as pessoas assistem. Qualquer coisa
 que rode um dos [builds suportados](/telinha/pt-br/start/how-it-works/#máquina-e-sistema-operacional)
-serve.
+serve. O assistente pergunta *Onde a Telinha vai rodar?* e oferece duas
+respostas.
+
+**Um computador em casa (um PC ou um servidor caseiro)**, atrás do roteador da
+sua internet:
 
 <CardGrid>
   <LinkCard title="PC com Windows" description="O PC que você já tem. Não precisa de administrador para instalar; um aviso do UAC configura o serviço." href="/telinha/pt-br/start/windows/" />
   <LinkCard title="Linux em casa" description="Um mini PC, um Raspberry Pi 4 ou 5 com sistema 64 bits ou qualquer máquina Linux 64 bits com glibc." href="/telinha/pt-br/start/linux/" />
   <LinkCard title="Docker" description="Um NAS ou servidor que já roda Docker, ou um sistema com musl, como o Alpine. Um contêiner traz tudo." href="/telinha/pt-br/start/docker/" />
+</CardGrid>
+
+**Um servidor alugado (VPS)**, que tem IP público próprio:
+
+<CardGrid>
   <LinkCard title="VPS" description="Um servidor alugado com IP público próprio. Nenhum roteador para configurar; funciona quando a sua linha de casa não dá." href="/telinha/pt-br/start/vps/" />
 </CardGrid>
 
 No Linux, a instalação nativa e a com Docker fazem o mesmo trabalho. A
 nativa é um único programa que se atualiza sozinho e roda como serviço do
-systemd; o Docker combina com uma máquina que já roda contêineres.
+systemd; o Docker combina com uma máquina que já roda contêineres, em casa ou
+numa VPS.
 
-## Como as pessoas acessam a Telinha?
+## Qual endereço?
 
-As pessoas abrem um endereço HTTPS. Escolha a primeira linha que serve para
-você:
+As pessoas abrem um endereço HTTPS. O que serve depende da resposta acima.
+
+### Em casa: você tem um domínio na Cloudflare?
+
+A internet de casa em geral não deixa as portas web 80 e 443 entrarem, então a
+Telinha não conta com elas, e nada aqui pede pra você abrir essas portas.
+
+| A sua resposta | O que a Telinha faz | O que isso quer dizer |
+| --- | --- | --- |
+| Sim | [Cloudflare Tunnel](/telinha/pt-br/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | O seu próprio endereço, tipo `https://telinha.example.com`; o `cloudflared` leva as páginas, nada pra abrir pras páginas |
+| Não | [DuckDNS na porta 8443](/telinha/pt-br/guides/domains/#duckdns-na-porta-8443), `INGRESS=direct` | Um endereço grátis tipo `https://my-group.duckdns.org:8443`; o certificado vem pelo DuckDNS, e o roteador encaminha a TCP 8443 |
+
+Com DuckDNS os links levam a porta. Algumas redes rígidas (empresas, escolas)
+só deixam o navegador chegar na porta 443, então quem estiver nelas não abre;
+um domínio na Cloudflare não tem essa limitação e é a escolha que funciona em
+mais lugares.
+
+### Numa VPS: qual endereço?
+
+Uma VPS tem a 80 e a 443 só dela, então o Caddy que vem junto pega o
+certificado por elas.
 
 | A sua situação | Escolha | O que isso quer dizer |
 | --- | --- | --- |
-| Você tem um domínio | [Domínio próprio](/telinha/pt-br/guides/domains/#seu-próprio-domínio), `INGRESS=direct` | O Caddy que vem junto obtém um certificado do Let's Encrypt; encaminhe as portas TCP 80 e 443 (ou só a 443) |
-| Sem domínio, em casa | [DuckDNS](/telinha/pt-br/guides/domains/#duckdns) | Um `<name>.duckdns.org` gratuito que a Telinha mantém apontando para o seu IP, mesmo quando ele muda |
-| Sem domínio, numa VPS | [sslip.io](/telinha/pt-br/guides/domains/#sslipio) | Um endereço feito a partir do IP fixo da VPS, sem conta nenhuma; é um domínio compartilhado, então o Let's Encrypt pode recusar um certificado numa semana movimentada |
-| Você não consegue abrir 80/443, mas consegue abrir as portas de mídia | [Cloudflare Tunnel](/telinha/pt-br/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | Nenhuma porta web de entrada; precisa de um domínio na Cloudflare |
+| Você tem um domínio | [Domínio próprio](/telinha/pt-br/guides/domains/#seu-próprio-domínio), `INGRESS=direct` | Um registro A apontando para a VPS; libere a TCP 80 e a 443 no firewall do provedor |
+| Sem domínio, quer um nome | [DuckDNS](/telinha/pt-br/guides/domains/#duckdns), `INGRESS=direct` | Um `<name>.duckdns.org` grátis, na 80 e na 443 como um domínio próprio |
+| Sem domínio, sem conta | [sslip.io](/telinha/pt-br/guides/domains/#sslipio), `INGRESS=direct` | Um endereço feito a partir do IP fixo da VPS; é um domínio compartilhado, então o Let's Encrypt pode recusar um certificado numa semana movimentada |
+| Um domínio na Cloudflare | [Cloudflare Tunnel](/telinha/pt-br/guides/domains/#cloudflare-tunnel), `INGRESS=tunnel` | Opcional numa VPS: nenhuma porta web de entrada |
 | Você já usa nginx, Traefik ou Caddy | [Seu próprio proxy reverso](/telinha/pt-br/guides/domains/#seu-próprio-proxy-reverso), `INGRESS=external` | O seu proxy cuida do HTTPS e repassa para a Telinha; ele precisa deixar passar WebSockets |
 
-Em qualquer modo, as duas portas de mídia, TCP 7881 e UDP 7882, precisam
+Em qualquer caso, as duas portas de mídia, TCP 7881 e UDP 7882, precisam
 chegar à máquina: nenhum túnel leva a mídia do WebRTC. Veja
 [Como funciona](/telinha/pt-br/start/how-it-works/#a-mídia-vai-direto-para-o-livekit).
 
@@ -93,7 +124,7 @@ ainda sem data.
 | Instalação | `install.ps1` no PowerShell, sem administrador | `install.sh` como root ou como usuário | `install.sh` como root | `install.sh --docker` como root |
 | Serviço | Tarefa `Telinha` do Agendador de Tarefas, um aviso do UAC durante o assistente | systemd: unidade do sistema como root, unidade de usuário nos outros casos | Unidade do sistema no systemd | compose com `restart: unless-stopped` |
 | Atualizações | O programa se atualiza sozinho | O programa se atualiza sozinho | O programa se atualiza sozinho | Timer do `telinha-update`, se você ativar |
-| O que você encaminha | TCP 7881 e UDP 7882 no roteador (o UPnP pode fazer isso); no modo direto, também TCP 80 e 443 | Igual ao Windows | Sem roteador: libere as mesmas portas no firewall do provedor e no ufw ou firewalld | Igual à máquina onde ele roda |
+| O que você encaminha | TCP 7881, UDP 7882 e, com DuckDNS, TCP 8443 no roteador (o UPnP pode fazer isso); com um Cloudflare Tunnel só as duas portas de mídia | Igual ao Windows | Sem roteador: libere TCP 7881, UDP 7882, TCP 443 e TCP 80 no firewall do provedor e no ufw ou firewalld | Igual à máquina onde ele roda |
 
 Os comandos de instalação, como cada guia rápido mostra:
 

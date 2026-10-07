@@ -101,6 +101,9 @@ describe('reference tables match the code', () => {
     expect(g.cli.commands).toEqual(derivedCommands());
     expect(sortedKeys(g.cli.service.linux)).toEqual(sortedKeys(SERVICE_FLAG_DOCS));
     expect(g.versions.livekit).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(g.versions.caddy.version).toMatch(/^\d+\.\d+\.\d+$/);
+    // PinnedVersions names the modules; the home certificate needs this one.
+    expect(Object.keys(g.versions.caddy.modules)).toContain('github.com/caddy-dns/duckdns');
     expect(g.paths.windows.home).toBe('%LOCALAPPDATA%\\Telinha');
     expect(g.paths.linuxRoot.home).toBe('/opt/telinha');
     expect(g.paths.linuxUser.home).toBe('~/.local/share/telinha');

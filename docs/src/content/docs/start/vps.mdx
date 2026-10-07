@@ -114,7 +114,9 @@ The program lands in `/usr/local/lib/telinha/telinha`, run by the
 `/usr/local/bin/telinha` command; the home folder is `/opt/telinha`, and the
 setup copies the program into `/opt/telinha/bin/` for the service, which
 updates that copy itself. The script downloads nothing else: `livekit-server`
-and `caddy` or `cloudflared` come later, each checked against a pinned sha256.
+and `caddy` or `cloudflared` come later, `livekit-server` and `cloudflared`
+from upstream checked against a pinned sha256, `caddy` from the same Telinha
+release checked against its `SHA256SUMS`.
 To skip the question, add `-s -- --native` after `sh` (`--no-setup` installs
 without starting the setup). `TELINHA_VERSION` installs a given release tag.
 
@@ -127,16 +129,15 @@ it goes like this:
 
 <Steps>
 
-1. **Where Telinha runs.** Choose *a VPS or cloud server*. There is no router
-   question after this one.
+1. **Where Telinha runs.** It asks *Where will Telinha run?* Choose *A
+   rented server (VPS)*. There is no router question after this one.
 
-2. **Address.** Your own domain (its A record is compared with the public
-   IP), DuckDNS, sslip.io, a Cloudflare Tunnel or your own reverse proxy. With
-   the first three Telinha gets the HTTPS certificate itself, so it asks
-   whether ports 80 and 443 from the internet reach the server: answer yes,
-   you opened them above. With sslip.io it takes the
-   server's public IPv4 (and asks for it when it cannot see it) and writes
-   both the address and the IP LiveKit announces:
+2. **Address.** It asks *How will people reach Telinha?*: your own domain
+   (its A record is compared with the public IP), DuckDNS, sslip.io, a
+   Cloudflare Tunnel or your own reverse proxy. With the first three Telinha
+   gets the HTTPS certificate over 80 and 443, which you opened above. With
+   sslip.io it takes the server's public IPv4 (and asks for it when it cannot
+   see it) and writes both the address and the IP LiveKit announces:
 
    ```ini
    PUBLIC_URL=https://203-0-113-9.sslip.io

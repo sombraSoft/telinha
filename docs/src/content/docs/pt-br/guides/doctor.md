@@ -126,8 +126,10 @@ A página abre na sua rede, mas não pelos dados móveis. Olhe, nesta ordem:
 - `tls`: além do certificado, ela busca `<PUBLIC_URL>/healthz` pela internet.
   Se isso falha com o certificado válido, o pedido não está chegando na
   Telinha.
-- `gateway`, `cgnat` e `mappings`: o roteador encaminha a TCP 443 (e a 80)
-  para esta máquina, e a linha não está atrás de CGNAT. Veja
+- `gateway`, `cgnat` e `mappings`: o roteador encaminha a TCP 8443 (um
+  endereço do DuckDNS em casa) para esta máquina, ou o túnel está de pé
+  (`listeners`), e a linha não está atrás de CGNAT. Numa VPS, a 443 e a 80
+  estão abertas no firewall do provedor. Veja
   [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/).
 - `listeners`: a Telinha e os programas auxiliares estão de pé localmente.
 
@@ -190,18 +192,33 @@ descobrir o endereço sozinho (e a vigia de IP acompanhar as mudanças, veja
 ### O certificado não sai
 
 A `tls` falha no modo `direct`. O Caddy pega o certificado no Let's Encrypt
-sozinho assim que o nome aponta para cá (`dns`) e as portas chegam no Caddy
-(`mappings`, `listeners`); as tentativas dele aparecem no log como linhas
-`[caddy]`.
+sozinho; as tentativas dele aparecem no log como linhas `[caddy]`. A linha
+`certificate` diz por qual caminho ele vai.
 
-- Porta 80 fechada: o Let's Encrypt pode validar por TLS na 443. Use
-  `HTTP_PORT=0` para nada ficar esperando na 80, e garanta que a 443 pública
-  chega no Caddy. Veja
-  [Tradução de portas](/telinha/pt-br/guides/domains/#tradução-de-portas).
+**Em casa com DuckDNS** (o desafio de DNS, `ACME_DNS=duckdns`), nenhuma porta
+entra no certificado:
+
+- O token do DuckDNS precisa estar certo: a linha `dns` pergunta ao DuckDNS
+  se ele aceita o token (mandando o IP que o registro já tem, então nada
+  muda) e falha quando não aceita; rode o `telinha setup` de novo para
+  digitar o certo. Um token errado também aparece como erros `ddns:` no log.
+- A `listeners` precisa mostrar o Caddy no `HTTPS_PORT` (8443): outro
+  programa nessa porta impede o Caddy de subir.
+- A `binaries` falha quando o `caddy` em uso não tem o módulo do DuckDNS (um
+  Caddy original ou da distro no `PATH`): rode o `telinha setup` de novo pra
+  pôr o build da própria Telinha em `bin/`; o do `PATH` fica como está.
+- O primeiro certificado costuma levar de 1 a 3 minutos: o Caddy espera o DNS
+  público mostrar o registro do desafio. Rode o `telinha doctor` de novo antes
+  de mudar qualquer coisa.
+
+**Numa VPS** (o desafio HTTP), o nome precisa apontar para cá (`dns`) e as
+portas 80 e 443 precisam chegar no Caddy: abra as duas no firewall do provedor
+e no ufw ou no firewalld (a `listeners` mostra os comandos).
+
 - A `listeners` diz que nada escuta na porta HTTPS, numa instalação de
   usuário no Linux: portas abaixo de 1024 precisam do passo único de sysctl
-  que ela mostra, ou de `HTTPS_PORT=8443`. Veja
-  [Rodando como serviço](/telinha/pt-br/guides/service/#linux-como-usuário).
+  que ela mostra. Veja
+  [Rodando como serviço](/telinha/pt-br/guides/service/#portas-baixas-numa-instalação-de-usuário-na-vps).
 - No sslip.io o domínio compartilhado pode bater no limite semanal do Let's
   Encrypt; um nome DuckDNS ou um domínio próprio evita isso.
 
@@ -252,7 +269,7 @@ docker ps
 
 O contêiner aparece como `unhealthy` no `docker ps` enquanto um programa
 auxiliar (LiveKit, Caddy, `cloudflared`) está parado esperando reiniciar: por
-exemplo, o Caddy não consegue usar as portas 80/443, ou o token do túnel está
+exemplo, o Caddy não consegue usar a porta dele, ou o token do túnel está
 errado. O log diz qual. O `telinha-update` volta uma versão que nunca fica
 saudável. Com o override do journald, o `journalctl -t telinha` guarda o log
 mesmo quando o contêiner é recriado; veja

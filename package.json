@@ -20,6 +20,7 @@
     "compile": "bun scripts/build-binary.ts",
     "image": "bun scripts/image.ts",
     "bins": "bun scripts/bins.ts",
+    "caddy": "bun scripts/caddy-build.ts",
     "versions": "bun scripts/versions.ts"
   },
   "devDependencies": {

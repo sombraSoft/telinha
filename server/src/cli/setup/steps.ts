@@ -20,9 +20,8 @@ import type { ControlClient } from '../control.ts';
 import type { Locale, Params } from '../strings.ts';
 import type { Term } from '../term.ts';
 import type { DiscordSetup } from './discord.ts';
-import type { Target } from './domain.ts';
 import { lockWindowsHome, renderEnvFile, SECRET_KEYS, writeEnvFile, type EnvFs, type PreviousEnv } from './envwrite.ts';
-import { routerLabel, type HostInfo } from './host.ts';
+import { routerLabel, type HostInfo, type Hosting } from './host.ts';
 import type { SKey } from './strings.ts';
 
 /** The wizard's answers by telinha.env key; '' = not set (the key is dropped or stays commented). */
@@ -153,8 +152,11 @@ export async function askMediaPorts(w: Wizard, values: Values): Promise<void> {
   let udp = values.MEDIA_UDP_PORT || '7882';
   lines(term, s('mediaHelp', { tcp, udp }));
   if (await term.confirm(s('mediaChangeQ'), false, { id: 'media' })) {
-    tcp = await term.text(s('mediaTcpQ'), { default: tcp, id: 'media-tcp', validate: (v) => (portOk(v) ? null : s('portBad')) });
-    udp = await term.text(s('mediaUdpQ'), { default: udp, id: 'media-udp', validate: (v) => (portOk(v) ? null : s('portBad')) });
+    // The HTTPS port was just chosen (at home a high one, within reach of a typo here).
+    const https = (values.INGRESS || 'direct') === 'direct' ? values.HTTPS_PORT || '443' : null;
+    const check = (v: string) => (!portOk(v) ? s('portBad') : v === https ? s('mediaPortIsHttps') : null);
+    tcp = await term.text(s('mediaTcpQ'), { default: tcp, id: 'media-tcp', validate: check });
+    udp = await term.text(s('mediaUdpQ'), { default: udp, id: 'media-udp', validate: check });
   }
   // Defaults stay commented in the file.
   values.MEDIA_TCP_PORT = tcp === '7881' ? '' : tcp;
@@ -417,11 +419,11 @@ async function linuxInstall(w: Wizard, exe: string): Promise<boolean> {
 }
 
 /**
- * Linux user install, direct mode, a port below 1024: the unprivileged-port
- * sysctl (one sudo step, survives every binary update), else high ports with
- * the router translating 443 -> 8443. `rewrite` re-writes telinha.env.
+ * Linux user install, direct mode, a port below 1024 (a VPS, or a home that
+ * opened 80/443 itself): the unprivileged-port sysctl, one sudo step that
+ * survives every binary update. Declined, the command is printed for later.
  */
-export async function unprivilegedPorts(w: Wizard, values: Values, rewrite: (v: Values) => Promise<void>): Promise<void> {
+export async function unprivilegedPorts(w: Wizard, values: Values): Promise<void> {
   const { term, s, deps } = w;
   if ((values.INGRESS || 'direct') !== 'direct') return;
   const low = [Number(values.HTTP_PORT || 80), Number(values.HTTPS_PORT || 443)].filter((p) => p > 0 && p < 1024);
@@ -440,26 +442,18 @@ export async function unprivilegedPorts(w: Wizard, values: Values, rewrite: (v: 
     return;
   }
   term.warn(s('sysctlFailed'));
-  lines(term, s('highPortsExplain'));
-  if (w.interactive && (await term.confirm(s('highPortsQ'), true, { id: 'high-ports' }))) {
-    values.HTTPS_PORT = '8443';
-    values.HTTP_PORT = '0';
-    await rewrite(values);
-    term.ok(s('highPortsOk'));
-  } else {
-    term.info(s('sysctlManual', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }));
-  }
+  term.info(s('sysctlManual', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }));
 }
 
 /** Installs and starts the service (and the Windows firewall rules); true when it is registered. */
-export async function serviceStep(w: Wizard, values: Values, o: { firewall: boolean; rewrite: (v: Values) => Promise<void> }): Promise<boolean> {
+export async function serviceStep(w: Wizard, values: Values, o: { firewall: boolean }): Promise<boolean> {
   const { term, s, deps } = w;
   term.step(s('serviceTitle'));
   if (!w.ctx.compiled) {
     term.info(s('serviceNeedsBinary'));
     return false;
   }
-  if (deps.platform === 'linux' && !deps.isRoot) await unprivilegedPorts(w, values, o.rewrite);
+  if (deps.platform === 'linux' && !deps.isRoot) await unprivilegedPorts(w, values);
   let exe: string;
   try {
     exe = await installedExe(w);
@@ -475,15 +469,34 @@ export async function serviceStep(w: Wizard, values: Values, o: { firewall: bool
 
 // --- router
 
-/** The ports the internet must reach, as the router sees them. */
-export function publicPorts(values: Values): string[] {
-  const out = [`TCP ${values.MEDIA_TCP_PORT || '7881'}`, `UDP ${values.MEDIA_UDP_PORT || '7882'}`];
+/** The port in PUBLIC_URL, as a string; 443 when it carries none (or is unreadable). */
+function publicUrlPort(url: string | undefined): string {
+  try {
+    return new URL(url ?? '').port || '443';
+  } catch {
+    return '443';
+  }
+}
+
+/**
+ * The ports the internet must reach, as the router sees them (public port ->
+ * this machine's when they differ), and whether the UPnP mapper asks for each:
+ * the rule of upnpMappings, so never for a public 80 or 443.
+ */
+function routerEntries(values: Values): { port: string; mapper: boolean }[] {
+  const out = [{ port: `TCP ${values.MEDIA_TCP_PORT || '7881'}`, mapper: true }, { port: `UDP ${values.MEDIA_UDP_PORT || '7882'}`, mapper: true }];
   if ((values.INGRESS || 'direct') === 'direct') {
     const https = values.HTTPS_PORT || '443';
-    out.push(https === '443' ? 'TCP 443' : `TCP 443 -> ${https}`);
-    if ((values.HTTP_PORT || '80') !== '0') out.push(`TCP ${values.HTTP_PORT || '80'}`);
+    const pub = publicUrlPort(values.PUBLIC_URL);
+    out.push({ port: pub === https ? `TCP ${pub}` : `TCP ${pub} -> ${https}`, mapper: pub !== '443' && pub !== '80' });
+    if ((values.HTTP_PORT || '80') !== '0') out.push({ port: `TCP ${values.HTTP_PORT || '80'}`, mapper: false });
   }
   return out;
+}
+
+/** The ports the internet must reach, as the router sees them (public port -> this machine's when they differ). */
+export function publicPorts(values: Values): string[] {
+  return routerEntries(values).map((e) => e.port);
 }
 
 /** What this host listens on, for its own firewall (ufw/firewalld take the internal ports). */
@@ -496,12 +509,12 @@ export function hostPorts(values: Values): string[] {
   return out;
 }
 
-export async function routerStep(w: Wizard, values: Values, target: Target = 'home'): Promise<void> {
+export async function routerStep(w: Wizard, values: Values, hosting: Hosting = 'home'): Promise<void> {
   const { term, s } = w;
   term.step(s('routerTitle'));
   const ports = publicPorts(values).join(', ');
   // A VPS has no router: its provider's firewall and its own are what block.
-  if (target === 'vps') {
+  if (hosting === 'vps') {
     term.info(s('routerVps', { ports }));
     if (w.deps.platform === 'linux') {
       const cmds = firewallCommands(hostPorts(values), (c) => w.deps.which(c));
@@ -520,7 +533,15 @@ export async function routerStep(w: Wizard, values: Values, target: Target = 'ho
   const ext = nat.externalIp;
   if (ext && isCgnatIpv4(ext)) lines(term, s('cgnat'), 'warn');
   else if (ext && isPrivateIpv4(ext)) lines(term, s('doubleNat'), 'warn');
-  term.info(values.UPNP === 'off' ? s('forwardByHand', { ports }) : s('upnpWillMap', { ports }));
+  if (values.UPNP === 'off') {
+    term.info(s('forwardByHand', { ports }));
+    return;
+  }
+  // The mapper never asks for 80/443 (the advanced path forwards them by hand): name only what it owns.
+  const entries = routerEntries(values);
+  term.info(s('upnpWillMap', { ports: entries.filter((e) => e.mapper).map((e) => e.port).join(', ') }));
+  const byHand = entries.filter((e) => !e.mapper).map((e) => e.port);
+  if (byHand.length) term.info(s('forwardByHand', { ports: byHand.join(', ') }));
 }
 
 // --- start, doctor, next steps
@@ -541,12 +562,10 @@ async function waitForService(w: Wizard, timeoutMs: number): Promise<boolean> {
   return false;
 }
 
-/**
- * A service that was already running restarts to read the new file; a fresh
- * one was started by its install. Then doctor (phone test only interactively).
- */
 /** How long setup waits for Caddy's first certificate before doctor runs. */
 export const CERT_WAIT_MS = 90_000;
+/** Through the DuckDNS API: the TXT record must propagate first (up to two minutes), then issuance. */
+export const CERT_WAIT_DNS_MS = 240_000;
 
 /**
  * Direct mode: Caddy gets its certificate after the start, which takes from
@@ -563,8 +582,9 @@ async function waitForCertificate(w: Wizard, values: Values): Promise<void> {
     return;
   }
   const port = Number(values.HTTPS_PORT || 443);
-  const spin = term.spinner(s('certWaiting'));
-  const end = deps.now() + CERT_WAIT_MS;
+  const dns = values.ACME_DNS === 'duckdns';
+  const spin = term.spinner(s(dns ? 'certWaitingDns' : 'certWaiting'));
+  const end = deps.now() + (dns ? CERT_WAIT_DNS_MS : CERT_WAIT_MS);
   for (;;) {
     if (await deps.certReady(host, port).catch(() => false)) {
       spin.stop(s('certOk'));
@@ -576,6 +596,10 @@ async function waitForCertificate(w: Wizard, values: Values): Promise<void> {
   spin.fail(s('certPending', { telinha: cliName(w) }));
 }
 
+/**
+ * A service that was already running restarts to read the new file; a fresh
+ * one was started by its install. Then doctor (phone test only interactively).
+ */
 export async function startAndDoctor(w: Wizard, o: { installed: boolean; wasRunning: boolean; doctor: boolean; values?: Values }): Promise<number> {
   const { term, s, deps } = w;
   term.step(s('startTitle'));

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { loadConfig, type Config } from '../src/config.ts';
 import { broadAclEntries, CHECKS, compareVersions, inviteUrl, neededPorts, runChecks } from '../src/doctor/checks.ts';
 import type {
@@ -92,6 +92,7 @@ function ctxFor(o: Opts = {}) {
     icacls: async () => null,
     which: () => null,
     exists: (p) => norm(p) in files,
+    readBytes: async () => null,
     ...o.sys,
   };
   let latestCalls = 0;
@@ -124,13 +125,18 @@ const one = async (id: string, o: Opts = {}) => {
 const BIN_FILES = {
   [ENV_FILE]: 'GUILD_ID=100\n',
   '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': '1.13.7\n',
-  '/srv/telinha/bin/caddy': '', '/srv/telinha/bin/caddy.version': '2.11.4\n',
+  '/srv/telinha/bin/caddy': '', '/srv/telinha/bin/caddy.version': 'v0.7.0\n',
+};
+
+// The standard home setup without a domain: DuckDNS name, HTTPS on 8443, DNS-01.
+const DUCK = {
+  HOSTING: 'home', PUBLIC_URL: 'https://grupo.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns', DUCKDNS_TOKEN: 'duck-tok', // gitleaks:allow
 };
 
 test('checks run in the documented order', () => {
   expect(CHECKS.map((c) => c.id)).toEqual([
     'config', 'binaries', 'discord-token', 'discord-intents', 'discord-guild', 'discord-role', 'discord-channels', 'discord-redirect',
-    'public-ip', 'dns', 'tls', 'listeners', 'service', 'gateway', 'cgnat', 'mappings', 'update',
+    'public-ip', 'dns', 'certificate', 'tls', 'listeners', 'service', 'gateway', 'cgnat', 'mappings', 'update',
   ]);
 });
 
@@ -198,16 +204,81 @@ describe('binaries', () => {
   test('present with matching sidecars', async () => {
     const r = await one('binaries', { files: BIN_FILES });
     expect(r.status).toBe('ok');
-    expect(r.detail?.map(norm)).toEqual(['livekit 1.13.7 (/srv/telinha/bin/livekit-server)', 'caddy 2.11.4 (/srv/telinha/bin/caddy)']);
+    expect(r.detail?.map(norm)).toEqual(['livekit 1.13.7 (/srv/telinha/bin/livekit-server)', 'caddy v0.7.0 (/srv/telinha/bin/caddy)']);
   });
 
   test('stale sidecar is a pending update (warn); missing is a fail', async () => {
-    const stale = await one('binaries', { files: { ...BIN_FILES, '/srv/telinha/bin/caddy.version': '2.10.0' } });
+    const stale = await one('binaries', { files: { ...BIN_FILES, '/srv/telinha/bin/livekit.version': '1.10.0' } });
     expect(stale.status).toBe('warn');
-    expect(stale.summary).toContain('caddy 2.10.0 is installed, 2.11.4 is pinned');
+    expect(stale.summary).toContain('livekit 1.10.0 is installed, 1.13.7 is pinned');
     const missing = await one('binaries', { files: { [ENV_FILE]: '' } });
     expect(missing.status).toBe('fail');
     expect(missing.fix).toContain('Start telinha');
+  });
+
+  test('caddy comes with the release: its sidecar holds the tag, compared only when compiled', async () => {
+    const files = { ...BIN_FILES, '/srv/telinha/bin/caddy.version': 'v0.6.0' };
+    const stale = await one('binaries', { files });
+    expect(stale.status).toBe('warn');
+    expect(stale.summary).toBe('caddy v0.6.0 is installed, v0.7.0 is pinned: the next start downloads v0.7.0.');
+    const dev = await one('binaries', { files, compiled: false });
+    expect(dev.status).toBe('ok');
+    expect(dev.detail?.map(norm)).toContain('caddy v0.6.0 (/srv/telinha/bin/caddy)');
+  });
+
+  test('DNS-01: the caddy in use must have the DuckDNS module', async () => {
+    // What a Go binary carries: the module IDs and the build info's module paths, as plain strings.
+    const binary = (...strings: string[]) => async () => new TextEncoder().encode(`\x7fELF...${strings.join('\0')}...`);
+    const onPath = { which: (n: string) => (n === 'caddy' ? '/usr/bin/caddy' : null) };
+    const files = { [ENV_FILE]: '', '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': '1.13.7\n' };
+    const ours = { ...files, '/srv/telinha/bin/caddy': '', '/srv/telinha/bin/caddy.version': 'v0.7.0' };
+
+    const dev = await one('binaries', { env: DUCK, files, compiled: false, sys: { ...onPath, readBytes: binary('tls.issuance.acme') } });
+    expect(dev.status).toBe('fail');
+    expect(dev.summary).toBe('The caddy at /usr/bin/caddy has no DuckDNS module: the certificate (DNS challenge) cannot be obtained.');
+    expect(norm(dev.fix!)).toBe('Fetch Telinha\'s Caddy build (bun scripts/bins.ts --out /srv/telinha/bin caddy) or build one (bun run caddy --out /srv/telinha/bin).');
+
+    // Compiled, a caddy on PATH is in use only because Telinha's own download failed: never "delete /usr/bin/caddy".
+    const compiled = await one('binaries', { env: DUCK, files, sys: { ...onPath, readBytes: binary('tls.issuance.acme') } });
+    expect(norm(compiled.fix!)).toBe('Telinha\'s own Caddy is not in /srv/telinha/bin, so the one on PATH is used: run telinha setup again (or restart telinha) while online and it downloads Telinha\'s build into /srv/telinha/bin. The caddy at /usr/bin/caddy is left as it is.');
+    expect(compiled.fix).not.toContain('Delete');
+    // A wrong caddy in bin/ is Telinha's to replace.
+    const inBin = await one('binaries', { env: DUCK, files: ours, sys: { readBytes: binary('tls.issuance.acme') } });
+    expect(norm(inBin.fix!)).toBe('Delete /srv/telinha/bin/caddy and run telinha setup again: it downloads Telinha\'s own Caddy build.');
+
+    const seen: string[] = [];
+    for (const marker of ['dns.providers.duckdns', 'github.com/caddy-dns/duckdns']) {
+      const ok = await one('binaries', { env: DUCK, files: ours, sys: { readBytes: async (p, max) => { seen.push(norm(p)); expect(max).toBeGreaterThan(100_000_000); return binary(marker)(); } } });
+      expect(ok.status).toBe('ok');
+    }
+    expect(seen).toEqual(['/srv/telinha/bin/caddy', '/srv/telinha/bin/caddy']);
+
+    const unknown = await one('binaries', { env: DUCK, files, sys: { ...onPath, readBytes: async () => null } });
+    expect(unknown.status).toBe('ok');
+    expect(unknown.detail).toContain('Could not read /usr/bin/caddy to look for the DuckDNS module.');
+
+    // HTTP-01 never looks.
+    let asked = false;
+    await one('binaries', { files: BIN_FILES, sys: { readBytes: async () => { asked = true; return null; } } });
+    expect(asked).toBe(false);
+  });
+
+  test('DNS-01 as root with bin/ owned by the service user: the caddy there is read, never run', async () => {
+    const spawned: unknown[] = [];
+    const spawn = spyOn(Bun, 'spawn').mockImplementation(((...a: unknown[]) => { spawned.push(a); throw new Error('no spawning in doctor'); }) as typeof Bun.spawn);
+    const spawnSync = spyOn(Bun, 'spawnSync').mockImplementation(((...a: unknown[]) => { spawned.push(a); throw new Error('no spawning in doctor'); }) as typeof Bun.spawnSync);
+    try {
+      const files = { ...BIN_FILES, [ENV_FILE]: '' };
+      const r = await one('binaries', {
+        env: DUCK, files,
+        sys: { isRoot: true, fileUid: (p) => (norm(p).startsWith('/srv/telinha/bin/') ? 999 : 0), readBytes: async () => new TextEncoder().encode('dns.providers.duckdns') },
+      });
+      expect(r.status).toBe('ok');
+      expect(spawned).toEqual([]);
+    } finally {
+      spawn.mockRestore();
+      spawnSync.mockRestore();
+    }
   });
 
   test('on PATH counts (Docker image)', async () => {
@@ -305,6 +376,29 @@ describe('public address', () => {
     expect(duck.summary).toBe(`DuckDNS points grupo.duckdns.org at 198.51.100.1, the public IP is ${PUBLIC}; the running service updates it.`);
   });
 
+  test('dns: a DuckDNS name has its token checked, with the IP the record already holds', async () => {
+    const update = (ip: string) => `https://www.duckdns.org/update?domains=grupo&token=duck-tok&ip=${ip}&verbose=true`;
+    const home = { ...DUCK, DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'grupo' };
+    const ok = await run('dns', { env: home, routes: { [update(PUBLIC)]: 'OK\n203.0.113.7\n\nNOCHANGE' } });
+    expect(ok.status).toBe('ok');
+    expect(ok.detail).toEqual(['DuckDNS accepts the token for grupo.duckdns.org.']);
+
+    // The certificate alone (ACME_DNS without the updater) uses the same token; the record's IP, not the public one, goes out.
+    const { ctx, calls } = ctxFor({ env: DUCK, routes: { [update('198.51.100.1')]: 'KO' }, net: { resolveA: async () => ['198.51.100.1'] } });
+    const bad = await CHECKS.find((c) => c.id === 'dns')!.run(ctx);
+    expect(bad.status).toBe('fail');
+    expect(bad.summary).toBe('DuckDNS rejected the token for grupo.duckdns.org: the record cannot be updated and the certificate (DNS challenge) cannot be obtained.');
+    expect(bad.fix).toContain('run telinha setup again');
+    expect(calls.map((c) => c.url)).toContain(update('198.51.100.1'));
+    expect(JSON.stringify(bad)).not.toContain('duck-tok');
+
+    // DuckDNS unreachable: a detail, never a finding, and never the token.
+    const down = await run('dns', { env: home, routes: { [update(PUBLIC)]: new Error(`fetch failed for ${update(PUBLIC)}`) } });
+    expect(down.status).toBe('ok');
+    expect(down.detail?.[0]).toStartWith('Could not ask DuckDNS about the token: ');
+    expect(JSON.stringify(down)).not.toContain('duck-tok');
+  });
+
   test('tls: expiring soon warns, untrusted fails, healthz must answer', async () => {
     expect((await run('tls')).status).toBe('ok');
     const soon = await run('tls', { net: { tlsInfo: async () => ({ validTo: Date.now() + 5 * 86_400_000, issuer: 'LE', subjectAltNames: [], authorized: true }) } });
@@ -316,6 +410,49 @@ describe('public address', () => {
     const down = await run('tls', { routes: { 'https://telinha.example.com/healthz': 502 } });
     expect(down.status).toBe('fail');
     expect(down.summary).toContain('/healthz');
+  });
+
+  test('tls: a DNS-01 certificate failure points at DuckDNS and the HTTPS port, not at 80/443', async () => {
+    const bad = { tlsInfo: async () => ({ validTo: 0, issuer: '', subjectAltNames: [], authorized: false, error: 'self-signed certificate' }) };
+    const r = await run('tls', { env: DUCK, net: bad });
+    expect(r.status).toBe('fail');
+    expect(r.fix).toBe('Caddy asks Let\'s Encrypt through DuckDNS: check the DuckDNS token (dns check), that port 8443 is free for Caddy (listeners) and the [caddy] lines in the log; a fresh install can take a few minutes.');
+    expect((await run('tls', { net: bad })).fix).toContain('ports 80 and 443');
+  });
+});
+
+describe('certificate', () => {
+  test('every way the certificate comes; informational, never a warning', async () => {
+    const rows: [Record<string, string>, string, string[]?][] = [
+      [{ INGRESS: 'tunnel', TUNNEL_TOKEN: 't' }, 'Cloudflare terminates HTTPS for telinha.example.com; nothing to obtain here.'],
+      [{ INGRESS: 'external' }, 'Your reverse proxy holds the certificate for telinha.example.com.'],
+      [DUCK, 'Let\'s Encrypt through DuckDNS (DNS challenge) for grupo.duckdns.org; HTTPS on port 8443, ports 80 and 443 are not used.'],
+      [{}, 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com.'],
+      [{ HTTPS_PORT: '8443', HTTP_PORT: '0' }, 'Let\'s Encrypt over port 443 (TLS-ALPN challenge) for telinha.example.com.'],
+      [{ HOSTING: 'vps' }, 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com.'],
+      [{ HOSTING: 'home' }, 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com.', [
+        'Advanced home setup: ports 80 and 443 must reach this machine, forwarded by hand. The standard home options (a Cloudflare Tunnel, or a DuckDNS address with HTTPS on port 8443) need neither.',
+      ]],
+    ];
+    for (const [env, summary, detail] of rows) {
+      const r = await one('certificate', { env });
+      expect(r.status).toBe('ok');
+      expect(r.summary).toBe(summary);
+      expect(r.detail).toEqual(detail);
+      expect(r.fix).toBeUndefined();
+      expect([r.summary, ...(r.detail ?? [])].join('\n')).not.toMatch(/forward 443/i);
+    }
+    expect((await one('certificate', { env: { DISCORD_TOKEN: '' } })).status).toBe('skip');
+    const pt = await one('certificate', { env: { HOSTING: 'home' }, locale: 'pt-BR' });
+    expect(pt.title).toBe('Como vem o certificado');
+    expect(pt.detail?.[0]).toContain('Cloudflare Tunnel, ou um endereço DuckDNS com HTTPS na porta 8443');
+  });
+
+  test('the advanced home setup keeps setup\'s final doctor run clean', async () => {
+    const { ctx } = ctxFor({ env: { HOSTING: 'home' }, files: BIN_FILES });
+    const rs = byId(await runChecks(CHECKS, ctx));
+    expect(rs.certificate!.status).toBe('ok');
+    expect(Object.values(rs).filter((r) => r.status === 'warn' || r.status === 'fail')).toEqual([]);
   });
 });
 
@@ -338,9 +475,9 @@ describe('listeners and service', () => {
   test('low port as non-root on Linux explains the sysctl', async () => {
     const closed443 = { tcpOpen: async (_h: string, p: number) => p !== 443 };
     const r = await one('listeners', { net: closed443, routes: { 'http://127.0.0.1:8081/healthz': { ok: true, children: {} } } });
-    // The same one sudo step setup offers, and the same high-port alternative.
-    expect(r.fix).toContain(`sudo sh -c '${SYSCTL_SCRIPT}'`);
-    expect(r.fix).toContain('HTTPS_PORT=8443 and HTTP_PORT=0');
+    // The same one sudo step setup offers; no router translation of 443 is ever suggested.
+    expect(r.fix).toBe(`Ports below 1024 need root on Linux. Allow them once (it survives every update): sudo sh -c '${SYSCTL_SCRIPT}'. The standard home options of telinha setup need no low port.`);
+    expect(r.fix).not.toMatch(/8443|forward/);
     const root = await one('listeners', { net: closed443, sys: { isRoot: true }, routes: { 'http://127.0.0.1:8081/healthz': { ok: true, children: {} } } });
     expect(root.fix).toBeUndefined();
   });
@@ -428,7 +565,8 @@ describe('router', () => {
     expect(r.status).toBe('warn');
     expect(r.summary).toBe('Not forwarded: UDP 7882.');
     expect(r.fix).toContain('192.168.0.10');
-    expect(r.detail).toEqual(['UDP 7882: ConflictInMappingEntry']);
+    // The mapper never asks for 80/443; they are named as by hand, not as missing.
+    expect(r.detail).toEqual(['UDP 7882: ConflictInMappingEntry', 'Forwarded by hand, not asked of the router: TCP 443, TCP 80']);
     upnp.mappings[3]!.state = 'mapped';
     expect((await run('mappings', { control: { upnp } })).status).toBe('ok');
   });
@@ -441,8 +579,39 @@ describe('router', () => {
     expect(off.summary).toContain('UDP 7882');
   });
 
+  test('mappings judge only what the mapper asks of the router', async () => {
+    const mapped = (...ports: [string, number][]) => ({ enabled: true, mappings: ports.map(([protocol, p]) => ({ protocol, externalPort: p, internalPort: p, state: 'mapped' })) });
+    const media = mapped(['tcp', 7881], ['udp', 7882]);
+
+    const advanced = await run('mappings', { env: { HOSTING: 'home', UPNP: 'auto' }, control: { upnp: media } });
+    expect(advanced.status).toBe('ok');
+    expect(advanced.summary).toBe('Every needed port is forwarded: TCP 7881, UDP 7882.');
+    expect(advanced.detail).toEqual(['Forwarded by hand, not asked of the router: TCP 443, TCP 80']);
+
+    const duck = await run('mappings', { env: DUCK, control: { upnp: media } });
+    expect(duck.status).toBe('warn');
+    expect(duck.summary).toBe('Not forwarded: TCP 8443.');
+    expect(duck.fix).toBe('Forward them by hand on the router to 192.168.0.10: TCP 8443');
+    expect(duck.detail).toBeUndefined();
+    expect((await run('mappings', { env: DUCK, control: { upnp: mapped(['tcp', 8443], ['tcp', 7881], ['udp', 7882]) } })).status).toBe('ok');
+
+    // MEDIA=cloud is refused by loadConfig for now; the doctor still has to handle it.
+    // Direct on 443 asks nothing of the router but still needs 443 and 80 forwarded.
+    const mappingsCheck = CHECKS.find((x) => x.id === 'mappings')!;
+    const { ctx } = ctxFor();
+    const cloud = await mappingsCheck.run({ ...ctx, config: { ...ctx.config!, media: 'cloud' } });
+    expect(cloud.status).toBe('skip');
+    expect(cloud.summary).toBe('Skipped: nothing here is asked of the router. Forward by hand: TCP 443, TCP 80');
+    const tunnelCloud = await mappingsCheck.run({ ...ctx, config: { ...ctx.config!, media: 'cloud', ingress: 'tunnel' } });
+    expect(tunnelCloud.status).toBe('skip');
+    expect(tunnelCloud.summary).toBe('Skipped: this configuration needs no inbound ports.');
+
+    const pt = await run('mappings', { env: { HOSTING: 'home' }, control: { upnp: media }, locale: 'pt-BR' });
+    expect(pt.detail).toEqual(['Redirecionadas na mão, sem pedir ao roteador: TCP 443, TCP 80']);
+  });
+
   test('neededPorts follows ingress and the PUBLIC_URL port', () => {
-    const c = loadConfig({ ...ENV, PUBLIC_URL: 'https://t.example.com:8443', HTTPS_PORT: '8443', HTTP_PORT: '0' });
+    const c = loadConfig({ ...ENV, ...DUCK });
     expect(neededPorts(c)).toEqual([
       { protocol: 'tcp', external: 8443, internal: 8443 },
       { protocol: 'tcp', external: 7881, internal: 7881 },

@@ -29,11 +29,12 @@ Source: [Manuais Digitais](https://www.oi.com.br/minha-oi/manuais-digitais/), Oi
 | --- | --- | --- |
 | TCP | 7881 | always |
 | UDP | 7882 | always |
-| TCP | 443 | `direct` mode only |
-| TCP | 80 | `direct` mode only, unless `HTTP_PORT=0` |
+| TCP | 8443 | DuckDNS address at home; your port if you changed it |
 
-If you changed `MEDIA_TCP_PORT`, `MEDIA_UDP_PORT`, `HTTP_PORT` or `HTTPS_PORT`
-in `telinha.env`, use your own values.
+With a Cloudflare Tunnel only the two media ports. Nothing else, not 80 and
+not 443: home connections usually do not let them in, so Telinha does not use
+them. If you changed `MEDIA_TCP_PORT`, `MEDIA_UDP_PORT` or `HTTPS_PORT` in
+`telinha.env`, use your own values.
 
 ## Is it CGNAT?
 

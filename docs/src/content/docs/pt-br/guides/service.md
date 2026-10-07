@@ -62,9 +62,9 @@ unit:
 
 - roda `"/opt/telinha/bin/telinha" service run` como o usuário `telinha`, o
   mesmo loop do Windows, com `Restart=on-failure` por cima;
-- dá a `CAP_NET_BIND_SERVICE`, para o Caddy poder usar as portas 80 e 443. É
-  uma capability do processo, que o Caddy herda, então um Caddy baixado de
-  novo continua com ela;
+- dá a `CAP_NET_BIND_SERVICE`, para o Caddy poder usar as portas 80 e 443
+  numa VPS. É uma capability do processo, que o Caddy herda, então um Caddy
+  baixado de novo continua com ela;
 - usa `ProtectSystem=strict`, com só `bin/`, `data/` e `logs/` graváveis.
 
 O usuário do serviço é dono só dessas três pastas (ele atualiza o próprio
@@ -101,25 +101,25 @@ uma sessão SSH conta. O linger mantém ele rodando: a instalação roda o
 `loginctl enable-linger` para você, e mostra o comando com `sudo` quando ele
 pede autenticação.
 
-### Portas 80 e 443
+Em casa as instalações padrão não precisam de porta baixa: um endereço do
+DuckDNS escuta na 8443 e um Cloudflare Tunnel não escuta em nenhuma, então uma
+instalação de usuário funciona do jeito que está.
+
+### Portas baixas numa instalação de usuário na VPS
 
 Um serviço de usuário não consegue usar portas abaixo de 1024, a não ser que
-o kernel libere portas baixas sem privilégio, e o modo `direct` precisa da 80
-e da 443. O assistente oferece este passo único com `sudo`, que continua
-valendo em todas as atualizações:
+o kernel libere portas baixas sem privilégio, e o modo `direct` numa VPS
+precisa da 80 e da 443. O assistente oferece este passo único com `sudo`,
+que continua valendo em todas as atualizações:
 
 ```
 sudo sh -c 'printf "net.ipv4.ip_unprivileged_port_start=80\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system'
 ```
 
-Apesar do nome, ele vale para IPv6 também. A alternativa é usar portas altas
-na máquina com o roteador traduzindo: `HTTPS_PORT=8443`, `HTTP_PORT=0` e o
-roteador encaminhando a 443 pública para a 8443 (com o UPnP ligado, a Telinha
-pede exatamente isso). O assistente grava esses valores quando você recusa o
-passo do sysctl; veja
-[Tradução de portas](/telinha/pt-br/guides/domains/#tradução-de-portas). A
-verificação `listeners` do `telinha doctor` oferece as duas saídas quando
-nada escuta na porta HTTPS.
+Apesar do nome, ele vale para IPv6 também. Quando você recusa, o assistente
+mostra o comando pra depois e não muda mais nada; a verificação `listeners` do
+`telinha doctor` mostra o comando de novo enquanto nada escuta na porta HTTPS.
+Uma instalação como root não precisa de nada disso.
 
 ## Docker
 

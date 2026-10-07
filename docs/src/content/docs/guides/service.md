@@ -58,9 +58,9 @@ then enables and starts it. The unit:
 
 - runs `"/opt/telinha/bin/telinha" service run` as the `telinha` user, the
   same loop as on Windows, with `Restart=on-failure` on top;
-- grants `CAP_NET_BIND_SERVICE`, so Caddy can bind ports 80 and 443. It is a
-  process capability that Caddy inherits, so a newly downloaded Caddy keeps
-  it;
+- grants `CAP_NET_BIND_SERVICE`, so Caddy can bind ports 80 and 443 on a VPS.
+  It is a process capability that Caddy inherits, so a newly downloaded Caddy
+  keeps it;
 - uses `ProtectSystem=strict`, with only `bin/`, `data/` and `logs/`
   writable.
 
@@ -96,22 +96,24 @@ counts. Lingering keeps it running: the install runs
 `loginctl enable-linger` for you, and prints it as a `sudo` command when it
 needs authentication.
 
-### Ports 80 and 443
+At home the standard setups need no low port: a DuckDNS address listens on
+8443 and a Cloudflare Tunnel listens on nothing, so a user install works as
+it is.
+
+### Low ports on a VPS user install
 
 A user service cannot bind ports below 1024 unless the kernel allows
-unprivileged low ports, which `direct` mode needs for 80 and 443. The setup
-offers this one `sudo` step, and it survives every update:
+unprivileged low ports, which `direct` mode on a VPS needs for 80 and 443.
+The setup offers this one `sudo` step, and it survives every update:
 
 ```
 sudo sh -c 'printf "net.ipv4.ip_unprivileged_port_start=80\n" > /etc/sysctl.d/50-telinha.conf && sysctl --system'
 ```
 
-It covers IPv6 too, despite the name. The alternative is high ports on the
-machine with the router translating: `HTTPS_PORT=8443`, `HTTP_PORT=0`, and the
-router forwarding public 443 to 8443 (with UPnP on, Telinha asks for exactly
-that). The setup writes those values when you decline the sysctl step; see
-[Port translation](/telinha/guides/domains/#port-translation). The `listeners`
-check of `telinha doctor` offers both when nothing listens on the HTTPS port.
+It covers IPv6 too, despite the name. When you decline it, the setup prints
+the command for later and changes nothing else; the `listeners` check of
+`telinha doctor` prints it again while nothing listens on the HTTPS port. A
+root install needs none of this.
 
 ## Docker
 

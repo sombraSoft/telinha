@@ -1,6 +1,7 @@
 // Config files for the children, rendered from telinha.env. Pure:
 // children.ts writes them to <run>/ before every (re)start. No secret goes in
-// here: LiveKit gets its keys from the LIVEKIT_KEYS env of its process.
+// here: LiveKit gets its keys from the LIVEKIT_KEYS env of its process, Caddy
+// its DuckDNS token from DUCKDNS_TOKEN through an {env.*} placeholder.
 import type { Config } from './config.ts';
 
 const HEADER = '# Rendered by telinha from telinha.env; do not edit.';
@@ -37,15 +38,32 @@ export function upstreamHost(listenHost: string): string {
 }
 
 export function renderCaddyfile(
-  c: Pick<Config, 'publicHost' | 'httpPort' | 'httpsPort' | 'acmeEmail' | 'host' | 'port'>,
+  c: Pick<Config, 'publicHost' | 'httpPort' | 'httpsPort' | 'acmeEmail' | 'acmeDns' | 'host' | 'port'>,
 ): string {
   const global = [
     '\tadmin off',
     // 0 = no redirect listener; Caddy keeps its default http_port 80 for ACME then.
     c.httpPort === 0 ? '\tauto_https disable_redirects' : `\thttp_port ${c.httpPort}`,
     `\thttps_port ${c.httpsPort}`,
-    ...(c.acmeEmail ? [`\temail ${c.acmeEmail}`] : []),
+    // An explicit issuer ignores the global email, so DNS-01 sets it in its own block.
+    ...(c.acmeEmail && !c.acmeDns ? [`\temail ${c.acmeEmail}`] : []),
   ];
+  const tls = c.acmeDns
+    ? [
+      '\ttls {',
+      '\t\tissuer acme {',
+      ...(c.acmeEmail ? [`\t\t\temail ${c.acmeEmail}`] : []),
+      `\t\t\tdns ${c.acmeDns.provider} {env.DUCKDNS_TOKEN}`,
+      // Otherwise Caddy may try these first: a wasted try on a closed port, and
+      // a listener on 80/443 that a home connection never lets through.
+      '\t\t\tdisable_http_challenge',
+      '\t\t\tdisable_tlsalpn_challenge',
+      // Check the TXT record on public resolvers, not the home router's cache.
+      '\t\t\tresolvers 1.1.1.1 8.8.8.8',
+      '\t\t}',
+      '\t}',
+    ]
+    : [];
   // Bare host as the site address: https_port picks the bind port, so a router
   // translating 443 -> 8443 just works.
   return [
@@ -55,6 +73,7 @@ export function renderCaddyfile(
     '}',
     '',
     `${c.publicHost} {`,
+    ...tls,
     '\tencode zstd gzip',
     `\treverse_proxy ${upstreamHost(c.host)}:${c.port}`,
     '}',

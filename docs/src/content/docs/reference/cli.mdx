@@ -44,11 +44,22 @@ missing answer exits 2 naming the flag or variable. Required:
 `--guild`, `--role`, `--channels`, plus the tunnel or DuckDNS token in those
 modes.
 
+`--host home|vps` (or `HOSTING`) picks the defaults the interactive wizard
+would; without it the existing file decides, else a guess from the machine
+that is `home` unless it clearly is a VPS. At home, `--duckdns-domain` means
+HTTPS on `--https-port` (8443) with a certificate through DuckDNS, and
+`--ingress tunnel` a Cloudflare Tunnel; Telinha never counts on ports 80 and
+443 there. A home install:
+
 ```
-telinha setup --non-interactive --public-url https://telinha.example.com \
+telinha setup --non-interactive --host home --duckdns-domain my-group \
+  --duckdns-token-file ./duckdns-token \
   --guild <id> --role <id> --channels <id>,<id> \
   --discord-token-file ./discord-token --client-secret-file - < ./client-secret
 ```
+
+A script for a VPS passes `--host vps` instead, and there `--public-url` or
+`--duckdns-domain` is served directly on 443.
 
 ## telinha doctor
 

@@ -309,6 +309,8 @@ jobs:
           # summary are enough.
           GITLEAKS_ENABLE_COMMENTS: "false"
 
+  # The image build also compiles our Caddy (xcaddy + DuckDNS + layer4), and the
+  # smoke test checks its version and modules and validates the DNS-01 Caddyfile.
   image:
     runs-on: ubuntu-latest
     steps:
@@ -338,3 +340,26 @@ jobs:
       # entrypoint is the program itself.
       - name: smoke
         run: docker run --rm --entrypoint sh telinha:ci scripts/smoke.sh
+
+  # Windows Caddy through the same Dockerfile stage the release uses, so a
+  # Windows-only Go build break in a module bump shows up before release (the
+  # image job covers linux). Not a required check.
+  caddy:
+    name: caddy (windows-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: caddy-export
+          build-args: |
+            CADDY_OS=windows
+            CADDY_ARCH=amd64
+          outputs: type=local,dest=dist-caddy
+          push: false
+      - name: caddy.exe
+        run: test -s dist-caddy/caddy.exe

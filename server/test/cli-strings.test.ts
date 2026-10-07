@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { defineStrings, dicts, localeFromTag, pickLocale, ts } from '../src/cli/strings.ts';
+import { t as setupStrings } from '../src/cli/setup/strings.ts';
 
 describe('ts', () => {
   test('substitutes params once and falls back to the key text', () => {
@@ -22,6 +23,37 @@ describe('ts', () => {
       for (const cmd of ['run', 'setup', 'doctor', 'update', 'service', '--lang', '--home', '--yes', '--version', '--help']) expect(help).toContain(cmd);
       for (const v of Object.values(dicts[l])) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b/);
     }
+  });
+
+  test('setup help names the non-interactive home rules', () => {
+    for (const l of ['en', 'pt-BR'] as const) {
+      const help = ts(l, 'helpSetup');
+      for (const flag of ['--non-interactive', '--host home|vps', '--duckdns-domain', '--advanced', '80/443']) expect(help).toContain(flag);
+    }
+  });
+});
+
+describe('setup strings', () => {
+  test('pt-BR keeps every key and placeholder of en; nothing says "phase" or tells a home to open 80/443', () => {
+    const en = setupStrings.en as Record<string, string>;
+    const pt = setupStrings.ptBR as Record<string, string>;
+    expect(Object.keys(pt).sort()).toEqual(Object.keys(en).sort());
+    for (const [k, v] of Object.entries(en)) {
+      const want = [...v.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      const got = [...pt[k]!.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      expect(`${k}: ${got.join(',')}`).toBe(`${k}: ${want.join(',')}`);
+    }
+    for (const d of [en, pt]) {
+      for (const v of Object.values(d)) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b/);
+      // The old ports question and the 443 -> 8443 router rewrite are gone.
+      expect(Object.values(d).join('\n')).not.toMatch(/reach this machine\?|chegam nesta máquina\?|Switch to port 8443|Mudar pra porta 8443/);
+    }
+    expect(en.homeIntro).toContain('usually');
+    expect(en.httpsPortLow).toContain('usually');
+    expect(pt.homeIntro).toContain('em geral');
+    expect(pt.httpsPortLow).toContain('em geral');
+    expect(en.homeNeedsAdvanced).toEndWith('; on a rented server pass --host vps');
+    expect(pt.homeNeedsAdvanced).toEndWith('; num servidor alugado passe --host vps');
   });
 });
 

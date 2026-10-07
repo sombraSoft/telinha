@@ -29,6 +29,7 @@ bun run build
 bun run e2e
 bun run image
 bun run bins
+bun run caddy
 bun run versions check
 bun run compile --smoke
 bun run docs:dev
@@ -42,9 +43,10 @@ bun run docs:build
 | `bun run test` | `bun test` no servidor, na página web e na documentação |
 | `bun run build` | Compila a página da sala em `web/dist` |
 | `bun run e2e` | Playwright; rode `bun run build` antes e instale um Chromium com `bunx playwright install chromium` |
-| `bun run image` | Compila `telinha:dev` com docker ou podman e roda o teste de fumaça |
-| `bun run bins` | Baixa os três binários auxiliares para este computador em `.cache/telinha/bin` |
-| `bun run versions check` | Valida o `versions.json` (`refresh` recalcula todos os hashes) |
+| `bun run image` | Compila `telinha:dev` com docker ou podman (o Caddy é compilado num estágio Go do `Dockerfile`) e roda o teste de fumaça, que também confere a versão e os módulos do Caddy e faz o Caddy validar o `Caddyfile` do DuckDNS |
+| `bun run bins` | Baixa os três binários auxiliares para este computador em `.cache/telinha/bin`: `livekit-server` e `cloudflared` dos projetos originais, `caddy` da versão mais nova da Telinha (`bun scripts/bins.ts --release vX.Y.Z caddy` pega o de outra versão). Uma versão sem o arquivo do `caddy` dá um aviso, não uma falha, quando o caddy não foi pedido pelo nome; nesse caso compile ele com `bun run caddy` |
+| `bun run caddy` | Compila o Caddy da Telinha (o Caddy original mais os módulos do `versions.json`) com o xcaddy em `.cache/telinha/bin` (ou `BIN_DIR`, ou `--out DIR`), junto do que o `bun run bins` baixa; precisa do Go no `PATH`. Na plataforma do próprio computador ele também confere a versão e os módulos |
+| `bun run versions check` | Valida o `versions.json` (`refresh` recalcula os hashes do livekit e do cloudflared) |
 | `bun run compile --smoke` | Compila os binários nativos deste sistema em `dist-bin/` (rode `bun run build` antes) |
 | `bun run docs:dev` | Serve este site em `http://localhost:4321/telinha/` |
 | `bun run docs:build` | Compila este site em `docs/dist/` |
@@ -66,7 +68,7 @@ O `bun run compile` (`scripts/build-binary.ts`) roda `bun build --compile` com o
 | `--out DIR` | Pasta de saída |
 | `--smoke` | Roda o `--version` do binário deste computador |
 
-O `bun run compile sums` reescreve o `SHA256SUMS` para os pacotes que estiverem em `dist-bin/`. Os alvos Linux compilam de qualquer sistema. Os alvos Windows só compilam no Windows, onde o Bun consegue escrever o recurso de versão. Os alvos x64 são os builds baseline do Bun. O binário nunca lê um `.env` ou `bunfig.toml` da pasta onde roda.
+O `bun run compile sums` reescreve o `SHA256SUMS` para os pacotes que estiverem em `dist-bin/`, incluindo os `caddy-<target>`. O `bun run compile pack-caddy --target <t> --from DIR` empacota um `caddy` já compilado como o pacote de release daquele alvo; o workflow de release compila cada um pelo estágio `caddy-export` do `Dockerfile`. Os alvos Linux compilam de qualquer sistema. Os alvos Windows só compilam no Windows, onde o Bun consegue escrever o recurso de versão. Os alvos x64 são os builds baseline do Bun. O binário nunca lê um `.env` ou `bunfig.toml` da pasta onde roda.
 
 ## Este site
 
@@ -93,11 +95,11 @@ O `release.yml` chama o `.github/workflows/docs.yml` depois de publicar uma vers
 - web/ Página da sala em Svelte 5 e a página do doctor, compiladas com Vite em `web/dist`
 - docs/ Este site (Starlight, inglês e português), seu gerador e seus testes
 - deploy/ Os instaladores, os arquivos do host Docker e o `telinha-update`
-- scripts/ Ambiente de desenvolvimento, download dos binários auxiliares, build nativo, build da imagem e teste de fumaça
+- scripts/ Ambiente de desenvolvimento, download dos binários auxiliares, o build do Caddy, build nativo, build da imagem e teste de fumaça
 - e2e/ Testes do Playwright
 - .github/ Workflows de CI e de release
-- Dockerfile Build da imagem em vários estágios e várias arquiteturas
-- versions.json Versões fixadas de `livekit-server`, `caddy` e `cloudflared` com seus hashes
+- Dockerfile Build da imagem em vários estágios e várias arquiteturas, com um estágio Go que compila o Caddy
+- versions.json Versões fixadas de `livekit-server` e `cloudflared` com seus hashes, e a receita de build do `caddy`: versão, xcaddy, módulos
 - package.json Workspaces e os scripts acima
 - bun.lock
 - bunfig.toml

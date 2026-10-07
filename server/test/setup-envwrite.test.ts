@@ -61,6 +61,29 @@ describe('renderEnvFile', () => {
     const text = renderEnvFile(VALUES, { vars: { MY_NOTE: 'a b' } });
     expect(text).toContain("MY_NOTE='a b'\n");
   });
+
+  test('the home answers land in their documented places and load without warnings', () => {
+    const home = {
+      ...VALUES, PUBLIC_URL: 'https://g.duckdns.org:8443', HOSTING: 'home', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns',
+      DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'g', DUCKDNS_TOKEN: 'duck-token-1', // gitleaks:allow
+    };
+    const text = renderEnvFile(home, null);
+    expect(text).toContain('\nHOSTING=home\n');
+    expect(text).toContain('\nACME_DNS=duckdns\n');
+    expect(text.indexOf('HOSTING=home')).toBeLessThan(text.indexOf('INGRESS=direct'));
+    expect(text).not.toContain('Other settings');
+    const config = loadConfig({ ...parseEnvFile(text).vars, TELINHA_HOME: '/srv/telinha' });
+    expect([config.hosting, config.acmeDns?.provider]).toEqual(['home', 'duckdns']);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('HOSTING and ACME_DNS are managed: a re-run that drops them does not keep the old values', () => {
+    const previous = 'HOSTING=home\nACME_DNS=duckdns\n';
+    const text = renderEnvFile({ ...VALUES, HOSTING: 'vps' }, { vars: parseEnvFile(previous).vars, text: previous });
+    expect(text).toContain('\nHOSTING=vps\n');
+    expect(text).toContain('\n#ACME_DNS=none\n');
+    expect(text).not.toContain('Other settings');
+  });
 });
 
 type Entry = { uid: number; gid: number; mode: number; dir?: boolean; symlink?: boolean };

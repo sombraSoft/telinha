@@ -14,6 +14,11 @@ const PROD_ENV = {
 };
 const DEV_ENV = { DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:5173', COOKIE_SECRET: 'x', LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'secret' };
 const TUNNEL_ENV = { ...PROD_ENV, INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' };
+// What the wizard writes for a home without a domain: DuckDNS name, HTTPS on 8443, DNS-01.
+const HOME_ENV = {
+  ...PROD_ENV, PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns',
+  DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'g', DUCKDNS_TOKEN: 'duck-secret-token', // gitleaks:allow
+};
 
 describe('loadConfig', () => {
   test('production defaults', () => {
@@ -43,6 +48,8 @@ describe('loadConfig', () => {
     expect(c.httpPort).toBe(80);
     expect(c.httpsPort).toBe(443);
     expect(c.acmeEmail).toBeUndefined();
+    expect(c.acmeDns).toBeNull();
+    expect(c.hosting).toBeNull();
     expect(c.tunnelToken).toBeUndefined();
     expect(c.livekitPort).toBe(7880);
     expect(c.mediaTcpPort).toBe(7881);
@@ -134,7 +141,7 @@ describe('loadConfig', () => {
   });
 
   test('KNOWN_KEYS covers the schema incl. reserved keys, not the removed LIVEKIT_KEYS', () => {
-    for (const k of [...Object.keys(PROD_ENV), 'INGRESS', 'MEDIA', 'TUNNEL_TOKEN', 'TELINHA_ENV', 'BIN_DIR', 'DEV_USER', 'DUCKDNS_TOKEN', 'TURN_TLS_PORT']) {
+    for (const k of [...Object.keys(PROD_ENV), 'INGRESS', 'MEDIA', 'TUNNEL_TOKEN', 'TELINHA_ENV', 'BIN_DIR', 'DEV_USER', 'DUCKDNS_TOKEN', 'TURN_TLS_PORT', 'HOSTING', 'ACME_DNS']) {
       expect(KNOWN_KEYS.has(k)).toBe(true);
     }
     expect(KNOWN_KEYS.has('LIVEKIT_KEYS')).toBe(false);
@@ -234,8 +241,8 @@ describe('INGRESS=direct', () => {
 
   test('publicHost is the bare hostname, with or without a URL port', () => {
     expect(loadConfig(PROD_ENV).publicHost).toBe('tela.example.com');
-    const c = loadConfig({ ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:8443', HTTPS_PORT: '8443' });
-    expect(c.publicHost).toBe('tela.example.com');
+    const c = loadConfig(HOME_ENV);
+    expect(c.publicHost).toBe('g.duckdns.org');
     expect(c.warnings).toEqual([]);
   });
 
@@ -243,8 +250,21 @@ describe('INGRESS=direct', () => {
     const c = loadConfig({ ...PROD_ENV, HTTPS_PORT: '8443' });
     expect(c.httpsPort).toBe(8443);
     expect(c.warnings).toEqual(['config: PUBLIC_URL port 443 differs from HTTPS_PORT 8443; assuming the router translates 443 -> 8443']);
-    expect(loadConfig({ ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:9443' }).warnings)
-      .toEqual(['config: PUBLIC_URL port 9443 differs from HTTPS_PORT 443; assuming the router translates 9443 -> 443']);
+    expect(loadConfig({ ...HOME_ENV, HTTPS_PORT: '443' }).warnings)
+      .toEqual(['config: PUBLIC_URL port 8443 differs from HTTPS_PORT 443; assuming the router translates 8443 -> 443']);
+  });
+
+  test('a high PUBLIC_URL port without DNS-01 is refused with HTTP_PORT=0, warned otherwise', () => {
+    const high = { ...PROD_ENV, PUBLIC_URL: 'https://x.example.com:8443', HTTPS_PORT: '8443', HTTP_PORT: '0' };
+    expect(() => loadConfig(high)).toThrow(
+      "PUBLIC_URL uses port 8443 and HTTP_PORT=0: Let's Encrypt validates only over public port 80 or 443, so this needs ACME_DNS=duckdns (a DuckDNS name) or a PUBLIC_URL on port 443",
+    );
+    expect(loadConfig({ ...high, HTTP_PORT: '80' }).warnings)
+      .toEqual(['config: PUBLIC_URL uses port 8443; without ACME_DNS the certificate needs public port 80 reaching HTTP_PORT 80']);
+    // Port 443 with HTTP_PORT=0 still has the TLS-ALPN challenge.
+    expect(loadConfig({ ...PROD_ENV, HTTP_PORT: '0' }).warnings).toEqual([]);
+    // Outside direct mode Caddy fetches no certificate.
+    expect(() => loadConfig({ ...high, INGRESS: 'external' })).not.toThrow();
   });
 
   test('ACME_EMAIL only in direct mode', () => {
@@ -254,6 +274,47 @@ describe('INGRESS=direct', () => {
 
   test('HTTP_PORT=0 disables the redirect listener', () => {
     expect(loadConfig({ ...PROD_ENV, HTTP_PORT: '0' }).httpPort).toBe(0);
+  });
+});
+
+describe('HOSTING and ACME_DNS', () => {
+  test('HOSTING: home | vps | unset', () => {
+    expect(loadConfig({ ...PROD_ENV, HOSTING: 'home' }).hosting).toBe('home');
+    expect(loadConfig({ ...PROD_ENV, HOSTING: 'vps' }).hosting).toBe('vps');
+    expect(loadConfig({ ...PROD_ENV, HOSTING: '' }).hosting).toBeNull();
+    expect(() => loadConfig({ ...PROD_ENV, HOSTING: 'cloud' })).toThrow('bad HOSTING cloud (want home | vps)');
+  });
+
+  test('the home default loads with no warnings', () => {
+    const c = loadConfig(HOME_ENV);
+    expect(c.acmeDns).toEqual({ provider: 'duckdns', token: 'duck-secret-token' }); // gitleaks:allow
+    expect([c.httpsPort, c.httpPort]).toEqual([8443, 0]);
+    expect(c.warnings).toEqual([]);
+  });
+
+  test('ACME_DNS=duckdns needs DUCKDNS_TOKEN and a duckdns.org host', () => {
+    expect(() => loadConfig({ ...HOME_ENV, DUCKDNS_TOKEN: '', DDNS_PROVIDER: 'none' })).toThrow('missing env DUCKDNS_TOKEN');
+    expect(() => loadConfig({ ...HOME_ENV, DDNS_PROVIDER: 'none', PUBLIC_URL: 'https://tela.example.com:8443' }))
+      .toThrow('ACME_DNS=duckdns needs a PUBLIC_URL host under duckdns.org (got tela.example.com)');
+    // DNS-01 without the DDNS updater (a static IP) is fine.
+    expect(loadConfig({ ...HOME_ENV, DDNS_PROVIDER: 'none' }).acmeDns?.provider).toBe('duckdns');
+    expect(() => loadConfig({ ...HOME_ENV, ACME_DNS: 'cloudflare' })).toThrow('bad ACME_DNS cloudflare (want none | duckdns)');
+    expect(loadConfig({ ...PROD_ENV, ACME_DNS: 'none' }).acmeDns).toBeNull();
+  });
+
+  test('ACME_DNS outside direct mode is ignored with a warning; no warning holds the token', () => {
+    const c = loadConfig({ ...TUNNEL_ENV, ACME_DNS: 'duckdns', DUCKDNS_TOKEN: 'duck-secret-token' }); // gitleaks:allow
+    expect(c.acmeDns).toBeNull();
+    expect(c.warnings).toEqual(['config: ACME_DNS only applies to INGRESS=direct; ignored']);
+    const translated = loadConfig({ ...HOME_ENV, HTTPS_PORT: '9443', DUCKDNS_DOMAIN: 'other' });
+    expect(translated.warnings.length).toBe(2);
+    expect(translated.warnings.join(' ')).not.toContain('duck-secret-token');
+  });
+
+  test('dev mode ignores ACME_DNS', () => {
+    const c = loadConfig({ ...DEV_ENV, ACME_DNS: 'duckdns' });
+    expect(c.acmeDns).toBeNull();
+    expect(c.warnings).toEqual([]);
   });
 });
 
@@ -402,11 +463,20 @@ test('parseListen', () => {
 describe('upnpMappings', () => {
   const ports = (env: Record<string, string>) => upnpMappings(loadConfig(env)).map((m) => `${m.protocol} ${m.externalPort}->${m.internalPort}`);
 
-  test('direct: media ports, HTTPS from the PUBLIC_URL port, HTTP 80 unless off', () => {
-    expect(ports(PROD_ENV)).toEqual(['tcp 7881->7881', 'udp 7882->7882', 'tcp 443->443', 'tcp 80->80']);
-    expect(ports({ ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:8443', HTTPS_PORT: '9443', HTTP_PORT: '0' }))
-      .toEqual(['tcp 7881->7881', 'udp 7882->7882', 'tcp 8443->9443']);
-    expect(ports({ ...PROD_ENV, HTTP_PORT: '8080' })).toContain('tcp 80->8080');
+  test('direct: media ports, plus HTTPS only from a high PUBLIC_URL port', () => {
+    expect(ports(HOME_ENV)).toEqual(['tcp 7881->7881', 'udp 7882->7882', 'tcp 8443->8443']);
+    expect(ports({ ...HOME_ENV, HTTPS_PORT: '9443' })).toEqual(['tcp 7881->7881', 'udp 7882->7882', 'tcp 8443->9443']);
+    expect(ports(PROD_ENV)).toEqual(['tcp 7881->7881', 'udp 7882->7882']);
+    expect(ports({ ...PROD_ENV, HTTPS_PORT: '8443' })).toEqual(['tcp 7881->7881', 'udp 7882->7882']);
+  });
+
+  test('never an external 80 or 443 entry', () => {
+    const envs = [PROD_ENV, { ...PROD_ENV, HTTP_PORT: '8080' }, { ...HOME_ENV, HTTP_PORT: '8080' }, { ...PROD_ENV, PUBLIC_URL: 'https://tela.example.com:80' }];
+    for (const env of envs) {
+      const external = upnpMappings(loadConfig(env)).map((m) => m.externalPort);
+      expect(external).not.toContain(80);
+      expect(external).not.toContain(443);
+    }
   });
 
   test('tunnel and external: the media ports only', () => {

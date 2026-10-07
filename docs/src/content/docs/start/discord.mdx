@@ -101,7 +101,9 @@ API cannot set**, so the wizard shows the address and waits for you:
 
 1. Copy the address the wizard prints. With
    `PUBLIC_URL=https://telinha.example.com` it is
-   `https://telinha.example.com/auth/callback`.
+   `https://telinha.example.com/auth/callback`; with a DuckDNS address at
+   home it carries the port, as in
+   `https://my-group.duckdns.org:8443/auth/callback`.
 
 2. On the **OAuth2** page, under **Redirects**, click **Add Redirect** and
    paste it.
@@ -196,7 +198,8 @@ standard input, one secret per run:
 | Client secret | `DISCORD_CLIENT_SECRET` | `--client-secret-file PATH` |
 
 ```
-telinha setup --non-interactive --public-url https://telinha.example.com \
+telinha setup --non-interactive --host home --duckdns-domain my-group \
+  --duckdns-token-file ./duckdns-token \
   --guild <id> --role <id> --channels <id>,<id> \
   --discord-token-file ./discord-token --client-secret-file - < ./client-secret
 ```

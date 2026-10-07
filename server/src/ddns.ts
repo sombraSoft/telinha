@@ -18,6 +18,8 @@ export interface Ddns {
 type Log = (...a: unknown[]) => void;
 
 const TIMEOUT_MS = 10_000;
+/** last().error when DuckDNS answered KO: the name is not on the token's account, or the token is wrong. */
+export const DUCKDNS_REJECTED = 'DuckDNS rejected the domain/token';
 const DAY_MS = 24 * 3600_000;
 
 export function createDuckDns(o: {
@@ -43,7 +45,7 @@ export function createDuckDns(o: {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = (await res.text()).trim();
     if (body.startsWith('OK')) return;
-    if (body.startsWith('KO')) throw new Error('DuckDNS rejected the domain/token');
+    if (body.startsWith('KO')) throw new Error(DUCKDNS_REJECTED);
     throw new Error(`unexpected DuckDNS answer: ${body.slice(0, 20)}`);
   };
 

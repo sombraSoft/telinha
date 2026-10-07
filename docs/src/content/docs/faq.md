@@ -25,7 +25,11 @@ Chrome-family browsers. Streams use AV1 when the browser has a hardware encoder 
 
 ## Can I use it without a domain?
 
-Yes. At home, use a free DuckDNS name, which also follows a changing IP. On a VPS with a fixed public IPv4, sslip.io needs no setup at all. See [Address, HTTPS and ingress modes](/telinha/guides/domains/) and [Choose your setup](/telinha/start/choose/).
+Yes. At home, answer *No* to *Do you have a domain on Cloudflare?* in the setup: Telinha uses a free DuckDNS name, which also follows a changing IP, and serves HTTPS on port 8443 with a certificate it gets through DuckDNS, so nothing has to open on 80 or 443. The links then carry the port (`https://my-group.duckdns.org:8443/r/...`), and some strict networks (offices, schools) only let browsers reach port 443, so people there cannot open them; a domain on Cloudflare (Cloudflare Tunnel) avoids that. On a VPS with a fixed public IPv4, sslip.io needs no setup at all. See [Address, HTTPS and ingress modes](/telinha/guides/domains/) and [Choose your setup](/telinha/start/choose/).
+
+## Why does my link have :8443 in it?
+
+Because Telinha runs at home with a DuckDNS address. Home internet connections usually do not let the web ports 80 and 443 in, so Telinha serves HTTPS on a port of its own, 8443 (or the one you picked), and the address has to say which. It is a normal HTTPS address with a valid certificate. If people on a strict network cannot open it, use a domain on Cloudflare: run `telinha setup` again and answer *Yes* to *Do you have a domain on Cloudflare?* See [DuckDNS on port 8443](/telinha/guides/domains/#duckdns-on-port-8443).
 
 ## Can I run it behind CGNAT?
 
@@ -56,7 +60,7 @@ Inside it (`TELINHA_HOME`, or `--home DIR` on any command, points at another one
 | --- | --- |
 | `bin/telinha[.exe]` | The program (the installers and the updater write it) |
 | `bin/telinha.old-<version>[.exe]`, `bin/telinha.failed-<tag>[.exe]` | The executable an update replaced, or one that was rolled back; removed after the next good start (on Windows one the service still runs from stays until the service restarts) |
-| `bin/livekit-server`, `caddy`, `cloudflared` (`.exe` on Windows) and `<tool>.version` | The helper binaries this configuration needs, sha256-checked when downloaded (by setup, or at a start that finds them missing or at an older pinned version); `PATH` is tried after `bin/` |
+| `bin/livekit-server`, `caddy`, `cloudflared` (`.exe` on Windows) and `<tool>.version` | The helper binaries this configuration needs, sha256-checked when downloaded (by setup, or at a start that finds them missing or at an older pinned version); `PATH` is tried after `bin/`. `caddy` is Telinha's own Caddy build (with the DuckDNS DNS module and layer4), fetched from the Telinha release and checked against its `SHA256SUMS` |
 | `config/telinha.env` | The configuration, owner-only: Linux user install mode 0600; Linux root install `root:telinha` 0640 in a `root:telinha` 0750 `config/` (the service reads it through its group); on Windows an ACL with only you, SYSTEM and Administrators |
 | `data/telinha.sqlite` | The room registry. If it is lost, only the links of rooms open at that moment stop working |
 | `data/run/` | The rendered `livekit.yaml` and `Caddyfile` (rewritten before every start: edit `telinha.env`, never these) and run state: `children.json`, `public-ip`, `telinha.pid` (one `run` per home), `service.pid`, `control.token`, `update.json`, `upnp.json` |
@@ -66,7 +70,7 @@ Inside it (`TELINHA_HOME`, or `--home DIR` on any command, points at another one
 
 ## Is it safe to expose?
 
-Every page is behind the Discord login and the role check. Telinha itself relays the LiveKit signaling and forwards only `/livekit/rtc`, so LiveKit's own API is never reachable from outside. Secrets never go on a command line (setup refuses `--discord-token` and friends and reads them from the environment or a file), and `telinha.env` is readable by its owner only (plus the service's group on a Linux root install). The helper binaries are pinned by sha256, and every release carries `SHA256SUMS` plus a build provenance attestation you can check by hand, see [Updates](/telinha/guides/updates/).
+Every page is behind the Discord login and the role check. Telinha itself relays the LiveKit signaling and forwards only `/livekit/rtc`, so LiveKit's own API is never reachable from outside. Secrets never go on a command line (setup refuses `--discord-token` and friends and reads them from the environment or a file), and `telinha.env` is readable by its owner only (plus the service's group on a Linux root install). The helper binaries are pinned by sha256, and every release carries `SHA256SUMS` plus a build provenance attestation you can check by hand; both cover Telinha's own Caddy build too, see [Updates](/telinha/guides/updates/).
 
 ## How do I remove it?
 
@@ -92,6 +96,6 @@ sudo rm -rf /opt/telinha
 ## What is planned?
 
 - Windows: a tray app, and code-signed binaries.
-- Media: LiveKit Cloud (`MEDIA=cloud`) for hosts that cannot open ports, and TURN over TLS on 443.
+- Media: LiveKit Cloud (`MEDIA=cloud`) for hosts that cannot open ports, and TURN over TLS on 443 (the layer4 module it needs is already in Telinha's Caddy build).
 
 None of these has a date.

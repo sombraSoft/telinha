@@ -1,5 +1,6 @@
 # Telinha: one container runs telinha + livekit-server (+ caddy in direct mode, + cloudflared in tunnel mode).
-# Host networking: Caddy binds 80/443, LiveKit the media ports from telinha.env, telinha LISTEN (127.0.0.1:8081).
+# Host networking: Caddy binds HTTPS_PORT (443 on a VPS, a high port such as 8443 at home), LiveKit the media ports
+# from telinha.env, telinha LISTEN (127.0.0.1:8081).
 # Config: ./config/telinha.env (copy telinha.env.example there). TELINHA_VERSION: ./.env, written by telinha-update; else latest.
 # Values with $ \ or # must be single-quoted in telinha.env (compose interpolates otherwise).
 # Linux: copy compose.journald.yml to compose.override.yml to log to journald (journalctl -t telinha).
@@ -21,7 +22,7 @@ services:
     healthcheck:
       # busybox wget and sh ship in the image; port must match LISTEN in telinha.env.
       # Unhealthy while a child (livekit, caddy, cloudflared) is down waiting to restart,
-      # e.g. Caddy cannot bind 80/443 or a bad tunnel token: then telinha-update's --wait
+      # e.g. Caddy cannot bind its port or a bad tunnel token: then telinha-update's --wait
       # fails and it rolls back. The retries absorb livekit's brief restart on an IP change.
       test:
         - CMD-SHELL

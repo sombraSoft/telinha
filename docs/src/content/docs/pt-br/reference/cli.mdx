@@ -45,11 +45,22 @@ Obrigatórias: `--public-url` (ou `--duckdns-domain`), o token do bot, o client
 secret, `--guild`, `--role`, `--channels`, mais o token do túnel ou do DuckDNS
 nesses modos.
 
+O `--host home|vps` (ou o `HOSTING`) escolhe os mesmos padrões que o
+assistente interativo escolheria; sem ele quem decide é o arquivo existente,
+senão um palpite pela máquina, que é `home` a não ser que ela claramente seja
+uma VPS. Em casa, `--duckdns-domain` quer dizer HTTPS na `--https-port` (8443)
+com um certificado pelo DuckDNS, e `--ingress tunnel` um Cloudflare Tunnel; ali
+a Telinha nunca conta com as portas 80 e 443. Uma instalação em casa:
+
 ```
-telinha setup --non-interactive --public-url https://telinha.example.com \
+telinha setup --non-interactive --host home --duckdns-domain my-group \
+  --duckdns-token-file ./duckdns-token \
   --guild <id> --role <id> --channels <id>,<id> \
   --discord-token-file ./discord-token --client-secret-file - < ./client-secret
 ```
+
+Um script para uma VPS passa `--host vps` no lugar, e ali o `--public-url` ou
+o `--duckdns-domain` é servido direto na 443.
 
 ## telinha doctor
 

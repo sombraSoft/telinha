@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { assetName, createGitHubReleases, isStableTag, latestStable, parseSums, tagFromRedirect } from '../src/update/github.ts';
+import * as releasetag from '../src/releasetag.ts';
+import { caddyAssetName, latestReleaseTag, releaseAssetUrl } from '../src/releasetag.ts';
 import { PendingError } from '../src/update/types.ts';
 
 type Call = { url: string; redirect: RequestInit['redirect'] };
@@ -99,5 +101,33 @@ describe('createGitHubReleases', () => {
     expect(await latestStable(fakeFetch(() => redirect('/r/releases/tag/v0.8.0')).fetch)).toBe('v0.8.0');
     expect(await latestStable(fakeFetch(() => redirect('/r/releases/tag/v0.9.0-rc.1')).fetch)).toBeNull();
     expect(await latestStable(fakeFetch(() => new Error('offline')).fetch)).toBeNull();
+  });
+});
+
+describe('releasetag', () => {
+  test('github.ts re-exports the shared helpers unchanged', () => {
+    expect(isStableTag).toBe(releasetag.isStableTag);
+    expect(parseSums).toBe(releasetag.parseSums);
+    expect(tagFromRedirect).toBe(releasetag.tagFromRedirect);
+  });
+
+  test('releaseAssetUrl: encoded tag, other repos', () => {
+    expect(releaseAssetUrl('v0.6.0', 'SHA256SUMS')).toBe('https://github.com/sombraSoft/telinha/releases/download/v0.6.0/SHA256SUMS');
+    expect(releaseAssetUrl('v1+b', 'x', 'me/fork')).toBe('https://github.com/me/fork/releases/download/v1%2Bb/x');
+  });
+
+  test('caddyAssetName follows the telinha target names', () => {
+    expect(caddyAssetName('linux', 'amd64')).toBe('caddy-linux-x64.tar.gz');
+    expect(caddyAssetName('linux', 'arm64')).toBe('caddy-linux-arm64.tar.gz');
+    expect(caddyAssetName('windows', 'amd64')).toBe('caddy-windows-x64.zip');
+    expect(caddyAssetName('windows', 'arm64')).toBe('caddy-windows-arm64.zip');
+  });
+
+  test('latestReleaseTag: the redirect target; offline or no release -> null', async () => {
+    const f = fakeFetch(() => redirect('https://github.com/me/fork/releases/tag/v2.0.0'));
+    expect(await latestReleaseTag(f.fetch, 'me/fork')).toBe('v2.0.0');
+    expect(f.calls).toEqual([{ url: 'https://github.com/me/fork/releases/latest', redirect: 'manual' }]);
+    expect(await latestReleaseTag(fakeFetch(() => new Error('ENOTFOUND')).fetch)).toBeNull();
+    expect(await latestReleaseTag(fakeFetch(() => new Response('', { status: 404 })).fetch)).toBeNull();
   });
 });

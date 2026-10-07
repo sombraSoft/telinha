@@ -3,8 +3,11 @@
 // pick defaults (home vs VPS) and which steps apply.
 import { readFileSync } from 'node:fs';
 import { release } from 'node:os';
+import type { Hosting } from '../../config.ts';
 import type { NatProbe } from '../../nat/index.ts';
+import type { Values } from './steps.ts';
 
+export type { Hosting };
 export type HostKind = 'windows' | 'linux-root' | 'linux-user' | 'docker';
 
 export interface HostInfo {
@@ -74,17 +77,26 @@ export function routerLabel(nat: NatProbe): string | null {
   return `${g.kind === 'pcp' ? 'PCP' : 'NAT-PMP'} (${g.gatewayIp})`;
 }
 
+/** A PUBLIC_URL on sslip.io: the name is made from a VPS's own IP. */
+export const SSLIP_RE = /\.sslip\.io(:\d+)?\/?$/;
+
 /**
- * A good first guess for "where does Telinha run" (the user confirms it): a
- * router that answers means home; the public IP on the interface means a VPS.
- * With a private address and no router answering, 192.168.x is the home
- * routers' range, while clouds with 1:1 NAT (AWS 172.31.x, GCP 10.128.x,
- * Oracle and Azure 10.0.x) hand out 10.x and 172.16-31.x.
+ * A first guess for "where will Telinha run" (the user confirms it): home,
+ * unless the public IP sits on this machine's own interface, which only a
+ * server with an address of its own has. A router answering, a private
+ * address of any range (a cloud behind 1:1 NAT included), Docker or no probe
+ * at all all mean home: someone at home who presses Enter must never land on
+ * the server list, while a server behind 1:1 NAT just picks the second option.
  */
-export function guessTarget(h: HostInfo): 'home' | 'vps' {
-  if (h.nat?.gateway) return 'home';
+export function guessHosting(h: HostInfo): Hosting {
   const local = h.nat?.localIp;
-  if (!local) return 'home';
-  if (local === h.publicIp) return 'vps';
-  return /^192\.168\./.test(local) ? 'home' : 'vps';
+  return local && local === h.publicIp ? 'vps' : 'home';
+}
+
+/** Where Telinha runs as a re-run (or a scripted run) sees it: the file's answer, else its VPS-only keys, else the machine. */
+export function inferHosting(values: Values, host: HostInfo): Hosting {
+  if (values.HOSTING === 'home' || values.HOSTING === 'vps') return values.HOSTING;
+  // A pinned node IP or an sslip.io name only ever come from the VPS list.
+  if (values.LIVEKIT_NODE_IP || SSLIP_RE.test(values.PUBLIC_URL ?? '')) return 'vps';
+  return guessHosting(host);
 }

@@ -9,6 +9,7 @@ export interface DevUser { id: string; name: string }
 export type Ingress = 'direct' | 'tunnel' | 'external';
 export type Media = 'self' | 'cloud';
 export interface DuckDnsConfig { provider: 'duckdns'; /** Bare subdomain, without .duckdns.org. */ domain: string; token: string }
+export type Hosting = 'home' | 'vps';
 
 export interface Config {
   /** Fake login for local dev/E2E; null in production. */
@@ -43,6 +44,8 @@ export interface Config {
   /** Slash command name, configurable so two deployments can share a guild. */
   commandName: string;
   ingress: Ingress;
+  /** Where telinha runs, as answered in setup; the wizard and the doctor read it, run does not. */
+  hosting: Hosting | null;
   /** Bare hostname of PUBLIC_URL (Caddy site address; https_port picks the bind port). */
   publicHost: string;
   /** Non-fatal validation findings; run.ts logs them. */
@@ -52,6 +55,8 @@ export interface Config {
   /** direct: the port Caddy binds for TLS. */
   httpsPort: number;
   acmeEmail?: string;
+  /** direct: DNS-01 instead of the HTTP/TLS-ALPN challenges; null = none. The token reaches Caddy only through its env. */
+  acmeDns: { provider: 'duckdns'; token: string } | null;
   tunnelToken?: string;
   media: Media;
   livekitPort: number;
@@ -61,7 +66,7 @@ export interface Config {
   livekitNodeIp?: string;
   /** 0 = off; forced 0 when livekitNodeIp is set. */
   ipWatchSeconds: number;
-  /** Ask the router (UPnP IGD / NAT-PMP / PCP) to forward the media (and direct-mode HTTP) ports. */
+  /** Ask the router (UPnP IGD / NAT-PMP / PCP) to forward the media ports (and a direct-mode high HTTPS port). */
   upnp: boolean;
   ddns: DuckDnsConfig | null;
   /** Native binary only: install new releases by itself. Always false from source/Docker. */
@@ -79,7 +84,7 @@ export interface Config {
 export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'GUILD_ID', 'ROLE_ID', 'CHANNEL_IDS',
   'COMMAND_NAME', 'GROUP_NAME', 'COOKIE_SECRET', 'SESSION_DAYS', 'ROLE_CACHE_SECONDS',
-  'PUBLIC_URL', 'INGRESS', 'LISTEN', 'HTTP_PORT', 'HTTPS_PORT', 'ACME_EMAIL', 'TUNNEL_TOKEN',
+  'PUBLIC_URL', 'HOSTING', 'INGRESS', 'LISTEN', 'HTTP_PORT', 'HTTPS_PORT', 'ACME_EMAIL', 'ACME_DNS', 'TUNNEL_TOKEN',
   'MEDIA', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'LIVEKIT_PORT', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT',
   'LIVEKIT_NODE_IP', 'LIVEKIT_API_URL', 'LIVEKIT_PUBLIC_URL', 'IP_WATCH_SECONDS',
   'CLOSE_EMPTY_SECONDS', 'POLL_SECONDS',
@@ -97,6 +102,7 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 const DEV_URL_RE = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 const INGRESSES: readonly Ingress[] = ['direct', 'tunnel', 'external'];
 const MEDIAS: readonly Media[] = ['self', 'cloud'];
+const HOSTINGS: readonly Hosting[] = ['home', 'vps'];
 // Discord's chat-input name rule (lowercase is checked separately, it is locale-aware).
 export const COMMAND_RE = /^[-_\p{L}\p{N}]{1,32}$/u;
 // The duckdns.org subdomain alone.
@@ -167,6 +173,9 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   // Dev has no Caddy and no tunnel: the stack (or Vite) talks to LISTEN directly.
   const ingress = oneOf<Ingress>('INGRESS', dev ? 'external' : 'direct', INGRESSES);
   if (dev && ingress !== 'external') throw new Error('DEV_USER requires INGRESS=external');
+  const hostingRaw = opt('HOSTING');
+  if (hostingRaw && !HOSTINGS.includes(hostingRaw as Hosting)) throw new Error(`bad HOSTING ${hostingRaw} (want ${HOSTINGS.join(' | ')})`);
+  const hosting = (hostingRaw as Hosting | undefined) ?? null;
   const media = oneOf<Media>('MEDIA', 'self', MEDIAS);
   if (media === 'cloud') throw new Error('MEDIA=cloud is not supported yet');
 
@@ -176,8 +185,29 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   if ((ingress === 'direct' || ingress === 'tunnel') && url.protocol !== 'https:') {
     throw new Error(`INGRESS=${ingress} requires an https:// PUBLIC_URL`);
   }
+  // Dev never runs Caddy, so the key is not even parsed there.
+  let acmeDns: Config['acmeDns'] = null;
+  if (!dev && oneOf('ACME_DNS', 'none', ['none', 'duckdns'] as const) === 'duckdns') {
+    if (ingress !== 'direct') {
+      warnings.push('config: ACME_DNS only applies to INGRESS=direct; ignored');
+    } else {
+      const token = get('DUCKDNS_TOKEN');
+      // The DuckDNS API can only set TXT records under its own names.
+      if (!url.hostname.endsWith('.duckdns.org')) {
+        throw new Error(`ACME_DNS=duckdns needs a PUBLIC_URL host under duckdns.org (got ${url.hostname})`);
+      }
+      acmeDns = { provider: 'duckdns', token };
+    }
+  }
   if (ingress === 'direct') {
     const urlPort = Number(url.port || 443);
+    // Let's Encrypt's HTTP and TLS-ALPN challenges only ever dial public 80 and 443.
+    if (!acmeDns && urlPort !== 443) {
+      if (httpPort === 0) {
+        throw new Error(`PUBLIC_URL uses port ${urlPort} and HTTP_PORT=0: Let's Encrypt validates only over public port 80 or 443, so this needs ACME_DNS=duckdns (a DuckDNS name) or a PUBLIC_URL on port 443`);
+      }
+      warnings.push(`config: PUBLIC_URL uses port ${urlPort}; without ACME_DNS the certificate needs public port 80 reaching HTTP_PORT ${httpPort}`);
+    }
     // Not an error: external 443 -> internal 8443 is common where 443 is taken.
     if (urlPort !== httpsPort) {
       warnings.push(`config: PUBLIC_URL port ${urlPort} differs from HTTPS_PORT ${httpsPort}; assuming the router translates ${urlPort} -> ${httpsPort}`);
@@ -276,11 +306,13 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     secureCookies: !publicUrl.startsWith('http://'),
     commandName,
     ingress,
+    hosting,
     publicHost: url.hostname,
     warnings,
     httpPort,
     httpsPort,
     acmeEmail: ingress === 'direct' ? opt('ACME_EMAIL') : undefined,
+    acmeDns,
     tunnelToken,
     media,
     livekitPort,
@@ -302,10 +334,11 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
 
 /**
  * What UPNP=auto asks the router to forward: the media ports, plus in direct
- * mode Caddy's HTTPS (public PUBLIC_URL port -> HTTPS_PORT) and HTTP (80 ->
- * HTTP_PORT) listeners.
+ * mode Caddy's HTTPS listener (PUBLIC_URL's port -> HTTPS_PORT) when that port
+ * is a high one. Never 80 or 443: home connections block them anyway, and
+ * whoever opened them by hand forwards them by hand.
  */
-export function upnpMappings(c: Pick<Config, 'media' | 'ingress' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort' | 'httpPort' | 'httpsPort'>): Mapping[] {
+export function upnpMappings(c: Pick<Config, 'media' | 'ingress' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort' | 'httpsPort'>): Mapping[] {
   const out: Mapping[] = [];
   if (c.media === 'self') {
     out.push(
@@ -314,8 +347,10 @@ export function upnpMappings(c: Pick<Config, 'media' | 'ingress' | 'publicUrl' |
     );
   }
   if (c.ingress === 'direct') {
-    out.push({ protocol: 'tcp', externalPort: Number(new URL(c.publicUrl).port || 443), internalPort: c.httpsPort, description: 'telinha https' });
-    if (c.httpPort !== 0) out.push({ protocol: 'tcp', externalPort: 80, internalPort: c.httpPort, description: 'telinha http' });
+    const external = Number(new URL(c.publicUrl).port || 443);
+    if (external !== 443 && external !== 80) {
+      out.push({ protocol: 'tcp', externalPort: external, internalPort: c.httpsPort, description: 'telinha https' });
+    }
   }
   return out;
 }

@@ -1,8 +1,10 @@
 // Native binaries: `bun build --compile` per target with the built page
-// embedded, then the release archives and SHA256SUMS.
+// embedded, then the release archives and SHA256SUMS. Also packs our Caddy
+// build (the Dockerfile's caddy-export output) as a release archive.
 //
 //   bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out dist-bin] [--smoke]
 //   bun scripts/build-binary.ts sums [--out dist-bin]
+//   bun scripts/build-binary.ts pack-caddy --target <one target> --from DIR [--out dist-bin]
 //
 // <t>: linux-x64 | linux-arm64 | windows-x64 | windows-arm64 | linux | windows | host.
 // Default: this OS's targets. Windows targets need a Windows host: the version
@@ -11,6 +13,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { writeTarGz, writeZip, type Entry } from '../server/src/archive.ts';
+import { caddyAssetName } from '../server/src/releasetag.ts';
 import { TARGETS, hostTarget, type Target } from '../server/src/version.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -28,20 +31,25 @@ const isWindows = (t: Target) => t.startsWith('windows-');
 const exeName = (t: Target) => (isWindows(t) ? 'telinha.exe' : 'telinha');
 // Linux gets tar.gz: minimal Debian/Alpine have tar but no unzip.
 export const assetName = (t: Target) => `telinha-${t}.${isWindows(t) ? 'zip' : 'tar.gz'}`;
-// The binary archives; the sums also cover the Docker bundle and the image
-// digest when they sit next to them (the release job puts them there): the
-// Docker install verifies the bundle the way the native one verifies a binary.
+/** Our Caddy for a target, named by releasetag.ts so the fetcher and this packer agree. */
+export const caddyAsset = (t: Target) => caddyAssetName(isWindows(t) ? 'windows' : 'linux', t.endsWith('-arm64') ? 'arm64' : 'amd64');
+// The binary archives; the sums also cover the caddy archives, the Docker
+// bundle and the image digest when they sit next to them (the release job puts
+// them there): every download is verified the way the native one verifies a binary.
 const ASSETS = new Set(TARGETS.map(assetName));
+const CADDY_ASSETS = new Set(TARGETS.map(caddyAsset));
 const EXTRA_SUMMED = ['telinha-deploy.tar.gz', 'telinha-image.digest'];
 
 const step = (s: string) => console.log(`\n==> ${s}`);
 
 interface Options {
-  sums: boolean;
+  mode: 'compile' | 'sums' | 'pack-caddy';
   targets: Target[];
   version: string;
   out: string;
   smoke: boolean;
+  /** pack-caddy: the directory holding caddy[.exe]. */
+  from?: string;
 }
 
 function expand(t: string, platform: string): Target[] {
@@ -54,8 +62,10 @@ function expand(t: string, platform: string): Target[] {
 
 export function parseArgs(argv: string[], platform: string = process.platform): Options {
   const usage = 'usage: bun scripts/build-binary.ts [--target <t>...] [--version X.Y.Z] [--out DIR] [--smoke]\n'
-    + '       bun scripts/build-binary.ts sums [--out DIR]';
-  let sums = false;
+    + '       bun scripts/build-binary.ts sums [--out DIR]\n'
+    + '       bun scripts/build-binary.ts pack-caddy --target <t> --from DIR [--out DIR]';
+  let mode: Options['mode'] = 'compile';
+  let from: string | undefined;
   let version: string | undefined;
   let out = 'dist-bin';
   let smoke = false;
@@ -67,12 +77,19 @@ export function parseArgs(argv: string[], platform: string = process.platform): 
       if (!v) throw new Error(`${a} needs a value\n${usage}`);
       return v;
     };
-    if (a === 'sums' && i === 0) sums = true;
-    else if (a === '--target' && !sums) wanted.push(...expand(value(), platform));
-    else if (a === '--version' && !sums) version = value();
+    if ((a === 'sums' || a === 'pack-caddy') && i === 0) mode = a;
+    else if (a === '--target' && mode !== 'sums') wanted.push(...expand(value(), platform));
+    else if (a === '--version' && mode === 'compile') version = value();
     else if (a === '--out') out = value();
-    else if (a === '--smoke' && !sums) smoke = true;
+    else if (a === '--smoke' && mode === 'compile') smoke = true;
+    else if (a === '--from' && mode === 'pack-caddy') from = value();
     else throw new Error(`unknown argument ${a}\n${usage}`);
+  }
+  if (mode === 'pack-caddy') {
+    // Packing only copies bytes, so any host packs any target.
+    const targets = [...new Set(wanted)];
+    if (targets.length !== 1 || !from) throw new Error(`pack-caddy needs one --target and --from\n${usage}`);
+    return { mode, targets, version: '', out: resolve(ROOT, out), smoke: false, from: resolve(from) };
   }
   // Other hosts (macOS included) can still cross-compile the Linux targets.
   const targets = TARGETS.filter((t) => (wanted.length ? wanted.includes(t) : isWindows(t) === (platform === 'win32')));
@@ -81,7 +98,7 @@ export function parseArgs(argv: string[], platform: string = process.platform): 
   }
   version ??= (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string }).version;
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`--version must look like 1.2.3 or 1.2.3-rc.1, got ${version}`);
-  return { sums, targets, version, out: resolve(ROOT, out), smoke };
+  return { mode, targets, version, out: resolve(ROOT, out), smoke };
 }
 
 function shortCommit(): string {
@@ -162,13 +179,31 @@ async function smoke(o: Options): Promise<void> {
   if (line !== want && !line.startsWith(`${want} `)) throw new Error(`--version printed "${line}", want "${want} (...)"`);
 }
 
+/** The buildx export's caddy[.exe] as caddy-<target>.tar.gz|.zip, the one file inside named like the binary. */
+async function packCaddy(t: Target, from: string, out: string): Promise<string> {
+  const name = isWindows(t) ? 'caddy.exe' : 'caddy';
+  const exe = join(from, name);
+  if (!existsSync(exe)) throw new Error(`no ${name} in ${from}`);
+  await mkdir(out, { recursive: true });
+  const file = join(out, caddyAsset(t));
+  const entries: Entry[] = [{ path: name, mode: 0o755, data: await Bun.file(exe).bytes() }];
+  await Bun.write(file, isWindows(t) ? writeZip(entries) : writeTarGz(entries));
+  console.log(file);
+  return file;
+}
+
 async function main(argv: string[]): Promise<void> {
   const o = parseArgs(argv);
-  if (o.sums) {
+  if (o.mode === 'pack-caddy') {
+    await packCaddy(o.targets[0]!, o.from!, o.out);
+    return;
+  }
+  if (o.mode === 'sums') {
     const present = existsSync(o.out) ? readdirSync(o.out) : [];
     const names = present.filter((n) => ASSETS.has(n));
     if (!names.length) throw new Error(`no ${[...ASSETS].join(', ')} in ${o.out}`);
-    await writeSums(o.out, [...names, ...present.filter((n) => EXTRA_SUMMED.includes(n))]);
+    // The caddy archives are optional: a local run may have built none.
+    await writeSums(o.out, [...names, ...present.filter((n) => CADDY_ASSETS.has(n) || EXTRA_SUMMED.includes(n))]);
     return;
   }
   // Whatever is in web/dist gets embedded; without the page the binary is useless.

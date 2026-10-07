@@ -24,7 +24,7 @@ filhos:
 | Processo filho | Quando | O que faz |
 | --- | --- | --- |
 | `livekit-server` | sempre | Recebe a tela compartilhada e envia para cada pessoa assistindo |
-| `caddy` | `INGRESS=direct` | Obtém um certificado do Let's Encrypt para o seu endereço e cuida do HTTPS |
+| `caddy` | `INGRESS=direct` | Obtém um certificado do Let's Encrypt para o seu endereço (pela API do DuckDNS em casa, pelas portas 80/443 numa VPS) e cuida do HTTPS |
 | `cloudflared` | `INGRESS=tunnel` | Leva o tráfego web da Cloudflare até a Telinha, sem abrir portas web de entrada |
 
 Com `INGRESS=external` nem o `caddy` nem o `cloudflared` rodam: o seu próprio
@@ -38,6 +38,17 @@ valor fixado na versão e baixa de novo quando uma versão fixa uma mais nova.
 A imagem Docker já traz os três.
 
 <PinnedVersions locale="pt-BR" />
+
+### O nosso próprio build do Caddy
+
+O `caddy` que a Telinha roda não é o download original: é o Caddy original
+mais dois módulos, o provedor de DNS do DuckDNS (`caddy-dns/duckdns`, que pega
+um certificado em casa sem as portas 80 e 443) e o layer4 (`caddy-l4`),
+compilado com o xcaddy a partir das versões fixadas no `versions.json`. Cada
+versão traz esse build para cada plataforma junto com os binários da Telinha,
+e a imagem Docker compila ele dentro dela. O programa nativo baixa o Caddy da
+própria versão e confere com o `SHA256SUMS` dessa versão, então uma
+atualização da Telinha traz junto o Caddy que combina com ela.
 
 ## Login na entrada
 
@@ -80,7 +91,8 @@ encaminhadas no roteador (ou liberadas na VPS).
 ### Direto
 
 `INGRESS=direct`: o Caddy que vem junto obtém o certificado e repassa tudo
-para a Telinha.
+para a Telinha. Numa VPS ele escuta na 443 e pega o certificado pela 80 e pela
+443:
 
 ```
 browser --> caddy :443 (TLS; :80 redirects)           child of telinha
@@ -95,7 +107,18 @@ browser --> caddy :443 (TLS; :80 redirects)           child of telinha
                       /r/<code>     --> room page
                       /             --> redirect to /r/
 
-media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP)
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (opened in the provider's firewall)
+```
+
+Em casa com DuckDNS ele escuta numa porta alta que o endereço leva, e o
+certificado vem pela API do DuckDNS (o desafio de DNS), então nada escuta na
+80 ou na 443:
+
+```
+browser --> caddy :8443 (TLS via DNS-01; no :80)      child of telinha
+              --> telinha 127.0.0.1:8081 --> (same routes as above)
+
+media: browser <--> LiveKit   TCP 7881 / UDP 7882 (forwarded on the router or by UPnP, like 8443)
 ```
 
 ### Túnel
@@ -135,9 +158,10 @@ apontando para o IP atual. Veja
 
 ## UPnP
 
-Com `UPNP=auto` (o padrão), a Telinha pede ao roteador que encaminhe as
-portas para esta máquina enquanto ela roda, por UPnP, NAT-PMP ou PCP, o que o
-roteador responder. Os mapeamentos são renovados enquanto ela roda e
+Com `UPNP=auto` (o padrão em casa), a Telinha pede ao roteador que encaminhe
+as portas para esta máquina enquanto ela roda, por UPnP, NAT-PMP ou PCP, o que
+o roteador responder: as portas de mídia, e a 8443 com DuckDNS. Ela nunca pede
+a 80 nem a 443. Os mapeamentos são renovados enquanto ela roda e
 removidos quando ela para. Muitos roteadores vêm com o UPnP desligado; aí
 você liga no roteador ou faz o encaminhamento de portas à mão e define
 `UPNP=off`. Veja [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/).
@@ -183,16 +207,18 @@ sistema 64 bits. A imagem Docker é `linux/amd64` e `linux/arm64`. O macOS não
   roteador onde você consiga fazer encaminhamento de portas e uma linha sem
   CGNAT; uma VPS já tem um. Veja
   [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
-- **Um endereço HTTPS**: um domínio seu ou uma opção sem domínio (DuckDNS,
-  sslip.io numa VPS ou um Cloudflare Tunnel com um domínio na Cloudflare).
-- **Estas portas**, da internet até a máquina:
+- **Um endereço HTTPS**: em casa, um domínio na Cloudflare (Cloudflare
+  Tunnel) ou um nome grátis do DuckDNS na porta 8443; numa VPS, um domínio
+  seu, DuckDNS ou sslip.io.
+- **Estas portas**, da internet até a máquina. Em casa são as portas de
+  mídia, mais a 8443 com DuckDNS, e nunca a 80 nem a 443:
 
 | Porta (padrão) | Protocolo | Quando |
 | --- | --- | --- |
 | `MEDIA_TCP_PORT` (7881) | TCP | sempre |
 | `MEDIA_UDP_PORT` (7882) | UDP | sempre |
-| `HTTPS_PORT` (443) | TCP | `INGRESS=direct` |
-| `HTTP_PORT` (80) | TCP | `INGRESS=direct`, a não ser com `HTTP_PORT=0` |
+| `HTTPS_PORT` | TCP | `INGRESS=direct`: 443 numa VPS, 8443 em casa (a porta do `PUBLIC_URL`) |
+| `HTTP_PORT` (80) | TCP | `INGRESS=direct` só numa VPS (`0` em casa) |
 
 `LISTEN` (8081) e `LIVEKIT_PORT` (7880) só escutam em loopback e nunca são
 encaminhadas. Mais em [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/#quais-portas).
