@@ -1,7 +1,8 @@
 // Test adapters for the room session (web/src/lib/room.svelte.ts): a LiveKit
 // room that emits events when told to, fixed token answers, a clock moved by
-// hand, prefs in memory, and a screen picker (navigator.mediaDevices) that
-// hands out fake tracks.
+// hand, prefs in memory, a screen picker (navigator.mediaDevices) that hands
+// out fake tracks, and Chrome's breakout box for the crop to multiples of 8.
+// restoreGlobals puts back the browser globals these replace.
 import {
   Track,
   type LocalTrackPublication,
@@ -119,7 +120,7 @@ export class FakeMediaTrack {
     private size: { width: number; height: number } = { width: 0, height: 0 },
     private log: Log = [],
   ) {}
-  getSettings() {
+  getSettings(): { width?: number; height?: number } {
     return this.kind === 'video' ? { ...this.size } : {};
   }
   async applyConstraints(c: MediaTrackConstraints) {
@@ -290,14 +291,34 @@ export class FakeRoom implements LiveRoom {
   async startAudio() {}
 }
 
+/** Puts back the browser globals the fakes below replaced. */
+const restores: (() => void)[] = [];
+
+function replaceGlobal(target: object, key: string, value: unknown) {
+  const before = Object.getOwnPropertyDescriptor(target, key);
+  Object.defineProperty(target, key, { value, configurable: true, writable: true });
+  restores.push(() => {
+    if (before) Object.defineProperty(target, key, before);
+    else delete (target as Record<string, unknown>)[key];
+  });
+}
+
+/** Undoes every fakeScreen and fakeBreakoutBox, latest first (for afterEach). */
+export function restoreGlobals() {
+  while (restores.length) restores.pop()!();
+}
+
+type DisplayOptions = DisplayMediaStreamOptions & Record<string, unknown>;
+
 /**
  * The browser's screen picker: each pick gives a fresh capture of this size,
- * with sound when `audio` is on. Returns the captures handed out.
+ * with sound when `audio` is on and the page asked for it. Returns the
+ * captures handed out, each with the options the picker was opened with.
  */
 export function fakeScreen(size = { width: 1920, height: 1080 }, audio = true, log: Log = []) {
-  const picks: { video: FakeMediaTrack; audio: FakeMediaTrack | null }[] = [];
-  const getDisplayMedia = async (opts: { audio?: unknown }) => {
-    const pick = { video: new FakeMediaTrack('video', size, log), audio: audio && opts.audio ? new FakeMediaTrack('audio') : null };
+  const picks: { options: DisplayOptions; video: FakeMediaTrack; audio: FakeMediaTrack | null }[] = [];
+  const getDisplayMedia = async (options: DisplayOptions) => {
+    const pick = { options, video: new FakeMediaTrack('video', size, log), audio: audio && options.audio ? new FakeMediaTrack('audio') : null };
     picks.push(pick);
     const tracks = pick.audio ? [pick.video, pick.audio] : [pick.video];
     return {
@@ -306,6 +327,59 @@ export function fakeScreen(size = { width: 1920, height: 1080 }, audio = true, l
       getTracks: () => tracks,
     };
   };
-  Object.defineProperty(globalThis.navigator, 'mediaDevices', { value: { getDisplayMedia }, configurable: true });
+  replaceGlobal(globalThis.navigator, 'mediaDevices', { getDisplayMedia });
   return picks;
+}
+
+type Rect = { x: number; y: number; width: number; height: number };
+
+/** The VideoFrame parts the crop touches: its visible rect and display size. */
+export class FakeVideoFrame {
+  visibleRect: Rect;
+  displayWidth: number;
+  displayHeight: number;
+  closed = false;
+  constructor(_src: FakeVideoFrame | null, init: { visibleRect: Rect; displayWidth: number; displayHeight: number }) {
+    this.visibleRect = init.visibleRect;
+    this.displayWidth = init.displayWidth;
+    this.displayHeight = init.displayHeight;
+  }
+  close() {
+    this.closed = true;
+  }
+}
+
+/**
+ * Chrome's breakout box (MediaStreamTrackProcessor, MediaStreamTrackGenerator
+ * and VideoFrame): the processor reads one frame of its capture's size, and
+ * the generator reports the size of the last frame written to it, none until
+ * one went through. Returns the frames the generators got.
+ */
+export function fakeBreakoutBox() {
+  const written: FakeVideoFrame[] = [];
+  class Processor {
+    readable: ReadableStream<FakeVideoFrame>;
+    constructor({ track }: { track: FakeMediaTrack }) {
+      const { width = 0, height = 0 } = track.getSettings();
+      const frame = new FakeVideoFrame(null, { visibleRect: { x: 0, y: 0, width, height }, displayWidth: width, displayHeight: height });
+      this.readable = new ReadableStream({ start: (ctl) => ctl.enqueue(frame) });
+    }
+  }
+  class Generator extends FakeMediaTrack {
+    writable: WritableStream<FakeVideoFrame>;
+    constructor(_init: { kind: 'video' }) {
+      const size = { width: 0, height: 0 };
+      super('video', size);
+      this.writable = new WritableStream({
+        write(frame) {
+          written.push(frame);
+          Object.assign(size, { width: frame.displayWidth, height: frame.displayHeight });
+        },
+      });
+    }
+  }
+  replaceGlobal(globalThis, 'MediaStreamTrackProcessor', Processor);
+  replaceGlobal(globalThis, 'MediaStreamTrackGenerator', Generator);
+  replaceGlobal(globalThis, 'VideoFrame', FakeVideoFrame);
+  return written;
 }

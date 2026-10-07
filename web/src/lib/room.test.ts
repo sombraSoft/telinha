@@ -1,6 +1,6 @@
 // The room session through its interface: a fake LiveKit room, fixed token
 // answers, a clock moved by hand, prefs in memory and a fake screen picker.
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { DisconnectReason, RoomEvent, Track, type VideoPreset } from 'livekit-client';
 import {
   FakeParticipant,
@@ -8,7 +8,9 @@ import {
   FixedTokens,
   ManualClock,
   MemoryPrefs,
+  fakeBreakoutBox,
   fakeScreen,
+  restoreGlobals,
   settle,
   tokenFor,
   videoStats,
@@ -32,13 +34,28 @@ async function joined(tokens = new FixedTokens(ROOM, { status: 200, token: token
   return { s, room, clock, prefs, tokens, lp: room.localParticipant };
 }
 
-/** Joined and streaming a 1080p screen with sound. */
-async function live(settings = SMOOTH) {
+afterEach(restoreGlobals);
+
+/** Joined and streaming a screen (1080p unless told) with sound. */
+async function live(settings = SMOOTH, size = { width: 1920, height: 1080 }) {
   const j = await joined();
-  const picks = fakeScreen({ width: 1920, height: 1080 }, true, j.room.log);
+  const picks = fakeScreen(size, true, j.room.log);
   await j.s.useShareSettings(settings);
   j.clock.paint();
   return { ...j, picks };
+}
+
+/** The published screen's simulcast layers: width, height, kbps, fps. */
+function layersOf(lp: FakeRoom['localParticipant']) {
+  const layers = lp.screen!.publishOptions.screenShareSimulcastLayers as VideoPreset[];
+  return layers.map((p) => [p.width, p.height, p.encoding.maxBitrate, p.encoding.maxFramerate]);
+}
+
+/** Each layer's scale factor the way livekit-client derives it from the sent track's size. */
+function factorsOf(lp: FakeRoom['localParticipant']) {
+  const { width = 0, height = 0 } = lp.screen!.mediaStreamTrack.getSettings();
+  const layers = lp.screen!.publishOptions.screenShareSimulcastLayers as VideoPreset[];
+  return layers.map((p) => Math.min(width, height) / Math.min(p.width, p.height));
 }
 
 /** A remote participant joins. */
@@ -153,12 +170,92 @@ describe('going live', () => {
     expect(s.share?.audio).not.toBeNull();
     const o = lp.screen!.publishOptions;
     expect(o.screenShareEncoding).toEqual({ maxBitrate: 12_000_000, maxFramerate: 60 });
-    expect((o.screenShareSimulcastLayers as VideoPreset[]).map((p) => [p.width, p.height, p.encoding.maxBitrate, p.encoding.maxFramerate])).toEqual([
+    expect(layersOf(lp)).toEqual([
       [960, 540, 3_000_000, 30],
       [480, 270, 700_000, 15],
     ]);
     expect([o.degradationPreference, picks[0]!.video.contentHint]).toEqual(['balanced', 'motion']);
     expect(s.busy).toBe(false);
+  });
+
+  test('any window size gets exact integer layer factors', async () => {
+    // 992x1080 broke H.265 in 0.1.1: a 1280x720 preset gave factor 1.378, and the HW encoder sent nothing
+    for (const [width, height] of [[992, 1080], [1856, 1010], [993, 1079], [2560, 1440], [800, 600]] as const) {
+      const { lp } = await live(SMOOTH, { width, height });
+      expect(factorsOf(lp)).toEqual(height > 720 ? [2, 4] : [2]);
+    }
+  });
+
+  test('720p and below: one half-size layer', async () => {
+    const { lp } = await live(CUSTOM_720, { width: 1280, height: 720 });
+    expect(layersOf(lp)).toEqual([[640, 360, 700_000, 15]]);
+  });
+
+  test('above 1080p: a richer half-size layer', async () => {
+    const { lp } = await live({ res: 1440, fps: 60, preset: 'custom', audio: true }, { width: 2560, height: 1440 });
+    expect(layersOf(lp)).toEqual([
+      [1280, 720, 3_500_000, 30],
+      [640, 360, 700_000, 15],
+    ]);
+  });
+
+  test('layer fps never exceeds the capture fps', async () => {
+    const { lp } = await live({ res: 1080, fps: 15, preset: 'custom', audio: true });
+    expect(layersOf(lp)).toEqual([
+      [960, 540, 3_000_000, 15],
+      [480, 270, 700_000, 15],
+    ]);
+  });
+
+  test('with the breakout box, frames are cropped to multiples of 8 and the layers come out even', async () => {
+    const j = await joined();
+    const written = fakeBreakoutBox();
+    const picks = fakeScreen({ width: 1311, height: 1079 }, true, j.room.log);
+    let done = false;
+    const going = j.s.useShareSettings(SMOOTH).then(() => (done = true));
+    // The size is only known once a frame went through the crop.
+    for (let i = 0; i < 10 && !done; i++) await j.clock.advance(50);
+    await going;
+    const sent = j.lp.screen!.mediaStreamTrack;
+    expect(sent).not.toBe(picks[0]!.video);
+    expect(written.map((f) => [f.visibleRect, f.displayWidth, f.displayHeight])).toEqual([
+      [{ x: 0, y: 0, width: 1304, height: 1072 }, 1304, 1072],
+    ]);
+    expect(sent.getSettings()).toEqual({ width: 1304, height: 1072 });
+    expect(layersOf(j.lp).map(([w, h]) => [w, h])).toEqual([
+      [652, 536],
+      [326, 268],
+    ]);
+    expect(factorsOf(j.lp)).toEqual([2, 4]);
+    // The hint goes on the sent copy; live changes still constrain the raw capture.
+    expect(sent.contentHint).toBe('motion');
+    j.room.log.length = 0;
+    await j.s.useShareSettings(CUSTOM_720);
+    expect(j.room.log[0]).toBe('constraints 720p30');
+    expect(picks[0]!.video.stopped).toBe(false);
+  });
+
+  test('an already aligned capture goes through uncropped', async () => {
+    const j = await joined();
+    const written = fakeBreakoutBox();
+    fakeScreen({ width: 1920, height: 1080 }, true, j.room.log);
+    let done = false;
+    const going = j.s.useShareSettings(SMOOTH).then(() => (done = true));
+    for (let i = 0; i < 10 && !done; i++) await j.clock.advance(50);
+    await going;
+    expect(written.map((f) => [f.displayWidth, f.displayHeight])).toEqual([[1920, 1080]]);
+    expect(factorsOf(j.lp)).toEqual([2, 4]);
+  });
+
+  test('sound off: only the screen is published, and the picker is not asked for sound', async () => {
+    const { s, lp, picks } = await live({ ...SMOOTH, audio: false });
+    expect(lp.published()).toEqual([Track.Source.ScreenShare]);
+    expect(s.share?.audio).toBeNull();
+    expect(picks[0]!.audio).toBeNull();
+    expect(picks[0]!.options.audio).toBe(false);
+    expect(picks[0]!.options).not.toHaveProperty('systemAudio');
+    expect(picks[0]!.options).not.toHaveProperty('windowAudio');
+    expect(s.toast).toBeNull();
   });
 
   test('a failed sound publish leaves nothing published and the capture stopped', async () => {
