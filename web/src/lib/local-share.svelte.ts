@@ -9,7 +9,7 @@ import {
   type LocalParticipant,
   type LocalVideoTrack,
 } from 'livekit-client';
-import type { Notice } from './room.svelte';
+import type { Clock, Notice } from './room.svelte';
 import type { Fps, Preset, Res, ShareSettings } from './share';
 
 // Text stays sharp for readability; everything else keeps its frame rate.
@@ -80,11 +80,11 @@ function alignedTrack(src: MediaStreamTrack): MediaStreamTrack | null {
 }
 
 /** The generator only reports its size once a frame went through. */
-async function settledSize(track: MediaStreamTrack, timeoutMs = 3000): Promise<{ width: number; height: number }> {
+async function settledSize(track: MediaStreamTrack, clock: Clock, timeoutMs = 3000): Promise<{ width: number; height: number }> {
   for (let waited = 0; ; waited += 50) {
     const { width = 0, height = 0 } = track.getSettings();
     if ((width && height) || waited >= timeoutMs) return { width, height };
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise<void>((r) => clock.after(50, r));
   }
 }
 
@@ -157,6 +157,7 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function capture(
   lp: Publisher,
+  clock: Clock,
   { res, fps, preset, audio: withAudio }: ShareSettings,
   onEnded: () => void,
 ): Promise<Outcome> {
@@ -178,7 +179,7 @@ async function capture(
   const aligned = alignedTrack(v);
   const sent = aligned ?? v;
   sent.contentHint = contentHintOf(preset);
-  const { width, height } = await settledSize(sent);
+  const { width, height } = await settledSize(sent, clock);
   // No size (shouldn't happen for screen capture): let livekit pick layers.
   const layers = width && height ? simulcastLayers(width, height, fps) : undefined;
   let video: LocalVideoTrack | undefined;
@@ -257,9 +258,11 @@ export class LocalShare {
 
   /** The last live change; the next one waits for it. */
   #applying: Promise<void> = Promise.resolve();
+  #clock: Clock;
   #notify: (notice: Notice, ms?: number) => void;
 
-  constructor(notify: (notice: Notice, ms?: number) => void) {
+  constructor(clock: Clock, notify: (notice: Notice, ms?: number) => void) {
+    this.#clock = clock;
     this.#notify = notify;
   }
 
@@ -268,7 +271,7 @@ export class LocalShare {
     if (this.busy || this.share) return;
     this.busy = true;
     try {
-      const out = await capture(lp, settings, onEnded);
+      const out = await capture(lp, this.#clock, settings, onEnded);
       if (out.kind === 'cancelled') return;
       if (out.kind === 'error') {
         const key = out.stage === 'capture' ? 'share.captureFailed' : 'share.publishFailed';

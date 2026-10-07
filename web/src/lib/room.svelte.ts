@@ -236,7 +236,7 @@ export class RoomSession {
 
   constructor(deps: RoomDeps) {
     this.#deps = deps;
-    this.#local = new LocalShare((notice, ms) => this.notify(notice, ms));
+    this.#local = new LocalShare(deps.clock, (notice, ms) => this.notify(notice, ms));
   }
 
   /** The live share; null while not sharing. */
