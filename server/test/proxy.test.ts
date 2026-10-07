@@ -15,7 +15,8 @@ afterEach(() => {
 
 /** Echoes WS frames as they came; "close:<code>:<reason>" makes it close; /rtc/validate answers with what it saw. */
 function fakeLivekit(o: { upgradeDelayMs?: number } = {}) {
-  const http: Array<{ method: string; path: string; search: string; headers: Record<string, string>; body: string }> = [];
+  const http: Array<{ method: string; path: string; search: string; headers: Record<string, string>; body: string }> =
+    [];
   const upgrades: Array<{ search: string; cookie: string | null }> = [];
   const got: Frame[] = [];
   const closed: Array<[number, string]> = [];
@@ -30,8 +31,15 @@ function fakeLivekit(o: { upgradeDelayMs?: number } = {}) {
         return srv.upgrade(req, { data: {} }) ? undefined : new Response('no upgrade', { status: 400 });
       }
       const body = await req.text();
-      http.push({ method: req.method, path: url.pathname, search: url.search, headers: Object.fromEntries(req.headers), body });
-      if (url.pathname === '/rtc/validate') return Response.json({ path: url.pathname, search: url.search }, { headers: { 'x-from': 'livekit' } });
+      http.push({
+        method: req.method,
+        path: url.pathname,
+        search: url.search,
+        headers: Object.fromEntries(req.headers),
+        body,
+      });
+      if (url.pathname === '/rtc/validate')
+        return Response.json({ path: url.pathname, search: url.search }, { headers: { 'x-from': 'livekit' } });
       if (req.method === 'POST') return new Response(`got ${body}`, { status: 201 });
       return new Response('invalid token', { status: 401 });
     },
@@ -68,7 +76,11 @@ function front(apiUrl: string, configUrl = apiUrl) {
   const logs: unknown[][] = [];
   const proxy = createLivekitProxy({ apiUrl, log: (...a) => logs.push(a) });
   let server: Server<ProxyData> | undefined;
-  const s = setup({ env: { ...PROD_ENV, LIVEKIT_API_URL: configUrl }, proxy, upgrade: (req, data) => server!.upgrade(req, { data }) });
+  const s = setup({
+    env: { ...PROD_ENV, LIVEKIT_API_URL: configUrl },
+    proxy,
+    upgrade: (req, data) => server!.upgrade(req, { data }),
+  });
   server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (req) => s.handler(req), websocket: proxy.websocket });
   servers.push(server as Server<unknown>);
   const proxyLogs = () => logs.filter((l) => String(l[0]).startsWith('[proxy]'));
@@ -107,7 +119,8 @@ test('closeCode: only codes a close frame may carry', () => {
 
 test('allows: /rtc and below only', () => {
   const { allows } = createLivekitProxy({ apiUrl: 'http://127.0.0.1:1', log: () => {} });
-  for (const ok of ['/rtc', '/rtc/', '/rtc/validate', '/rtc/v1', '/rtc/v1/validate']) expect([ok, allows(ok)]).toEqual([ok, true]);
+  for (const ok of ['/rtc', '/rtc/', '/rtc/validate', '/rtc/v1', '/rtc/v1/validate'])
+    expect([ok, allows(ok)]).toEqual([ok, true]);
   for (const no of ['/', '', '/rtcx', '/RTC', '/twirp/livekit.RoomService/ListRooms', '/rtc/..%2ftwirp', '/rtc%2f..']) {
     expect([no, allows(no)]).toEqual([no, false]);
   }
@@ -126,12 +139,20 @@ describe('HTTP', () => {
   test('path, query, status and body pass through; cookie, host and hop-by-hop headers do not', async () => {
     const lk = fakeLivekit();
     const f = front(lk.url);
-    const r = await f.s.call(new Request('https://telinha.example.com/livekit/rtc/validate?access_token=AT&sdk=js&protocol=15', {
-      headers: {
-        cookie: f.cookie, 'x-keep': 'kept', 'user-agent': 'test-ua',
-        connection: 'x-hop', 'x-hop': 'dropped', 'proxy-authorization': 'Basic eA==', te: 'trailers', 'keep-alive': 'timeout=5',
-      },
-    }));
+    const r = await f.s.call(
+      new Request('https://telinha.example.com/livekit/rtc/validate?access_token=AT&sdk=js&protocol=15', {
+        headers: {
+          cookie: f.cookie,
+          'x-keep': 'kept',
+          'user-agent': 'test-ua',
+          connection: 'x-hop',
+          'x-hop': 'dropped',
+          'proxy-authorization': 'Basic eA==',
+          te: 'trailers',
+          'keep-alive': 'timeout=5',
+        },
+      }),
+    );
     expect(r.status).toBe(200);
     expect(r.headers.get('x-from')).toBe('livekit');
     expect(await r.json()).toEqual({ path: '/rtc/validate', search: '?access_token=AT&sdk=js&protocol=15' });
@@ -145,11 +166,19 @@ describe('HTTP', () => {
     expect(h['keep-alive']).toBeUndefined();
     expect(h.host).toBe(`127.0.0.1:${lk.server.port}`);
 
-    const denied = await f.s.call(new Request('https://telinha.example.com/livekit/rtc/v1', { headers: { cookie: f.cookie } }));
+    const denied = await f.s.call(
+      new Request('https://telinha.example.com/livekit/rtc/v1', { headers: { cookie: f.cookie } }),
+    );
     expect(denied.status).toBe(401);
     expect(await denied.text()).toBe('invalid token');
 
-    const post = await f.s.call(new Request('https://telinha.example.com/livekit/rtc/x', { method: 'POST', body: 'payload', headers: { cookie: f.cookie } }));
+    const post = await f.s.call(
+      new Request('https://telinha.example.com/livekit/rtc/x', {
+        method: 'POST',
+        body: 'payload',
+        headers: { cookie: f.cookie },
+      }),
+    );
     expect(post.status).toBe(201);
     expect(await post.text()).toBe('got payload');
     expect(lk.http.at(-1)).toMatchObject({ method: 'POST', path: '/rtc/x', body: 'payload' });
@@ -159,7 +188,9 @@ describe('HTTP', () => {
     const lk = fakeLivekit();
     const f = front(lk.url);
     for (const p of ['/livekit/twirp/livekit.RoomService/ListRooms', '/livekit', '/livekit/rtcx']) {
-      const r = await f.s.call(new Request(`https://telinha.example.com${p}`, { method: 'POST', headers: { cookie: f.cookie } }));
+      const r = await f.s.call(
+        new Request(`https://telinha.example.com${p}`, { method: 'POST', headers: { cookie: f.cookie } }),
+      );
       expect([p, r.status, await r.json()]).toEqual([p, 404, { error: 'not found' }]);
     }
     // the proxy refuses on its own too
@@ -169,7 +200,11 @@ describe('HTTP', () => {
 
   test('LiveKit down -> 502, the token not logged', async () => {
     const f = front(deadUrl());
-    const r = await f.s.call(new Request('https://telinha.example.com/livekit/rtc/validate?access_token=SECRET', { headers: { cookie: f.cookie } }));
+    const r = await f.s.call(
+      new Request('https://telinha.example.com/livekit/rtc/validate?access_token=SECRET', {
+        headers: { cookie: f.cookie },
+      }),
+    );
     expect(r.status).toBe(502);
     expect(await r.json()).toEqual({ error: 'livekit' });
     expect(f.proxyLogs()).toHaveLength(1);
@@ -237,7 +272,10 @@ describe('WebSocket', () => {
     await until(() => b.got.length === 1);
     b.ws.close(4002, 'leaving');
     await until(() => lk.closed.length === 2);
-    expect(lk.closed).toEqual([[4001, 'room deleted'], [4002, 'leaving']]);
+    expect(lk.closed).toEqual([
+      [4001, 'room deleted'],
+      [4002, 'leaving'],
+    ]);
     expect(f.proxyLogs()).toEqual([
       ['[proxy] ws close', 'code=4001', 'by=livekit'],
       ['[proxy] ws close', 'code=4002', 'by=client'],

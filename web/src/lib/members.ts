@@ -36,7 +36,10 @@ export function byStatus(a: Member, b: Member): number {
 }
 
 /** Members not in the room (matched by Discord id), split for the two sections. */
-export function splitMembers(members: readonly Member[], inRoom: ReadonlySet<string>): { online: Member[]; offline: Member[] } {
+export function splitMembers(
+  members: readonly Member[],
+  inRoom: ReadonlySet<string>,
+): { online: Member[]; offline: Member[] } {
   const rest = members.filter((m) => !inRoom.has(m.id)).sort(byStatus);
   return { online: rest.filter((m) => m.status !== 'offline'), offline: rest.filter((m) => m.status === 'offline') };
 }

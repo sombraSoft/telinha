@@ -30,19 +30,19 @@ export function renderLivekitYaml(
     `  departure_timeout: ${timeouts.departureTimeout}`,
     ...(c.turn
       ? [
-        // Caddy terminates TLS on 443 for this name and forwards plain TCP here
-        // with a PROXY header, so TURN echoes the browser's address, not
-        // loopback (browsers drop an allocation that reflects 127.0.0.1).
-        // LiveKit advertises turns:<domain>:443 by itself. No udp_port (no
-        // TURN/UDP), and bind_addresses stays LiveKit's default because the
-        // relay sockets share it; the trusted proxy CIDRs default to loopback.
-        'turn:',
-        '  enabled: true',
-        `  domain: ${c.turn.host}`,
-        `  tls_port: ${c.turn.port}`,
-        '  external_tls: true',
-        '  proxy_protocol: true',
-      ]
+          // Caddy terminates TLS on 443 for this name and forwards plain TCP here
+          // with a PROXY header, so TURN echoes the browser's address, not
+          // loopback (browsers drop an allocation that reflects 127.0.0.1).
+          // LiveKit advertises turns:<domain>:443 by itself. No udp_port (no
+          // TURN/UDP), and bind_addresses stays LiveKit's default because the
+          // relay sockets share it; the trusted proxy CIDRs default to loopback.
+          'turn:',
+          '  enabled: true',
+          `  domain: ${c.turn.host}`,
+          `  tls_port: ${c.turn.port}`,
+          '  external_tls: true',
+          '  proxy_protocol: true',
+        ]
       : []),
     '',
   ].join('\n');
@@ -68,46 +68,46 @@ export function renderCaddyfile(
     // falls through to the tls wrapper and the sites. TURN implies HTTPS_PORT 443.
     ...(c.turn
       ? [
-        `\tservers :${c.httpsPort} {`,
-        '\t\tlistener_wrappers {',
-        '\t\t\tlayer4 {',
-        `\t\t\t\t@turn tls sni ${c.turn.host}`,
-        '\t\t\t\troute @turn {',
-        // Caddy's default ALPN list (h2, http/1.1) refuses a client that offers
-        // RFC 7443's stun.turn; one that offers none still gets through.
-        '\t\t\t\t\ttls {',
-        '\t\t\t\t\t\tconnection_policy {',
-        '\t\t\t\t\t\t\talpn stun.turn',
-        '\t\t\t\t\t\t}',
-        '\t\t\t\t\t}',
-        `\t\t\t\t\tproxy 127.0.0.1:${c.turn.port} {`,
-        '\t\t\t\t\t\tproxy_protocol v2',
-        '\t\t\t\t\t}',
-        '\t\t\t\t}',
-        '\t\t\t}',
-        '\t\t\ttls',
-        '\t\t}',
-        '\t}',
-      ]
+          `\tservers :${c.httpsPort} {`,
+          '\t\tlistener_wrappers {',
+          '\t\t\tlayer4 {',
+          `\t\t\t\t@turn tls sni ${c.turn.host}`,
+          '\t\t\t\troute @turn {',
+          // Caddy's default ALPN list (h2, http/1.1) refuses a client that offers
+          // RFC 7443's stun.turn; one that offers none still gets through.
+          '\t\t\t\t\ttls {',
+          '\t\t\t\t\t\tconnection_policy {',
+          '\t\t\t\t\t\t\talpn stun.turn',
+          '\t\t\t\t\t\t}',
+          '\t\t\t\t\t}',
+          `\t\t\t\t\tproxy 127.0.0.1:${c.turn.port} {`,
+          '\t\t\t\t\t\tproxy_protocol v2',
+          '\t\t\t\t\t}',
+          '\t\t\t\t}',
+          '\t\t\t}',
+          '\t\t\ttls',
+          '\t\t}',
+          '\t}',
+        ]
       : []),
     // An explicit issuer ignores the global email, so DNS-01 sets it in its own block.
     ...(c.acmeEmail && !c.acmeDns ? [`\temail ${c.acmeEmail}`] : []),
   ];
   const tls = c.acmeDns
     ? [
-      '\ttls {',
-      '\t\tissuer acme {',
-      ...(c.acmeEmail ? [`\t\t\temail ${c.acmeEmail}`] : []),
-      `\t\t\tdns ${c.acmeDns.provider} {env.DUCKDNS_TOKEN}`,
-      // Otherwise Caddy may try these first: a wasted try on a closed port, and
-      // a listener on 80/443 that a home connection never lets through.
-      '\t\t\tdisable_http_challenge',
-      '\t\t\tdisable_tlsalpn_challenge',
-      // Check the TXT record on public resolvers, not the home router's cache.
-      '\t\t\tresolvers 1.1.1.1 8.8.8.8',
-      '\t\t}',
-      '\t}',
-    ]
+        '\ttls {',
+        '\t\tissuer acme {',
+        ...(c.acmeEmail ? [`\t\t\temail ${c.acmeEmail}`] : []),
+        `\t\t\tdns ${c.acmeDns.provider} {env.DUCKDNS_TOKEN}`,
+        // Otherwise Caddy may try these first: a wasted try on a closed port, and
+        // a listener on 80/443 that a home connection never lets through.
+        '\t\t\tdisable_http_challenge',
+        '\t\t\tdisable_tlsalpn_challenge',
+        // Check the TXT record on public resolvers, not the home router's cache.
+        '\t\t\tresolvers 1.1.1.1 8.8.8.8',
+        '\t\t}',
+        '\t}',
+      ]
     : [];
   // Bare host as the site address: https_port picks the bind port, so a router
   // translating 443 -> 8443 just works.

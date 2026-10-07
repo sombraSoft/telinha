@@ -18,11 +18,19 @@ const DIST = `${BIN}\\telinha-tray.dist.exe`;
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const T0 = 1_700_000_000_000;
 
-function harness(o: {
-  files?: Record<string, string>; procs?: Map<number, string>; elevated?: boolean | 'no-uac';
-  platform?: NodeJS.Platform; compiled?: boolean; docker?: boolean; locale?: 'en' | 'pt-BR'; execPath?: string;
-  spawnFails?: boolean;
-} = {}) {
+function harness(
+  o: {
+    files?: Record<string, string>;
+    procs?: Map<number, string>;
+    elevated?: boolean | 'no-uac';
+    platform?: NodeJS.Platform;
+    compiled?: boolean;
+    docker?: boolean;
+    locale?: 'en' | 'pt-BR';
+    execPath?: string;
+    spawnFails?: boolean;
+  } = {},
+) {
   const files = new Map(Object.entries(o.files ?? {}));
   const procs = o.procs ?? new Map<number, string>();
   const out: string[] = [];
@@ -41,8 +49,11 @@ function harness(o: {
     spawn: async (cmd: string[]) => {
       calls.push(cmd);
       // 2: elevated through UAC; 1: an administrator with UAC off; 3: a normal UAC session.
-      if (cmd[4] === ELEVATION_TYPE) return { code: 0, stdout: o.elevated === 'no-uac' ? '1\r\n' : o.elevated ? '2\r\n' : '3\r\n', stderr: '' };
-      return o.spawnFails ? { code: 1, stdout: '', stderr: 'ERROR: Access is denied.' } : { code: 0, stdout: '', stderr: '' };
+      if (cmd[4] === ELEVATION_TYPE)
+        return { code: 0, stdout: o.elevated === 'no-uac' ? '1\r\n' : o.elevated ? '2\r\n' : '3\r\n', stderr: '' };
+      return o.spawnFails
+        ? { code: 1, stdout: '', stderr: 'ERROR: Access is denied.' }
+        : { code: 0, stdout: '', stderr: '' };
     },
     fs: {
       readText: async (p: string) => files.get(p) ?? null,
@@ -62,7 +73,8 @@ function harness(o: {
         files.delete(p);
       },
     },
-    processInfo: (pid: number) => (procs.has(pid) ? { alive: true, exe: procs.get(pid)! } : { alive: false, exe: null }),
+    processInfo: (pid: number) =>
+      procs.has(pid) ? { alive: true, exe: procs.get(pid)! } : { alive: false, exe: null },
     tray: { launch: (exe: string, env: Record<string, string>) => void launches.push({ exe, env }) },
     now: () => clock.t,
     sleep: async (ms: number) => {
@@ -73,7 +85,11 @@ function harness(o: {
   } as unknown as SetupDeps;
   const env = { TELINHA_HOME: HOME, LOCALE: 'pt-BR', USERPROFILE: 'C:\\Users\\Ana Souza', NOT_SET: undefined };
   const ctx = {
-    argv: ['setup'], env, paths: resolvePaths(env, 'win32'), compiled: o.compiled ?? true, locale: o.locale ?? 'en',
+    argv: ['setup'],
+    env,
+    paths: resolvePaths(env, 'win32'),
+    compiled: o.compiled ?? true,
+    locale: o.locale ?? 'en',
   } as unknown as CliContext;
   const w = { ctx, deps, out: term, locale: o.locale ?? 'en', docker: o.docker ?? false } as unknown as Wizard;
   return { w, out, fsCalls, calls, launches, files, clock };
@@ -98,7 +114,9 @@ describe('setup tray step', () => {
     expect(h.fsCalls).toEqual([`mkdir ${BIN}`, `copy ${BESIDE} ${EXE}`]);
     // No --tray-autostart: the Run value is not touched.
     expect(h.calls.some((c) => c[0] === 'reg')).toBe(false);
-    expect(h.launches).toEqual([{ exe: EXE, env: { TELINHA_HOME: HOME, LOCALE: 'pt-BR', USERPROFILE: 'C:\\Users\\Ana Souza' } }]);
+    expect(h.launches).toEqual([
+      { exe: EXE, env: { TELINHA_HOME: HOME, LOCALE: 'pt-BR', USERPROFILE: 'C:\\Users\\Ana Souza' } },
+    ]);
     expect(h.out).toEqual(['ok Tray icon started (next to the clock).']);
   });
 
@@ -107,7 +125,9 @@ describe('setup tray step', () => {
     await trayStep(h.w, { install: true, autostart: true });
     expect(h.fsCalls).toEqual([]);
     expect(h.files.get(EXE)).toBe('MZ');
-    expect(h.calls.filter((c) => c[0] === 'reg')).toEqual([['reg', 'add', RUN_KEY, '/v', 'Telinha', '/t', 'REG_SZ', '/d', `"${EXE}"`, '/f']]);
+    expect(h.calls.filter((c) => c[0] === 'reg')).toEqual([
+      ['reg', 'add', RUN_KEY, '/v', 'Telinha', '/t', 'REG_SZ', '/d', `"${EXE}"`, '/f'],
+    ]);
     expect(h.launches.length).toBe(1);
   });
 
@@ -125,10 +145,14 @@ describe('setup tray step', () => {
     expect(h.files.has(EXE)).toBe(true);
     expect(h.calls.some((c) => c[1] === 'add')).toBe(true);
     expect(h.launches).toEqual([]);
-    expect(h.out).toEqual(['Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.']);
+    expect(h.out).toEqual([
+      'Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.',
+    ]);
     const pt = harness({ files: { [BESIDE]: 'MZ' }, elevated: true, locale: 'pt-BR' });
     await trayStep(pt.w, { install: true, autostart: null });
-    expect(pt.out).toEqual(['Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.']);
+    expect(pt.out).toEqual([
+      'Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.',
+    ]);
   });
 
   test('no tray anywhere (a dev or hand-built binary): one info line, nothing else', async () => {
@@ -146,7 +170,10 @@ describe('setup tray step', () => {
   test('--no-tray: Run value removed, the running tray stopped, the file kept uninstalled as telinha-tray.dist.exe', async () => {
     const h = harness({ files: { ...running, [BESIDE]: 'MZ' }, procs: new Map([[4321, 'telinha-tray.exe']]) });
     await trayStep(h.w, { install: false, autostart: false });
-    expect(h.calls).toEqual([['reg', 'delete', RUN_KEY, '/v', 'Telinha', '/f'], ['taskkill', '/PID', '4321']]);
+    expect(h.calls).toEqual([
+      ['reg', 'delete', RUN_KEY, '/v', 'Telinha', '/f'],
+      ['taskkill', '/PID', '4321'],
+    ]);
     expect(h.files.has(EXE)).toBe(false);
     expect(h.files.get(DIST)).toBe('MZ');
     expect(h.files.has(STATE)).toBe(false);
@@ -205,7 +232,9 @@ describe('setup tray step', () => {
     expect(Object.keys(trayStrings.ptBR).sort()).toEqual(Object.keys(trayStrings.en).sort());
     for (const [k, v] of Object.entries(trayStrings.en)) {
       const want = [...v.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
-      expect([...trayStrings.ptBR[k as keyof typeof trayStrings.en].matchAll(/\{(\w+)\}/g)].map((m) => m[1])).toEqual(want);
+      expect([...trayStrings.ptBR[k as keyof typeof trayStrings.en].matchAll(/\{(\w+)\}/g)].map((m) => m[1])).toEqual(
+        want,
+      );
     }
   });
 });

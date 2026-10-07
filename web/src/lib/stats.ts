@@ -85,7 +85,8 @@ export type CodecCaps = { codec: 'H265' | 'AV1'; send: boolean; recv: boolean };
 
 /** What this browser can send/receive (why a stream fell back to H.264). */
 export function codecCaps(): CodecCaps[] {
-  const has = (caps: RTCRtpCapabilities | null | undefined, mime: string) => !!caps?.codecs.some((c) => c.mimeType === mime);
+  const has = (caps: RTCRtpCapabilities | null | undefined, mime: string) =>
+    !!caps?.codecs.some((c) => c.mimeType === mime);
   const send = typeof RTCRtpSender !== 'undefined' ? RTCRtpSender.getCapabilities?.('video') : null;
   const recv = typeof RTCRtpReceiver !== 'undefined' ? RTCRtpReceiver.getCapabilities?.('video') : null;
   return (['H265', 'AV1'] as const).map((codec) => ({

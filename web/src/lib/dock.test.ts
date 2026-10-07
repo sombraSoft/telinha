@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DOCK_MARGIN, clampTo, homeOf, nearHome, parseDockPos, placeDock, toFraction } from './dock';
+import { clampTo, DOCK_MARGIN, homeOf, nearHome, parseDockPos, placeDock, toFraction } from './dock';
 
 const stage = { width: 1000, height: 600 };
 const dock = { width: 200, height: 52 };
@@ -48,7 +48,10 @@ describe('clampTo', () => {
   });
   test('the whole dock stays inside, margin included', () => {
     expect(clampTo({ x: -50, y: -50 }, dock, stage)).toEqual({ x: DOCK_MARGIN + 100, y: DOCK_MARGIN + 26 });
-    expect(clampTo({ x: 5000, y: 5000 }, dock, stage)).toEqual({ x: 1000 - DOCK_MARGIN - 100, y: 600 - DOCK_MARGIN - 26 });
+    expect(clampTo({ x: 5000, y: 5000 }, dock, stage)).toEqual({
+      x: 1000 - DOCK_MARGIN - 100,
+      y: 600 - DOCK_MARGIN - 26,
+    });
   });
   test('a stage narrower than the dock centres it on that axis', () => {
     expect(clampTo({ x: 10, y: 200 }, dock, { width: 180, height: 600 })).toEqual({ x: 90, y: 200 });
@@ -76,7 +79,10 @@ describe('placeDock', () => {
     expect(placeDock({ x: 0.25, y: 0.5 }, dock, { width: 2000, height: 1200 })).toEqual({ x: 500, y: 600 });
   });
   test('re-clamps when the stage shrinks', () => {
-    expect(placeDock({ x: 0.99, y: 0.01 }, dock, { width: 400, height: 300 })).toEqual({ x: 400 - DOCK_MARGIN - 100, y: DOCK_MARGIN + 26 });
+    expect(placeDock({ x: 0.99, y: 0.01 }, dock, { width: 400, height: 300 })).toEqual({
+      x: 400 - DOCK_MARGIN - 100,
+      y: DOCK_MARGIN + 26,
+    });
   });
   test('toFraction is its inverse', () => {
     const p = { x: 250, y: 300 };
@@ -93,7 +99,18 @@ describe('parseDockPos', () => {
     expect(parseDockPos({ x: 0, y: 1 })).toEqual({ x: 0, y: 1 });
   });
   test('anything else is home', () => {
-    for (const v of [null, undefined, 'top', 3, [0.5, 0.5], { x: 0.5 }, { x: '0.5', y: 0.5 }, { x: 1.5, y: 0.5 }, { x: -0.1, y: 0.5 }, { x: NaN, y: 0.5 }]) {
+    for (const v of [
+      null,
+      undefined,
+      'top',
+      3,
+      [0.5, 0.5],
+      { x: 0.5 },
+      { x: '0.5', y: 0.5 },
+      { x: 1.5, y: 0.5 },
+      { x: -0.1, y: 0.5 },
+      { x: NaN, y: 0.5 },
+    ]) {
       expect(parseDockPos(v)).toBeNull();
     }
   });

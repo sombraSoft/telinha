@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { THEMES, THEME_CHOICES, parseThemeChoice, resolveTheme } from './theme';
+import { parseThemeChoice, resolveTheme, THEME_CHOICES, THEMES } from './theme';
 
 describe('theme', () => {
   test('explicit themes win over the OS', () => {

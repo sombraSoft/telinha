@@ -6,20 +6,20 @@
 import { posix } from 'node:path';
 import { createComponent, type JSX } from 'solid-js';
 import type { CliContext } from '../src/cli/args.ts';
-import { offerSetup, run } from '../src/cli/setup.ts';
 import { createDiscordSetup } from '../src/cli/setup/discord.ts';
 import type { QuestionId } from '../src/cli/setup/model.ts';
 import type { SetupDeps, SetupFs } from '../src/cli/setup/steps.ts';
 import type { SetupUi, SetupUiContext, SetupUiResult } from '../src/cli/setup/ui.ts';
-import type { Spinner, Term } from '../src/cli/term.ts';
+import { offerSetup, run } from '../src/cli/setup.ts';
 import type { Locale } from '../src/cli/strings.ts';
+import type { Spinner, Term } from '../src/cli/term.ts';
 import type { Ddns } from '../src/ddns.ts';
 import type { Check, CheckContext, CheckResult, CheckStatus } from '../src/doctor/types.ts';
 import type { NatProbe } from '../src/nat/index.ts';
 import { resolvePaths } from '../src/paths.ts';
 import type { InstallResult, ServiceManager } from '../src/service/index.ts';
 import { SetupApp } from '../src/tui/setup/app.tsx';
-import { frame, open, paste, press, settle, typeText, type Session } from './tui-harness.tsx';
+import { frame, open, paste, press, type Session, settle, typeText } from './tui-harness.tsx';
 
 export const APP = '111111111111111111';
 export const GUILD = '222222222222222222';
@@ -40,7 +40,8 @@ export const DUCK = 'f5e8a1c4-7b2d-9e6a-3c0f-8d2b6e4a1c7f'; // gitleaks:allow
 export const TUNNEL = Buffer.from(JSON.stringify({ a: 'Rk7Qw2Zx', t: 'Vm4Np8Ty', s: 'Hc3Lb9FdZq' })).toString('base64'); // gitleaks:allow
 export const BAD_TOKEN = 'Zt8Wq3Xn5Rv2Ly7Kd4Mp'; // gitleaks:allow
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 /** What Discord answers; tests change it between steps (a bot added to a server, a hold on the token check). */
 export interface DiscordWorld {
@@ -53,13 +54,21 @@ export interface DiscordWorld {
 
 export function discordWorld(o: Partial<DiscordWorld> = {}): DiscordWorld {
   return {
-    guilds: [{ id: GUILD, name: 'Gurizada' }, { id: GUILD2, name: 'Clube do Livro' }],
+    guilds: [
+      { id: GUILD, name: 'Gurizada' },
+      { id: GUILD2, name: 'Clube do Livro' },
+    ],
     channels: [
       { id: CHANNEL, name: 'geral', type: 0, position: 0 },
       { id: CHANNEL2, name: 'telinha', type: 0, position: 1 },
       { id: CHANNEL3, name: 'filmes', type: 0, position: 2 },
     ],
-    redirects: ['https://my-group.duckdns.org:8443', 'https://t.example.com', `https://${PUBLIC_IP.replaceAll('.', '-')}.sslip.io`, 'https://my-group.duckdns.org'].map((u) => `${u}/auth/callback`),
+    redirects: [
+      'https://my-group.duckdns.org:8443',
+      'https://t.example.com',
+      `https://${PUBLIC_IP.replaceAll('.', '-')}.sslip.io`,
+      'https://my-group.duckdns.org',
+    ].map((u) => `${u}/auth/callback`),
     hold: null,
     ...o,
   };
@@ -69,7 +78,10 @@ export function discordFetch(world: DiscordWorld): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input).replace('https://discord.com/api/v10', '');
     const auth = new Headers(init?.headers).get('authorization');
-    if (url === '/oauth2/token') return auth === `Basic ${Buffer.from(`${APP}:${SECRET}`).toString('base64')}` ? json({}) : json({ error: 'invalid_client' }, 401);
+    if (url === '/oauth2/token')
+      return auth === `Basic ${Buffer.from(`${APP}:${SECRET}`).toString('base64')}`
+        ? json({})
+        : json({ error: 'invalid_client' }, 401);
     // Held before the answer, whichever token asks: a frame catches the check running.
     if (url === '/applications/@me' && world.hold) await world.hold;
     if (auth !== `Bot ${TOKEN}`) return json({ message: '401: Unauthorized' }, 401);
@@ -78,7 +90,11 @@ export function discordFetch(world: DiscordWorld): typeof fetch {
     }
     if (url === '/users/@me/guilds') return json(world.guilds);
     const roles = /^\/guilds\/(\d+)\/roles$/.exec(url);
-    if (roles) return json([{ id: roles[1], name: '@everyone', position: 0 }, { id: ROLE, name: 'Membro', position: 1 }]);
+    if (roles)
+      return json([
+        { id: roles[1], name: '@everyone', position: 0 },
+        { id: ROLE, name: 'Membro', position: 1 },
+      ]);
     if (/^\/guilds\/\d+\/channels$/.test(url)) return json(world.channels);
     if (/^\/guilds\/\d+\/members\//.test(url)) return json({ roles: [] });
     if (/^\/guilds\/\d+$/.test(url)) return json({ id: GUILD, name: 'Gurizada' });
@@ -88,8 +104,19 @@ export function discordFetch(world: DiscordWorld): typeof fetch {
 
 /** A home router answering UPnP: the machine looks like a home. */
 export const NAT: NatProbe = {
-  gateway: { kind: 'igd', version: 2, location: 'http://192.168.0.1:49152/d.xml', controlUrl: 'http://192.168.0.1/c', serviceType: 'x', localIp: '192.168.0.10', gatewayIp: '192.168.0.1', name: 'Fritz!Box' },
-  externalIp: PUBLIC_IP, localIp: '192.168.0.10', errors: [],
+  gateway: {
+    kind: 'igd',
+    version: 2,
+    location: 'http://192.168.0.1:49152/d.xml',
+    controlUrl: 'http://192.168.0.1/c',
+    serviceType: 'x',
+    localIp: '192.168.0.10',
+    gatewayIp: '192.168.0.1',
+    name: 'Fritz!Box',
+  },
+  externalIp: PUBLIC_IP,
+  localIp: '192.168.0.10',
+  errors: [],
 };
 /** The public IP on the interface itself: a VPS. */
 export const VPS_NAT: NatProbe = { gateway: null, externalIp: null, localIp: PUBLIC_IP, errors: [] };
@@ -97,8 +124,21 @@ export const VPS_NAT: NatProbe = { gateway: null, externalIp: null, localIp: PUB
 export const CHECK_RESULTS: CheckResult[] = [
   { id: 'config', title: 'Configuration', status: 'ok', summary: 'telinha.env is valid' },
   { id: 'dns', title: 'DNS', status: 'ok', summary: 'my-group.duckdns.org points at 203.0.113.9' },
-  { id: 'gateway', title: 'Router', status: 'fail', summary: 'UDP 7882 is not reachable from the internet', detail: ['Router: 192.168.0.1 (UPnP)'], fix: 'Forward UDP 7882 on your router to 192.168.0.10.' },
-  { id: 'update', title: 'Updates', status: 'warn', summary: 'telinha 0.9.1 is available', fix: 'telinha update --now' },
+  {
+    id: 'gateway',
+    title: 'Router',
+    status: 'fail',
+    summary: 'UDP 7882 is not reachable from the internet',
+    detail: ['Router: 192.168.0.1 (UPnP)'],
+    fix: 'Forward UDP 7882 on your router to 192.168.0.10.',
+  },
+  {
+    id: 'update',
+    title: 'Updates',
+    status: 'warn',
+    summary: 'telinha 0.9.1 is available',
+    fix: 'telinha update --now',
+  },
 ];
 
 /** Doctor checks for the report screen: the results above, each run counted. */
@@ -116,7 +156,14 @@ export function fakeChecks(runs: { n: number }, results: CheckResult[] = CHECK_R
 export class FakeTerm implements Term {
   out: string[] = [];
   colors = false;
-  style = { bold: (s: string) => s, dim: (s: string) => s, red: (s: string) => s, green: (s: string) => s, yellow: (s: string) => s, cyan: (s: string) => s };
+  style = {
+    bold: (s: string) => s,
+    dim: (s: string) => s,
+    red: (s: string) => s,
+    green: (s: string) => s,
+    yellow: (s: string) => s,
+    cyan: (s: string) => s,
+  };
   info = (m: string) => void this.out.push(m);
   ok = (m: string) => void this.out.push(`ok ${m}`);
   warn = (m: string) => void this.out.push(`warn ${m}`);
@@ -125,7 +172,11 @@ export class FakeTerm implements Term {
   line = (m = '') => void this.out.push(m);
   spinner(label: string): Spinner {
     this.out.push(`spin ${label}`);
-    return { update: (l) => void this.out.push(`spin ${l}`), stop: (l) => void this.out.push(`ok ${l ?? label}`), fail: (l) => void this.out.push(`fail ${l ?? label}`) };
+    return {
+      update: (l) => void this.out.push(`spin ${l}`),
+      stop: (l) => void this.out.push(`ok ${l ?? label}`),
+      fail: (l) => void this.out.push(`fail ${l ?? label}`),
+    };
   }
   table = (rows: string[][]) => void this.out.push(...rows.map((r) => r.join(' ')));
   link = (u: string) => u;
@@ -186,7 +237,12 @@ export function machine(o: MachineOptions = {}) {
     },
     chmod: async () => {},
     chown: async () => {},
-    stat: async (p) => (files.has(p) ? { uid: 0, gid: 0, mode: 0o100600 } : p.includes('.') ? null : { uid: 0, gid: 0, mode: 0o40700, dir: true }),
+    stat: async (p) =>
+      files.has(p)
+        ? { uid: 0, gid: 0, mode: 0o100600 }
+        : p.includes('.')
+          ? null
+          : { uid: 0, gid: 0, mode: 0o40700, dir: true },
     rm: async (p) => void files.delete(p),
     readText: async (p) => files.get(p) ?? null,
     exists: async (p) => files.has(p),
@@ -263,7 +319,7 @@ export function machine(o: MachineOptions = {}) {
     doctorChecks: async (_c, onResult) => {
       rec.checks++;
       const all = o.results ?? CHECK_RESULTS;
-      all.forEach((r, i) => onResult?.(r, i + 1, all.length));
+      for (const [i, r] of all.entries()) onResult?.(r, i + 1, all.length);
       return all;
     },
     execPath: '/usr/local/bin/telinha',
@@ -273,14 +329,26 @@ export function machine(o: MachineOptions = {}) {
   return { deps, files, rec, world, detected };
 }
 
-export function ctxFor(argv: string[], o: { tty?: boolean; yes?: boolean; compiled?: boolean; locale?: Locale; env?: Record<string, string> } = {}) {
+export function ctxFor(
+  argv: string[],
+  o: { tty?: boolean; yes?: boolean; compiled?: boolean; locale?: Locale; env?: Record<string, string> } = {},
+) {
   const env = { TELINHA_HOME: '/opt/telinha', ...o.env };
   const paths = resolvePaths(env, 'linux', true);
   const out: string[] = [];
   const err: string[] = [];
   const ctx: CliContext = {
-    argv, env, paths, envFile: posix.join(paths.config, 'telinha.env'), locale: o.locale ?? 'en',
-    tty: o.tty ?? true, yes: o.yes ?? false, stdout: (l) => void out.push(l), stderr: (l) => void err.push(l), compiled: o.compiled ?? false, version: 'test',
+    argv,
+    env,
+    paths,
+    envFile: posix.join(paths.config, 'telinha.env'),
+    locale: o.locale ?? 'en',
+    tty: o.tty ?? true,
+    yes: o.yes ?? false,
+    stdout: (l) => void out.push(l),
+    stderr: (l) => void err.push(l),
+    compiled: o.compiled ?? false,
+    version: 'test',
   };
   return { ctx, out, err };
 }
@@ -318,7 +386,12 @@ export class Driver implements SetupUi {
     this.context = c;
     let finish!: (r: SetupUiResult) => void;
     const result = new Promise<SetupUiResult>((r) => (finish = r));
-    const ctx: SetupUiContext = { ...c, doctor: c.doctor && this.o.doctor !== undefined ? this.o.doctor : c.doctor, ...(this.o.apply ? { apply: this.o.apply } : {}), ...(this.o.tasks ? { tasks: this.o.tasks } : {}) };
+    const ctx: SetupUiContext = {
+      ...c,
+      doctor: c.doctor && this.o.doctor !== undefined ? this.o.doctor : c.doctor,
+      ...(this.o.apply ? { apply: this.o.apply } : {}),
+      ...(this.o.tasks ? { tasks: this.o.tasks } : {}),
+    };
     const s = await openApp(
       () =>
         createComponent(SetupApp, {
@@ -355,7 +428,8 @@ export function fakeDoctor(builds: { n: number } = { n: 0 }): NonNullable<SetupU
   };
 }
 
-export type StartOptions = MachineOptions & DriverOptions & { yes?: boolean; compiled?: boolean; locale?: Locale; env?: Record<string, string> };
+export type StartOptions = MachineOptions &
+  DriverOptions & { yes?: boolean; compiled?: boolean; locale?: Locale; env?: Record<string, string> };
 
 /** The screens up and the machine detected (its defaults are in): what a test drives. */
 async function started(m: ReturnType<typeof machine>, driver: Driver, code: Promise<number | null>, err: string[]) {
@@ -379,7 +453,12 @@ export async function startSetup(argv: string[], o: StartOptions = {}) {
   const m = machine(o);
   const term = new FakeTerm();
   m.deps.term = () => term;
-  const { ctx, out, err } = ctxFor(['setup', ...argv], { yes: o.yes, compiled: o.compiled, locale: o.locale, env: o.env });
+  const { ctx, out, err } = ctxFor(['setup', ...argv], {
+    yes: o.yes,
+    compiled: o.compiled,
+    locale: o.locale,
+    env: o.env,
+  });
   const driver = new Driver(o);
   const code = run({ flags: {}, positionals: [], rest: [] }, ctx, { ...m.deps, ui: driver });
   const s = await started(m, driver, code, err);
@@ -404,14 +483,21 @@ export type Started = Awaited<ReturnType<typeof startSetup>>;
  * Waits until the session shows `id` (or the Review) with no lookup running,
  * whatever the language; returns the frame.
  */
-export async function at(r: Pick<Started, 's' | 'session'>, id: QuestionId | 'review', o: { running?: boolean; ms?: number } = {}): Promise<string> {
+export async function at(
+  r: Pick<Started, 's' | 'session'>,
+  id: QuestionId | 'review',
+  o: { running?: boolean; ms?: number } = {},
+): Promise<string> {
   const end = Date.now() + (o.ms ?? 3000);
   for (;;) {
     await settle(r.s, 20);
     const s = r.session();
-    const here = id === 'review'
-      ? s.screen() === 'review'
-      : s.screen() === 'question' && s.current().id === id && (s.current().lookup.state === 'running') === !!o.running;
+    const here =
+      id === 'review'
+        ? s.screen() === 'review'
+        : s.screen() === 'question' &&
+          s.current().id === id &&
+          (s.current().lookup.state === 'running') === !!o.running;
     if (here) return frame(r.s);
     if (Date.now() > end) throw new Error(`timed out waiting for ${id}: ${frame(r.s)}`);
   }

@@ -5,37 +5,38 @@
 // the slash command and the room lifecycle, keeps the router's port mappings
 // and the DuckDNS record fresh, answers the local control endpoint and, in the
 // native binary, updates itself. See README.md.
-import type { WebSocketHandler } from 'bun';
-import { REST } from 'discord.js';
+
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { WebSocketHandler } from 'bun';
+import { REST } from 'discord.js';
 import { ensureBinariesForConfig } from './bins.ts';
 import { editCard, startBot } from './bot.ts';
-import { renderCard, type Card } from './card.ts';
+import { type Card, renderCard } from './card.ts';
 import { childBaseEnv, childSpecs } from './children.ts';
 import type { CliContext } from './cli/args.ts';
 import type { ControlStatus } from './cli/control.ts';
 import { ts } from './cli/strings.ts';
 import { waitForEnter } from './cli/term.ts';
-import { KNOWN_KEYS, loadConfig, upnpMappings, type Config } from './config.ts';
-import { createControl, type Control } from './control.ts';
-import { createDuckDns, startDdnsLoop, type Ddns } from './ddns.ts';
+import { type Config, KNOWN_KEYS, loadConfig, upnpMappings } from './config.ts';
+import { type Control, createControl } from './control.ts';
+import { createDuckDns, type Ddns, startDdnsLoop } from './ddns.ts';
 import { createDoctorRoutes } from './doctor/routes.ts';
 import { createDoctorStore } from './doctor/session.ts';
 import { loadEnvFile, mergeEnv } from './envfile.ts';
 import { footprintOf } from './footprint.ts';
 import { createHandler } from './http.ts';
-import { t, type Locale } from './i18n.ts';
+import { type Locale, t } from './i18n.ts';
 import { createIpWatch, type IpWatch } from './ipwatch.ts';
 import { createLifecycle } from './lifecycle.ts';
-import { roomService, type RoomService } from './livekit.ts';
-import { acquireLock, AlreadyRunningError, type Lock } from './lock.ts';
+import { type RoomService, roomService } from './livekit.ts';
+import { AlreadyRunningError, acquireLock, type Lock } from './lock.ts';
 import { createLogger } from './log.ts';
 import { createDirectory } from './members.ts';
 import { createPortMapper, type PortMapper } from './nat/index.ts';
 import { lookupPublicIp } from './netinfo.ts';
 import { createLivekitProxy, type ProxyData } from './proxy.ts';
-import { createRoleChecker, devIsMember, restGetMember, type IsMember } from './roles.ts';
+import { createRoleChecker, devIsMember, type IsMember, restGetMember } from './roles.ts';
 import { createRooms, type Rooms } from './rooms.ts';
 import { loadStatic } from './static.ts';
 import { createSupervisor, type Supervisor } from './supervisor.ts';
@@ -59,7 +60,11 @@ export interface RunOptions {
 }
 
 /** The Room module for this config; dev has no slash command, so admit opens a room for any code. */
-export function roomModuleFor(config: Pick<Config, 'dataDir' | 'closeEmptySeconds' | 'dev'>, livekit: RoomService, log: (...a: unknown[]) => void): Rooms {
+export function roomModuleFor(
+  config: Pick<Config, 'dataDir' | 'closeEmptySeconds' | 'dev'>,
+  livekit: RoomService,
+  log: (...a: unknown[]) => void,
+): Rooms {
   return createRooms({
     path: join(config.dataDir, 'telinha.sqlite'),
     livekit,
@@ -134,7 +139,12 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
       for (const stop of stoppers) stop();
       // Side by side: closing the console leaves ~5 s, the router must not eat the children's share.
       await Promise.all([
-        mapper ? Promise.race([mapper.stop().catch((e: unknown) => log('upnp: removing the mappings failed', message(e))), Bun.sleep(MAPPER_STOP_MS)]) : null,
+        mapper
+          ? Promise.race([
+              mapper.stop().catch((e: unknown) => log('upnp: removing the mappings failed', message(e))),
+              Bun.sleep(MAPPER_STOP_MS),
+            ])
+          : null,
         supervisor?.stop().catch((e: unknown) => log('stopping children failed', message(e))),
       ]);
       void server?.stop(true);
@@ -208,7 +218,9 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     lock.release();
     return fail(`telinha: ${message(e)}`);
   }
-  log(`telinha ${ctx.version} starting (ingress=${config.ingress}, media=${config.media}, turn=${config.turn?.host ?? 'off'}${supervised ? ', supervised' : ''})`);
+  log(
+    `telinha ${ctx.version} starting (ingress=${config.ingress}, media=${config.media}, turn=${config.turn?.host ?? 'off'}${supervised ? ', supervised' : ''})`,
+  );
 
   try {
     await supervisor.start();
@@ -234,30 +246,46 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   let guildName = (): string | undefined => undefined;
   // GROUP_NAME, else the guild's name once the bot sees it, else "members".
   const group = (l: Locale) => config.groupName ?? guildName() ?? t(l, 'members');
-  const render = (rec: Parameters<typeof renderCard>[0], live: Parameters<typeof renderCard>[1] = { streamers: [], viewers: [] }) =>
-    renderCard(rec, live, { publicUrl: config.publicUrl, group: group(rec.locale) });
+  const render = (
+    rec: Parameters<typeof renderCard>[0],
+    live: Parameters<typeof renderCard>[1] = { streamers: [], viewers: [] },
+  ) => renderCard(rec, live, { publicUrl: config.publicUrl, group: group(rec.locale) });
   // Dev rooms have no Discord message; rooms.ts still opens and closes them.
   let editMessage = async (_c: string, _m: string, _card: Card) => {};
 
   if (config.dev) {
-    log(`!!! DEV_USER fake login enabled: everyone on ${config.publicUrl} is "${config.dev.name}" (${config.dev.id}); Discord bot not started !!!`);
+    log(
+      `!!! DEV_USER fake login enabled: everyone on ${config.publicUrl} is "${config.dev.name}" (${config.dev.id}); Discord bot not started !!!`,
+    );
     isMember = devIsMember(config.dev.id);
   } else {
     const rest = new REST().setToken(config.discordToken);
-    isMember = createRoleChecker({ getMember: restGetMember(rest, config.guildId), roleId: config.roleId, ttlMs: config.roleTtlMs });
+    isMember = createRoleChecker({
+      getMember: restGetMember(rest, config.guildId),
+      roleId: config.roleId,
+      ttlMs: config.roleTtlMs,
+    });
     const client = startBot({ config, rest, group, log, rooms, render: (rec) => render(rec), directory });
     discordReady = () => client.isReady();
     guildName = () => client.guilds.cache.get(config.guildId)?.name;
     editMessage = editCard(rest);
   }
 
-  stoppers.push(createLifecycle({
-    rooms, render, editMessage: (c, m, card) => editMessage(c, m, card), log,
-  }).start(config.pollSeconds * 1000));
+  stoppers.push(
+    createLifecycle({
+      rooms,
+      render,
+      editMessage: (c, m, card) => editMessage(c, m, card),
+      log,
+    }).start(config.pollSeconds * 1000),
+  );
 
-  const ddns: Ddns | null = config.ddns ? createDuckDns({ domain: config.ddns.domain, token: config.ddns.token, fetch, log }) : null;
+  const ddns: Ddns | null = config.ddns
+    ? createDuckDns({ domain: config.ddns.domain, token: config.ddns.token, fetch, log })
+    : null;
   // With nothing to map (LiveKit Cloud behind a tunnel) the mapper only drops what a previous run left.
-  if (config.upnp) mapper = createPortMapper({ mappings: upnpMappings(config), statePath: join(paths.run, 'upnp.json'), log });
+  if (config.upnp)
+    mapper = createPortMapper({ mappings: upnpMappings(config), statePath: join(paths.run, 'upnp.json'), log });
 
   const footprint = footprintOf(config);
   // LiveKit picks the public IP once at start; a residential IP change needs a
@@ -266,7 +294,9 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   if (footprint.ipWatch) {
     const self = footprint.helpers.some((h) => h.name === 'livekit');
     ipWatch = createIpWatch({
-      fetch, intervalMs: config.ipWatchSeconds * 1000, log,
+      fetch,
+      intervalMs: config.ipWatchSeconds * 1000,
+      log,
       labels: self
         ? { changed: 'restarting livekit', startedWith: 'livekit started with the new one' }
         : { changed: 'nothing to restart', startedWith: 'nothing to restart' },
@@ -313,7 +343,8 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
       compiled: ctx.compiled,
       enabled: config.autoUpdate,
       onApplied: (tag) => {
-        if (supervised) setTimeout(() => exit(EXIT_RESTART, `update to ${tag} installed, restarting`), RESTART_DELAY_MS);
+        if (supervised)
+          setTimeout(() => exit(EXIT_RESTART, `update to ${tag} installed, restarting`), RESTART_DELAY_MS);
         else log(`update to ${tag} installed; restart telinha to apply it`);
       },
     });
@@ -323,7 +354,15 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   const doctorStore = createDoctorStore({ cookieSecret: config.cookieSecret });
   const doctor = createDoctorRoutes({ store: doctorStore, config, files, rooms: livekit, log });
   const children = () => Object.fromEntries(sup.status().map((s) => [s.name, s.state]));
-  const childStatus = () => Object.fromEntries(sup.status().map((s) => [s.name, { state: s.state, pid: s.pid, restarts: s.restarts, recentRestarts: s.recentRestarts, since: s.since }]));
+  const childStatus = () =>
+    Object.fromEntries(
+      sup
+        .status()
+        .map((s) => [
+          s.name,
+          { state: s.state, pid: s.pid, restarts: s.restarts, recentRestarts: s.recentRestarts, since: s.since },
+        ]),
+    );
   const status = (): ControlStatus => ({
     version: ctx.version,
     startedAt,
@@ -360,7 +399,14 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   // Bun.serve wants a handler even when nothing ever upgrades.
   const noSockets: WebSocketHandler<ProxyData> = { message() {} };
   const handler = createHandler({
-    config, isMember, files, group, rooms, discordReady: () => discordReady(), members: () => directory.list(), log,
+    config,
+    isMember,
+    files,
+    group,
+    rooms,
+    discordReady: () => discordReady(),
+    members: () => directory.list(),
+    log,
     proxy,
     upgrade: (req, data) => server?.upgrade(req, { data }) ?? false,
     timeout: (req, seconds) => server?.timeout(req, seconds),

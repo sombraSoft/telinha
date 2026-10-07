@@ -2,21 +2,27 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { acquireLock, AlreadyRunningError } from '../src/lock.ts';
+import { AlreadyRunningError, acquireLock } from '../src/lock.ts';
 import { sameExe } from '../src/supervisor.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'telinha-lock-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 let n = 0;
 const fresh = () => join(dir, `run${++n}`, 'telinha.pid');
-const record = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as { pid: number; exe: string; startedAt: number };
+const record = (path: string) =>
+  JSON.parse(readFileSync(path, 'utf8')) as { pid: number; exe: string; startedAt: number };
 
 /** Fake process table: pid -> executable; anything else is dead. */
 const table = (procs: Record<number, string>) => (pid: number) =>
   procs[pid] ? { alive: true, exe: procs[pid]! } : { alive: false, exe: null };
 
 const opts = (pid: number, procs: Record<number, string> = {}) => ({
-  pid, exe: 'telinha.exe', platform: 'win32' as const, processInfo: table(procs), sameExe, now: () => 1000,
+  pid,
+  exe: 'telinha.exe',
+  platform: 'win32' as const,
+  processInfo: table(procs),
+  sameExe,
+  now: () => 1000,
 });
 
 describe('acquireLock', () => {
@@ -67,7 +73,9 @@ describe('acquireLock', () => {
   test('linux: comm cut at 15 chars still counts as the same executable', () => {
     const path = fresh();
     acquireLock(path, { ...opts(10), exe: 'telinha-from-source', platform: 'linux' });
-    expect(() => acquireLock(path, { ...opts(20, { 10: 'telinha-from-so' }), platform: 'linux' })).toThrow(AlreadyRunningError);
+    expect(() => acquireLock(path, { ...opts(20, { 10: 'telinha-from-so' }), platform: 'linux' })).toThrow(
+      AlreadyRunningError,
+    );
   });
 
   test('garbage: replaced when old, held when it may be a start still writing it', () => {

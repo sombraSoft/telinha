@@ -18,7 +18,9 @@ export function WelcomeScreen(p: { envFile: string; active: () => boolean; onGo(
   const about = createMemo(() => paint(s('welcome.about'), inner(), c.muted));
   return (
     <Card title={` ${s('welcome.title')} `} width={fullW()} active={p.active()}>
-      <text fg={c.text} attributes={Bold} wrapMode="none">{fit(ts(locale(), 'offerSetup'), inner())}</text>
+      <text fg={c.text} attributes={Bold} wrapMode="none">
+        {fit(ts(locale(), 'offerSetup'), inner())}
+      </text>
       <Lines lines={intro()} />
       <box flexDirection="column" marginTop={1} flexShrink={0}>
         <Lines lines={about()} />

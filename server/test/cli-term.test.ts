@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { byteProgress, createTerm, visibleLength, type Term, type TermOptions, type TermOut } from '../src/cli/term.ts';
+import { byteProgress, createTerm, type Term, type TermOptions, type TermOut, visibleLength } from '../src/cli/term.ts';
 
 function setup(o: Partial<TermOptions> = {}) {
   let out = '';
@@ -17,7 +17,8 @@ describe('createTerm', () => {
     term.info('ok');
     term.line();
     expect(written).toBe('  ok\n\n');
-    for (const k of ['info', 'ok', 'warn', 'fail', 'step', 'line', 'link', 'spinner', 'table'] as const) expect(typeof term[k]).toBe('function');
+    for (const k of ['info', 'ok', 'warn', 'fail', 'step', 'line', 'link', 'spinner', 'table'] as const)
+      expect(typeof term[k]).toBe('function');
     expect(term.colors).toBe(false);
     expect(term.style.bold('x')).toBe('x');
   });
@@ -37,7 +38,10 @@ describe('output', () => {
 
   test('table aligns columns by visible width', () => {
     const { term, out } = setup();
-    term.table([[term.style.green('ok'), 'config', 'fine'], ['fail', 'dns', 'no A record']]);
+    term.table([
+      [term.style.green('ok'), 'config', 'fine'],
+      ['fail', 'dns', 'no A record'],
+    ]);
     const lines = out().trimEnd().split('\n');
     expect(lines[1]).toBe('  fail  dns     no A record');
     expect(visibleLength(lines[0]!)).toBe('  ok    config  fine'.length);
@@ -45,7 +49,9 @@ describe('output', () => {
 
   test('link: OSC 8 only where supported', () => {
     expect(setup().term.link('https://x.test')).toBe('https://x.test');
-    expect(setup({ env: { WT_SESSION: '1' } }).term.link('https://x.test')).toBe('\x1b]8;;https://x.test\x1b\\https://x.test\x1b]8;;\x1b\\');
+    expect(setup({ env: { WT_SESSION: '1' } }).term.link('https://x.test')).toBe(
+      '\x1b]8;;https://x.test\x1b\\https://x.test\x1b]8;;\x1b\\',
+    );
     expect(setup({ tty: false, env: { WT_SESSION: '1' } }).term.link('https://x.test')).toBe('https://x.test');
   });
 
@@ -57,7 +63,7 @@ describe('output', () => {
     expect(out()).toBe('- downloading\n✓ downloaded\n- checking\n✗ checking\n');
   });
 
-  test('progress: nothing on a plain log, folded into an animated spinner\'s line', async () => {
+  test("progress: nothing on a plain log, folded into an animated spinner's line", async () => {
     const plain = setup({ tty: false });
     const s = plain.term.spinner('downloading');
     plain.term.progress?.(5_000_000, 10_000_000, 'livekit');

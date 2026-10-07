@@ -2,7 +2,14 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertOneStdin, buildContext, GLOBAL_FLAGS, parseArgs, readSecretSource, UsageError } from '../src/cli/args.ts';
+import {
+  assertOneStdin,
+  buildContext,
+  GLOBAL_FLAGS,
+  parseArgs,
+  readSecretSource,
+  UsageError,
+} from '../src/cli/args.ts';
 
 const SPEC = {
   flags: {
@@ -28,7 +35,10 @@ const usage = (fn: () => unknown) => {
 
 describe('parseArgs', () => {
   test('booleans, strings, repeated strings, positionals', () => {
-    const a = parseArgs(['setup', '--json', '--public-url', 'https://x.test', '--channel=1', '--channel', '2', 'extra'], SPEC);
+    const a = parseArgs(
+      ['setup', '--json', '--public-url', 'https://x.test', '--channel=1', '--channel', '2', 'extra'],
+      SPEC,
+    );
     expect(a.flags.json).toBe(true);
     expect(a.flags['public-url']).toBe('https://x.test');
     expect(a.flags.channel).toEqual(['1', '2']);
@@ -70,7 +80,13 @@ describe('parseArgs', () => {
   });
 
   test('secret flags are refused, naming the env var and the -file form', () => {
-    for (const [flag, env] of [['discord-token', 'DISCORD_TOKEN'], ['client-secret', 'DISCORD_CLIENT_SECRET'], ['tunnel-token', 'TUNNEL_TOKEN'], ['duckdns-token', 'DUCKDNS_TOKEN'], ['livekit-secret', 'LIVEKIT_API_SECRET']]) {
+    for (const [flag, env] of [
+      ['discord-token', 'DISCORD_TOKEN'],
+      ['client-secret', 'DISCORD_CLIENT_SECRET'],
+      ['tunnel-token', 'TUNNEL_TOKEN'],
+      ['duckdns-token', 'DUCKDNS_TOKEN'],
+      ['livekit-secret', 'LIVEKIT_API_SECRET'],
+    ]) {
       for (const argv of [[`--${flag}`, 'abc'], [`--${flag}=abc`]]) {
         const msg = usage(() => parseArgs(argv, SPEC));
         expect(msg).toContain(env!);
@@ -111,18 +127,24 @@ describe('buildContext', () => {
     const ctx = buildContext({ argv: [], flags: { home: h }, env: { ...env, TELINHA_ENV: join(h, 'telinha.env') } });
     expect(ctx.envFile).toBe(join(h, 'telinha.env'));
     expect(ctx.locale).toBe('pt-BR');
-    expect(buildContext({ argv: [], flags: { home: h, lang: 'en' }, env: { TELINHA_ENV: join(h, 'telinha.env') } }).locale).toBe('en');
+    expect(
+      buildContext({ argv: [], flags: { home: h, lang: 'en' }, env: { TELINHA_ENV: join(h, 'telinha.env') } }).locale,
+    ).toBe('en');
   });
 
   test('tty needs both streams and no --non-interactive; --yes', () => {
     const env = { TELINHA_HOME: home() };
     expect(buildContext({ argv: [], env, stdinTty: false, stdoutTty: true }).tty).toBe(false);
-    expect(buildContext({ argv: [], env, stdinTty: true, stdoutTty: true, flags: { 'non-interactive': true } }).tty).toBe(false);
+    expect(
+      buildContext({ argv: [], env, stdinTty: true, stdoutTty: true, flags: { 'non-interactive': true } }).tty,
+    ).toBe(false);
     expect(buildContext({ argv: [], env, flags: { yes: true } }).yes).toBe(true);
   });
 
   test('--lang must be en or pt', () => {
-    expect(usage(() => buildContext({ argv: [], env: { TELINHA_HOME: home() }, flags: { lang: 'fr' } }))).toContain('--lang must be en or pt-BR');
+    expect(usage(() => buildContext({ argv: [], env: { TELINHA_HOME: home() }, flags: { lang: 'fr' } }))).toContain(
+      '--lang must be en or pt-BR',
+    );
     expect(buildContext({ argv: [], env: { TELINHA_HOME: home() }, flags: { lang: 'pt' } }).locale).toBe('pt-BR');
   });
 });

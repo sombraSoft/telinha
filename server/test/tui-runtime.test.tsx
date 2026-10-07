@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
-import { RGBA, type CliRenderer } from '@opentui/core';
+import { type CliRenderer, RGBA } from '@opentui/core';
 import { createTestRenderer, type TestRendererSetup } from '@opentui/core/testing';
-import { runTui, RENDERER_CONFIG, type TuiHandle } from '../src/tui/runtime.tsx';
+import { RENDERER_CONFIG, runTui, type TuiHandle } from '../src/tui/runtime.tsx';
 import { applyColorEnv, c, detectMode, mode, setMode } from '../src/tui/theme.ts';
 
 const EVENTS = ['SIGINT', 'SIGTERM', 'SIGHUP', 'uncaughtException', 'unhandledRejection'];
@@ -26,7 +26,12 @@ function harness() {
     return r;
   };
   const errors: string[] = [];
-  const deps = { createRenderer, proc, stdout: (s: string) => void log.push(`out ${s.trim()}`), stderr: (s: string) => void errors.push(s) };
+  const deps = {
+    createRenderer,
+    proc,
+    stdout: (s: string) => void log.push(`out ${s.trim()}`),
+    stderr: (s: string) => void errors.push(s),
+  };
   const listeners = () => EVENTS.reduce((n, e) => n + proc.listenerCount(e), 0);
   return { log, proc, deps, errors, listeners, setup: () => setup! };
 }
@@ -41,7 +46,10 @@ describe('runTui', () => {
   test('done: the value comes back, one destroy, every handler removed', async () => {
     const h = harness();
     const p = runTui<number>({
-      locale: 'en', env: ENV, onCtrlC: () => 130, deps: h.deps,
+      locale: 'en',
+      env: ENV,
+      onCtrlC: () => 130,
+      deps: h.deps,
       app: (done) => {
         setTimeout(() => {
           done(7);
@@ -60,7 +68,10 @@ describe('runTui', () => {
   test('a throwing app: destroy once, the error goes on', async () => {
     const h = harness();
     const p = runTui<number>({
-      locale: 'en', env: ENV, onCtrlC: () => 130, deps: h.deps,
+      locale: 'en',
+      env: ENV,
+      onCtrlC: () => 130,
+      deps: h.deps,
       app: () => {
         throw new Error('boom');
       },
@@ -71,9 +82,19 @@ describe('runTui', () => {
   });
 
   test('a signal: destroy once, the conventional exit code, handlers gone', async () => {
-    for (const [sig, code] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]] as const) {
+    for (const [sig, code] of [
+      ['SIGTERM', 143],
+      ['SIGINT', 130],
+      ['SIGHUP', 129],
+    ] as const) {
       const h = harness();
-      void runTui<number>({ locale: 'en', env: ENV, onCtrlC: () => 130, deps: h.deps, app: () => <text fg="#ffffff">hi</text> });
+      void runTui<number>({
+        locale: 'en',
+        env: ENV,
+        onCtrlC: () => 130,
+        deps: h.deps,
+        app: () => <text fg="#ffffff">hi</text>,
+      });
       await Bun.sleep(20);
       h.proc.emit(sig);
       expect(h.log).toEqual(['destroy', `exit ${code}`]);
@@ -83,7 +104,13 @@ describe('runTui', () => {
 
   test('a crash: destroy first, then the error on stderr, exit 1', async () => {
     const h = harness();
-    void runTui<number>({ locale: 'en', env: ENV, onCtrlC: () => 130, deps: h.deps, app: () => <text fg="#ffffff">hi</text> });
+    void runTui<number>({
+      locale: 'en',
+      env: ENV,
+      onCtrlC: () => 130,
+      deps: h.deps,
+      app: () => <text fg="#ffffff">hi</text>,
+    });
     await Bun.sleep(20);
     h.proc.emit('unhandledRejection', new Error('lost promise'));
     expect(h.log).toEqual(['destroy', 'exit 1']);
@@ -93,7 +120,13 @@ describe('runTui', () => {
 
   test('Ctrl+C no screen handles: onCtrlC decides the value', async () => {
     const h = harness();
-    const p = runTui<number>({ locale: 'en', env: ENV, onCtrlC: () => 130, deps: h.deps, app: () => <text fg="#ffffff">hi</text> });
+    const p = runTui<number>({
+      locale: 'en',
+      env: ENV,
+      onCtrlC: () => 130,
+      deps: h.deps,
+      app: () => <text fg="#ffffff">hi</text>,
+    });
     await Bun.sleep(20);
     h.setup().mockInput.pressCtrlC();
     expect(await p).toBe(130);
@@ -105,7 +138,10 @@ describe('runTui', () => {
     let handle!: TuiHandle;
     let finish!: (n: number) => void;
     const p = runTui<number>({
-      locale: 'en', env: ENV, onCtrlC: () => 130, deps: h.deps,
+      locale: 'en',
+      env: ENV,
+      onCtrlC: () => 130,
+      deps: h.deps,
       app: (done, th) => {
         handle = th;
         finish = done;
@@ -118,13 +154,24 @@ describe('runTui', () => {
       return 5;
     }, ['Telinha needs your password for one command.']);
     expect(got).toBe(5);
-    await expect(handle.withTerminal(async () => {
-      h.log.push('fn2');
-      throw new Error('sudo refused');
-    })).rejects.toThrow('sudo refused');
+    await expect(
+      handle.withTerminal(async () => {
+        h.log.push('fn2');
+        throw new Error('sudo refused');
+      }),
+    ).rejects.toThrow('sudo refused');
     finish(0);
     expect(await p).toBe(0);
-    expect(h.log).toEqual(['suspend', 'out Telinha needs your password for one command.', 'fn', 'resume', 'suspend', 'fn2', 'resume', 'destroy']);
+    expect(h.log).toEqual([
+      'suspend',
+      'out Telinha needs your password for one command.',
+      'fn',
+      'resume',
+      'suspend',
+      'fn2',
+      'resume',
+      'destroy',
+    ]);
   });
 });
 
@@ -132,18 +179,33 @@ describe('theme', () => {
   const term = (m: 'dark' | 'light' | null) => ({ waitForThemeMode: async () => m });
 
   test('TELINHA_THEME > the terminal > COLORFGBG > dark', async () => {
-    expect(await detectMode(term('dark'), { TELINHA_THEME: 'light', COLORFGBG: '0;0' })).toEqual({ mode: 'light', source: 'TELINHA_THEME' });
-    expect(await detectMode(term('light'), { TELINHA_THEME: 'bogus', COLORFGBG: '0;0' })).toEqual({ mode: 'light', source: 'terminal' });
+    expect(await detectMode(term('dark'), { TELINHA_THEME: 'light', COLORFGBG: '0;0' })).toEqual({
+      mode: 'light',
+      source: 'TELINHA_THEME',
+    });
+    expect(await detectMode(term('light'), { TELINHA_THEME: 'bogus', COLORFGBG: '0;0' })).toEqual({
+      mode: 'light',
+      source: 'terminal',
+    });
     expect(await detectMode(term(null), { COLORFGBG: '0;15' })).toEqual({ mode: 'light', source: 'COLORFGBG' });
     expect(await detectMode(term(null), { COLORFGBG: '15;default;0' })).toEqual({ mode: 'dark', source: 'COLORFGBG' });
     expect(await detectMode(null, {})).toEqual({ mode: 'dark', source: 'fallback' });
-    expect(await detectMode({ waitForThemeMode: () => Promise.reject(new Error('no tty')) }, {})).toEqual({ mode: 'dark', source: 'fallback' });
+    expect(await detectMode({ waitForThemeMode: () => Promise.reject(new Error('no tty')) }, {})).toEqual({
+      mode: 'dark',
+      source: 'fallback',
+    });
   });
 
   test('runTui applies the detected mode', async () => {
     const h = harness();
     setMode('dark');
-    const p = runTui<number>({ locale: 'en', env: { TELINHA_THEME: 'light' }, onCtrlC: () => 130, deps: h.deps, app: (done) => (setTimeout(() => done(0), 5), <text fg="#ffffff">hi</text>) });
+    const p = runTui<number>({
+      locale: 'en',
+      env: { TELINHA_THEME: 'light' },
+      onCtrlC: () => 130,
+      deps: h.deps,
+      app: (done) => (setTimeout(() => done(0), 5), (<text fg="#ffffff">hi</text>)),
+    });
     await p;
     expect(mode()).toBe('light');
     setMode('dark');

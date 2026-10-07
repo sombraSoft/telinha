@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cookie, parseCookies, safeNext, sign, verify, type Session } from '../src/auth.ts';
+import { cookie, parseCookies, type Session, safeNext, sign, verify } from '../src/auth.ts';
 
 const S = 'test-secret';
 

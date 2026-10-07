@@ -4,7 +4,16 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { defaultRoute, localIpFor } from './gateway.ts';
 import { addPortMapping, deletePortMapping, getExternalIp, getSpecificEntry } from './igd.ts';
-import type { Gateway, Mapping, MapperStatus, MappingState, NatDeps, NatProbe, PortMapper, UdpFactory } from './index.ts';
+import type {
+  Gateway,
+  MapperStatus,
+  Mapping,
+  MappingState,
+  NatDeps,
+  NatProbe,
+  PortMapper,
+  UdpFactory,
+} from './index.ts';
 import { natpmpDelete, natpmpExternalAddress, natpmpMap } from './natpmp.ts';
 import { pcpAnnounce, pcpDelete, pcpMap } from './pcp.ts';
 import { fetchIgdService, ssdpSearch } from './ssdp.ts';
@@ -25,7 +34,9 @@ const PMP_MIN_LEASE_S = 120;
 function bunUdp(): UdpFactory {
   return async (o) => {
     const s = await Bun.udpSocket({
-      hostname: '0.0.0.0', port: 0, binaryType: 'uint8array',
+      hostname: '0.0.0.0',
+      port: 0,
+      binaryType: 'uint8array',
       socket: {
         data: (_s, data, port, address) => o.onMessage(data, port, address),
         // An ICMP "port unreachable" (a gateway without NAT-PMP/PCP) comes back as
@@ -36,10 +47,24 @@ function bunUdp(): UdpFactory {
     });
     if (o.multicastInterface !== undefined) {
       // Best effort: without them the M-SEARCH still leaves via the default interface.
-      try { s.setMulticastTTL(2); } catch { /* ignore */ }
-      if (o.multicastInterface) try { s.setMulticastInterface(o.multicastInterface); } catch { /* ignore */ }
+      try {
+        s.setMulticastTTL(2);
+      } catch {
+        /* ignore */
+      }
+      if (o.multicastInterface)
+        try {
+          s.setMulticastInterface(o.multicastInterface);
+        } catch {
+          /* ignore */
+        }
     }
-    return { send: (data, port, address) => { s.send(data, port, address); }, close: () => s.close() };
+    return {
+      send: (data, port, address) => {
+        s.send(data, port, address);
+      },
+      close: () => s.close(),
+    };
   };
 }
 
@@ -70,7 +95,11 @@ export function defaultNatDeps(): NatDeps {
 const withDefaults = (o: Partial<NatDeps>): NatDeps => ({ ...defaultNatDeps(), ...o });
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-interface Discovery { gateways: Gateway[]; errors: string[]; route: { gatewayIp: string; localIp: string } | null }
+interface Discovery {
+  gateways: Gateway[];
+  errors: string[];
+  route: { gatewayIp: string; localIp: string } | null;
+}
 
 /** SSDP and PCP/NAT-PMP run side by side; the result lists IGDs (the default gateway's first), then PCP, then NAT-PMP. */
 async function discover(d: NatDeps, timeoutMs = DISCOVER_TIMEOUT_MS): Promise<Discovery> {
@@ -81,11 +110,17 @@ async function discover(d: NatDeps, timeoutMs = DISCOVER_TIMEOUT_MS): Promise<Di
     const host = new URL(location).hostname;
     try {
       const s = await fetchIgdService(d.fetch, location);
-      const localIp = route && route.gatewayIp === host ? route.localIp : localIpFor(host) ?? route?.localIp;
+      const localIp = route && route.gatewayIp === host ? route.localIp : (localIpFor(host) ?? route?.localIp);
       if (!localIp) throw new Error('no local IPv4 address');
       return {
-        kind: 'igd', version: s.version, location, controlUrl: s.controlUrl, serviceType: s.serviceType,
-        localIp, gatewayIp: host, ...(s.name ? { name: s.name } : {}),
+        kind: 'igd',
+        version: s.version,
+        location,
+        controlUrl: s.controlUrl,
+        serviceType: s.serviceType,
+        localIp,
+        gatewayIp: host,
+        ...(s.name ? { name: s.name } : {}),
       };
     } catch (e) {
       // TVs and NAS boxes answer upnp:rootdevice too: not being a router is not an error.
@@ -94,9 +129,16 @@ async function discover(d: NatDeps, timeoutMs = DISCOVER_TIMEOUT_MS): Promise<Di
     }
   };
   const ssdp = ssdpSearch({
-    udp: d.udp, sleep: d.sleep, localIp: route?.localIp, timeoutMs,
-    onReply: (r) => { igds.push(describeIgd(r.location)); },
-  }).catch((e) => { errors.push(`SSDP: ${msg(e)}`); });
+    udp: d.udp,
+    sleep: d.sleep,
+    localIp: route?.localIp,
+    timeoutMs,
+    onReply: (r) => {
+      igds.push(describeIgd(r.location));
+    },
+  }).catch((e) => {
+    errors.push(`SSDP: ${msg(e)}`);
+  });
 
   // Most routers speak only one protocol: a silent PCP/NAT-PMP is news only when nothing else answered.
   let pmpError: string | null = null;
@@ -117,7 +159,7 @@ async function discover(d: NatDeps, timeoutMs = DISCOVER_TIMEOUT_MS): Promise<Di
   await ssdp;
   const found = (await Promise.all(igds)).filter((g): g is Gateway => g !== null);
   found.sort((a, b) => Number(b.gatewayIp === route?.gatewayIp) - Number(a.gatewayIp === route?.gatewayIp));
-  const gateways = [...found, ...await pmp];
+  const gateways = [...found, ...(await pmp)];
   if (!route) errors.unshift('no default IPv4 route');
   if (gateways.length === 0 && pmpError) errors.push(pmpError);
   return { gateways, errors, route };
@@ -155,7 +197,13 @@ export async function probe(o: Partial<NatDeps> = {}): Promise<NatProbe> {
     result.localIp ??= result.gateway?.localIp ?? null;
   })();
   const cap = new AbortController();
-  const finished = await Promise.race([work.then(() => true, () => true), d.sleep(PROBE_BUDGET_MS, cap.signal).then(() => false)]);
+  const finished = await Promise.race([
+    work.then(
+      () => true,
+      () => true,
+    ),
+    d.sleep(PROBE_BUDGET_MS, cap.signal).then(() => false),
+  ]);
   cap.abort();
   if (!finished) result.errors.push(`gave up after ${PROBE_BUDGET_MS / 1000} s`);
   return { ...result, errors: [...result.errors] };
@@ -181,19 +229,22 @@ interface StateFile extends MapperStatus {
   mappings: (MapperStatus['mappings'][number] & { nonce?: string })[];
 }
 
-const key = (m: Pick<Mapping, 'protocol' | 'externalPort' | 'internalPort'>) => `${m.protocol}/${m.externalPort}/${m.internalPort}`;
+const key = (m: Pick<Mapping, 'protocol' | 'externalPort' | 'internalPort'>) =>
+  `${m.protocol}/${m.externalPort}/${m.internalPort}`;
 const label = (m: Mapping) => `${m.protocol.toUpperCase()} ${m.externalPort}`;
 const via = (gw: Gateway) => (gw.kind === 'natpmp' ? ' via NAT-PMP' : gw.kind === 'pcp' ? ' via PCP' : '');
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 const unhex = (s: string) => new Uint8Array(Buffer.from(s, 'hex'));
 
-export function createPortMapper(o: {
-  mappings: Mapping[];
-  /** data/run/upnp.json: what is mapped, for doctor and for cleanup after a crash. */
-  statePath?: string;
-  leaseSeconds?: number;
-  log: (...a: unknown[]) => void;
-} & Partial<NatDeps>): PortMapper {
+export function createPortMapper(
+  o: {
+    mappings: Mapping[];
+    /** data/run/upnp.json: what is mapped, for doctor and for cleanup after a crash. */
+    statePath?: string;
+    leaseSeconds?: number;
+    log: (...a: unknown[]) => void;
+  } & Partial<NatDeps>,
+): PortMapper {
   const d = withDefaults(o);
   const leaseSeconds = o.leaseSeconds ?? 3600;
   const entries: Entry[] = o.mappings.map((m) => ({ m: { ...m }, state: 'pending', renewAt: 0, failing: false }));
@@ -213,7 +264,8 @@ export function createPortMapper(o: {
     gateway,
     externalIp,
     mappings: entries.map((e) => ({
-      ...e.m, state: e.state,
+      ...e.m,
+      state: e.state,
       ...(e.leaseEndsAt !== undefined && e.state === 'mapped' ? { leaseEndsAt: e.leaseEndsAt } : {}),
       ...(e.error !== undefined && e.state === 'failed' ? { error: e.error } : {}),
     })),
@@ -222,7 +274,11 @@ export function createPortMapper(o: {
   const persist = () => {
     if (!o.statePath) return;
     const s = status();
-    const file: StateFile = { ...s, updatedAt: d.now(), mappings: s.mappings.map((m, i) => ({ ...m, ...(entries[i]!.nonce ? { nonce: entries[i]!.nonce } : {}) })) };
+    const file: StateFile = {
+      ...s,
+      updatedAt: d.now(),
+      mappings: s.mappings.map((m, i) => ({ ...m, ...(entries[i]!.nonce ? { nonce: entries[i]!.nonce } : {}) })),
+    };
     try {
       mkdirSync(dirname(o.statePath), { recursive: true });
       const tmp = `${o.statePath}.tmp`;
@@ -276,7 +332,14 @@ export function createPortMapper(o: {
     if (gw.kind === 'igd') return deletePortMapping(d.fetch, gw, m);
     if (gw.kind === 'natpmp') return natpmpDelete({ ...common, protocol: m.protocol, internalPort: m.internalPort });
     // Without the nonce PCP refuses the delete (NOT_AUTHORIZED); the lease runs out instead.
-    if (nonce) return pcpDelete({ ...common, localIp: gw.localIp, protocol: m.protocol, internalPort: m.internalPort, nonce: unhex(nonce) });
+    if (nonce)
+      return pcpDelete({
+        ...common,
+        localIp: gw.localIp,
+        protocol: m.protocol,
+        internalPort: m.internalPort,
+        nonce: unhex(nonce),
+      });
   };
 
   const removeStale = async (gw: Gateway) => {
@@ -288,7 +351,9 @@ export function createPortMapper(o: {
         if (gw.kind === 'igd' && (await getSpecificEntry(d.fetch, gw, m))?.internalClient !== gw.localIp) continue;
         await remove(gw, m, m.nonce);
         o.log(`upnp: removed stale mapping ${label(m)}`);
-      } catch { /* gone already, or the router forgot it */ }
+      } catch {
+        /* gone already, or the router forgot it */
+      }
     }
   };
 
@@ -306,7 +371,9 @@ export function createPortMapper(o: {
         e.renewAt = now + (lease > 0 ? Math.min(Math.max(lease * 500, RENEW_MIN_MS), RENEW_MAX_MS) : RENEW_MAX_MS);
         // Routine renewals stay quiet; first mappings and recoveries are worth a line.
         if (before !== 'mapped' || e.failing) {
-          o.log(`upnp: mapped ${label(e.m)} -> ${gw.localIp}:${e.m.internalPort}${via(gw)} (${lease > 0 ? `lease ${lease}s` : 'permanent'})`);
+          o.log(
+            `upnp: mapped ${label(e.m)} -> ${gw.localIp}:${e.m.internalPort}${via(gw)} (${lease > 0 ? `lease ${lease}s` : 'permanent'})`,
+          );
         }
         e.failing = false;
       } catch (err) {
@@ -362,7 +429,9 @@ export function createPortMapper(o: {
   const runCycle = (force: boolean) => {
     chain = chain
       .then(() => (stopped ? undefined : cycle(force)))
-      .catch((e) => { o.log('upnp: unexpected error', msg(e)); });
+      .catch((e) => {
+        o.log('upnp: unexpected error', msg(e));
+      });
     return chain;
   };
 

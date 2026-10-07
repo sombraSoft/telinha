@@ -13,7 +13,16 @@ import { readTarGz, readZip } from './archive.ts';
 import type { Config } from './config.ts';
 import { helpersOf } from './footprint.ts';
 import type { Paths } from './paths.ts';
-import { REPO, SUMS, archiveType, caddyAssetName, caddyExeName, latestReleaseTag, parseSums, releaseAssetUrl } from './release.ts';
+import {
+  archiveType,
+  caddyAssetName,
+  caddyExeName,
+  latestReleaseTag,
+  parseSums,
+  REPO,
+  releaseAssetUrl,
+  SUMS,
+} from './release.ts';
 import { isCompiled, version } from './version.ts';
 
 export const HELPERS = ['livekit', 'caddy', 'cloudflared'] as const;
@@ -62,19 +71,40 @@ export function assetSpec(helper: Helper, version: string, os: Os, arch: Arch): 
       // LiveKit's own naming, which happens to match ours.
       const archive = os === 'windows' ? 'zip' : 'tar.gz';
       const asset = `livekit_${version}_${os}_${arch}.${archive}`;
-      return { url: `${GH}/livekit/livekit/releases/download/v${version}/${asset}`, asset, archive, member: `livekit-server${exe}`, hashKey: `${os}-${arch}`, verify: 'pinned' };
+      return {
+        url: `${GH}/livekit/livekit/releases/download/v${version}/${asset}`,
+        asset,
+        archive,
+        member: `livekit-server${exe}`,
+        hashKey: `${os}-${arch}`,
+        verify: 'pinned',
+      };
     }
     case 'caddy': {
       // Named after Telinha's targets, which say x64 where Go says amd64.
       const target = `${os}-${arch === 'amd64' ? 'x64' : arch}` as const;
       const asset = caddyAssetName(target);
-      return { url: releaseAssetUrl(version, asset), asset, archive: archiveType(target), member: caddyExeName(os), hashKey: `${os}-${arch}`, verify: 'release-sums' };
+      return {
+        url: releaseAssetUrl(version, asset),
+        asset,
+        archive: archiveType(target),
+        member: caddyExeName(os),
+        hashKey: `${os}-${arch}`,
+        verify: 'release-sums',
+      };
     }
     case 'cloudflared': {
       // No windows-arm64 build upstream; Windows 11 on ARM runs the x64 one emulated.
       const a = os === 'windows' && arch === 'arm64' ? 'amd64' : arch;
       const asset = `cloudflared-${os}-${a}${exe}`;
-      return { url: `${GH}/cloudflare/cloudflared/releases/download/${version}/${asset}`, asset, archive: null, member: `cloudflared${exe}`, hashKey: `${os}-${a}`, verify: 'pinned' };
+      return {
+        url: `${GH}/cloudflare/cloudflared/releases/download/${version}/${asset}`,
+        asset,
+        archive: null,
+        member: `cloudflared${exe}`,
+        hashKey: `${os}-${a}`,
+        verify: 'pinned',
+      };
     }
   }
 }
@@ -96,11 +126,12 @@ export function caddyRelease(tag: string, fetchFn: FetchFn): CaddyRelease {
   let sums: Promise<Record<string, string>> | null = null;
   return {
     tag,
-    sums: () => (sums ??= (async () => {
-      const res = await fetchFn(releaseAssetUrl(tag, SUMS), { signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS) });
-      if (!res.ok) throw new Error(`${SUMS} of ${tag}: HTTP ${res.status}`);
-      return parseSums(await res.text());
-    })()),
+    sums: () =>
+      (sums ??= (async () => {
+        const res = await fetchFn(releaseAssetUrl(tag, SUMS), { signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS) });
+        if (!res.ok) throw new Error(`${SUMS} of ${tag}: HTTP ${res.status}`);
+        return parseSums(await res.text());
+      })()),
   };
 }
 
@@ -183,13 +214,20 @@ export async function ensureBinaries(names: Helper[], o: EnsureOptions): Promise
     let version: string;
     if (isPinned(name)) version = versions[name].version;
     else if (o.release) version = o.release.tag;
-    else throw new Error('caddy comes from a Telinha release: pass the release tag (bun scripts/bins.ts --release vX.Y.Z caddy)');
+    else
+      throw new Error(
+        'caddy comes from a Telinha release: pass the release tag (bun scripts/bins.ts --release vX.Y.Z caddy)',
+      );
     const spec = assetSpec(name, version, o.os, o.arch);
     const bin = join(o.outDir, spec.member);
     // Sidecar records which version `bin` is, so a pin bump re-downloads.
     const sidecar = join(o.outDir, `${name}.version`);
     paths[name] = bin;
-    if ((await Bun.file(bin).exists()) && (await Bun.file(sidecar).exists()) && (await Bun.file(sidecar).text()).trim() === version) {
+    if (
+      (await Bun.file(bin).exists()) &&
+      (await Bun.file(sidecar).exists()) &&
+      (await Bun.file(sidecar).text()).trim() === version
+    ) {
       log(`[bins] ${name} ${version} already present`);
       continue;
     }
@@ -198,7 +236,10 @@ export async function ensureBinaries(names: Helper[], o: EnsureOptions): Promise
     let expected: string | undefined;
     if (isPinned(name)) {
       expected = versions[name].sha256[spec.hashKey];
-      if (!expected) throw new Error(`${name}: no sha256 for ${spec.hashKey} in versions.json (run: bun scripts/versions.ts refresh)`);
+      if (!expected)
+        throw new Error(
+          `${name}: no sha256 for ${spec.hashKey} in versions.json (run: bun scripts/versions.ts refresh)`,
+        );
     } else {
       expected = (await o.release!.sums())[spec.asset];
       if (!expected) throw new Error(`SHA256SUMS of ${version} has no ${spec.asset}`);
@@ -264,7 +305,16 @@ export async function ensureBinariesForConfig(
   for (const name of helpersOf(config)) {
     try {
       const release = name === 'caddy' ? (o.release ?? (await resolveCaddyRelease(fetchFn, o.compiled))) : undefined;
-      const r = await ensureBinaries([name], { os, arch, outDir: paths.bin, versions, release, log, progress: o.progress, fetch: fetchFn });
+      const r = await ensureBinaries([name], {
+        os,
+        arch,
+        outDir: paths.bin,
+        versions,
+        release,
+        log,
+        progress: o.progress,
+        fetch: fetchFn,
+      });
       Object.assign(result.paths, r.paths);
       result.changed.push(...r.changed);
     } catch (e) {
@@ -273,7 +323,10 @@ export async function ensureBinariesForConfig(
       const member = assetSpec(name, '', os, arch).member;
       const local = join(paths.bin, member);
       const present = existsSync(local) ? local : which(member.replace(/\.exe$/, ''));
-      if (!present) throw new Error(`${member.replace(/\.exe$/, '')} not found: put it in ${paths.bin} or on PATH (download failed: ${msg})`);
+      if (!present)
+        throw new Error(
+          `${member.replace(/\.exe$/, '')} not found: put it in ${paths.bin} or on PATH (download failed: ${msg})`,
+        );
       log(`[bins] could not update ${name} (${msg}); using ${present}`);
       result.paths[name] = present;
     }

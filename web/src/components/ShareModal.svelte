@@ -4,12 +4,12 @@
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomSession } from '../lib/room.svelte';
   import {
-    FRAME_RATES,
-    PRESETS,
-    PRESET_SETTINGS,
-    RESOLUTIONS,
-    presetOf,
     type Fps,
+    FRAME_RATES,
+    PRESET_SETTINGS,
+    PRESETS,
+    presetOf,
+    RESOLUTIONS,
     type Res,
     type ShareSettings,
   } from '../lib/share';
@@ -94,6 +94,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions (backdrop clicks; Escape is the dialog's own) -->
+<!-- biome-ignore lint/a11y/useKeyWithClickEvents: backdrop clicks only; Escape is the dialog's own -->
 <dialog
   class="modal"
   aria-labelledby="{id}-title"
@@ -104,9 +105,16 @@
   onclick={onClick}
 >
   <div class="card">
-    <button class="btn ghost icon close" data-testid="share-close" aria-label={t('share.close')} title={t('share.close')} onclick={() => (open = false)}
-      ><span aria-hidden="true">✕</span></button
+    <button
+      type="button"
+      class="btn ghost icon close"
+      data-testid="share-close"
+      aria-label={t('share.close')}
+      title={t('share.close')}
+      onclick={() => (open = false)}
     >
+      <span aria-hidden="true">✕</span>
+    </button>
 
     <img class="glyph" src={head} alt="" width="106" height="112" draggable="false" />
     <h2 id="{id}-title">{t('share.modalTitle')}</h2>
@@ -131,7 +139,14 @@
         <div class="seg">
           {#each RESOLUTIONS as r (r)}
             <label class:on={draft.res === r}>
-              <input type="radio" name="{id}-res" value={r} data-testid="res-{r}" checked={draft.res === r} onchange={() => pick(r, draft.fps)} />
+              <input
+                type="radio"
+                name="{id}-res"
+                value={r}
+                data-testid="res-{r}"
+                checked={draft.res === r}
+                onchange={() => pick(r, draft.fps)}
+              />
               <span>{r}<span class="sr-only">p</span></span>
             </label>
           {/each}
@@ -142,7 +157,14 @@
         <div class="seg">
           {#each FRAME_RATES as f (f)}
             <label class:on={draft.fps === f}>
-              <input type="radio" name="{id}-fps" value={f} data-testid="fps-{f}" checked={draft.fps === f} onchange={() => pick(draft.res, f)} />
+              <input
+                type="radio"
+                name="{id}-fps"
+                value={f}
+                data-testid="fps-{f}"
+                checked={draft.fps === f}
+                onchange={() => pick(draft.res, f)}
+              />
               <span>{f}<span class="sr-only"> fps</span></span>
             </label>
           {/each}
@@ -165,8 +187,16 @@
     <p class="hint" id="{id}-audio-hint">{rc.canChangeAudio ? t('share.audioHint') : t('share.audioLocked')}</p>
 
     <div class="actions">
-      <button class="btn ghost" data-testid="share-back" onclick={() => (open = false)}>{t('share.back')}</button>
-      <button class="btn primary" data-testid="share-go-live" disabled={!rc.connected || rc.busy || (live && rc.applying)} onclick={submit}>
+      <button type="button" class="btn ghost" data-testid="share-back" onclick={() => (open = false)}>
+        {t('share.back')}
+      </button>
+      <button
+        type="button"
+        class="btn primary"
+        data-testid="share-go-live"
+        disabled={!rc.connected || rc.busy || (live && rc.applying)}
+        onclick={submit}
+      >
         {live ? t('share.apply') : t('share.goLive')}
       </button>
     </div>
@@ -272,7 +302,9 @@
     background: var(--bg-3);
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.12s, color 0.12s;
+    transition:
+      background-color 0.12s,
+      color 0.12s;
   }
   .seg label:hover {
     background-image: linear-gradient(var(--hover), var(--hover));

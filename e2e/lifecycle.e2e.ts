@@ -44,11 +44,16 @@ test('a room closes for good once it sat empty', async ({ browser }) => {
     // someone in the room. A token fetch also keeps an open room alive for
     // CLOSE_EMPTY_SECONDS, so poll more slowly than that.
     await expect
-      .poll(async () => (await ctx.request.get(`/auth/token?room=${room}`)).status(), { intervals: [6_000], timeout: 60_000 })
+      .poll(async () => (await ctx.request.get(`/auth/token?room=${room}`)).status(), {
+        intervals: [6_000],
+        timeout: 60_000,
+      })
       .toBe(410);
 
     await later.goto(`/r/${room}`);
-    await expect(later.getByTestId('notice')).toHaveText('This Telinha has ended. Open another with /telinha on Discord.');
+    await expect(later.getByTestId('notice')).toHaveText(
+      'This Telinha has ended. Open another with /telinha on Discord.',
+    );
     await expect(later.getByTestId('me')).toHaveCount(0);
     await expect(later.getByTestId('fatal').getByRole('button')).toHaveCount(0);
   } finally {

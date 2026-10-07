@@ -2,16 +2,27 @@
 // posts its live status card in the allowed channels.
 // Replies only the caller sees use their client locale; the card uses the
 // guild locale. Also keeps the member directory (members.ts) current.
-import {
-  Client, GatewayIntentBits, InteractionContextType, Locale as DLocale, MessageFlags, Options, REST, Routes,
-  SlashCommandBuilder, Status, type GuildMember, type PartialGuildMember,
-} from 'discord.js';
+
 import { randomBytes } from 'node:crypto';
+import {
+  Client,
+  Locale as DLocale,
+  GatewayIntentBits,
+  type GuildMember,
+  InteractionContextType,
+  MessageFlags,
+  Options,
+  type PartialGuildMember,
+  type REST,
+  Routes,
+  SlashCommandBuilder,
+  Status,
+} from 'discord.js';
 import type { Card } from './card.ts';
 import { uniqueRoomCode } from './codes.ts';
 import type { Config } from './config.ts';
-import { dicts, resolveLocale, t, type Locale } from './i18n.ts';
-import { memberData, type Directory } from './members.ts';
+import { dicts, type Locale, resolveLocale, t } from './i18n.ts';
+import { type Directory, memberData } from './members.ts';
 import type { RoomRecord, Rooms } from './rooms.ts';
 
 export function buildCommand(name: string) {
@@ -20,12 +31,14 @@ export function buildCommand(name: string) {
     .setDescription(dicts.en.cmdDescription)
     .setDescriptionLocalizations({ [DLocale.PortugueseBR]: dicts['pt-BR'].cmdDescription })
     .setContexts(InteractionContextType.Guild)
-    .addStringOption((o) => o
-      .setName('what')
-      .setNameLocalizations({ [DLocale.PortugueseBR]: 'o_que' })
-      .setDescription(dicts.en.optWhatDescription)
-      .setDescriptionLocalizations({ [DLocale.PortugueseBR]: dicts['pt-BR'].optWhatDescription })
-      .setMaxLength(80));
+    .addStringOption((o) =>
+      o
+        .setName('what')
+        .setNameLocalizations({ [DLocale.PortugueseBR]: 'o_que' })
+        .setDescription(dicts.en.optWhatDescription)
+        .setDescriptionLocalizations({ [DLocale.PortugueseBR]: dicts['pt-BR'].optWhatDescription })
+        .setMaxLength(80),
+    );
 }
 
 export interface CommandInput {
@@ -52,11 +65,16 @@ export interface Ephemeral {
 
 export type CommandPayload = (Card & { flags?: undefined }) | Ephemeral;
 
-const ephemeral = (content: string): Ephemeral => ({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+const ephemeral = (content: string): Ephemeral => ({
+  content,
+  flags: MessageFlags.Ephemeral,
+  allowedMentions: { parse: [] },
+});
 
 /** The ephemeral refusal, or null when this caller may open a room here. */
 export function commandDenied(
-  i: Pick<CommandInput, 'locale' | 'allowed' | 'command' | 'channelId' | 'channelIds'>, group: (l: Locale) => string,
+  i: Pick<CommandInput, 'locale' | 'allowed' | 'command' | 'channelId' | 'channelIds'>,
+  group: (l: Locale) => string,
 ): Ephemeral | null {
   const me = resolveLocale(i.locale);
   if (!i.allowed) return ephemeral(t(me, 'onlyGroup', { group: group(me) }));
@@ -87,14 +105,22 @@ export async function handleCommand(i: CommandInput, d: CommandDeps): Promise<vo
   const room = d.newRoom();
   try {
     // A failed open leaves no room behind (rooms.ts): only the caller hears of it.
-    await d.rooms.open({
-      room, guildId: i.guildId, channelId: i.channelId, locale: resolveLocale(i.guildLocale),
-      openerId: i.userId, openerName: i.who, what: i.what,
-    }, async (rec) => {
-      const posted = await d.reply(d.render(rec));
-      if (!posted) throw new Error('no message in the interaction response');
-      return posted;
-    });
+    await d.rooms.open(
+      {
+        room,
+        guildId: i.guildId,
+        channelId: i.channelId,
+        locale: resolveLocale(i.guildLocale),
+        openerId: i.userId,
+        openerName: i.who,
+        what: i.what,
+      },
+      async (rec) => {
+        const posted = await d.reply(d.render(rec));
+        if (!posted) throw new Error('no message in the interaction response');
+        return posted;
+      },
+    );
     d.log(i.command, i.userId, room);
   } catch (e) {
     d.log(`${i.command} failed`, room, (e as Error).message);
@@ -112,8 +138,12 @@ export function editCard(rest: REST) {
 }
 
 export function startBot(o: {
-  config: Config; rest: REST; group: (l: Locale) => string; log: (...a: unknown[]) => void;
-  rooms: Pick<Rooms, 'open' | 'get'>; render: (rec: RoomRecord) => Card;
+  config: Config;
+  rest: REST;
+  group: (l: Locale) => string;
+  log: (...a: unknown[]) => void;
+  rooms: Pick<Rooms, 'open' | 'get'>;
+  render: (rec: RoomRecord) => Card;
   directory: Directory;
 }): Client {
   const { config: c, rest, group, log, directory } = o;
@@ -157,7 +187,10 @@ export function startBot(o: {
     if (!guild?.available) return;
     try {
       const all = [...(await guild.members.fetch({ withPresences: true })).values()];
-      directory.reset(all.map((m) => memberData(m, c.roleId)), all.map((m) => [m.id, m.presence?.status]));
+      directory.reset(
+        all.map((m) => memberData(m, c.roleId)),
+        all.map((m) => [m.id, m.presence?.status]),
+      );
       failures = 0;
       log(`members: ${directory.size} with the role`);
     } catch (e) {
@@ -214,34 +247,37 @@ export function startBot(o: {
       const roles = i.member?.roles;
       const hasRole = Array.isArray(roles) ? roles.includes(c.roleId) : Boolean(roles?.cache.has(c.roleId));
       const member = i.member && 'displayName' in i.member ? i.member.displayName : null;
-      await handleCommand({
-        locale: i.locale,
-        guildLocale: i.guildLocale,
-        allowed: i.guildId === c.guildId && hasRole,
-        command: c.commandName,
-        guildId: i.guildId ?? '',
-        channelId: i.channelId,
-        channelIds: c.channelIds,
-        userId: i.user.id,
-        who: member ?? i.user.globalName ?? i.user.username,
-        what: i.options.getString('what'),
-      }, {
-        rooms: o.rooms,
-        render: o.render,
-        async reply(p) {
-          if (p.flags) {
-            // after a failed public reply the interaction may already be acknowledged
-            await (i.replied || i.deferred ? i.followUp(p) : i.reply(p));
-            return null;
-          }
-          const res = await i.reply({ ...p, withResponse: true });
-          const m = res.resource?.message;
-          return m ? { channelId: m.channelId, messageId: m.id } : null;
+      await handleCommand(
+        {
+          locale: i.locale,
+          guildLocale: i.guildLocale,
+          allowed: i.guildId === c.guildId && hasRole,
+          command: c.commandName,
+          guildId: i.guildId ?? '',
+          channelId: i.channelId,
+          channelIds: c.channelIds,
+          userId: i.user.id,
+          who: member ?? i.user.globalName ?? i.user.username,
+          what: i.options.getString('what'),
         },
-        newRoom: () => uniqueRoomCode((code) => o.rooms.get(code) !== null, randomBytes),
-        group,
-        log,
-      });
+        {
+          rooms: o.rooms,
+          render: o.render,
+          async reply(p) {
+            if (p.flags) {
+              // after a failed public reply the interaction may already be acknowledged
+              await (i.replied || i.deferred ? i.followUp(p) : i.reply(p));
+              return null;
+            }
+            const res = await i.reply({ ...p, withResponse: true });
+            const m = res.resource?.message;
+            return m ? { channelId: m.channelId, messageId: m.id } : null;
+          },
+          newRoom: () => uniqueRoomCode((code) => o.rooms.get(code) !== null, randomBytes),
+          group,
+          log,
+        },
+      );
     } catch (e) {
       log('command error', (e as Error).message);
     }

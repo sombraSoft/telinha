@@ -29,7 +29,11 @@ export interface LockOptions {
   now?: () => number;
 }
 
-interface LockRecord { pid: number; exe: string; startedAt: number }
+interface LockRecord {
+  pid: number;
+  exe: string;
+  startedAt: number;
+}
 
 // A file this young that does not parse yet is a racing start writing it, not litter.
 const FRESH_MS = 5000;

@@ -4,7 +4,17 @@
 // so nothing else of server/ is needed). caddy is Telinha's own build, taken
 // from a release: --release picks which one, the latest by default.
 import { join } from 'node:path';
-import { HELPERS, ROOT, caddyRelease, ensureBinaries, hostArch, hostOs, type Arch, type Helper, type Os } from '../server/src/bins.ts';
+import {
+  type Arch,
+  caddyRelease,
+  ensureBinaries,
+  HELPERS,
+  type Helper,
+  hostArch,
+  hostOs,
+  type Os,
+  ROOT,
+} from '../server/src/bins.ts';
 import { latestReleaseTag } from '../server/src/release.ts';
 
 const USAGE = `usage: bun scripts/bins.ts [--os linux|windows] [--arch amd64|arm64] [--out DIR] [--release vX.Y.Z] [${HELPERS.join(' ')}]
@@ -72,7 +82,9 @@ if (import.meta.main) {
         // Asked for by name: a hard failure. Part of "everything": releases cut
         // before Telinha shipped its Caddy have no asset, so say how to get one.
         if (explicit) throw e;
-        console.warn(`caddy: ${e instanceof Error ? e.message : e}; build it with bun run caddy, or pass --release vX.Y.Z caddy`);
+        console.warn(
+          `caddy: ${e instanceof Error ? e.message : e}; build it with bun run caddy, or pass --release vX.Y.Z caddy`,
+        );
       }
     }
   } catch (e) {

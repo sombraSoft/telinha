@@ -4,17 +4,25 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { KNOWN_KEYS, loadConfig } from '../../server/src/config.ts';
-import { GLOBAL_FLAGS, SECRET_FLAGS, type FlagDef } from '../../server/src/cli/args.ts';
-import { SETUP_FLAGS } from '../../server/src/cli/setup.ts';
+import { type FlagDef, GLOBAL_FLAGS, SECRET_FLAGS } from '../../server/src/cli/args.ts';
 import { DOCTOR_FLAGS } from '../../server/src/cli/doctor.ts';
-import { UPDATE_FLAGS } from '../../server/src/cli/update.ts';
 import { ACTIONS, serviceSpec } from '../../server/src/cli/service.ts';
+import { SETUP_FLAGS } from '../../server/src/cli/setup.ts';
 import { TRAY_ACTIONS } from '../../server/src/cli/tray.ts';
+import { UPDATE_FLAGS } from '../../server/src/cli/update.ts';
+import { KNOWN_KEYS, loadConfig } from '../../server/src/config.ts';
 import { CHECKS } from '../../server/src/doctor/checks.ts';
 import {
-  CONFIG_KEYS, DOCTOR_CHECK_DOCS, DOCTOR_FLAG_DOCS, GLOBAL_FLAG_DOCS, SECTION_TITLES, SERVICE_ACTION_DOCS, SERVICE_FLAG_DOCS,
-  SETUP_FLAG_DOCS, TRAY_ACTION_DOCS, UPDATE_FLAG_DOCS,
+  CONFIG_KEYS,
+  DOCTOR_CHECK_DOCS,
+  DOCTOR_FLAG_DOCS,
+  GLOBAL_FLAG_DOCS,
+  SECTION_TITLES,
+  SERVICE_ACTION_DOCS,
+  SERVICE_FLAG_DOCS,
+  SETUP_FLAG_DOCS,
+  TRAY_ACTION_DOCS,
+  UPDATE_FLAG_DOCS,
 } from '../src/data/reference.ts';
 import { BASE_ENV, derivedCommands, generate } from './generate.ts';
 
@@ -32,7 +40,9 @@ function readAstroConfig(): string {
 // Kept identical to the copy in workspace.test.ts (not imported: that would run its tests here too).
 function localeFolders(config: string = readAstroConfig()): string[] {
   const block = /locales:\s*\{([\s\S]*?)\n\s*\},/.exec(config)?.[1] ?? '';
-  return [...block.matchAll(/^\s*'?([a-z][a-z0-9-]*)'?:\s*\{[^}]*\blang:/gm)].map((m) => m[1]!).filter((k) => k !== 'root');
+  return [...block.matchAll(/^\s*'?([a-z][a-z0-9-]*)'?:\s*\{[^}]*\blang:/gm)]
+    .map((m) => m[1]!)
+    .filter((k) => k !== 'root');
 }
 
 /** Every .md/.mdx under dir, as forward-slash paths relative to it. */
@@ -58,7 +68,8 @@ describe('reference tables match the code', () => {
   test('one row per telinha.env key', () => {
     same(Object.keys(CONFIG_KEYS), KNOWN_KEYS);
     const sections = new Set(Object.keys(SECTION_TITLES));
-    for (const [key, doc] of Object.entries(CONFIG_KEYS)) expect(sections.has(doc.section), `${key}: unknown section ${doc.section}`).toBe(true);
+    for (const [key, doc] of Object.entries(CONFIG_KEYS))
+      expect(sections.has(doc.section), `${key}: unknown section ${doc.section}`).toBe(true);
   });
 
   test('every probed default equals the shown default', () => {
@@ -103,7 +114,8 @@ describe('reference tables match the code', () => {
     expect(g.cli.commands).toEqual(derivedCommands());
     expect(sortedKeys(g.cli.service.linux)).toEqual(sortedKeys(SERVICE_FLAG_DOCS));
     expect(g.cli.tray.actions).toEqual([...TRAY_ACTIONS]);
-    for (const locale of ['en', 'pt-BR'] as const) expect(g.cli.help[locale].helpTray).toStartWith(locale === 'en' ? 'Usage: telinha tray' : 'Uso: telinha tray');
+    for (const locale of ['en', 'pt-BR'] as const)
+      expect(g.cli.help[locale].helpTray).toStartWith(locale === 'en' ? 'Usage: telinha tray' : 'Uso: telinha tray');
     expect(g.versions.livekit).toMatch(/^\d+\.\d+\.\d+$/);
     expect(g.versions.caddy.version).toMatch(/^\d+\.\d+\.\d+$/);
     // PinnedVersions names the modules; the home certificate needs this one.
@@ -138,7 +150,9 @@ describe('every page exists in every language', () => {
   test.each(locales)('%s has the same pages as the root locale', (locale) => {
     const own = all.filter((p) => p.startsWith(`${locale}/`)).map((p) => p.slice(locale.length + 1));
     const problems = [
-      ...root.filter((p) => !own.includes(p)).map((p) => `${locale}/${p} is missing (root page ${p} has no translation)`),
+      ...root
+        .filter((p) => !own.includes(p))
+        .map((p) => `${locale}/${p} is missing (root page ${p} has no translation)`),
       ...own.filter((p) => !root.includes(p)).map((p) => `${p} is missing (only ${locale}/${p} exists)`),
     ];
     expect(problems).toEqual([]);
@@ -161,18 +175,40 @@ describe('every page exists in every language', () => {
  * the shell's own. A writer who needs another real one adds it here.
  */
 const LINT_ALLOW_ENV = new Set([
-  'TELINHA_VERSION', 'TELINHA_NO_SETUP', 'TELINHA_INSTALL', 'TELINHA_BASE_URL', // install.ps1 / install.sh
-  'TELINHA_DIR', 'TELINHA_DIGEST', 'MAX_DEFER_HOURS', 'VERIFY_ATTESTATION', 'ALLOW_UNVERIFIED', // telinha-update
-  'LIVEKIT_KEYS', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', // what the children get
-  'TELINHA_THEME', 'NO_COLOR', // the terminal screens' colours
+  'TELINHA_VERSION',
+  'TELINHA_NO_SETUP',
+  'TELINHA_INSTALL',
+  'TELINHA_BASE_URL', // install.ps1 / install.sh
+  'TELINHA_DIR',
+  'TELINHA_DIGEST',
+  'MAX_DEFER_HOURS',
+  'VERIFY_ATTESTATION',
+  'ALLOW_UNVERIFIED', // telinha-update
+  'LIVEKIT_KEYS',
+  'XDG_DATA_HOME',
+  'XDG_CONFIG_HOME', // what the children get
+  'TELINHA_THEME',
+  'NO_COLOR', // the terminal screens' colours
   'LIVEKIT_URL', // the LiveKit Cloud dashboard's name for the project URL
-  'LOCALAPPDATA', 'GH_TOKEN', 'GITHUB_TOKEN', 'CAP_NET_BIND_SERVICE', 'SHA256SUMS', 'LC_ALL', 'LC_MESSAGES', 'NODE_ENV',
+  'LOCALAPPDATA',
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
+  'CAP_NET_BIND_SERVICE',
+  'SHA256SUMS',
+  'LC_ALL',
+  'LC_MESSAGES',
+  'NODE_ENV',
 ]);
 const ENV_LIKE = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/;
 
 const flagKind = (d: FlagDef) => (typeof d === 'string' ? d : d.type);
 const ALL_FLAGS: Record<string, FlagDef> = {
-  ...GLOBAL_FLAGS, ...SETUP_FLAGS, ...DOCTOR_FLAGS, ...UPDATE_FLAGS, ...serviceSpec('linux').flags, ...serviceSpec('win32').flags,
+  ...GLOBAL_FLAGS,
+  ...SETUP_FLAGS,
+  ...DOCTOR_FLAGS,
+  ...UPDATE_FLAGS,
+  ...serviceSpec('linux').flags,
+  ...serviceSpec('win32').flags,
 };
 const SECRET_FILE_FLAGS = new Set(Object.keys(SECRET_FLAGS).map((f) => `${f}-file`));
 const COMMANDS = new Set([...derivedCommands(), 'help']);
@@ -211,7 +247,8 @@ describe('pages name only things that exist', () => {
     });
     for (const [, span] of prose.matchAll(/`([^`\n]+)`/g)) {
       const s = span!.trim();
-      if (ENV_LIKE.test(s) && !KNOWN_KEYS.has(s) && !LINT_ALLOW_ENV.has(s)) problems.push(`\`${s}\` is not a telinha.env key (add it to LINT_ALLOW_ENV if it is a real variable)`);
+      if (ENV_LIKE.test(s) && !KNOWN_KEYS.has(s) && !LINT_ALLOW_ENV.has(s))
+        problems.push(`\`${s}\` is not a telinha.env key (add it to LINT_ALLOW_ENV if it is a real variable)`);
       if (/^telinha[ -]/.test(s)) problems.push(...lintCommand(s).map((m) => `\`${s}\`: ${m}`));
     }
     for (const line of fenced.join('\n').split('\n')) {
@@ -221,8 +258,10 @@ describe('pages name only things that exist', () => {
     // Astro `base`: an internal link must carry /telinha/ (Starlight prefixes only the links it generates).
     for (const [, href] of [...prose.matchAll(/\]\(([^)\s]+)\)/g), ...prose.matchAll(/\bhref="([^"]+)"/g)]) {
       if (href!.startsWith('http') || href!.startsWith('#') || href!.startsWith('mailto:')) continue;
-      if (href!.includes('/telinha/') && !href!.startsWith('/telinha/')) problems.push(`link ${href} must start with /telinha/`);
-      else if (href!.startsWith('/') && !href!.startsWith('/telinha/')) problems.push(`link ${href} is missing the /telinha/ base`);
+      if (href!.includes('/telinha/') && !href!.startsWith('/telinha/'))
+        problems.push(`link ${href} must start with /telinha/`);
+      else if (href!.startsWith('/') && !href!.startsWith('/telinha/'))
+        problems.push(`link ${href} is missing the /telinha/ base`);
     }
     expect(problems).toEqual([]);
   });

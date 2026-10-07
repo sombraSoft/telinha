@@ -3,7 +3,7 @@
 // to the host only through an injected spawn so tests assert exact argv.
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createControlClient, type ControlClient } from '../cli/control.ts';
+import { type ControlClient, createControlClient } from '../cli/control.ts';
 import type { Locale } from '../cli/strings.ts';
 import type { Paths } from '../paths.ts';
 import { defaultProcessInfo, type ProcessInfo } from '../supervisor.ts';
@@ -12,7 +12,11 @@ import { createWindowsTask } from './windows.ts';
 
 type Env = Record<string, string | undefined>;
 
-export interface SpawnOutcome { code: number; stdout: string; stderr: string }
+export interface SpawnOutcome {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
 export type SpawnFn = (cmd: string[], o?: { timeoutMs?: number }) => Promise<SpawnOutcome>;
 
 export interface ServiceFs {
@@ -48,7 +52,12 @@ export interface InstallOptions {
   resultFile?: string;
 }
 
-export interface ServiceStatus { installed: boolean; running: boolean; enabled: boolean; detail: string }
+export interface ServiceStatus {
+  installed: boolean;
+  running: boolean;
+  enabled: boolean;
+  detail: string;
+}
 
 export interface ServiceManager {
   kind: 'windows-task' | 'systemd-system' | 'systemd-user';
@@ -63,7 +72,13 @@ export interface ServiceManager {
 
 export class ServiceInstallError extends Error {
   constructor(readonly result: InstallResult) {
-    super(result.error ?? Object.entries(result.steps).filter(([, s]) => s.startsWith('failed')).map(([k, s]) => `${k} ${s}`).join('; '));
+    super(
+      result.error ??
+        Object.entries(result.steps)
+          .filter(([, s]) => s.startsWith('failed'))
+          .map(([k, s]) => `${k} ${s}`)
+          .join('; '),
+    );
     this.name = 'ServiceInstallError';
   }
 }
@@ -126,7 +141,11 @@ export const defaultSpawn: SpawnFn = async (cmd, o = {}) => {
   const { proc } = started;
   const timer = o.timeoutMs ? setTimeout(() => proc.kill(), o.timeoutMs) : null;
   try {
-    const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
     return { code: code ?? 1, stdout, stderr };
   } finally {
     if (timer) clearTimeout(timer);
@@ -144,7 +163,11 @@ export function nodeServiceFs(): ServiceFs {
       }
     },
     writeFile: (path, data) => writeFile(path, data),
-    exists: (path) => stat(path).then(() => true, () => false),
+    exists: (path) =>
+      stat(path).then(
+        () => true,
+        () => false,
+      ),
     rm: (path) => rm(path, { force: true }),
     mkdir: async (dir) => void (await mkdir(dir, { recursive: true })),
   };

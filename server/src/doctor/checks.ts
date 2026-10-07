@@ -6,7 +6,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, win32 } from 'node:path';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import versionsJson from '../../../versions.json' with { type: 'json' };
-import { KNOWN_KEYS, turnIneligibility, upnpMappings, type Config } from '../config.ts';
+import { type Config, KNOWN_KEYS, turnIneligibility, upnpMappings } from '../config.ts';
 import { createDuckDns, DUCKDNS_REJECTED } from '../ddns.ts';
 import { parseEnvFile } from '../envfile.ts';
 import { footprintOf } from '../footprint.ts';
@@ -17,7 +17,15 @@ import { SYSCTL_SCRIPT } from '../service/systemd.ts';
 import { defaultProcessInfo, sameExe } from '../supervisor.ts';
 import { compareVersions as compareSemver } from '../update/updater.ts';
 import type {
-  Check, CheckContext, CheckResult, CheckStatus, MapperStatusLike, MappingLike, NatProbeLike, NetLike, SysLike,
+  Check,
+  CheckContext,
+  CheckResult,
+  CheckStatus,
+  MapperStatusLike,
+  MappingLike,
+  NatProbeLike,
+  NetLike,
+  SysLike,
   UpdateStatusLike,
 } from './types.ts';
 
@@ -78,7 +86,8 @@ const en = {
   permSkipped: 'No telinha.env, so there are no file permissions to check.',
   permOpen: 'telinha.env can be read by other users of this computer, and it holds secrets.',
   permOpenFixLinux: 'Run: chmod 600 "{file}"',
-  permOpenFixWindows: 'Run telinha setup again (it locks the file down), or: icacls "{file}" /inheritance:r /grant:r "%USERNAME%:F" "*S-1-5-18:F" "*S-1-5-32-544:F"',
+  permOpenFixWindows:
+    'Run telinha setup again (it locks the file down), or: icacls "{file}" /inheritance:r /grant:r "%USERNAME%:F" "*S-1-5-18:F" "*S-1-5-32-544:F"',
   permUnknown: 'Could not read the permissions of telinha.env.',
 
   binOk: 'All helper programs are in place.',
@@ -91,15 +100,17 @@ const en = {
   binStale: '{tool} {have} is installed, {want} is pinned: the next start downloads {want}.',
   binNoSidecar: '{tool} in {dir} has no version record: the next start downloads it again.',
   binCaddyNoDns: 'The caddy at {where} has no DuckDNS module: the certificate (DNS challenge) cannot be obtained.',
-  binCaddyNoDnsFixCompiled: 'Delete {where} and run telinha setup again: it downloads Telinha\'s own Caddy build.',
-  binCaddyNoDnsFixPath: 'Telinha\'s own Caddy is not in {bin}, so the one on PATH is used: run telinha setup again (or restart telinha) while online and it downloads Telinha\'s build into {bin}. The caddy at {where} is left as it is.',
-  binCaddyNoDnsFixDev: 'Fetch Telinha\'s Caddy build (bun scripts/bins.ts --out {bin} caddy) or build one (bun run caddy --out {bin}).',
+  binCaddyNoDnsFixCompiled: "Delete {where} and run telinha setup again: it downloads Telinha's own Caddy build.",
+  binCaddyNoDnsFixPath:
+    "Telinha's own Caddy is not in {bin}, so the one on PATH is used: run telinha setup again (or restart telinha) while online and it downloads Telinha's build into {bin}. The caddy at {where} is left as it is.",
+  binCaddyNoDnsFixDev:
+    "Fetch Telinha's Caddy build (bun scripts/bins.ts --out {bin} caddy) or build one (bun run caddy --out {bin}).",
   binCaddyNoProbe: 'Could not read {where} to look for the DuckDNS module.',
 
   tokenOk: 'The token works (application "{name}").',
   tokenBad: 'Discord rejected DISCORD_TOKEN.',
   tokenBadFix: 'Developer Portal → your app → Bot → Reset Token, then run telinha setup.',
-  clientIdMismatch: 'DISCORD_CLIENT_ID {have} is not this bot\'s application ({want}).',
+  clientIdMismatch: "DISCORD_CLIENT_ID {have} is not this bot's application ({want}).",
   clientIdMismatchFix: 'Set DISCORD_CLIENT_ID={want} (or run telinha setup).',
 
   intentsOk: 'Presence and Server Members intents are on.',
@@ -114,7 +125,7 @@ const en = {
 
   roleOk: 'Role "{name}" exists.',
   roleMissing: 'ROLE_ID {id} is not a role in this server.',
-  roleFix: 'Run telinha setup again: it lists the server\'s roles to pick from.',
+  roleFix: "Run telinha setup again: it lists the server's roles to pick from.",
 
   channelsAll: 'No CHANNEL_IDS: the command works in every channel.',
   channelsOk: 'Command channels: {list}.',
@@ -140,27 +151,34 @@ const en = {
   dnsWrong: '{host} points at {ips}, but the public IP is {ip}.',
   dnsWrongFix: 'Change the A record of {host} to {ip}.',
   dnsDuck: 'DuckDNS points {host} at {ips}, the public IP is {ip}; the running service updates it.',
-  dnsDuckToken: 'DuckDNS rejected the token for {host}: the record cannot be updated and the certificate (DNS challenge) cannot be obtained.',
-  dnsDuckTokenFix: 'Copy the token from duckdns.org (shown at the top once you sign in, with {host} among your domains) and run telinha setup again.',
+  dnsDuckToken:
+    'DuckDNS rejected the token for {host}: the record cannot be updated and the certificate (DNS challenge) cannot be obtained.',
+  dnsDuckTokenFix:
+    'Copy the token from duckdns.org (shown at the top once you sign in, with {host} among your domains) and run telinha setup again.',
   dnsDuckTokenOk: 'DuckDNS accepts the token for {host}.',
   dnsDuckTokenUnknown: 'Could not ask DuckDNS about the token: {error}',
-  dnsExternal: '{host} points at {ips}, not at this network ({ip}): fine if another proxy in front forwards to telinha.',
+  dnsExternal:
+    '{host} points at {ips}, not at this network ({ip}): fine if another proxy in front forwards to telinha.',
 
   certTunnel: 'Cloudflare terminates HTTPS for {host}; nothing to obtain here.',
   certExternal: 'Your reverse proxy holds the certificate for {host}.',
-  certDns: 'Let\'s Encrypt through DuckDNS (DNS challenge) for {host}; HTTPS on port {port}, ports 80 and 443 are not used.',
-  certHttp: 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for {host}.',
-  certAlpn: 'Let\'s Encrypt over port 443 (TLS-ALPN challenge) for {host}.',
-  certHomeAdvanced: 'Advanced home setup: ports 80 and 443 must reach this machine, forwarded by hand. The standard home options (a Cloudflare Tunnel, or a DuckDNS address with HTTPS on port 8443) need neither.',
+  certDns:
+    "Let's Encrypt through DuckDNS (DNS challenge) for {host}; HTTPS on port {port}, ports 80 and 443 are not used.",
+  certHttp: "Let's Encrypt over ports 80 and 443 (HTTP challenge) for {host}.",
+  certAlpn: "Let's Encrypt over port 443 (TLS-ALPN challenge) for {host}.",
+  certHomeAdvanced:
+    'Advanced home setup: ports 80 and 443 must reach this machine, forwarded by hand. The standard home options (a Cloudflare Tunnel, or a DuckDNS address with HTTPS on port 8443) need neither.',
 
   tlsHttp: 'Skipped: PUBLIC_URL is plain http.',
   tlsBad: 'The certificate of {host} is not valid: {error}',
-  tlsBadFixDirect: 'Caddy gets the certificate by itself once ports 80 and 443 reach this computer: see the DNS, listeners and port forwarding checks.',
-  tlsBadFixDns: 'Caddy asks Let\'s Encrypt through DuckDNS: check the DuckDNS token (dns check), that port {port} is free for Caddy (listeners) and the [caddy] lines in the log; a fresh install can take a few minutes.',
+  tlsBadFixDirect:
+    'Caddy gets the certificate by itself once ports 80 and 443 reach this computer: see the DNS, listeners and port forwarding checks.',
+  tlsBadFixDns:
+    "Caddy asks Let's Encrypt through DuckDNS: check the DuckDNS token (dns check), that port {port} is free for Caddy (listeners) and the [caddy] lines in the log; a fresh install can take a few minutes.",
   tlsBadFix: 'Check the proxy or tunnel in front of telinha.',
   tlsExpired: 'The certificate of {host} expired.',
   tlsSoon: 'The certificate of {host} expires in {days} days.',
-  tlsSoonFix: 'Caddy renews it on its own when it can reach Let\'s Encrypt; check the logs.',
+  tlsSoonFix: "Caddy renews it on its own when it can reach Let's Encrypt; check the logs.",
   tlsOk: 'Valid certificate by {issuer}, {days} days left; {url}/healthz answers.',
   healthFail: '{url}/healthz did not answer from the internet: {error}',
   healthFailFix: 'Check that telinha is running (listeners check) and that the ingress reaches it.',
@@ -168,23 +186,30 @@ const en = {
   cloudSkipSelf: 'Skipped: MEDIA=self runs LiveKit on this machine.',
   cloudOk: 'Connected to {host}: {n} room(s) open there.',
   cloudAuth: 'LiveKit Cloud rejected the API key or secret for {host}.',
-  cloudAuthFix: 'Cloud dashboard → your project → Settings → Keys: copy the key and secret into LIVEKIT_API_KEY / LIVEKIT_API_SECRET (or run telinha setup --non-interactive --media cloud --cloud-url ... --livekit-key ... with LIVEKIT_API_SECRET set).',
+  cloudAuthFix:
+    'Cloud dashboard → your project → Settings → Keys: copy the key and secret into LIVEKIT_API_KEY / LIVEKIT_API_SECRET (or run telinha setup --non-interactive --media cloud --cloud-url ... --livekit-key ... with LIVEKIT_API_SECRET set).',
   cloudUnreachable: 'Could not reach LiveKit Cloud at {host}: {error}',
-  cloudUnreachableFix: 'Check LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<project>.livekit.cloud) and this machine\'s internet access.',
-  cloudAutoCreate: 'In the project\'s settings, turn automatic room creation off: Telinha creates and deletes rooms itself, and a closed room must not come back when someone opens an old link.',
-  cloudLimits: 'Free Build plan: 5,000 WebRTC participant-minutes and 50 GB downstream a month, as a hard cap (past that, LiveKit Cloud refuses new connections until the next month), and up to 100 participants connected at once.',
+  cloudUnreachableFix:
+    "Check LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<project>.livekit.cloud) and this machine's internet access.",
+  cloudAutoCreate:
+    "In the project's settings, turn automatic room creation off: Telinha creates and deletes rooms itself, and a closed room must not come back when someone opens an old link.",
+  cloudLimits:
+    'Free Build plan: 5,000 WebRTC participant-minutes and 50 GB downstream a month, as a hard cap (past that, LiveKit Cloud refuses new connections until the next month), and up to 100 participants connected at once.',
 
   turnOff: 'Skipped: TURN=off.',
   turnNotHere: 'Skipped: TURN over TLS on 443 is for a VPS in direct mode on port 443 ({why}).',
-  turnAvailable: 'TURN over TLS is available: create the DNS record turn.{host} → {ip} (A record, same IP as {host}) and set TURN=on in telinha.env. It lets people on networks that only allow port 443 watch and stream.',
+  turnAvailable:
+    'TURN over TLS is available: create the DNS record turn.{host} → {ip} (A record, same IP as {host}) and set TURN=on in telinha.env. It lets people on networks that only allow port 443 watch and stream.',
   turnDnsFail: 'turn.{host} does not resolve: {error}',
   turnDnsWrong: 'turn.{host} points at {ips}, but the public IP is {ip}.',
   turnDnsFix: 'Create an A record turn.{host} → {ip}. DuckDNS and sslip.io names need nothing.',
   turnDnsUnknownIp: 'turn.{host} resolves to {ips}; the public IP is unknown, so it could not be compared.',
   turnTlsBad: 'turn.{host}:443 has no valid certificate: {error}',
-  turnTlsFix: 'Caddy obtains it after the start (a few minutes; it needs port 80 open for the HTTP challenge, or 443 for TLS-ALPN). Look at the [caddy] lines in the log.',
-  turnLocalDown: 'LiveKit\'s TURN is not listening on 127.0.0.1:{port} (TURN_PORT).',
-  turnOk: 'turn.{host}:443 has a valid certificate and LiveKit\'s TURN is listening on 127.0.0.1:{port} behind Caddy. Whether a phone can relay through it is what the phone test\'s TURN/TLS row shows.',
+  turnTlsFix:
+    'Caddy obtains it after the start (a few minutes; it needs port 80 open for the HTTP challenge, or 443 for TLS-ALPN). Look at the [caddy] lines in the log.',
+  turnLocalDown: "LiveKit's TURN is not listening on 127.0.0.1:{port} (TURN_PORT).",
+  turnOk:
+    "turn.{host}:443 has a valid certificate and LiveKit's TURN is listening on 127.0.0.1:{port} behind Caddy. Whether a phone can relay through it is what the phone test's TURN/TLS row shows.",
 
   listenDown: 'telinha is not running on this computer ({url}).',
   listenDownFix: 'Start it: telinha service start (or telinha run).',
@@ -197,14 +222,16 @@ const en = {
   httpsDown: 'Nothing listens on HTTPS port {port}.',
   listenTurnUp: 'TURN (TURN_PORT): listening on 127.0.0.1:{port}',
   listenTurnDown: 'TURN (TURN_PORT): nothing listening on 127.0.0.1:{port}',
-  lowPortFix: 'Ports below 1024 need root on Linux. Allow them once (it survives every update): {cmd}. The standard home options of telinha setup need no low port.',
+  lowPortFix:
+    'Ports below 1024 need root on Linux. Allow them once (it survives every update): {cmd}. The standard home options of telinha setup need no low port.',
   fwUfw: 'If ufw is active, open the ports: {cmd}',
   fwFirewalld: 'If firewalld is running, open the ports: {cmd}',
 
   serviceNone: 'Skipped: not a native install (Docker, a source checkout) or no service manager here.',
   serviceNotInstalled: 'telinha is not installed as a background service: it stops when you close the terminal.',
   serviceNotInstalledFix: 'Run: telinha service install',
-  serviceNotInstalledFixWin: 'Run telinha setup again: it installs the service (and the firewall rules) with one administrator prompt.',
+  serviceNotInstalledFixWin:
+    'Run telinha setup again: it installs the service (and the firewall rules) with one administrator prompt.',
   serviceNotInstalledFixRoot: 'Run: sudo telinha service install',
   serviceStopped: 'The service is installed but not running.',
   serviceStoppedFix: 'Run: telinha service start',
@@ -238,11 +265,15 @@ const en = {
 
   cgnatSkip: 'Skipped: no router to ask for its external IP.',
   cgnatOk: 'The router has the public IP {ip}.',
-  cgnatFail: 'Your internet provider uses carrier NAT (router external IP {ip}): nobody on the internet can reach this network.',
-  cgnatFailFix: 'For the web side use INGRESS=tunnel or a VPS. For the video, either ask your provider for a public IPv4 (a public IP or a CGNAT opt-out) or set MEDIA=cloud: LiveKit Cloud carries the media and needs no open port (free Build plan: 5,000 participant-minutes and 50 GB a month, up to 100 participants connected at once).',
-  cgnatCloud: 'Your provider uses carrier NAT ({ip}); the video goes through LiveKit Cloud, so only the pages need a way in: INGRESS=tunnel or a VPS.',
-  doubleNat: 'Double NAT: the router\'s external IP {ip} is a private address, so another router (often the provider\'s modem) sits in front.',
-  doubleNatFix: 'Put the provider\'s modem in bridge mode, or forward the ports on both devices: {list}',
+  cgnatFail:
+    'Your internet provider uses carrier NAT (router external IP {ip}): nobody on the internet can reach this network.',
+  cgnatFailFix:
+    'For the web side use INGRESS=tunnel or a VPS. For the video, either ask your provider for a public IPv4 (a public IP or a CGNAT opt-out) or set MEDIA=cloud: LiveKit Cloud carries the media and needs no open port (free Build plan: 5,000 participant-minutes and 50 GB a month, up to 100 participants connected at once).',
+  cgnatCloud:
+    'Your provider uses carrier NAT ({ip}); the video goes through LiveKit Cloud, so only the pages need a way in: INGRESS=tunnel or a VPS.',
+  doubleNat:
+    "Double NAT: the router's external IP {ip} is a private address, so another router (often the provider's modem) sits in front.",
+  doubleNatFix: "Put the provider's modem in bridge mode, or forward the ports on both devices: {list}",
   natMismatch: 'The router reports {ext}, but the internet sees {ip}: there is probably another NAT in front.',
 
   mapSkipNoPorts: 'Skipped: this configuration needs no inbound ports.',
@@ -312,7 +343,8 @@ const ptBR: Dict = {
   permSkipped: 'Sem telinha.env, então não há permissões de arquivo pra conferir.',
   permOpen: 'Outros usuários deste computador conseguem ler o telinha.env, e ele guarda segredos.',
   permOpenFixLinux: 'Roda: chmod 600 "{file}"',
-  permOpenFixWindows: 'Roda o telinha setup de novo (ele tranca o arquivo), ou: icacls "{file}" /inheritance:r /grant:r "%USERNAME%:F" "*S-1-5-18:F" "*S-1-5-32-544:F"',
+  permOpenFixWindows:
+    'Roda o telinha setup de novo (ele tranca o arquivo), ou: icacls "{file}" /inheritance:r /grant:r "%USERNAME%:F" "*S-1-5-18:F" "*S-1-5-32-544:F"',
   permUnknown: 'Não deu pra ler as permissões do telinha.env.',
 
   binOk: 'Todos os programas auxiliares estão no lugar.',
@@ -326,8 +358,10 @@ const ptBR: Dict = {
   binNoSidecar: '{tool} em {dir} não tem registro de versão: a próxima inicialização baixa de novo.',
   binCaddyNoDns: 'O caddy em {where} não tem o módulo do DuckDNS: o certificado (desafio DNS) não tem como sair.',
   binCaddyNoDnsFixCompiled: 'Apaga {where} e roda o telinha setup de novo: ele baixa o Caddy da própria Telinha.',
-  binCaddyNoDnsFixPath: 'O Caddy da própria Telinha não está em {bin}, então o do PATH é que está sendo usado: roda o telinha setup de novo (ou reinicia a Telinha) com internet e ele baixa o build da Telinha em {bin}. O caddy em {where} fica como está.',
-  binCaddyNoDnsFixDev: 'Baixa o Caddy da Telinha (bun scripts/bins.ts --out {bin} caddy) ou compila um (bun run caddy --out {bin}).',
+  binCaddyNoDnsFixPath:
+    'O Caddy da própria Telinha não está em {bin}, então o do PATH é que está sendo usado: roda o telinha setup de novo (ou reinicia a Telinha) com internet e ele baixa o build da Telinha em {bin}. O caddy em {where} fica como está.',
+  binCaddyNoDnsFixDev:
+    'Baixa o Caddy da Telinha (bun scripts/bins.ts --out {bin} caddy) ou compila um (bun run caddy --out {bin}).',
   binCaddyNoProbe: 'Não deu pra ler {where} pra procurar o módulo do DuckDNS.',
 
   tokenOk: 'O token funciona (aplicação "{name}").',
@@ -374,27 +408,34 @@ const ptBR: Dict = {
   dnsWrong: '{host} aponta pra {ips}, mas o IP público é {ip}.',
   dnsWrongFix: 'Muda o registro A de {host} pra {ip}.',
   dnsDuck: 'O DuckDNS aponta {host} pra {ips}, o IP público é {ip}; o serviço rodando atualiza isso.',
-  dnsDuckToken: 'O DuckDNS recusou o token pra {host}: o registro não atualiza e o certificado (desafio DNS) não tem como sair.',
-  dnsDuckTokenFix: 'Copia o token do duckdns.org (aparece no topo depois de entrar, com {host} entre os teus domínios) e roda o telinha setup de novo.',
+  dnsDuckToken:
+    'O DuckDNS recusou o token pra {host}: o registro não atualiza e o certificado (desafio DNS) não tem como sair.',
+  dnsDuckTokenFix:
+    'Copia o token do duckdns.org (aparece no topo depois de entrar, com {host} entre os teus domínios) e roda o telinha setup de novo.',
   dnsDuckTokenOk: 'O DuckDNS aceita o token pra {host}.',
   dnsDuckTokenUnknown: 'Não deu pra perguntar ao DuckDNS sobre o token: {error}',
-  dnsExternal: '{host} aponta pra {ips}, não pra esta rede ({ip}): tudo bem se outro proxy na frente repassa pra Telinha.',
+  dnsExternal:
+    '{host} aponta pra {ips}, não pra esta rede ({ip}): tudo bem se outro proxy na frente repassa pra Telinha.',
 
   certTunnel: 'A Cloudflare cuida do HTTPS de {host}; não há nada pra obter aqui.',
   certExternal: 'Teu proxy reverso guarda o certificado de {host}.',
-  certDns: 'Let\'s Encrypt pelo DuckDNS (desafio DNS) pra {host}; HTTPS na porta {port}, as portas 80 e 443 não são usadas.',
-  certHttp: 'Let\'s Encrypt pelas portas 80 e 443 (desafio HTTP) pra {host}.',
-  certAlpn: 'Let\'s Encrypt pela porta 443 (desafio TLS-ALPN) pra {host}.',
-  certHomeAdvanced: 'Configuração avançada em casa: as portas 80 e 443 precisam chegar neste computador, redirecionadas na mão. As opções padrão pra casa (um Cloudflare Tunnel, ou um endereço DuckDNS com HTTPS na porta 8443) não precisam de nenhuma das duas.',
+  certDns:
+    "Let's Encrypt pelo DuckDNS (desafio DNS) pra {host}; HTTPS na porta {port}, as portas 80 e 443 não são usadas.",
+  certHttp: "Let's Encrypt pelas portas 80 e 443 (desafio HTTP) pra {host}.",
+  certAlpn: "Let's Encrypt pela porta 443 (desafio TLS-ALPN) pra {host}.",
+  certHomeAdvanced:
+    'Configuração avançada em casa: as portas 80 e 443 precisam chegar neste computador, redirecionadas na mão. As opções padrão pra casa (um Cloudflare Tunnel, ou um endereço DuckDNS com HTTPS na porta 8443) não precisam de nenhuma das duas.',
 
   tlsHttp: 'Pulado: PUBLIC_URL é http simples.',
   tlsBad: 'O certificado de {host} não é válido: {error}',
-  tlsBadFixDirect: 'O Caddy pega o certificado sozinho quando as portas 80 e 443 chegam neste computador: olha os testes de DNS, portas locais e redirecionamento.',
-  tlsBadFixDns: 'O Caddy pede ao Let\'s Encrypt pelo DuckDNS: confere o token do DuckDNS (teste de DNS), se a porta {port} está livre pro Caddy (portas locais) e as linhas [caddy] do log; numa instalação nova pode levar alguns minutos.',
+  tlsBadFixDirect:
+    'O Caddy pega o certificado sozinho quando as portas 80 e 443 chegam neste computador: olha os testes de DNS, portas locais e redirecionamento.',
+  tlsBadFixDns:
+    "O Caddy pede ao Let's Encrypt pelo DuckDNS: confere o token do DuckDNS (teste de DNS), se a porta {port} está livre pro Caddy (portas locais) e as linhas [caddy] do log; numa instalação nova pode levar alguns minutos.",
   tlsBadFix: 'Confere o proxy ou o túnel na frente da Telinha.',
   tlsExpired: 'O certificado de {host} venceu.',
   tlsSoon: 'O certificado de {host} vence em {days} dias.',
-  tlsSoonFix: 'O Caddy renova sozinho quando alcança o Let\'s Encrypt; olha os logs.',
+  tlsSoonFix: "O Caddy renova sozinho quando alcança o Let's Encrypt; olha os logs.",
   tlsOk: 'Certificado válido de {issuer}, faltam {days} dias; {url}/healthz responde.',
   healthFail: '{url}/healthz não respondeu pela internet: {error}',
   healthFailFix: 'Confere se a Telinha está rodando (teste de portas locais) e se a entrada chega nela.',
@@ -402,23 +443,30 @@ const ptBR: Dict = {
   cloudSkipSelf: 'Pulado: com MEDIA=self o LiveKit roda neste computador.',
   cloudOk: 'Conectado a {host}: {n} sala(s) aberta(s) lá.',
   cloudAuth: 'O LiveKit Cloud recusou a chave ou o segredo da API pra {host}.',
-  cloudAuthFix: 'Painel do Cloud → teu projeto → Settings → Keys: copia a chave e o segredo pro LIVEKIT_API_KEY / LIVEKIT_API_SECRET (ou roda telinha setup --non-interactive --media cloud --cloud-url ... --livekit-key ... com o LIVEKIT_API_SECRET definido).',
+  cloudAuthFix:
+    'Painel do Cloud → teu projeto → Settings → Keys: copia a chave e o segredo pro LIVEKIT_API_KEY / LIVEKIT_API_SECRET (ou roda telinha setup --non-interactive --media cloud --cloud-url ... --livekit-key ... com o LIVEKIT_API_SECRET definido).',
   cloudUnreachable: 'Não deu pra falar com o LiveKit Cloud em {host}: {error}',
-  cloudUnreachableFix: 'Confere o LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<projeto>.livekit.cloud) e a internet deste computador.',
-  cloudAutoCreate: 'Nas configurações do projeto, desliga a criação automática de salas: a Telinha cria e apaga as salas sozinha, e uma sala fechada não pode voltar quando alguém abre um link antigo.',
-  cloudLimits: 'Plano gratuito Build: 5.000 participante-minutos de WebRTC e 50 GB de download por mês, como teto rígido (passou disso, o LiveKit Cloud recusa conexões novas até o mês seguinte), e até 100 participantes conectados ao mesmo tempo.',
+  cloudUnreachableFix:
+    'Confere o LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<projeto>.livekit.cloud) e a internet deste computador.',
+  cloudAutoCreate:
+    'Nas configurações do projeto, desliga a criação automática de salas: a Telinha cria e apaga as salas sozinha, e uma sala fechada não pode voltar quando alguém abre um link antigo.',
+  cloudLimits:
+    'Plano gratuito Build: 5.000 participante-minutos de WebRTC e 50 GB de download por mês, como teto rígido (passou disso, o LiveKit Cloud recusa conexões novas até o mês seguinte), e até 100 participantes conectados ao mesmo tempo.',
 
   turnOff: 'Pulado: TURN=off.',
   turnNotHere: 'Pulado: TURN sobre TLS na 443 é pra uma VPS no modo direto na porta 443 ({why}).',
-  turnAvailable: 'TURN sobre TLS está disponível: cria o registro DNS turn.{host} → {ip} (registro A, mesmo IP de {host}) e põe TURN=on no telinha.env. Ele deixa quem está numa rede que só libera a porta 443 assistir e transmitir.',
+  turnAvailable:
+    'TURN sobre TLS está disponível: cria o registro DNS turn.{host} → {ip} (registro A, mesmo IP de {host}) e põe TURN=on no telinha.env. Ele deixa quem está numa rede que só libera a porta 443 assistir e transmitir.',
   turnDnsFail: 'turn.{host} não resolve: {error}',
   turnDnsWrong: 'turn.{host} aponta pra {ips}, mas o IP público é {ip}.',
   turnDnsFix: 'Cria um registro A turn.{host} → {ip}. Nomes do DuckDNS e do sslip.io não precisam de nada.',
   turnDnsUnknownIp: 'turn.{host} resolve pra {ips}; o IP público é desconhecido, então não deu pra comparar.',
   turnTlsBad: 'turn.{host}:443 não tem certificado válido: {error}',
-  turnTlsFix: 'O Caddy pega ele depois de iniciar (alguns minutos; precisa da porta 80 aberta pro desafio HTTP, ou da 443 pro TLS-ALPN). Olha as linhas [caddy] do log.',
+  turnTlsFix:
+    'O Caddy pega ele depois de iniciar (alguns minutos; precisa da porta 80 aberta pro desafio HTTP, ou da 443 pro TLS-ALPN). Olha as linhas [caddy] do log.',
   turnLocalDown: 'O TURN do LiveKit não está escutando em 127.0.0.1:{port} (TURN_PORT).',
-  turnOk: 'turn.{host}:443 tem certificado válido e o TURN do LiveKit está escutando em 127.0.0.1:{port} atrás do Caddy. Se um celular consegue passar por ele é o que mostra a linha TURN/TLS do teste no celular.',
+  turnOk:
+    'turn.{host}:443 tem certificado válido e o TURN do LiveKit está escutando em 127.0.0.1:{port} atrás do Caddy. Se um celular consegue passar por ele é o que mostra a linha TURN/TLS do teste no celular.',
 
   listenDown: 'A Telinha não está rodando neste computador ({url}).',
   listenDownFix: 'Inicia: telinha service start (ou telinha run).',
@@ -431,14 +479,16 @@ const ptBR: Dict = {
   httpsDown: 'Nada escuta na porta HTTPS {port}.',
   listenTurnUp: 'TURN (TURN_PORT): escutando em 127.0.0.1:{port}',
   listenTurnDown: 'TURN (TURN_PORT): nada escutando em 127.0.0.1:{port}',
-  lowPortFix: 'No Linux, portas abaixo de 1024 precisam de root. Libera uma vez (vale pra todas as atualizações): {cmd}. As opções padrão pra casa do telinha setup não precisam de porta baixa.',
+  lowPortFix:
+    'No Linux, portas abaixo de 1024 precisam de root. Libera uma vez (vale pra todas as atualizações): {cmd}. As opções padrão pra casa do telinha setup não precisam de porta baixa.',
   fwUfw: 'Se o ufw estiver ativo, abre as portas: {cmd}',
   fwFirewalld: 'Se o firewalld estiver rodando, abre as portas: {cmd}',
 
   serviceNone: 'Pulado: não é uma instalação nativa (Docker, código-fonte) ou não há gerenciador de serviços aqui.',
   serviceNotInstalled: 'A Telinha não está instalada como serviço: ela para quando fecha o terminal.',
   serviceNotInstalledFix: 'Roda: telinha service install',
-  serviceNotInstalledFixWin: 'Roda o telinha setup de novo: ele instala o serviço (e as regras de firewall) com um pedido de administrador.',
+  serviceNotInstalledFixWin:
+    'Roda o telinha setup de novo: ele instala o serviço (e as regras de firewall) com um pedido de administrador.',
   serviceNotInstalledFixRoot: 'Roda: sudo telinha service install',
   serviceStopped: 'O serviço está instalado mas parado.',
   serviceStoppedFix: 'Roda: telinha service start',
@@ -473,9 +523,12 @@ const ptBR: Dict = {
   cgnatSkip: 'Pulado: nenhum roteador pra perguntar o IP externo.',
   cgnatOk: 'O roteador tem o IP público {ip}.',
   cgnatFail: 'Tua operadora usa NAT de operadora (IP externo do roteador {ip}): ninguém na internet alcança esta rede.',
-  cgnatFailFix: 'Pro lado web usa INGRESS=tunnel ou uma VPS. Pro vídeo, ou pede um IPv4 público pra operadora (IP público ou sair do CGNAT) ou põe MEDIA=cloud: o LiveKit Cloud leva a mídia e não precisa de porta aberta (plano gratuito Build: 5.000 participante-minutos e 50 GB por mês, até 100 participantes conectados ao mesmo tempo).',
-  cgnatCloud: 'Tua operadora usa NAT de operadora ({ip}); o vídeo passa pelo LiveKit Cloud, então só as páginas precisam de uma entrada: INGRESS=tunnel ou uma VPS.',
-  doubleNat: 'NAT duplo: o IP externo do roteador {ip} é privado, então tem outro roteador na frente (geralmente o modem da operadora).',
+  cgnatFailFix:
+    'Pro lado web usa INGRESS=tunnel ou uma VPS. Pro vídeo, ou pede um IPv4 público pra operadora (IP público ou sair do CGNAT) ou põe MEDIA=cloud: o LiveKit Cloud leva a mídia e não precisa de porta aberta (plano gratuito Build: 5.000 participante-minutos e 50 GB por mês, até 100 participantes conectados ao mesmo tempo).',
+  cgnatCloud:
+    'Tua operadora usa NAT de operadora ({ip}); o vídeo passa pelo LiveKit Cloud, então só as páginas precisam de uma entrada: INGRESS=tunnel ou uma VPS.',
+  doubleNat:
+    'NAT duplo: o IP externo do roteador {ip} é privado, então tem outro roteador na frente (geralmente o modem da operadora).',
   doubleNatFix: 'Põe o modem da operadora em modo bridge, ou redireciona as portas nos dois aparelhos: {list}',
   natMismatch: 'O roteador informa {ext}, mas a internet vê {ip}: provavelmente tem outro NAT na frente.',
 
@@ -515,11 +568,21 @@ export function checkTitle(id: string, locale: Locale): string {
 
 // ---------- helpers ----------
 
-interface Finding { status: Exclude<CheckStatus, 'skip'>; summary: string; fix?: string }
+interface Finding {
+  status: Exclude<CheckStatus, 'skip'>;
+  summary: string;
+  fix?: string;
+}
 
 const RANK: Record<CheckStatus, number> = { skip: 0, ok: 1, warn: 2, fail: 3 };
 
-function make(ctx: CheckContext, id: string, status: CheckStatus, summary: string, extra: { detail?: string[]; fix?: string } = {}): CheckResult {
+function make(
+  ctx: CheckContext,
+  id: string,
+  status: CheckStatus,
+  summary: string,
+  extra: { detail?: string[]; fix?: string } = {},
+): CheckResult {
   const r: CheckResult = { id, title: checkTitle(id, ctx.locale), status, summary };
   if (extra.detail?.length) r.detail = extra.detail;
   if (extra.fix && (status === 'warn' || status === 'fail')) r.fix = extra.fix;
@@ -527,7 +590,13 @@ function make(ctx: CheckContext, id: string, status: CheckStatus, summary: strin
 }
 
 /** Worst finding leads (summary + fix); the others become detail lines. */
-function combine(ctx: CheckContext, id: string, findings: Finding[], okSummary: string, detail: string[] = []): CheckResult {
+function combine(
+  ctx: CheckContext,
+  id: string,
+  findings: Finding[],
+  okSummary: string,
+  detail: string[] = [],
+): CheckResult {
   const bad = findings.filter((f) => f.status !== 'ok');
   if (!bad.length) return make(ctx, id, 'ok', okSummary, { detail });
   const worst = bad.reduce((a, b) => (RANK[b.status] > RANK[a.status] ? b : a));
@@ -539,7 +608,10 @@ const memo = new WeakMap<CheckContext, Map<string, Promise<unknown>>>();
 /** One lookup per doctor run, shared by the checks that need it. */
 function once<T>(ctx: CheckContext, key: string, fn: () => Promise<T>): Promise<T> {
   let m = memo.get(ctx);
-  if (!m) memo.set(ctx, (m = new Map()));
+  if (!m) {
+    m = new Map();
+    memo.set(ctx, m);
+  }
   if (!m.has(key)) m.set(key, fn());
   return m.get(key) as Promise<T>;
 }
@@ -607,17 +679,22 @@ const realSys: SysLike = {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       // The path travels in the environment, never spliced into the script.
-      const script = '$s = Get-AuthenticodeSignature -LiteralPath $env:TELINHA_SIG_PATH; '
-        + '$n = if ($s.SignerCertificate) { $s.SignerCertificate.GetNameInfo("SimpleName", $false) } else { $null }; '
-        + '@{ status = [string]$s.Status; signer = $n } | ConvertTo-Json -Compress';
+      const script =
+        '$s = Get-AuthenticodeSignature -LiteralPath $env:TELINHA_SIG_PATH; ' +
+        '$n = if ($s.SignerCertificate) { $s.SignerCertificate.GetNameInfo("SimpleName", $false) } else { $null }; ' +
+        '@{ status = [string]$s.Status; signer = $n } | ConvertTo-Json -Compress';
       const p = Bun.spawn(['powershell', '-NoProfile', '-NonInteractive', '-Command', script], {
-        stdout: 'pipe', stderr: 'ignore', env: { ...process.env, TELINHA_SIG_PATH: path },
+        stdout: 'pipe',
+        stderr: 'ignore',
+        env: { ...process.env, TELINHA_SIG_PATH: path },
       });
       timer = setTimeout(() => p.kill(), SIGNATURE_TIMEOUT_MS);
       const out = await new Response(p.stdout).text();
       if ((await p.exited) !== 0) return null;
       const j = JSON.parse(out) as { status?: unknown; signer?: unknown };
-      return typeof j.status === 'string' ? { status: j.status, signer: typeof j.signer === 'string' && j.signer ? j.signer : null } : null;
+      return typeof j.status === 'string'
+        ? { status: j.status, signer: typeof j.signer === 'string' && j.signer ? j.signer : null }
+        : null;
     } catch {
       return null;
     } finally {
@@ -632,7 +709,11 @@ const net = (ctx: CheckContext): NetLike => ctx.net ?? netinfo;
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function publicIp(ctx: CheckContext): Promise<string | null> {
-  return once(ctx, 'publicIp', () => net(ctx).lookupPublicIp(ctx.fetch).catch(() => null));
+  return once(ctx, 'publicIp', () =>
+    net(ctx)
+      .lookupPublicIp(ctx.fetch)
+      .catch(() => null),
+  );
 }
 
 async function sdkListRooms(apiUrl: string, key: string, secret: string): Promise<{ rooms: number }> {
@@ -669,7 +750,10 @@ function controlStatus(ctx: CheckContext) {
   });
 }
 
-interface DiscordReply<T> { status: number; body: T | null }
+interface DiscordReply<T> {
+  status: number;
+  body: T | null;
+}
 
 function discordGet<T>(ctx: CheckContext, config: Config, path: string): Promise<DiscordReply<T>> {
   return once(ctx, `discord:${path}`, async () => {
@@ -681,10 +765,25 @@ function discordGet<T>(ctx: CheckContext, config: Config, path: string): Promise
   });
 }
 
-interface DiscordApp { id: string; name: string; flags?: number; redirect_uris?: string[] }
-interface DiscordGuild { id: string; name: string }
-interface DiscordRole { id: string; name: string }
-interface DiscordChannel { id: string; name: string; type: number }
+interface DiscordApp {
+  id: string;
+  name: string;
+  flags?: number;
+  redirect_uris?: string[];
+}
+interface DiscordGuild {
+  id: string;
+  name: string;
+}
+interface DiscordRole {
+  id: string;
+  name: string;
+}
+interface DiscordChannel {
+  id: string;
+  name: string;
+  type: number;
+}
 
 /** Common gate for the Discord checks: a usable config with a real bot. */
 function discordConfig(ctx: CheckContext, id: string): Config | CheckResult {
@@ -701,11 +800,17 @@ async function discordApp(ctx: CheckContext, id: string): Promise<DiscordApp | C
   try {
     r = await discordGet<DiscordApp>(ctx, c, '/applications/@me');
   } catch (e) {
-    return make(ctx, id, id === 'discord-token' ? 'warn' : 'skip', tr(ctx.locale, 'discordUnreachable', { error: errMsg(e) }));
+    return make(
+      ctx,
+      id,
+      id === 'discord-token' ? 'warn' : 'skip',
+      tr(ctx.locale, 'discordUnreachable', { error: errMsg(e) }),
+    );
   }
   if (r.status === 200 && r.body) return r.body;
   if (id !== 'discord-token') return make(ctx, id, 'skip', tr(ctx.locale, 'needToken'));
-  if (r.status === 401) return make(ctx, id, 'fail', tr(ctx.locale, 'tokenBad'), { fix: tr(ctx.locale, 'tokenBadFix') });
+  if (r.status === 401)
+    return make(ctx, id, 'fail', tr(ctx.locale, 'tokenBad'), { fix: tr(ctx.locale, 'tokenBadFix') });
   return make(ctx, id, 'warn', tr(ctx.locale, 'discordHttp', { status: r.status }));
 }
 
@@ -715,24 +820,34 @@ export function inviteUrl(clientId: string, guildId: string): string {
   return `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=${BOT_PERMISSIONS}&guild_id=${guildId}&disable_guild_select=true`;
 }
 
-interface NeededPort { protocol: 'tcp' | 'udp'; external: number; internal: number }
+interface NeededPort {
+  protocol: 'tcp' | 'udp';
+  external: number;
+  internal: number;
+}
 
 /** Inbound ports the router must forward for this config: the footprint's exposures, web ports first. */
 export function neededPorts(c: Config): NeededPort[] {
   const { exposures } = footprintOf(c);
-  return [...exposures.filter((e) => e.helper === 'caddy'), ...exposures.filter((e) => e.helper !== 'caddy')]
-    .map((e) => ({ protocol: e.protocol, external: e.externalPort ?? e.port, internal: e.port }));
+  return [...exposures.filter((e) => e.helper === 'caddy'), ...exposures.filter((e) => e.helper !== 'caddy')].map(
+    (e) => ({ protocol: e.protocol, external: e.externalPort ?? e.port, internal: e.port }),
+  );
 }
 
-const portLabel = (p: NeededPort) => `${p.protocol.toUpperCase()} ${p.external}${p.internal !== p.external ? ` → ${p.internal}` : ''}`;
+const portLabel = (p: NeededPort) =>
+  `${p.protocol.toUpperCase()} ${p.external}${p.internal !== p.external ? ` → ${p.internal}` : ''}`;
 const portList = (ps: NeededPort[]) => ps.map(portLabel).join(', ');
 
 /** The commands that open `ports` ("443/tcp") in ufw and firewalld, for the ones installed here. */
-export function firewallCommands(ports: string[], which: (cmd: string) => string | null): { ufw?: string; firewalld?: string } {
+export function firewallCommands(
+  ports: string[],
+  which: (cmd: string) => string | null,
+): { ufw?: string; firewalld?: string } {
   if (!ports.length) return {};
   const out: { ufw?: string; firewalld?: string } = {};
   if (which('ufw')) out.ufw = ports.map((p) => `sudo ufw allow ${p}`).join(' && ');
-  if (which('firewall-cmd')) out.firewalld = `sudo firewall-cmd --permanent ${ports.map((p) => `--add-port=${p}`).join(' ')} && sudo firewall-cmd --reload`;
+  if (which('firewall-cmd'))
+    out.firewalld = `sudo firewall-cmd --permanent ${ports.map((p) => `--add-port=${p}`).join(' ')} && sudo firewall-cmd --reload`;
   return out;
 }
 
@@ -740,7 +855,9 @@ export function firewallCommands(ports: string[], which: (cmd: string) => string
 function firewallHints(ctx: CheckContext, c: Config): string[] {
   const s = sys(ctx);
   if (s.platform !== 'linux') return [];
-  const cmds = firewallCommands([...new Set(neededPorts(c).map((p) => `${p.internal}/${p.protocol}`))], (cmd) => s.which(cmd));
+  const cmds = firewallCommands([...new Set(neededPorts(c).map((p) => `${p.internal}/${p.protocol}`))], (cmd) =>
+    s.which(cmd),
+  );
   const out: string[] = [];
   if (cmds.ufw) out.push(tr(ctx.locale, 'fwUfw', { cmd: cmds.ufw }));
   if (cmds.firewalld) out.push(tr(ctx.locale, 'fwFirewalld', { cmd: cmds.firewalld }));
@@ -761,7 +878,10 @@ export function compareVersions(a: string, b: string): number | null {
 export function broadAclEntries(icaclsOutput: string): string[] {
   // Names are localized and the console code page may mangle accents, hence `Usu.{1,2}rios`.
   const BROAD = /(^|[\\\s])(Everyone|Todos|Users|Usu.{1,2}rios|Authenticated Users|Usu.{1,2}rios autenticados):\(/i;
-  return icaclsOutput.split(/\r?\n/).map((l) => l.trim()).filter((l) => BROAD.test(l));
+  return icaclsOutput
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => BROAD.test(l));
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
@@ -783,7 +903,11 @@ const config: Check = {
     const text = s.readText(ctx.envFile);
     const parsed = text === null ? null : parseEnvFile(text);
     if (ctx.configError) {
-      findings.push({ status: 'fail', summary: tr(L, 'configError', { error: ctx.configError }), fix: tr(L, 'configErrorFix', { file: ctx.envFile }) });
+      findings.push({
+        status: 'fail',
+        summary: tr(L, 'configError', { error: ctx.configError }),
+        fix: tr(L, 'configErrorFix', { file: ctx.envFile }),
+      });
     }
     for (const w of parsed?.warnings ?? []) findings.push({ status: 'warn', summary: w });
     for (const k of Object.keys(parsed?.vars ?? {})) {
@@ -799,7 +923,11 @@ const config: Check = {
       else {
         const broad = broadAclEntries(out);
         if (broad.length) {
-          findings.push({ status: 'fail', summary: tr(L, 'permOpen'), fix: tr(L, 'permOpenFixWindows', { file: ctx.envFile }) });
+          findings.push({
+            status: 'fail',
+            summary: tr(L, 'permOpen'),
+            fix: tr(L, 'permOpenFixWindows', { file: ctx.envFile }),
+          });
           detail.push(...broad);
         }
       }
@@ -809,7 +937,11 @@ const config: Check = {
       const groupRead = mode !== null && s.fileUid?.(ctx.envFile) === 0 ? 0o040 : 0;
       if (mode === null) detail.push(tr(L, 'permUnknown'));
       else if (mode & 0o077 & ~groupRead) {
-        findings.push({ status: 'fail', summary: tr(L, 'permOpen'), fix: tr(L, 'permOpenFixLinux', { file: ctx.envFile }) });
+        findings.push({
+          status: 'fail',
+          summary: tr(L, 'permOpen'),
+          fix: tr(L, 'permOpenFixLinux', { file: ctx.envFile }),
+        });
         detail.push(`mode ${(mode & 0o777).toString(8).padStart(3, '0')}`);
       }
     }
@@ -818,7 +950,9 @@ const config: Check = {
 };
 
 const PINNED: Record<string, { version: string }> = {
-  livekit: versionsJson.livekit, caddy: versionsJson.caddy, cloudflared: versionsJson.cloudflared,
+  livekit: versionsJson.livekit,
+  caddy: versionsJson.caddy,
+  cloudflared: versionsJson.cloudflared,
 };
 
 /** Far above any Caddy build (~50 MB); a bigger file is not read whole. */
@@ -862,14 +996,19 @@ const binaries: Check = {
         found = local;
         const have = s.readText(join(ctx.paths.bin, `${tool}.version`))?.trim();
         if (!have) findings.push({ status: 'warn', summary: tr(L, 'binNoSidecar', { tool, dir: ctx.paths.bin }) });
-        else if (want !== null && have !== want) findings.push({ status: 'warn', summary: tr(L, 'binStale', { tool, have, want }) });
+        else if (want !== null && have !== want)
+          findings.push({ status: 'warn', summary: tr(L, 'binStale', { tool, have, want }) });
         else detail.push(tr(L, 'binLine', { tool, version: have, where: local }));
       } else {
         found = s.which(member);
         if (found) detail.push(tr(L, 'binPath', { tool, where: found }));
       }
       if (!found) {
-        findings.push({ status: 'fail', summary: tr(L, 'binMissing', { tool }), fix: tr(L, ctx.compiled ? 'binMissingFixCompiled' : 'binMissingFixDev') });
+        findings.push({
+          status: 'fail',
+          summary: tr(L, 'binMissing', { tool }),
+          fix: tr(L, ctx.compiled ? 'binMissingFixCompiled' : 'binMissingFixDev'),
+        });
         continue;
       }
       // An upstream caddy (a distro package, an old download) cannot do the DuckDNS challenge.
@@ -879,9 +1018,14 @@ const binaries: Check = {
         else if (!has) {
           // Ours in bin/ can go (the next setup or start downloads it again); a caddy on PATH
           // is only in use because Telinha's own download failed, and may belong to a package.
-          const fix = !ctx.compiled ? 'binCaddyNoDnsFixDev' : found === local ? 'binCaddyNoDnsFixCompiled' : 'binCaddyNoDnsFixPath';
+          const fix = !ctx.compiled
+            ? 'binCaddyNoDnsFixDev'
+            : found === local
+              ? 'binCaddyNoDnsFixCompiled'
+              : 'binCaddyNoDnsFixPath';
           findings.push({
-            status: 'fail', summary: tr(L, 'binCaddyNoDns', { where: found }),
+            status: 'fail',
+            summary: tr(L, 'binCaddyNoDns', { where: found }),
             fix: tr(L, fix, { where: found, bin: ctx.paths.bin }),
           });
         }
@@ -899,9 +1043,15 @@ const discordToken: Check = {
     if (isResult(app)) return app;
     const c = ctx.config!;
     if (c.clientId && app.id && c.clientId !== app.id) {
-      return make(ctx, 'discord-token', 'fail', tr(ctx.locale, 'clientIdMismatch', { have: c.clientId, want: app.id }), {
-        fix: tr(ctx.locale, 'clientIdMismatchFix', { want: app.id }),
-      });
+      return make(
+        ctx,
+        'discord-token',
+        'fail',
+        tr(ctx.locale, 'clientIdMismatch', { have: c.clientId, want: app.id }),
+        {
+          fix: tr(ctx.locale, 'clientIdMismatchFix', { want: app.id }),
+        },
+      );
     }
     return make(ctx, 'discord-token', 'ok', tr(ctx.locale, 'tokenOk', { name: app.name }));
   },
@@ -919,7 +1069,9 @@ const discordIntents: Check = {
     if (!(flags & PRESENCE_BITS)) missing.push(tr(L, 'intentPresence'));
     if (!(flags & MEMBERS_BITS)) missing.push(tr(L, 'intentMembers'));
     if (!missing.length) return make(ctx, 'discord-intents', 'ok', tr(L, 'intentsOk'));
-    return make(ctx, 'discord-intents', 'fail', tr(L, 'intentsMissing', { list: missing.join(', ') }), { fix: tr(L, 'intentsFix') });
+    return make(ctx, 'discord-intents', 'fail', tr(L, 'intentsMissing', { list: missing.join(', ') }), {
+      fix: tr(L, 'intentsFix'),
+    });
   },
 };
 
@@ -935,13 +1087,16 @@ async function botGuild(ctx: CheckContext, id: string): Promise<DiscordGuild | C
     return make(ctx, id, id === 'discord-guild' ? 'warn' : 'skip', tr(L, 'discordUnreachable', { error: errMsg(e) }));
   }
   if (r.status === 401) return make(ctx, id, 'skip', tr(L, 'needToken'));
-  if (!r.body) return make(ctx, id, id === 'discord-guild' ? 'warn' : 'skip', tr(L, 'discordHttp', { status: r.status }));
+  if (!r.body)
+    return make(ctx, id, id === 'discord-guild' ? 'warn' : 'skip', tr(L, 'discordHttp', { status: r.status }));
   const g = r.body.find((x) => x.id === c.guildId);
   if (g) return g;
   if (id !== 'discord-guild') return make(ctx, id, 'skip', tr(L, 'needGuild'));
   const app = await discordApp(ctx, 'discord-guild');
   const clientId = isResult(app) ? c.clientId : app.id;
-  return make(ctx, id, 'fail', tr(L, 'guildMissing', { id: c.guildId }), { fix: tr(L, 'guildMissingFix', { url: inviteUrl(clientId, c.guildId) }) });
+  return make(ctx, id, 'fail', tr(L, 'guildMissing', { id: c.guildId }), {
+    fix: tr(L, 'guildMissingFix', { url: inviteUrl(clientId, c.guildId) }),
+  });
 }
 
 const discordGuild: Check = {
@@ -987,7 +1142,12 @@ const discordChannels: Check = {
       const ch = r.body.find((x) => x.id === id);
       // 0 = text, 5 = announcement: the only kinds a slash command is used in here.
       if (!ch) findings.push({ status: 'fail', summary: tr(L, 'channelMissing', { id }), fix: tr(L, 'channelsFix') });
-      else if (ch.type !== 0 && ch.type !== 5) findings.push({ status: 'fail', summary: tr(L, 'channelWrongType', { id, name: ch.name }), fix: tr(L, 'channelsFix') });
+      else if (ch.type !== 0 && ch.type !== 5)
+        findings.push({
+          status: 'fail',
+          summary: tr(L, 'channelWrongType', { id, name: ch.name }),
+          fix: tr(L, 'channelsFix'),
+        });
       else names.push(`#${ch.name}`);
     }
     return combine(ctx, 'discord-channels', findings, tr(L, 'channelsOk', { list: names.join(', ') }));
@@ -1029,7 +1189,12 @@ const publicIpCheck: Check = {
  * redacted [caddy] lines in the log. The update carries the IP the record
  * already holds, so asking changes nothing.
  */
-async function duckDnsToken(ctx: CheckContext, c: Config, host: string, current: string): Promise<{ rejected: true } | { line: string } | null> {
+async function duckDnsToken(
+  ctx: CheckContext,
+  c: Config,
+  host: string,
+  current: string,
+): Promise<{ rejected: true } | { line: string } | null> {
   const token = c.acmeDns?.token ?? (c.ddns?.provider === 'duckdns' ? c.ddns.token : undefined);
   if (!token || !host.endsWith('.duckdns.org')) return null;
   const domain = c.ddns?.domain ?? host.slice(0, -'.duckdns.org'.length);
@@ -1066,15 +1231,20 @@ const dnsCheck: Check = {
     // Cloudflare answers with its own anycast addresses for a tunnel.
     if (c.ingress === 'tunnel') return make(ctx, 'dns', 'ok', tr(L, 'dnsTunnelOk', { host, ips: list }));
     const duck = await duckDnsToken(ctx, c, host, ips[0]!);
-    if (duck && 'rejected' in duck) return make(ctx, 'dns', 'fail', tr(L, 'dnsDuckToken', { host }), { fix: tr(L, 'dnsDuckTokenFix', { host }) });
+    if (duck && 'rejected' in duck)
+      return make(ctx, 'dns', 'fail', tr(L, 'dnsDuckToken', { host }), { fix: tr(L, 'dnsDuckTokenFix', { host }) });
     const detail = duck ? [duck.line] : [];
     if (!expected) return make(ctx, 'dns', 'warn', tr(L, 'dnsUnknownIp', { host, ips: list }), { detail });
     if (ips.includes(expected)) return make(ctx, 'dns', 'ok', tr(L, 'dnsOk', { host, ip: expected }), { detail });
     if (c.ddns?.provider === 'duckdns' && host.endsWith('.duckdns.org')) {
       return make(ctx, 'dns', 'warn', tr(L, 'dnsDuck', { host, ips: list, ip: expected }), { detail });
     }
-    if (c.ingress === 'external') return make(ctx, 'dns', 'warn', tr(L, 'dnsExternal', { host, ips: list, ip: expected }), { detail });
-    return make(ctx, 'dns', 'fail', tr(L, 'dnsWrong', { host, ips: list, ip: expected }), { fix: tr(L, 'dnsWrongFix', { host, ip: expected }), detail });
+    if (c.ingress === 'external')
+      return make(ctx, 'dns', 'warn', tr(L, 'dnsExternal', { host, ips: list, ip: expected }), { detail });
+    return make(ctx, 'dns', 'fail', tr(L, 'dnsWrong', { host, ips: list, ip: expected }), {
+      fix: tr(L, 'dnsWrongFix', { host, ip: expected }),
+      detail,
+    });
   },
 };
 
@@ -1111,7 +1281,12 @@ const tlsCheck: Check = {
     const info = await net(ctx).tlsInfo(host, Number(url.port || 443));
     if (!info.authorized) {
       return make(ctx, 'tls', 'fail', tr(L, 'tlsBad', { host, error: info.error ?? '?' }), {
-        fix: c.ingress !== 'direct' ? tr(L, 'tlsBadFix') : c.acmeDns ? tr(L, 'tlsBadFixDns', { port: c.httpsPort }) : tr(L, 'tlsBadFixDirect'),
+        fix:
+          c.ingress !== 'direct'
+            ? tr(L, 'tlsBadFix')
+            : c.acmeDns
+              ? tr(L, 'tlsBadFixDns', { port: c.httpsPort })
+              : tr(L, 'tlsBadFixDirect'),
       });
     }
     const days = Math.floor((info.validTo - Date.now()) / DAY_MS);
@@ -1126,9 +1301,13 @@ const tlsCheck: Check = {
     }
     const detail = [info.subjectAltNames.join(', ')].filter(Boolean);
     if (health) {
-      return make(ctx, 'tls', 'fail', tr(L, 'healthFail', { url: c.publicUrl, error: health }), { fix: tr(L, 'healthFailFix'), detail });
+      return make(ctx, 'tls', 'fail', tr(L, 'healthFail', { url: c.publicUrl, error: health }), {
+        fix: tr(L, 'healthFailFix'),
+        detail,
+      });
     }
-    if (days < 14) return make(ctx, 'tls', 'warn', tr(L, 'tlsSoon', { host, days }), { fix: tr(L, 'tlsSoonFix'), detail });
+    if (days < 14)
+      return make(ctx, 'tls', 'warn', tr(L, 'tlsSoon', { host, days }), { fix: tr(L, 'tlsSoonFix'), detail });
     return make(ctx, 'tls', 'ok', tr(L, 'tlsOk', { issuer: info.issuer || '?', days, url: c.publicUrl }), { detail });
   },
 };
@@ -1149,11 +1328,15 @@ const livekitCloud: Check = {
       const { rooms } = await list(c.livekitApiUrl, c.livekitKey, c.livekitSecret);
       return make(ctx, 'livekit-cloud', 'ok', tr(L, 'cloudOk', { host, n: rooms }), { detail });
     } catch (e) {
-      if (authError(e)) return make(ctx, 'livekit-cloud', 'fail', tr(L, 'cloudAuth', { host }), { fix: tr(L, 'cloudAuthFix'), detail });
+      if (authError(e))
+        return make(ctx, 'livekit-cloud', 'fail', tr(L, 'cloudAuth', { host }), { fix: tr(L, 'cloudAuthFix'), detail });
       // The SDK's messages carry the URL at most; the credentials are scrubbed anyway.
       let error = errMsg(e);
       for (const v of [c.livekitSecret, c.livekitKey]) if (v) error = error.replaceAll(v, '***');
-      return make(ctx, 'livekit-cloud', 'fail', tr(L, 'cloudUnreachable', { host, error }), { fix: tr(L, 'cloudUnreachableFix'), detail });
+      return make(ctx, 'livekit-cloud', 'fail', tr(L, 'cloudUnreachable', { host, error }), {
+        fix: tr(L, 'cloudUnreachableFix'),
+        detail,
+      });
     }
   },
 };
@@ -1179,23 +1362,35 @@ const turnCheck: Check = {
       ips = await net(ctx).resolveA(c.turn.host);
       if (!ips.length) throw new Error('no A record');
     } catch (e) {
-      return make(ctx, 'turn', 'fail', tr(L, 'turnDnsFail', { host, error: errMsg(e) }), { fix: tr(L, 'turnDnsFix', { host, ip: expected ?? '?' }) });
+      return make(ctx, 'turn', 'fail', tr(L, 'turnDnsFail', { host, error: errMsg(e) }), {
+        fix: tr(L, 'turnDnsFix', { host, ip: expected ?? '?' }),
+      });
     }
     const list = ips.join(', ');
     const findings: Finding[] = [];
     if (!expected) findings.push({ status: 'warn', summary: tr(L, 'turnDnsUnknownIp', { host, ips: list }) });
     else if (!ips.includes(expected)) {
-      return make(ctx, 'turn', 'fail', tr(L, 'turnDnsWrong', { host, ips: list, ip: expected }), { fix: tr(L, 'turnDnsFix', { host, ip: expected }) });
+      return make(ctx, 'turn', 'fail', tr(L, 'turnDnsWrong', { host, ips: list, ip: expected }), {
+        fix: tr(L, 'turnDnsFix', { host, ip: expected }),
+      });
     }
 
     const info = await net(ctx).tlsInfo(c.turn.host, 443);
     const detail = [info.subjectAltNames.join(', ')].filter(Boolean);
     if (!info.authorized) {
-      findings.push({ status: 'fail', summary: tr(L, 'turnTlsBad', { host, error: info.error ?? '?' }), fix: tr(L, 'turnTlsFix') });
+      findings.push({
+        status: 'fail',
+        summary: tr(L, 'turnTlsBad', { host, error: info.error ?? '?' }),
+        fix: tr(L, 'turnTlsFix'),
+      });
     }
     // Connect-and-close reachability only: LiveKit wants a PROXY header first, so it accepts and drops this.
     if (!(await net(ctx).tcpOpen('127.0.0.1', c.turn.port, 2000))) {
-      findings.push({ status: 'warn', summary: tr(L, 'turnLocalDown', { port: c.turn.port }), fix: tr(L, 'listenDownFix') });
+      findings.push({
+        status: 'warn',
+        summary: tr(L, 'turnLocalDown', { port: c.turn.port }),
+        fix: tr(L, 'listenDownFix'),
+      });
     }
     return combine(ctx, 'turn', findings, tr(L, 'turnOk', { host, port: c.turn.port }), detail);
   },
@@ -1218,7 +1413,11 @@ const listeners: Check = {
       // reported below
     }
     const fw = firewallHints(ctx, c);
-    if (!health) return make(ctx, 'listeners', 'warn', tr(L, 'listenDown', { url: base }), { fix: tr(L, 'listenDownFix'), detail: fw });
+    if (!health)
+      return make(ctx, 'listeners', 'warn', tr(L, 'listenDown', { url: base }), {
+        fix: tr(L, 'listenDownFix'),
+        detail: fw,
+      });
 
     const findings: Finding[] = [];
     const children = Object.entries(health.children ?? {});
@@ -1227,7 +1426,12 @@ const listeners: Check = {
       ...children.map(([name, state]) => tr(L, 'listenChild', { name, state })),
     ];
     const down = children.filter(([, state]) => state !== 'up').map(([name]) => name);
-    if (down.length) findings.push({ status: 'warn', summary: tr(L, 'childDown', { list: down.join(', ') }), fix: tr(L, 'listenDownFix') });
+    if (down.length)
+      findings.push({
+        status: 'warn',
+        summary: tr(L, 'childDown', { list: down.join(', ') }),
+        fix: tr(L, 'listenDownFix'),
+      });
     // The ports run binds, helper by helper; UDP and the HTTP redirect go unprobed.
     for (const { key, port } of footprintOf(c).helpers.flatMap((h) => h.ports)) {
       if (key === 'LIVEKIT_PORT') {
@@ -1239,16 +1443,22 @@ const listeners: Check = {
         }
         if (!lk) findings.push({ status: 'warn', summary: tr(L, 'livekitDown', { port }) });
       } else if (key === 'MEDIA_TCP_PORT') {
-        if (!(await net(ctx).tcpOpen('127.0.0.1', port, 2000))) findings.push({ status: 'warn', summary: tr(L, 'mediaTcpDown', { port }) });
+        if (!(await net(ctx).tcpOpen('127.0.0.1', port, 2000)))
+          findings.push({ status: 'warn', summary: tr(L, 'mediaTcpDown', { port }) });
       } else if (key === 'TURN_PORT') {
         // Reachability only (no PROXY header, so LiveKit drops it): shown here so --local sees it too.
         const up = await net(ctx).tcpOpen('127.0.0.1', port, 2000);
         detail.push(tr(L, up ? 'listenTurnUp' : 'listenTurnDown', { port }));
-        if (!up) findings.push({ status: 'warn', summary: tr(L, 'turnLocalDown', { port }), fix: tr(L, 'listenDownFix') });
+        if (!up)
+          findings.push({ status: 'warn', summary: tr(L, 'turnLocalDown', { port }), fix: tr(L, 'listenDownFix') });
       } else if (key === 'HTTPS_PORT' && !(await net(ctx).tcpOpen('127.0.0.1', port, 2000))) {
         const lowPorts = c.httpsPort < 1024 || (c.httpPort > 0 && c.httpPort < 1024);
         const hint = s.platform === 'linux' && !s.isRoot && lowPorts;
-        findings.push({ status: 'warn', summary: tr(L, 'httpsDown', { port }), fix: hint ? tr(L, 'lowPortFix', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }) : undefined });
+        findings.push({
+          status: 'warn',
+          summary: tr(L, 'httpsDown', { port }),
+          fix: hint ? tr(L, 'lowPortFix', { cmd: `sudo sh -c '${SYSCTL_SCRIPT}'` }) : undefined,
+        });
       }
     }
     return combine(ctx, 'listeners', findings, tr(L, 'listenOk', { url: base }), [...detail, ...fw]);
@@ -1266,9 +1476,18 @@ const service: Check = {
     // hand misses --firewall and the account (--user/--sid); setup does it right.
     const s = sys(ctx);
     const flavour = s.platform === 'win32' ? 'Win' : s.platform === 'linux' && s.isRoot ? 'Root' : '';
-    if (!st.installed) return make(ctx, 'service', 'warn', tr(L, 'serviceNotInstalled'), { fix: tr(L, `serviceNotInstalledFix${flavour}`), detail });
-    if (!st.running) return make(ctx, 'service', 'warn', tr(L, 'serviceStopped'), { fix: tr(L, 'serviceStoppedFix'), detail });
-    if (!st.enabled) return make(ctx, 'service', 'warn', tr(L, 'serviceDisabled'), { fix: tr(L, `serviceDisabledFix${flavour}`), detail });
+    if (!st.installed)
+      return make(ctx, 'service', 'warn', tr(L, 'serviceNotInstalled'), {
+        fix: tr(L, `serviceNotInstalledFix${flavour}`),
+        detail,
+      });
+    if (!st.running)
+      return make(ctx, 'service', 'warn', tr(L, 'serviceStopped'), { fix: tr(L, 'serviceStoppedFix'), detail });
+    if (!st.enabled)
+      return make(ctx, 'service', 'warn', tr(L, 'serviceDisabled'), {
+        fix: tr(L, `serviceDisabledFix${flavour}`),
+        detail,
+      });
     return make(ctx, 'service', 'ok', tr(L, 'serviceOk'), { detail });
   },
 };
@@ -1290,14 +1509,20 @@ const tray: Check = {
     const detail = [tr(L, autostart ? 'trayAutostartYes' : 'trayAutostartNo')];
     // Never a warning: unsigned builds are legitimate.
     const sig = await once(ctx, 'traySignature', async () => (await s.signature?.(exe)) ?? null);
-    if (sig) detail.push(sig.status === 'Valid' && sig.signer ? tr(L, 'traySigned', { signer: sig.signer }) : tr(L, 'trayUnsigned'));
+    if (sig)
+      detail.push(
+        sig.status === 'Valid' && sig.signer ? tr(L, 'traySigned', { signer: sig.signer }) : tr(L, 'trayUnsigned'),
+      );
     const st = ctx.trayState;
     const info = st ? s.processInfo?.(st.pid) : undefined;
     if (!st || !info?.alive || !sameExe(TRAY_EXE, info.exe, 'win32')) {
       return make(ctx, 'tray', 'ok', tr(L, 'trayStopped'), { detail: [...detail, tr(L, 'trayStoppedDetail')] });
     }
     if (compareSemver(st.version, ctx.version) !== 0) {
-      return make(ctx, 'tray', 'warn', tr(L, 'trayMismatch', { have: st.version, want: ctx.version }), { detail, fix: tr(L, 'trayMismatchFix') });
+      return make(ctx, 'tray', 'warn', tr(L, 'trayMismatch', { have: st.version, want: ctx.version }), {
+        detail,
+        fix: tr(L, 'trayMismatchFix'),
+      });
     }
     return make(ctx, 'tray', 'ok', tr(L, 'trayOk', { version: st.version }), { detail });
   },
@@ -1307,7 +1532,12 @@ const KIND: Record<string, string> = { igd: 'UPnP', pcp: 'PCP', natpmp: 'NAT-PMP
 
 /** A host whose own address is public (a VPS) has no router to ask. */
 const publicHost = (p: NatProbeLike) =>
-  !p.gateway && p.localIp && !netinfo.isPrivateIpv4(p.localIp) && !netinfo.isCgnatIpv4(p.localIp) && !p.localIp.startsWith('127.') && !p.localIp.startsWith('169.254.');
+  !p.gateway &&
+  p.localIp &&
+  !netinfo.isPrivateIpv4(p.localIp) &&
+  !netinfo.isCgnatIpv4(p.localIp) &&
+  !p.localIp.startsWith('127.') &&
+  !p.localIp.startsWith('169.254.');
 
 const gateway: Check = {
   id: 'gateway',
@@ -1319,7 +1549,10 @@ const gateway: Check = {
     const g = p.gateway;
     if (!g) {
       const list = ctx.config ? portList(neededPorts(ctx.config)) : '';
-      return make(ctx, 'gateway', 'warn', tr(L, 'gatewayNone'), { fix: list ? tr(L, 'gatewayNoneFix', { list }) : undefined, detail: p.errors });
+      return make(ctx, 'gateway', 'warn', tr(L, 'gatewayNone'), {
+        fix: list ? tr(L, 'gatewayNoneFix', { list }) : undefined,
+        detail: p.errors,
+      });
     }
     const kind = KIND[g.kind] ?? g.kind;
     if (!p.externalIp) return make(ctx, 'gateway', 'ok', tr(L, 'gatewayNoIp', { gw: g.gatewayIp, kind }));
@@ -1342,9 +1575,11 @@ const cgnat: Check = {
       if (ctx.config?.media === 'cloud') return make(ctx, 'cgnat', 'warn', tr(L, 'cgnatCloud', { ip: ext }));
       return make(ctx, 'cgnat', 'fail', tr(L, 'cgnatFail', { ip: ext }), { fix: tr(L, 'cgnatFailFix') });
     }
-    if (netinfo.isPrivateIpv4(ext)) return make(ctx, 'cgnat', 'warn', tr(L, 'doubleNat', { ip: ext }), { fix: tr(L, 'doubleNatFix', { list }) });
+    if (netinfo.isPrivateIpv4(ext))
+      return make(ctx, 'cgnat', 'warn', tr(L, 'doubleNat', { ip: ext }), { fix: tr(L, 'doubleNatFix', { list }) });
     const ip = ctx.local ? null : await publicIp(ctx);
-    if (ip && ip !== ext) return make(ctx, 'cgnat', 'warn', tr(L, 'natMismatch', { ext, ip }), { fix: tr(L, 'doubleNatFix', { list }) });
+    if (ip && ip !== ext)
+      return make(ctx, 'cgnat', 'warn', tr(L, 'natMismatch', { ext, ip }), { fix: tr(L, 'doubleNatFix', { list }) });
     return make(ctx, 'cgnat', 'ok', tr(L, 'cgnatOk', { ip: ext }));
   },
 };
@@ -1359,7 +1594,9 @@ function readMapperFile(ctx: CheckContext): MapperStatusLike | null {
     return {
       enabled: true,
       mappings: raw.mappings.map((m) => ({
-        protocol: String(m.protocol), externalPort: Number(m.externalPort), internalPort: Number(m.internalPort ?? m.externalPort),
+        protocol: String(m.protocol),
+        externalPort: Number(m.externalPort),
+        internalPort: Number(m.internalPort ?? m.externalPort),
         // The file lists active mappings; one without a state is mapped.
         state: m.state ?? 'mapped',
       })),
@@ -1377,9 +1614,18 @@ const mappings: Check = {
     if (!c) return make(ctx, 'mappings', 'skip', tr(L, 'needConfig'));
     const needed = neededPorts(c);
     // The mapper never asks for 80/443: judge it on what it owns, and name the rest as by hand.
-    const owned: NeededPort[] = upnpMappings(c).map((m) => ({ protocol: m.protocol, external: m.externalPort, internal: m.internalPort }));
+    const owned: NeededPort[] = upnpMappings(c).map((m) => ({
+      protocol: m.protocol,
+      external: m.externalPort,
+      internal: m.internalPort,
+    }));
     if (!owned.length) {
-      return make(ctx, 'mappings', 'skip', needed.length ? tr(L, 'mapSkipNoneAsked', { list: portList(needed) }) : tr(L, 'mapSkipNoPorts'));
+      return make(
+        ctx,
+        'mappings',
+        'skip',
+        needed.length ? tr(L, 'mapSkipNoneAsked', { list: portList(needed) }) : tr(L, 'mapSkipNoPorts'),
+      );
     }
     const byHand = needed.filter((n) => !owned.some((o) => o.protocol === n.protocol && o.external === n.external));
     const byHandLine = byHand.length ? [tr(L, 'mapByHand', { list: portList(byHand) })] : [];
@@ -1388,10 +1634,17 @@ const mappings: Check = {
     if (!c.upnp) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipOff', { list: portList(needed) }));
     const st = (await controlStatus(ctx))?.upnp ?? readMapperFile(ctx);
     if (!st) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoStatus'));
-    const missing = owned.filter((n) => !st.mappings.some((m) =>
-      m.protocol.toLowerCase() === n.protocol && m.externalPort === n.external && m.state === 'mapped'));
-    if (!missing.length) return make(ctx, 'mappings', 'ok', tr(L, 'mapOk', { list: portList(owned) }), { detail: byHandLine });
-    const errors = st.mappings.filter((m) => m.error).map((m) => `${m.protocol.toUpperCase()} ${m.externalPort}: ${m.error}`);
+    const missing = owned.filter(
+      (n) =>
+        !st.mappings.some(
+          (m) => m.protocol.toLowerCase() === n.protocol && m.externalPort === n.external && m.state === 'mapped',
+        ),
+    );
+    if (!missing.length)
+      return make(ctx, 'mappings', 'ok', tr(L, 'mapOk', { list: portList(owned) }), { detail: byHandLine });
+    const errors = st.mappings
+      .filter((m) => m.error)
+      .map((m) => `${m.protocol.toUpperCase()} ${m.externalPort}: ${m.error}`);
     return make(ctx, 'mappings', 'warn', tr(L, 'mapPartial', { list: portList(missing) }), {
       fix: tr(L, 'mapPartialFix', { ip: p.localIp ?? '?', list: portList(missing) }),
       detail: [...errors, ...byHandLine],
@@ -1411,14 +1664,23 @@ const update: Check = {
     if (!latest && !ctx.local && ctx.latestTag) latest = await ctx.latestTag().catch(() => null);
     const v = ctx.version;
     const findings: Finding[] = [];
-    if (st.failed) findings.push({ status: 'warn', summary: tr(L, 'updFailed', { tag: st.failed.tag, reason: st.failed.reason ?? '?' }), fix: tr(L, 'updFailedFix') });
+    if (st.failed)
+      findings.push({
+        status: 'warn',
+        summary: tr(L, 'updFailed', { tag: st.failed.tag, reason: st.failed.reason ?? '?' }),
+        fix: tr(L, 'updFailedFix'),
+      });
     if (st.staged) findings.push({ status: 'warn', summary: tr(L, 'updStaged', { tag: st.staged.tag }) });
     if (st.pending) findings.push({ status: 'warn', summary: tr(L, 'updPending', { tag: st.pending.tag }) });
     const newer = latest ? compareVersions(latest, v) === 1 : false;
     // A failed, staged or pending tag already says what the newest one is.
     const known = [st.failed?.tag, st.staged?.tag, st.pending?.tag];
     if (latest && newer && !known.includes(latest)) {
-      findings.push({ status: 'warn', summary: tr(L, 'updAvailable', { latest, version: v }), fix: tr(L, 'updAvailableFix') });
+      findings.push({
+        status: 'warn',
+        summary: tr(L, 'updAvailable', { latest, version: v }),
+        fix: tr(L, 'updAvailableFix'),
+      });
     }
     return combine(ctx, 'update', findings, tr(L, latest ? 'updOk' : 'updUnknown', { version: v }));
   },
@@ -1426,11 +1688,26 @@ const update: Check = {
 
 /** Every check, in the order they are shown. */
 export const CHECKS: readonly Check[] = [
-  config, binaries,
-  discordToken, discordIntents, discordGuild, discordRole, discordChannels, discordRedirect,
-  publicIpCheck, dnsCheck, certificate, tlsCheck, livekitCloud, turnCheck,
-  listeners, service, tray,
-  gateway, cgnat, mappings,
+  config,
+  binaries,
+  discordToken,
+  discordIntents,
+  discordGuild,
+  discordRole,
+  discordChannels,
+  discordRedirect,
+  publicIpCheck,
+  dnsCheck,
+  certificate,
+  tlsCheck,
+  livekitCloud,
+  turnCheck,
+  listeners,
+  service,
+  tray,
+  gateway,
+  cgnat,
+  mappings,
   update,
 ];
 
@@ -1439,7 +1716,10 @@ export const CHECKS: readonly Check[] = [
  * call cannot hang the doctor. A check that throws becomes a 'fail'.
  */
 export async function runChecks(
-  checks: readonly Check[], ctx: CheckContext, onResult?: (r: CheckResult) => void, o: { timeoutMs?: number } = {},
+  checks: readonly Check[],
+  ctx: CheckContext,
+  onResult?: (r: CheckResult) => void,
+  o: { timeoutMs?: number } = {},
 ): Promise<CheckResult[]> {
   const timeoutMs = o.timeoutMs ?? 10_000;
   const out: CheckResult[] = [];
@@ -1450,7 +1730,10 @@ export async function runChecks(
     } else {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<CheckResult>((resolve) => {
-        timer = setTimeout(() => resolve(make(ctx, check.id, 'fail', tr(ctx.locale, 'timedOut', { s: Math.round(timeoutMs / 1000) }))), timeoutMs);
+        timer = setTimeout(
+          () => resolve(make(ctx, check.id, 'fail', tr(ctx.locale, 'timedOut', { s: Math.round(timeoutMs / 1000) }))),
+          timeoutMs,
+        );
       });
       try {
         r = await Promise.race([check.run(ctx), timeout]);

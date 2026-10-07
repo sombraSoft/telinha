@@ -16,7 +16,10 @@ export const isCompiled = (): boolean => typeof BUILD_VERSION !== 'undefined';
 export function version(): string {
   if (typeof BUILD_VERSION !== 'undefined' && BUILD_VERSION) return BUILD_VERSION;
   try {
-    return (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version?: string }).version ?? 'dev';
+    return (
+      (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version?: string })
+        .version ?? 'dev'
+    );
   } catch {
     return 'dev';
   }

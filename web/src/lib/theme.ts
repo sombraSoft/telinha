@@ -4,7 +4,10 @@ export const THEMES = ['dark', 'ash', 'onyx', 'light'] as const;
 export type Theme = (typeof THEMES)[number];
 // Picker order: System first, then Discord's surfaces. Must list every theme
 // (theme.test.ts checks).
-export const THEME_CHOICES = ['system', 'ash', 'dark', 'onyx', 'light'] as const satisfies readonly ('system' | Theme)[];
+export const THEME_CHOICES = ['system', 'ash', 'dark', 'onyx', 'light'] as const satisfies readonly (
+  | 'system'
+  | Theme
+)[];
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
 
 export function parseThemeChoice(value: unknown): ThemeChoice {

@@ -51,7 +51,12 @@ export function fakeDisplayMedia() {
     const track = stream.getVideoTracks()[0]!;
     const settings = { width: W, height: H, frameRate: 30, displaySurface: 'monitor', deviceId: 'e2e-canvas' };
     track.getSettings = () => ({ ...settings }) as MediaTrackSettings;
-    track.getCapabilities = () => ({ width: { min: 1, max: W }, height: { min: 1, max: H }, frameRate: { min: 1, max: 30 } }) as MediaTrackCapabilities;
+    track.getCapabilities = () =>
+      ({
+        width: { min: 1, max: W },
+        height: { min: 1, max: H },
+        frameRate: { min: 1, max: 30 },
+      }) as MediaTrackCapabilities;
     track.applyConstraints = async () => {};
     Object.defineProperty(track, 'label', { value: 'e2e-canvas', configurable: true });
     return stream;

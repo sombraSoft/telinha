@@ -4,13 +4,19 @@
 // background colours instead.
 import { encode, renderANSI, renderUnicodeCompact } from 'uqr';
 
-export function canDrawBlocks(env: Record<string, string | undefined>, platform: NodeJS.Platform = process.platform): boolean {
+export function canDrawBlocks(
+  env: Record<string, string | undefined>,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
   if (env.TERM === 'linux') return false;
   if (platform === 'win32') return !!(env.WT_SESSION || env.TERM_PROGRAM);
   return true;
 }
 
-export function renderQr(text: string, o: { env?: Record<string, string | undefined>; platform?: NodeJS.Platform } = {}): string {
+export function renderQr(
+  text: string,
+  o: { env?: Record<string, string | undefined>; platform?: NodeJS.Platform } = {},
+): string {
   const env = o.env ?? process.env;
   // M: still scans with a smudged or glare-y screen, and a ~100-char URL stays small.
   return canDrawBlocks(env, o.platform) ? renderUnicodeCompact(text, { ecc: 'M' }) : renderANSI(text, { ecc: 'M' });

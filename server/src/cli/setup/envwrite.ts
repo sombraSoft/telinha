@@ -155,23 +155,56 @@ LIVEKIT_API_SECRET=''
 
 /** Keys the wizard decides: a re-run rewrites or drops them; every other key is kept as it was. */
 export const MANAGED_KEYS: readonly string[] = [
-  'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'GUILD_ID', 'ROLE_ID', 'CHANNEL_IDS',
-  'COMMAND_NAME', 'GROUP_NAME', 'COOKIE_SECRET',
-  'PUBLIC_URL', 'HOSTING', 'INGRESS', 'ACME_DNS', 'HTTP_PORT', 'HTTPS_PORT', 'TUNNEL_TOKEN', 'DDNS_PROVIDER', 'DUCKDNS_DOMAIN', 'DUCKDNS_TOKEN',
-  'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'MEDIA', 'LIVEKIT_CLOUD_URL', 'TURN', 'MEDIA_TCP_PORT', 'MEDIA_UDP_PORT', 'UPNP', 'LIVEKIT_NODE_IP',
-  'AUTO_UPDATE', 'LOCALE',
+  'DISCORD_TOKEN',
+  'DISCORD_CLIENT_ID',
+  'DISCORD_CLIENT_SECRET',
+  'GUILD_ID',
+  'ROLE_ID',
+  'CHANNEL_IDS',
+  'COMMAND_NAME',
+  'GROUP_NAME',
+  'COOKIE_SECRET',
+  'PUBLIC_URL',
+  'HOSTING',
+  'INGRESS',
+  'ACME_DNS',
+  'HTTP_PORT',
+  'HTTPS_PORT',
+  'TUNNEL_TOKEN',
+  'DDNS_PROVIDER',
+  'DUCKDNS_DOMAIN',
+  'DUCKDNS_TOKEN',
+  'LIVEKIT_API_KEY',
+  'LIVEKIT_API_SECRET',
+  'MEDIA',
+  'LIVEKIT_CLOUD_URL',
+  'TURN',
+  'MEDIA_TCP_PORT',
+  'MEDIA_UDP_PORT',
+  'UPNP',
+  'LIVEKIT_NODE_IP',
+  'AUTO_UPDATE',
+  'LOCALE',
 ];
 
 /** Always single-quoted, never shown. */
 export const SECRET_KEYS: ReadonlySet<string> = new Set([
-  'DISCORD_TOKEN', 'DISCORD_CLIENT_SECRET', 'COOKIE_SECRET', 'LIVEKIT_API_SECRET', 'TUNNEL_TOKEN', 'DUCKDNS_TOKEN',
+  'DISCORD_TOKEN',
+  'DISCORD_CLIENT_SECRET',
+  'COOKIE_SECRET',
+  'LIVEKIT_API_SECRET',
+  'TUNNEL_TOKEN',
+  'DUCKDNS_TOKEN',
 ]);
 
 const KEY_LINE = /^(#?)([A-Z_][A-Z0-9_]*)=(.*)$/;
 const SECTION_WIDTH = 100;
 
 /** The previous file: parsed values, and its text when the raw lines should be kept verbatim. */
-export interface PreviousEnv { vars: Record<string, string>; text?: string }
+export interface PreviousEnv {
+  vars: Record<string, string>;
+  text?: string;
+}
 
 /**
  * KEY=value with the quoting both Docker's env_file and envfile.ts read the
@@ -194,7 +227,14 @@ function rawLines(text: string): Map<string, string> {
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
     const eq = line.replace(/^export\s+/, '').indexOf('=');
-    if (eq > 0) out.set(line.replace(/^export\s+/, '').slice(0, eq).trim(), line);
+    if (eq > 0)
+      out.set(
+        line
+          .replace(/^export\s+/, '')
+          .slice(0, eq)
+          .trim(),
+        line,
+      );
   }
   return out;
 }
@@ -207,13 +247,15 @@ function rawLines(text: string): Map<string, string> {
 export function renderEnvFile(values: Record<string, string>, previous: PreviousEnv | null): string {
   const set = (k: string) => values[k] !== undefined && values[k] !== '';
   const placed = new Set<string>();
-  const lines = ENV_TEMPLATE.replace(/\n$/, '').split('\n').map((line) => {
-    const m = KEY_LINE.exec(line);
-    if (!m) return line;
-    const key = m[2]!;
-    placed.add(key);
-    return set(key) ? `${key}=${quoteValue(key, values[key]!)}` : line;
-  });
+  const lines = ENV_TEMPLATE.replace(/\n$/, '')
+    .split('\n')
+    .map((line) => {
+      const m = KEY_LINE.exec(line);
+      if (!m) return line;
+      const key = m[2]!;
+      placed.add(key);
+      return set(key) ? `${key}=${quoteValue(key, values[key]!)}` : line;
+    });
 
   const other: string[] = [];
   for (const [k, v] of Object.entries(values)) {
@@ -268,8 +310,15 @@ export interface WriteEnvOptions {
 }
 
 /** Windows ACL: inheritance off, full control for the user, SYSTEM and Administrators (by SID: names are localised). */
-export const icaclsArgv = (file: string, user: string): string[] =>
-  ['icacls', file, '/inheritance:r', '/grant:r', `${user}:(F)`, '*S-1-5-18:(F)', '*S-1-5-32-544:(F)'];
+export const icaclsArgv = (file: string, user: string): string[] => [
+  'icacls',
+  file,
+  '/inheritance:r',
+  '/grant:r',
+  `${user}:(F)`,
+  '*S-1-5-18:(F)',
+  '*S-1-5-32-544:(F)',
+];
 
 /**
  * The same for the whole Windows home, inherited by everything in it: the
@@ -277,12 +326,26 @@ export const icaclsArgv = (file: string, user: string): string[] =>
  * registers) stay the user's under a TELINHA_HOME like C:\Telinha, whose
  * inherited ACL lets Users read and Authenticated Users modify.
  */
-export const icaclsHomeArgv = (home: string, user: string): string[] =>
-  ['icacls', home, '/inheritance:r', '/grant:r', `${user}:(OI)(CI)F`, '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'];
+export const icaclsHomeArgv = (home: string, user: string): string[] => [
+  'icacls',
+  home,
+  '/inheritance:r',
+  '/grant:r',
+  `${user}:(OI)(CI)F`,
+  '*S-1-5-18:(OI)(CI)F',
+  '*S-1-5-32-544:(OI)(CI)F',
+];
 
 /** Locks the Windows home down to the user, SYSTEM and Administrators; a failure is a warning (doctor checks the file). */
-export async function lockWindowsHome(o: { home: string; user: string; spawn: SpawnFn; warn: (msg: string) => void }): Promise<void> {
-  const r = await o.spawn(icaclsHomeArgv(o.home, o.user)).catch((e: unknown) => ({ code: 1, stdout: '', stderr: String(e) }));
+export async function lockWindowsHome(o: {
+  home: string;
+  user: string;
+  spawn: SpawnFn;
+  warn: (msg: string) => void;
+}): Promise<void> {
+  const r = await o
+    .spawn(icaclsHomeArgv(o.home, o.user))
+    .catch((e: unknown) => ({ code: 1, stdout: '', stderr: String(e) }));
   if (r.code !== 0) o.warn(`icacls ${o.home}: ${(r.stderr || r.stdout).trim() || `exit ${r.code}`}`);
 }
 
@@ -316,8 +379,10 @@ export async function writeEnvFile(o: WriteEnvOptions): Promise<void> {
     if (o.isRoot) {
       const d = await fs.stat(dir);
       const trusted = new Set([0, home?.uid ?? 0]);
-      if (!d || d.symlink || d.dir === false || !trusted.has(d.uid) || (d.mode & GROUP_OTHER_WRITE)) {
-        throw new Error(`refusing to write into ${dir} as root: it must be a directory owned by root (or the home's owner) and not writable by others`);
+      if (!d || d.symlink || d.dir === false || !trusted.has(d.uid) || d.mode & GROUP_OTHER_WRITE) {
+        throw new Error(
+          `refusing to write into ${dir} as root: it must be a directory owned by root (or the home's owner) and not writable by others`,
+        );
       }
       owner = before ?? home;
     }
@@ -330,8 +395,13 @@ export async function writeEnvFile(o: WriteEnvOptions): Promise<void> {
   try {
     await fs.createFile(tmp, o.text, { mode, ...(owner ? { uid: owner.uid, gid: owner.gid } : {}) });
     if (!linux) {
-      const r = await o.spawn(icaclsArgv(tmp, o.user)).catch((e: unknown) => ({ code: 1, stdout: '', stderr: String(e) }));
-      if (r.code !== 0) throw new Error(`could not restrict access to ${o.file} (icacls: ${(r.stderr || r.stdout).trim() || `exit ${r.code}`})`);
+      const r = await o
+        .spawn(icaclsArgv(tmp, o.user))
+        .catch((e: unknown) => ({ code: 1, stdout: '', stderr: String(e) }));
+      if (r.code !== 0)
+        throw new Error(
+          `could not restrict access to ${o.file} (icacls: ${(r.stderr || r.stdout).trim() || `exit ${r.code}`})`,
+        );
     }
     await fs.rename(tmp, o.file);
   } catch (e) {

@@ -4,13 +4,25 @@ import { loadConfig } from '../src/config.ts';
 import { renderCaddyfile, renderLivekitYaml, upstreamHost } from '../src/render.ts';
 
 const PROD_ENV = {
-  DISCORD_TOKEN: 'tok', DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'csecret',
-  GUILD_ID: '100', ROLE_ID: '200', CHANNEL_IDS: '300',
-  PUBLIC_URL: 'https://tela.example.com', COOKIE_SECRET: 'secret',
-  LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'lksecret',
+  DISCORD_TOKEN: 'tok',
+  DISCORD_CLIENT_ID: 'cid',
+  DISCORD_CLIENT_SECRET: 'csecret',
+  GUILD_ID: '100',
+  ROLE_ID: '200',
+  CHANNEL_IDS: '300',
+  PUBLIC_URL: 'https://tela.example.com',
+  COOKIE_SECRET: 'secret',
+  LIVEKIT_API_KEY: 'devkey',
+  LIVEKIT_API_SECRET: 'lksecret',
 };
 const DUCK_TOKEN = 'S3CR3T-duckdns-token'; // gitleaks:allow
-const HOME = { PUBLIC_URL: 'https://my-group.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns', DUCKDNS_TOKEN: DUCK_TOKEN };
+const HOME = {
+  PUBLIC_URL: 'https://my-group.duckdns.org:8443',
+  HTTPS_PORT: '8443',
+  HTTP_PORT: '0',
+  ACME_DNS: 'duckdns',
+  DUCKDNS_TOKEN: DUCK_TOKEN,
+};
 // TURN=on on an own domain: the VPS has added the turn.<host> record.
 const TURN_ON = { HOSTING: 'vps', TURN: 'on' };
 const caddy = (env: Record<string, string> = {}) => renderCaddyfile(loadConfig({ ...PROD_ENV, ...env }));
@@ -49,8 +61,9 @@ tela.example.com {
   });
 
   test('custom ports: the site address stays the bare host', () => {
-    expect(caddy({ PUBLIC_URL: 'https://tela.example.com:8443', HTTP_PORT: '8080', HTTPS_PORT: '8443' }))
-      .toBe(`# Rendered by telinha from telinha.env; do not edit.
+    expect(
+      caddy({ PUBLIC_URL: 'https://tela.example.com:8443', HTTP_PORT: '8080', HTTPS_PORT: '8443' }),
+    ).toBe(`# Rendered by telinha from telinha.env; do not edit.
 {
 	admin off
 	http_port 8080
@@ -238,7 +251,9 @@ turn.tela.example.com {
   });
 
   test('TURN on with HTTP_PORT=0 and a custom TURN_PORT', () => {
-    expect(caddy({ ...TURN_ON, HTTP_PORT: '0', TURN_PORT: '15349' })).toBe(`# Rendered by telinha from telinha.env; do not edit.
+    expect(
+      caddy({ ...TURN_ON, HTTP_PORT: '0', TURN_PORT: '15349' }),
+    ).toBe(`# Rendered by telinha from telinha.env; do not edit.
 {
 	admin off
 	auto_https disable_redirects
@@ -275,7 +290,9 @@ turn.tela.example.com {
   });
 
   test('TURN on with ACME_EMAIL', () => {
-    expect(caddy({ ...TURN_ON, ACME_EMAIL: 'ops@example.com' })).toBe(`# Rendered by telinha from telinha.env; do not edit.
+    expect(
+      caddy({ ...TURN_ON, ACME_EMAIL: 'ops@example.com' }),
+    ).toBe(`# Rendered by telinha from telinha.env; do not edit.
 {
 	admin off
 	http_port 80
@@ -351,7 +368,11 @@ room:
 
   test('LIVEKIT_NODE_IP and custom ports', () => {
     const out = livekit({
-      LIVEKIT_NODE_IP: '203.0.113.7', LIVEKIT_PORT: '7890', MEDIA_TCP_PORT: '7891', MEDIA_UDP_PORT: '7892', CLOSE_EMPTY_SECONDS: '60',
+      LIVEKIT_NODE_IP: '203.0.113.7',
+      LIVEKIT_PORT: '7890',
+      MEDIA_TCP_PORT: '7891',
+      MEDIA_UDP_PORT: '7892',
+      CLOSE_EMPTY_SECONDS: '60',
     });
     expect(out).toBe(`# Rendered by telinha from telinha.env; do not edit.
 port: 7890

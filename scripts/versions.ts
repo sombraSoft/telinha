@@ -3,7 +3,18 @@
 // caddy is a build recipe (we build it, each release's SHA256SUMS pins it): validated, never hashed here.
 import { writeFile } from 'node:fs/promises';
 import {
-  HELPERS, PLATFORMS, VERSIONS_FILE, assetSpec, download, isPinned, sha256, type Arch, type Helper, type Os, type Platform, type Versions,
+  type Arch,
+  assetSpec,
+  download,
+  HELPERS,
+  type Helper,
+  isPinned,
+  type Os,
+  PLATFORMS,
+  type Platform,
+  sha256,
+  VERSIONS_FILE,
+  type Versions,
 } from '../server/src/bins.ts';
 import { parseSums } from '../server/src/release.ts';
 
@@ -42,7 +53,8 @@ export function validate(v: unknown): string[] {
     const keys = assets(helper, e.version).map((a) => a.key);
     for (const key of keys) {
       const h = e.sha256?.[key];
-      if (typeof h !== 'string' || !HEX64.test(h)) errors.push(`${helper}: sha256 for ${key} missing or not 64 hex chars`);
+      if (typeof h !== 'string' || !HEX64.test(h))
+        errors.push(`${helper}: sha256 for ${key} missing or not 64 hex chars`);
     }
     for (const key of Object.keys(e.sha256 ?? {})) {
       if (!keys.includes(key as Platform)) errors.push(`${helper}: sha256 for ${key} matches no asset`);
@@ -64,7 +76,8 @@ function validateBuild(helper: Helper, e: Record<string, any>): string[] {
       if (typeof tag !== 'string' || !TAG.test(tag)) errors.push(`${helper}: ${path} needs a tag like v1.2.3`);
     }
   }
-  if ('sha256' in e) errors.push(`${helper}: caddy is built, not downloaded: remove its sha256 (each release's SHA256SUMS pins it)`);
+  if ('sha256' in e)
+    errors.push(`${helper}: caddy is built, not downloaded: remove its sha256 (each release's SHA256SUMS pins it)`);
   return errors;
 }
 
@@ -83,7 +96,9 @@ export function checksumsUrl(helper: Helper, version: string): string | null {
  * silently skipping the check.
  */
 export async function upstreamChecksums(
-  helper: Helper, version: string, get: (url: string) => Promise<Uint8Array> = download,
+  helper: Helper,
+  version: string,
+  get: (url: string) => Promise<Uint8Array> = download,
 ): Promise<Record<string, string> | null> {
   const url = checksumsUrl(helper, version);
   if (!url) return null;
@@ -91,7 +106,9 @@ export async function upstreamChecksums(
   try {
     text = new TextDecoder().decode(await get(url));
   } catch (e) {
-    throw new Error(`${helper} ${version}: could not fetch upstream checksums, refusing to pin unchecked hashes (${e instanceof Error ? e.message : e})`);
+    throw new Error(
+      `${helper} ${version}: could not fetch upstream checksums, refusing to pin unchecked hashes (${e instanceof Error ? e.message : e})`,
+    );
   }
   const sums = parseSums(text);
   if (!Object.keys(sums).length) throw new Error(`${helper} ${version}: upstream checksums at ${url} list nothing`);
@@ -116,13 +133,16 @@ async function refresh(): Promise<void> {
         const listed = upstream?.[spec.asset];
         if (upstream && !listed) throw new Error(`${spec.asset} not listed in upstream checksums`);
         const computed = sha256(data);
-        if (listed && computed !== listed) throw new Error(`${spec.asset}: computed sha256 ${computed}, upstream says ${listed}`);
+        if (listed && computed !== listed)
+          throw new Error(`${spec.asset}: computed sha256 ${computed}, upstream says ${listed}`);
         hashes.set(key, computed);
       }),
     );
     // Fixed platform order keeps the diff of versions.json stable.
     entry.sha256 = Object.fromEntries(list.map(({ key }) => [key, hashes.get(key)!]));
-    console.log(`[versions] ${helper} ${entry.version}: ${upstream ? 'cross-checked against upstream' : 'upstream publishes no checksums, pinned as downloaded'}`);
+    console.log(
+      `[versions] ${helper} ${entry.version}: ${upstream ? 'cross-checked against upstream' : 'upstream publishes no checksums, pinned as downloaded'}`,
+    );
   }
   await writeFile(VERSIONS_FILE, `${JSON.stringify(versions, null, 2)}\n`);
 }

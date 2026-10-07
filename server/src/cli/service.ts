@@ -4,13 +4,18 @@
 import { posix, win32 } from 'node:path';
 import { createLogger } from '../log.ts';
 import { exeName } from '../release.ts';
-import { runLoop as defaultRunLoop } from '../service/runloop.ts';
 import {
-  NotElevatedError, ServiceInstallError, serviceManager as defaultServiceManager,
-  type InstallResult, type ServiceFs, type ServiceManager, type SpawnFn,
+  serviceManager as defaultServiceManager,
+  type InstallResult,
+  NotElevatedError,
+  type ServiceFs,
+  ServiceInstallError,
+  type ServiceManager,
+  type SpawnFn,
 } from '../service/index.ts';
+import { runLoop as defaultRunLoop } from '../service/runloop.ts';
+import { type ArgSpec, type CliContext, GLOBAL_FLAGS, type ParsedArgs, parseArgs, UsageError } from './args.ts';
 import type { ControlClient } from './control.ts';
-import { GLOBAL_FLAGS, parseArgs, UsageError, type ArgSpec, type CliContext, type ParsedArgs } from './args.ts';
 import { defineStrings, ts } from './strings.ts';
 
 export const ACTIONS = ['install', 'uninstall', 'start', 'stop', 'restart', 'status', 'run'] as const;
@@ -30,59 +35,62 @@ export function serviceSpec(platform: NodeJS.Platform = process.platform) {
   } as const satisfies ArgSpec;
 }
 
-const t = defineStrings({
-  unknownAction: 'unknown service action {action}',
-  unsupported: 'no service manager for this system ({platform}); run telinha in a console instead',
-  needsBinary: 'service install needs the native Telinha binary (bun/Docker runs are not installed as a service)',
-  notElevated: 'service install needs an administrator terminal. Open one and run: {cmd}',
-  stepOk: '{step}: ok',
-  stepFailed: '{step}: {error}',
-  stepSkipped: '{step}: skipped',
-  stepTask: 'service registration',
-  stepFirewall: 'firewall rules',
-  stepStart: 'start',
-  hint: 'Still to do by hand: {cmd}',
-  lingerWhy: 'Without it Telinha stops whenever you log out of this machine (an SSH session ending counts).',
-  installed: 'Telinha runs as a service now ({kind}).',
-  uninstalled: 'Service removed; the files in {home} stay.',
-  started: 'Service started.',
-  stopped: 'Service stopped.',
-  restarted: 'Service restarted.',
-  statusLine: 'Service ({kind}): {installed}, {running}, {enabled}',
-  installedYes: 'installed',
-  installedNo: 'not installed',
-  runningYes: 'running',
-  runningNo: 'not running',
-  enabledYes: 'starts at boot',
-  enabledNo: 'does not start at boot',
-  failed: 'service {action} failed: {error}',
-}, {
-  unknownAction: 'ação de service desconhecida {action}',
-  unsupported: 'sem gerenciador de serviço pra este sistema ({platform}); rode a telinha num console',
-  needsBinary: 'service install precisa do binário nativo da Telinha (rodando com bun/Docker não vira serviço)',
-  notElevated: 'service install precisa de um terminal como administrador. Abra um e rode: {cmd}',
-  stepOk: '{step}: ok',
-  stepFailed: '{step}: {error}',
-  stepSkipped: '{step}: pulado',
-  stepTask: 'registro do serviço',
-  stepFirewall: 'regras de firewall',
-  stepStart: 'início',
-  hint: 'Falta fazer na mão: {cmd}',
-  lingerWhy: 'Sem isso a Telinha para sempre que você sai desta máquina (o fim de uma sessão SSH conta).',
-  installed: 'A Telinha agora roda como serviço ({kind}).',
-  uninstalled: 'Serviço removido; os arquivos em {home} ficam.',
-  started: 'Serviço iniciado.',
-  stopped: 'Serviço parado.',
-  restarted: 'Serviço reiniciado.',
-  statusLine: 'Serviço ({kind}): {installed}, {running}, {enabled}',
-  installedYes: 'instalado',
-  installedNo: 'não instalado',
-  runningYes: 'rodando',
-  runningNo: 'parado',
-  enabledYes: 'inicia com o sistema',
-  enabledNo: 'não inicia com o sistema',
-  failed: 'service {action} falhou: {error}',
-});
+const t = defineStrings(
+  {
+    unknownAction: 'unknown service action {action}',
+    unsupported: 'no service manager for this system ({platform}); run telinha in a console instead',
+    needsBinary: 'service install needs the native Telinha binary (bun/Docker runs are not installed as a service)',
+    notElevated: 'service install needs an administrator terminal. Open one and run: {cmd}',
+    stepOk: '{step}: ok',
+    stepFailed: '{step}: {error}',
+    stepSkipped: '{step}: skipped',
+    stepTask: 'service registration',
+    stepFirewall: 'firewall rules',
+    stepStart: 'start',
+    hint: 'Still to do by hand: {cmd}',
+    lingerWhy: 'Without it Telinha stops whenever you log out of this machine (an SSH session ending counts).',
+    installed: 'Telinha runs as a service now ({kind}).',
+    uninstalled: 'Service removed; the files in {home} stay.',
+    started: 'Service started.',
+    stopped: 'Service stopped.',
+    restarted: 'Service restarted.',
+    statusLine: 'Service ({kind}): {installed}, {running}, {enabled}',
+    installedYes: 'installed',
+    installedNo: 'not installed',
+    runningYes: 'running',
+    runningNo: 'not running',
+    enabledYes: 'starts at boot',
+    enabledNo: 'does not start at boot',
+    failed: 'service {action} failed: {error}',
+  },
+  {
+    unknownAction: 'ação de service desconhecida {action}',
+    unsupported: 'sem gerenciador de serviço pra este sistema ({platform}); rode a telinha num console',
+    needsBinary: 'service install precisa do binário nativo da Telinha (rodando com bun/Docker não vira serviço)',
+    notElevated: 'service install precisa de um terminal como administrador. Abra um e rode: {cmd}',
+    stepOk: '{step}: ok',
+    stepFailed: '{step}: {error}',
+    stepSkipped: '{step}: pulado',
+    stepTask: 'registro do serviço',
+    stepFirewall: 'regras de firewall',
+    stepStart: 'início',
+    hint: 'Falta fazer na mão: {cmd}',
+    lingerWhy: 'Sem isso a Telinha para sempre que você sai desta máquina (o fim de uma sessão SSH conta).',
+    installed: 'A Telinha agora roda como serviço ({kind}).',
+    uninstalled: 'Serviço removido; os arquivos em {home} ficam.',
+    started: 'Serviço iniciado.',
+    stopped: 'Serviço parado.',
+    restarted: 'Serviço reiniciado.',
+    statusLine: 'Serviço ({kind}): {installed}, {running}, {enabled}',
+    installedYes: 'instalado',
+    installedNo: 'não instalado',
+    runningYes: 'rodando',
+    runningNo: 'parado',
+    enabledYes: 'inicia com o sistema',
+    enabledNo: 'não inicia com o sistema',
+    failed: 'service {action} falhou: {error}',
+  },
+);
 
 export interface ServiceCliDeps {
   /** Replaces serviceManager() (tests); null = unsupported host. */
@@ -148,31 +156,41 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: ServiceCliDep
 
   if (action === 'run') {
     const execPath = deps.execPath ?? process.execPath;
-    const cmd = ctx.compiled ? [exe, 'run', '--home', paths.home] : [execPath, deps.script ?? process.argv[1] ?? '', 'run', '--home', paths.home];
+    const cmd = ctx.compiled
+      ? [exe, 'run', '--home', paths.home]
+      : [execPath, deps.script ?? process.argv[1] ?? '', 'run', '--home', paths.home];
     // Windows has no journal: the file is the log. Linux writes to stdout (the journal) unless asked for a file.
     const file = flags['log-file'] ?? (platform === 'win32' ? paths.logFile : undefined);
     const logger = createLogger({ stdout: true, file });
     try {
       return await (deps.runLoop ?? defaultRunLoop)({
-        cmd, env: { ...ctx.env, TELINHA_HOME: paths.home }, paths, platform, pid: deps.pid, log: logger.log,
+        cmd,
+        env: { ...ctx.env, TELINHA_HOME: paths.home },
+        paths,
+        platform,
+        pid: deps.pid,
+        log: logger.log,
       });
     } finally {
       logger.close();
     }
   }
 
-  const manager = deps.manager !== undefined ? deps.manager : defaultServiceManager({
-    platform,
-    isRoot: deps.isRoot ?? process.getuid?.() === 0,
-    user: platform !== 'win32' && flags.user === true,
-    spawn: deps.spawn,
-    fs: deps.fs,
-    paths,
-    envFile: ctx.envFile,
-    env: ctx.env,
-    control: deps.control,
-    log: (...a) => ctx.stderr(a.map(String).join(' ')),
-  });
+  const manager =
+    deps.manager !== undefined
+      ? deps.manager
+      : defaultServiceManager({
+          platform,
+          isRoot: deps.isRoot ?? process.getuid?.() === 0,
+          user: platform !== 'win32' && flags.user === true,
+          spawn: deps.spawn,
+          fs: deps.fs,
+          paths,
+          envFile: ctx.envFile,
+          env: ctx.env,
+          control: deps.control,
+          log: (...a) => ctx.stderr(a.map(String).join(' ')),
+        });
   if (!manager) {
     ctx.stderr(t(ctx.locale, 'unsupported', { platform }));
     return 1;
@@ -216,12 +234,14 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: ServiceCliDep
         return 0;
       case 'status': {
         const s = await manager.status();
-        ctx.stdout(t(ctx.locale, 'statusLine', {
-          kind: manager.kind,
-          installed: t(ctx.locale, s.installed ? 'installedYes' : 'installedNo'),
-          running: t(ctx.locale, s.running ? 'runningYes' : 'runningNo'),
-          enabled: t(ctx.locale, s.enabled ? 'enabledYes' : 'enabledNo'),
-        }));
+        ctx.stdout(
+          t(ctx.locale, 'statusLine', {
+            kind: manager.kind,
+            installed: t(ctx.locale, s.installed ? 'installedYes' : 'installedNo'),
+            running: t(ctx.locale, s.running ? 'runningYes' : 'runningNo'),
+            enabled: t(ctx.locale, s.enabled ? 'enabledYes' : 'enabledNo'),
+          }),
+        );
         ctx.stdout(`  ${s.detail}`);
         return s.installed && s.running ? 0 : 1;
       }

@@ -86,7 +86,14 @@ export function createDoctorStore(o: {
       while (sessions.size >= MAX_SESSIONS) drop(sessions.values().next().value!);
       const id = Buffer.from(random(16)).toString('hex');
       const token = Buffer.from(random(32)).toString('base64url');
-      const e: Entry = { id, token, createdAt: now, expiresAt: now + SESSION_TTL_MS, granted: false, waiters: new Set() };
+      const e: Entry = {
+        id,
+        token,
+        createdAt: now,
+        expiresAt: now + SESSION_TTL_MS,
+        granted: false,
+        waiters: new Set(),
+      };
       sessions.set(id, e);
       byToken.set(token, id);
       return { id, token, expiresAt: e.expiresAt };
@@ -140,7 +147,8 @@ export function createDoctorStore(o: {
 
     state(id, now = clock()) {
       const e = sessions.get(id);
-      if (e?.report) return { state: 'done', ...(e.openedAt !== undefined ? { openedAt: e.openedAt } : {}), report: e.report };
+      if (e?.report)
+        return { state: 'done', ...(e.openedAt !== undefined ? { openedAt: e.openedAt } : {}), report: e.report };
       if (!live(e, now)) return { state: 'expired' };
       return e.openedAt !== undefined ? { state: 'opened', openedAt: e.openedAt } : { state: 'pending' };
     },

@@ -21,15 +21,21 @@ export function Header(props: { mode: 'setup' | 'doctor'; version: string; right
       </box>
       <box flexDirection="column" flexGrow={1} paddingTop={1}>
         <box flexDirection="row" gap={1}>
-          <text fg={c.accent} attributes={Bold}>{t('app.name')}</text>
+          <text fg={c.accent} attributes={Bold}>
+            {t('app.name')}
+          </text>
           <text fg={c.text}>{props.mode === 'setup' ? t('app.setup') : t('app.doctor')}</text>
         </box>
-        <text fg={c.muted} wrapMode="none">{t('app.tagline')}</text>
+        <text fg={c.muted} wrapMode="none">
+          {t('app.tagline')}
+        </text>
       </box>
       <box flexDirection="column" paddingTop={1} alignItems="flex-end" flexShrink={0}>
         <text fg={c.muted}>{`v${props.version}`}</text>
         <Show when={props.right}>
-          <text fg={c.muted} wrapMode="none">{props.right}</text>
+          <text fg={c.muted} wrapMode="none">
+            {props.right}
+          </text>
         </Show>
       </box>
     </box>
@@ -66,7 +72,10 @@ export function Sidebar(props: {
     return width(`  ${one}`) <= INNER ? [one] : parts;
   };
   const height = (gaps: boolean, sums: boolean) =>
-    2 + props.steps.length * (gaps ? 2 : 1) + (sums ? props.steps.reduce((n, s) => n + summary(s).length, 0) : 0) + (props.focused ? wrap(t('common.sidebarFocus'), INNER).length : 0);
+    2 +
+    props.steps.length * (gaps ? 2 : 1) +
+    (sums ? props.steps.reduce((n, s) => n + summary(s).length, 0) : 0) +
+    (props.focused ? wrap(t('common.sidebarFocus'), INNER).length : 0);
   const gaps = () => height(true, true) <= (props.maxRows ?? Infinity);
   const sums = () => gaps() || height(false, true) <= (props.maxRows ?? Infinity);
   useKeys({
@@ -97,7 +106,14 @@ export function Sidebar(props: {
       <For each={props.steps}>
         {(step, i) => {
           const cursor = () => props.focused && props.cursor === i();
-          const color = () => (step.state === 'failed' ? c.fail : step.state === 'done' ? c.ok : step.state === 'pending' ? c.muted : c.accent);
+          const color = () =>
+            step.state === 'failed'
+              ? c.fail
+              : step.state === 'done'
+                ? c.ok
+                : step.state === 'pending'
+                  ? c.muted
+                  : c.accent;
           const label = () => fit(`${step.label}${cursor() ? '  ‹' : ''}`, INNER - 2);
           return (
             <box flexDirection="column" marginBottom={gaps() ? 1 : 0} flexShrink={0}>
@@ -112,14 +128,22 @@ export function Sidebar(props: {
                 >{` ${label()}`}</text>
               </box>
               <Show when={sums()}>
-                <For each={summary(step)}>{(line) => <text fg={c.muted} wrapMode="none">{fit(`  ${line}`, INNER)}</text>}</For>
+                <For each={summary(step)}>
+                  {(line) => (
+                    <text fg={c.muted} wrapMode="none">
+                      {fit(`  ${line}`, INNER)}
+                    </text>
+                  )}
+                </For>
               </Show>
             </box>
           );
         }}
       </For>
       <Show when={props.focused}>
-        <text fg={c.muted} wrapMode="word">{t('common.sidebarFocus')}</text>
+        <text fg={c.muted} wrapMode="word">
+          {t('common.sidebarFocus')}
+        </text>
       </Show>
     </box>
   );
@@ -130,7 +154,8 @@ const LOW_KEYS = ['1-9', 'tab', 'pgup/pgdn', 'ctrl+u', 'ctrl+r', 'a'];
 
 /** The items that fit in `cols` columns: the low-priority keys go first, then the ones before the last (quit stays). */
 export function fitFooter(items: [string, string][], cols: number): [string, string][] {
-  const need = (xs: [string, string][]) => 2 + xs.reduce((n, [k, l]) => n + width(k) + 1 + width(l), 0) + 2 * Math.max(0, xs.length - 1);
+  const need = (xs: [string, string][]) =>
+    2 + xs.reduce((n, [k, l]) => n + width(k) + 1 + width(l), 0) + 2 * Math.max(0, xs.length - 1);
   const out = [...items];
   for (const key of LOW_KEYS) {
     if (need(out) <= cols) return out;
@@ -149,7 +174,9 @@ export function Footer(props: { items: [key: string, label: string][] }) {
       <For each={fitFooter(props.items, dims().width)}>
         {([key, label]) => (
           <box flexDirection="row" gap={1} marginRight={2} flexShrink={0}>
-            <text fg={c.accent} attributes={Bold}>{key}</text>
+            <text fg={c.accent} attributes={Bold}>
+              {key}
+            </text>
             <text fg={c.muted}>{label}</text>
           </box>
         )}

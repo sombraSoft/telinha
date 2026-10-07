@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { DoctorReport, PhoneTestPoll } from '../src/cli/control.ts';
 import type { Locale } from '../src/cli/strings.ts';
-import { loadConfig, type Config } from '../src/config.ts';
-import { PHONE_POLL_MS, PhoneTest, type DoctorControl, type PhoneTestState } from '../src/doctor/phone-test.ts';
+import { type Config, loadConfig } from '../src/config.ts';
+import { type DoctorControl, PHONE_POLL_MS, PhoneTest, type PhoneTestState } from '../src/doctor/phone-test.ts';
 import { PROD_ENV } from './helpers.ts';
 
 const URL = 'https://telinha.example.com/doctor?t=TOKEN';
@@ -22,7 +22,9 @@ const REPORT: DoctorReport = {
 type Poll = PhoneTestPoll | 'hang' | 'throw';
 
 /** A control client whose polls answer from a list, or hang until answer(). */
-function control(o: { available?: () => Promise<boolean>; session?: 'throw'; polls?: Poll[]; onWait?: () => void } = {}) {
+function control(
+  o: { available?: () => Promise<boolean>; session?: 'throw'; polls?: Poll[]; onWait?: () => void } = {},
+) {
   const calls: string[] = [];
   const polls = [...(o.polls ?? [])];
   const pending: ((s: PhoneTestPoll) => void)[] = [];
@@ -42,13 +44,26 @@ function control(o: { available?: () => Promise<boolean>; session?: 'throw'; pol
       return next === 'hang' ? new Promise<PhoneTestPoll>((r) => pending.push(r)) : Promise.resolve(next);
     },
   };
-  return { client, calls, answer: (s: PhoneTestPoll) => pending.splice(0).forEach((r) => r(s)) };
+  const answer = (s: PhoneTestPoll) => {
+    for (const r of pending.splice(0)) r(s);
+  };
+  return { client, calls, answer };
 }
 
-const label = (s: PhoneTestState | null) => (!s ? 'null' : s.kind === 'waiting' ? `waiting${s.opened ? ' opened' : ''}` : s.kind);
+const label = (s: PhoneTestState | null) =>
+  !s ? 'null' : s.kind === 'waiting' ? `waiting${s.opened ? ' opened' : ''}` : s.kind;
 
-function phoneTest(ctl: DoctorControl, o: { config?: Config | null; locale?: Locale; waitMs?: number; now?: () => number } = {}) {
-  const t = new PhoneTest({ control: ctl, config: o.config ?? null, locale: o.locale ?? 'en', now: o.now ?? (() => 0), ...(o.waitMs ? { waitMs: o.waitMs } : {}) });
+function phoneTest(
+  ctl: DoctorControl,
+  o: { config?: Config | null; locale?: Locale; waitMs?: number; now?: () => number } = {},
+) {
+  const t = new PhoneTest({
+    control: ctl,
+    config: o.config ?? null,
+    locale: o.locale ?? 'en',
+    now: o.now ?? (() => 0),
+    ...(o.waitMs ? { waitMs: o.waitMs } : {}),
+  });
   const seen: string[] = [];
   t.subscribe(() => seen.push(label(t.state)));
   return { t, seen };
@@ -94,12 +109,20 @@ describe('phone test run', () => {
   });
 
   test('waiting, opened, done: in that order, with the report for --json', async () => {
-    const ctl = control({ polls: [{ state: 'pending' }, { state: 'opened', openedAt: 1 }, { state: 'done', openedAt: 1, report: REPORT }] });
+    const ctl = control({
+      polls: [{ state: 'pending' }, { state: 'opened', openedAt: 1 }, { state: 'done', openedAt: 1, report: REPORT }],
+    });
     const { t, seen } = phoneTest(ctl.client, { now: () => 1000 });
     const done = t.finished();
     await t.start();
     expect(seen).toEqual(['starting', 'waiting', 'waiting opened', 'done']);
-    expect(ctl.calls).toEqual(['available', 'session', `wait abc ${PHONE_POLL_MS}`, `wait abc ${PHONE_POLL_MS}`, `wait abc ${PHONE_POLL_MS}`]);
+    expect(ctl.calls).toEqual([
+      'available',
+      'session',
+      `wait abc ${PHONE_POLL_MS}`,
+      `wait abc ${PHONE_POLL_MS}`,
+      `wait abc ${PHONE_POLL_MS}`,
+    ]);
     expect(await done).toEqual({ status: 'ok', report: REPORT });
   });
 
@@ -126,7 +149,12 @@ describe('phone test run', () => {
 
   test('the wait runs out: skipped, the last poll only as long as the time left', async () => {
     let clock = 0;
-    const ctl = control({ polls: [{ state: 'pending' }, { state: 'pending' }, { state: 'pending' }], onWait: () => void (clock += PHONE_POLL_MS) });
+    const ctl = control({
+      polls: [{ state: 'pending' }, { state: 'pending' }, { state: 'pending' }],
+      onWait: () => {
+        clock += PHONE_POLL_MS;
+      },
+    });
     const { t } = phoneTest(ctl.client, { now: () => clock, waitMs: 20_000 });
     await t.start();
     expect(ctl.calls.slice(2)).toEqual([`wait abc ${PHONE_POLL_MS}`, `wait abc ${PHONE_POLL_MS}`, 'wait abc 4000']);
@@ -201,7 +229,8 @@ describe('phone test run', () => {
 });
 
 describe('phone test rows', () => {
-  const view = (s: { rows: { id: string; status: string; hint?: string }[] }) => s.rows.map((r) => [r.id, r.status, r.hint ? 'hint' : '']);
+  const view = (s: { rows: { id: string; status: string; hint?: string }[] }) =>
+    s.rows.map((r) => [r.id, r.status, r.hint ? 'hint' : '']);
 
   test('all good: ok rows, no hints, status ok', async () => {
     const s = await rows(REPORT);
@@ -219,25 +248,39 @@ describe('phone test rows', () => {
   test('one media path closed warns, with its hint on that row', async () => {
     const udp = await rows({ ...REPORT, udp: { ok: false, error: 'fell back to TCP' } });
     expect(udp.status).toBe('warn');
-    expect(view(udp).slice(4)).toEqual([['udp', 'warn', 'hint'], ['tcp', 'ok', '']]);
+    expect(view(udp).slice(4)).toEqual([
+      ['udp', 'warn', 'hint'],
+      ['tcp', 'ok', ''],
+    ]);
     expect(udp.rows[4]!.value).toBe('failed: fell back to TCP');
     expect(udp.rows[4]!.hint).toContain('UDP 7882 is not reachable from the internet');
     const tcp = await rows({ ...REPORT, tcp: { ok: false } });
-    expect(view(tcp).slice(4)).toEqual([['udp', 'ok', ''], ['tcp', 'warn', 'hint']]);
+    expect(view(tcp).slice(4)).toEqual([
+      ['udp', 'ok', ''],
+      ['tcp', 'warn', 'hint'],
+    ]);
     expect(tcp.rows[5]!.hint).toContain('TCP 7881 is not reachable');
   });
 
   test('both media paths closed fail, the shared hint on both rows', async () => {
     const s = await rows({ ...REPORT, initial: null, udp: { ok: false }, tcp: { ok: false } });
     expect(s.status).toBe('fail');
-    expect(view(s).slice(3)).toEqual([['initial', 'warn', ''], ['udp', 'fail', 'hint'], ['tcp', 'fail', 'hint']]);
+    expect(view(s).slice(3)).toEqual([
+      ['initial', 'warn', ''],
+      ['udp', 'fail', 'hint'],
+      ['tcp', 'fail', 'hint'],
+    ]);
     expect(s.rows[3]!.value).toBe('no media path');
     expect(s.rows[4]!.hint).toBe(s.rows[5]!.hint!);
     expect(s.rows[4]!.hint).toContain('open TCP 7881 and UDP 7882 to this machine');
   });
 
   test('signaling or HTTPS down fails; only the signaling hint is given', async () => {
-    const s = await rows({ ...REPORT, signaling: { ok: false, error: 'timeout' }, udp: { ok: false }, tcp: { ok: false } }, null, 'pt-BR');
+    const s = await rows(
+      { ...REPORT, signaling: { ok: false, error: 'timeout' }, udp: { ok: false }, tcp: { ok: false } },
+      null,
+      'pt-BR',
+    );
     expect(s.status).toBe('fail');
     expect(s.rows[1]).toMatchObject({ status: 'fail', value: 'falhou: timeout' });
     expect(s.rows[1]!.hint).toContain('A Telinha não é acessível pela internet');
@@ -267,10 +310,19 @@ describe('phone test rows', () => {
     const config = loadConfig({ ...PROD_ENV, HOSTING: 'vps', TURN: 'on' });
     const s = await rows({ ...REPORT, turn: { ok: false, error: 'not relayed' } }, config);
     expect(s.status).toBe('warn');
-    expect(s.rows.at(-1)).toMatchObject({ id: 'turn', status: 'warn', label: 'TURN/TLS 443', value: 'failed: not relayed' });
+    expect(s.rows.at(-1)).toMatchObject({
+      id: 'turn',
+      status: 'warn',
+      label: 'TURN/TLS 443',
+      value: 'failed: not relayed',
+    });
     expect(s.rows.at(-1)!.hint).toContain('turn.telinha.example.com');
     const both = await rows({ ...REPORT, udp: { ok: false }, turn: { ok: false } });
-    expect(view(both).slice(4)).toEqual([['udp', 'warn', 'hint'], ['tcp', 'ok', ''], ['turn', 'warn', 'hint']]);
+    expect(view(both).slice(4)).toEqual([
+      ['udp', 'warn', 'hint'],
+      ['tcp', 'ok', ''],
+      ['turn', 'warn', 'hint'],
+    ]);
     expect(both.rows.at(-1)!.hint).toContain('turn.<host>');
     const good = await rows({ ...REPORT, turn: { ok: true, rttMs: 120 } });
     expect(good.status).toBe('ok');
@@ -279,14 +331,34 @@ describe('phone test rows', () => {
   });
 
   test("LiveKit Cloud: no ports to name, Cloud hints, and the candidate IP is Cloud's", async () => {
-    const config = loadConfig({ ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc.livekit.cloud', LIVEKIT_NODE_IP: '198.51.100.1' });
+    const config = loadConfig({
+      ...PROD_ENV,
+      MEDIA: 'cloud',
+      LIVEKIT_CLOUD_URL: 'wss://proj-abc.livekit.cloud',
+      LIVEKIT_NODE_IP: '198.51.100.1',
+    });
     const udp = await rows({ ...REPORT, udp: { ok: false, error: 'timed out' } }, config);
     expect(udp.rows.map((r) => r.label).slice(4)).toEqual(['UDP', 'TCP']);
     expect(udp.rows[3]!.status).toBe('ok');
-    expect(udp.rows[4]!.hint).toBe('UDP to LiveKit Cloud did not work from the phone; video falls back to TCP with more delay. Nothing to open on your side.');
-    expect((await rows({ ...REPORT, tcp: { ok: false } }, config)).rows[5]!.hint).toContain('video still works over UDP');
-    expect((await rows({ ...REPORT, tcp: { ok: false }, udp: { ok: false } }, config)).rows[4]!.hint).toContain('that network blocks WebRTC');
-    const down = await rows({ ...REPORT, signaling: { ok: false, error: 'could not connect' }, initial: null, udp: { ok: false }, tcp: { ok: false } }, config);
+    expect(udp.rows[4]!.hint).toBe(
+      'UDP to LiveKit Cloud did not work from the phone; video falls back to TCP with more delay. Nothing to open on your side.',
+    );
+    expect((await rows({ ...REPORT, tcp: { ok: false } }, config)).rows[5]!.hint).toContain(
+      'video still works over UDP',
+    );
+    expect((await rows({ ...REPORT, tcp: { ok: false }, udp: { ok: false } }, config)).rows[4]!.hint).toContain(
+      'that network blocks WebRTC',
+    );
+    const down = await rows(
+      {
+        ...REPORT,
+        signaling: { ok: false, error: 'could not connect' },
+        initial: null,
+        udp: { ok: false },
+        tcp: { ok: false },
+      },
+      config,
+    );
     expect(down.rows[1]!.hint).toContain('check the livekit-cloud check above');
   });
 

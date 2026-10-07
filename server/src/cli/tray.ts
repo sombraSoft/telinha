@@ -3,56 +3,67 @@
 // would run elevated too (the tray itself refuses to run that way).
 import { defaultSpawn, nodeServiceFs, type ServiceFs, type SpawnFn } from '../service/index.ts';
 import {
-  autostartEnabled, defaultTrayLauncher, readTrayState, setAutostart, stopTray, trayEnv, trayExePath, trayRunning,
+  autostartEnabled,
+  defaultTrayLauncher,
+  readTrayState,
+  setAutostart,
+  stopTray,
   type TrayLauncher,
+  trayEnv,
+  trayExePath,
+  trayRunning,
 } from '../service/tray.ts';
 import { isSplitElevated } from '../service/windows.ts';
 import { defaultProcessInfo, type ProcessInfo } from '../supervisor.ts';
-import { GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, type ParsedArgs } from './args.ts';
+import { type CliContext, GLOBAL_FLAGS, type ParsedArgs, parseArgs, UsageError } from './args.ts';
 import { defineStrings, ts } from './strings.ts';
 
 export const TRAY_ACTIONS = ['start', 'stop', 'status', 'autostart'] as const;
 export type TrayAction = (typeof TRAY_ACTIONS)[number];
 
-const t = defineStrings({
-  notWindows: 'the tray exists on Windows only',
-  unknownAction: 'unknown tray action {action}',
-  noExe: 'telinha-tray.exe is not in {bin}; run telinha setup again',
-  alreadyRunning: 'Tray icon already running.',
-  elevated: 'Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.',
-  started: 'Tray icon started.',
-  stopped: 'Tray icon stopped.',
-  notRunning: 'Tray icon is not running.',
-  statusLine: 'Tray icon: {state}, starts with Windows: {autostart}',
-  stateRunning: 'running (pid {pid}, {version})',
-  stateStopped: 'not running',
-  stateMissing: 'not installed',
-  yes: 'yes',
-  no: 'no',
-  autostartLine: 'Starts with Windows: {state}.',
-  on: 'on',
-  off: 'off',
-  failed: 'tray {action} failed: {error}',
-}, {
-  notWindows: 'o ícone na bandeja só existe no Windows',
-  unknownAction: 'ação de tray desconhecida {action}',
-  noExe: 'o telinha-tray.exe não está em {bin}; rode telinha setup de novo',
-  alreadyRunning: 'O ícone na bandeja já está rodando.',
-  elevated: 'Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.',
-  started: 'Ícone na bandeja iniciado.',
-  stopped: 'Ícone na bandeja parado.',
-  notRunning: 'O ícone na bandeja não está rodando.',
-  statusLine: 'Ícone na bandeja: {state}, inicia com o Windows: {autostart}',
-  stateRunning: 'rodando (pid {pid}, {version})',
-  stateStopped: 'parado',
-  stateMissing: 'não instalado',
-  yes: 'sim',
-  no: 'não',
-  autostartLine: 'Inicia com o Windows: {state}.',
-  on: 'ligado',
-  off: 'desligado',
-  failed: 'tray {action} falhou: {error}',
-});
+const t = defineStrings(
+  {
+    notWindows: 'the tray exists on Windows only',
+    unknownAction: 'unknown tray action {action}',
+    noExe: 'telinha-tray.exe is not in {bin}; run telinha setup again',
+    alreadyRunning: 'Tray icon already running.',
+    elevated: 'Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.',
+    started: 'Tray icon started.',
+    stopped: 'Tray icon stopped.',
+    notRunning: 'Tray icon is not running.',
+    statusLine: 'Tray icon: {state}, starts with Windows: {autostart}',
+    stateRunning: 'running (pid {pid}, {version})',
+    stateStopped: 'not running',
+    stateMissing: 'not installed',
+    yes: 'yes',
+    no: 'no',
+    autostartLine: 'Starts with Windows: {state}.',
+    on: 'on',
+    off: 'off',
+    failed: 'tray {action} failed: {error}',
+  },
+  {
+    notWindows: 'o ícone na bandeja só existe no Windows',
+    unknownAction: 'ação de tray desconhecida {action}',
+    noExe: 'o telinha-tray.exe não está em {bin}; rode telinha setup de novo',
+    alreadyRunning: 'O ícone na bandeja já está rodando.',
+    elevated:
+      'Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.',
+    started: 'Ícone na bandeja iniciado.',
+    stopped: 'Ícone na bandeja parado.',
+    notRunning: 'O ícone na bandeja não está rodando.',
+    statusLine: 'Ícone na bandeja: {state}, inicia com o Windows: {autostart}',
+    stateRunning: 'rodando (pid {pid}, {version})',
+    stateStopped: 'parado',
+    stateMissing: 'não instalado',
+    yes: 'sim',
+    no: 'não',
+    autostartLine: 'Inicia com o Windows: {state}.',
+    on: 'ligado',
+    off: 'desligado',
+    failed: 'tray {action} falhou: {error}',
+  },
+);
 
 export interface TrayCliDeps {
   spawn?: SpawnFn;
@@ -104,7 +115,8 @@ export async function run(_args: ParsedArgs, ctx: CliContext, deps: TrayCliDeps 
   const processInfo = deps.processInfo ?? defaultProcessInfo('win32');
   const { paths, locale } = ctx;
   const exe = trayExePath(paths);
-  const say = (key: Parameters<typeof t>[1], params?: Record<string, string | number>) => ctx.stdout(t(locale, key, params));
+  const say = (key: Parameters<typeof t>[1], params?: Record<string, string | number>) =>
+    ctx.stdout(t(locale, key, params));
 
   try {
     switch (action as TrayAction) {
@@ -127,7 +139,10 @@ export async function run(_args: ParsedArgs, ctx: CliContext, deps: TrayCliDeps 
       }
       case 'stop': {
         const r = await stopTray({
-          spawn, fs, paths, processInfo,
+          spawn,
+          fs,
+          paths,
+          processInfo,
           now: deps.now ?? Date.now,
           sleep: deps.sleep ?? ((ms) => Bun.sleep(ms)),
         });
@@ -140,7 +155,9 @@ export async function run(_args: ParsedArgs, ctx: CliContext, deps: TrayCliDeps 
         const running = installed && trayRunning(state, processInfo);
         const autostart = await autostartEnabled(spawn, exe);
         say('statusLine', {
-          state: running ? t(locale, 'stateRunning', { pid: state!.pid, version: state!.version || '?' }) : t(locale, installed ? 'stateStopped' : 'stateMissing'),
+          state: running
+            ? t(locale, 'stateRunning', { pid: state!.pid, version: state!.version || '?' })
+            : t(locale, installed ? 'stateStopped' : 'stateMissing'),
           autostart: t(locale, autostart ? 'yes' : 'no'),
         });
         return running ? 0 : 1;

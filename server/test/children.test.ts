@@ -2,14 +2,17 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { childBaseEnv, childSpecs, portInUse, type FindBinary } from '../src/children.ts';
+import { childBaseEnv, childSpecs, type FindBinary, portInUse } from '../src/children.ts';
 import { KNOWN_KEYS, loadConfig } from '../src/config.ts';
 import { resolvePaths } from '../src/paths.ts';
 
 // Distinctive so a scan can't match anything by accident.
 const SECRETS = {
-  DISCORD_TOKEN: 'S3CR3T-discord-token', DISCORD_CLIENT_SECRET: 'S3CR3T-client-secret',
-  COOKIE_SECRET: 'S3CR3T-cookie', LIVEKIT_API_SECRET: 'S3CR3T-livekit', TUNNEL_TOKEN: 'S3CR3T-tunnel', // gitleaks:allow
+  DISCORD_TOKEN: 'S3CR3T-discord-token',
+  DISCORD_CLIENT_SECRET: 'S3CR3T-client-secret',
+  COOKIE_SECRET: 'S3CR3T-cookie',
+  LIVEKIT_API_SECRET: 'S3CR3T-livekit', // gitleaks:allow
+  TUNNEL_TOKEN: 'S3CR3T-tunnel', // gitleaks:allow
   DUCKDNS_TOKEN: 'S3CR3T-duckdns', // gitleaks:allow
 };
 // The home default: a DuckDNS name on 8443 with the certificate over DNS-01.
@@ -24,8 +27,16 @@ let n = 0;
 function setup(ingress: 'direct' | 'tunnel' | 'external', extra: Record<string, string> = {}) {
   const home = join(tmp, `home${n++}`);
   const env = {
-    ...SECRETS, DISCORD_CLIENT_ID: 'cid', GUILD_ID: '100', ROLE_ID: '200', CHANNEL_IDS: '300',
-    PUBLIC_URL: 'https://tela.example.com', LIVEKIT_API_KEY: 'devkey', INGRESS: ingress, TELINHA_HOME: home, ...extra,
+    ...SECRETS,
+    DISCORD_CLIENT_ID: 'cid',
+    GUILD_ID: '100',
+    ROLE_ID: '200',
+    CHANNEL_IDS: '300',
+    PUBLIC_URL: 'https://tela.example.com',
+    LIVEKIT_API_KEY: 'devkey',
+    INGRESS: ingress,
+    TELINHA_HOME: home,
+    ...extra,
   };
   const config = loadConfig(env);
   return { config, paths: resolvePaths(env) };
@@ -46,7 +57,14 @@ describe('childSpecs', () => {
     const [lk, caddy] = specs;
     expect(lk!.cmd).toEqual([join(paths.bin, 'livekit-server'), '--config', join(paths.run, 'livekit.yaml')]);
     expect(lk!.ready).toEqual({ url: 'http://127.0.0.1:7880/', timeoutMs: 30_000 });
-    expect(caddy!.cmd).toEqual([join(paths.bin, 'caddy'), 'run', '--config', join(paths.run, 'Caddyfile'), '--adapter', 'caddyfile']);
+    expect(caddy!.cmd).toEqual([
+      join(paths.bin, 'caddy'),
+      'run',
+      '--config',
+      join(paths.run, 'Caddyfile'),
+      '--adapter',
+      'caddyfile',
+    ]);
     const storage = join(paths.data, 'caddy');
     expect(caddy!.env).toEqual({ XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage });
     expect(caddy!.ready).toBeUndefined();
@@ -57,9 +75,21 @@ describe('childSpecs', () => {
     const { paths, specs } = specsFor('direct', DNS01);
     const [lk, caddy] = specs;
     const storage = join(paths.data, 'caddy');
-    expect(caddy!.env).toEqual({ XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage, DUCKDNS_TOKEN: SECRETS.DUCKDNS_TOKEN });
+    expect(caddy!.env).toEqual({
+      XDG_DATA_HOME: storage,
+      XDG_CONFIG_HOME: storage,
+      HOME: storage,
+      DUCKDNS_TOKEN: SECRETS.DUCKDNS_TOKEN,
+    });
     expect(caddy!.redact).toEqual([SECRETS.DUCKDNS_TOKEN]);
-    expect(caddy!.cmd).toEqual([join(paths.bin, 'caddy'), 'run', '--config', join(paths.run, 'Caddyfile'), '--adapter', 'caddyfile']);
+    expect(caddy!.cmd).toEqual([
+      join(paths.bin, 'caddy'),
+      'run',
+      '--config',
+      join(paths.run, 'Caddyfile'),
+      '--adapter',
+      'caddyfile',
+    ]);
     expect(lk!.env).not.toHaveProperty('DUCKDNS_TOKEN');
   });
 
@@ -86,7 +116,14 @@ describe('childSpecs', () => {
   });
 
   test('no cmd element of any spec contains any secret', () => {
-    for (const [mode, extra] of [['direct', {}], ['direct', DNS01], ['tunnel', {}], ['external', {}], ['direct', CLOUD], ['tunnel', CLOUD]] as const) {
+    for (const [mode, extra] of [
+      ['direct', {}],
+      ['direct', DNS01],
+      ['tunnel', {}],
+      ['external', {}],
+      ['direct', CLOUD],
+      ['tunnel', CLOUD],
+    ] as const) {
       for (const spec of specsFor(mode, extra).specs) {
         for (const arg of spec.cmd) {
           for (const secret of Object.values(SECRETS)) expect(arg).not.toContain(secret);
@@ -135,7 +172,10 @@ describe('childSpecs', () => {
     const { config, paths } = setup('direct', TURN);
     expect(config.turn).toEqual({ host: 'turn.g.duckdns.org', port: 5349 });
     const probed: number[] = [];
-    const [lk] = childSpecs(config, paths, fake, async (p) => { probed.push(p); return p === 5349; });
+    const [lk] = childSpecs(config, paths, fake, async (p) => {
+      probed.push(p);
+      return p === 5349;
+    });
     await expect(lk!.prepare!()).rejects.toThrow('port 5349 (TURN_PORT) already in use (another LiveKit?)');
     expect(probed).toEqual([7880, 7881, 5349]);
   });
@@ -153,26 +193,40 @@ describe('childSpecs', () => {
 
   test('missing binary', () => {
     const { config, paths } = setup('direct');
-    expect(() => childSpecs(config, paths, () => null))
-      .toThrow(`livekit-server not found: put it in ${paths.bin} (bun scripts/bins.ts livekit) or on PATH`);
+    expect(() => childSpecs(config, paths, () => null)).toThrow(
+      `livekit-server not found: put it in ${paths.bin} (bun scripts/bins.ts livekit) or on PATH`,
+    );
     const noCaddy: FindBinary = (name, p) => (name === 'caddy' ? null : fake(name, p));
-    expect(() => childSpecs(config, paths, noCaddy))
-      .toThrow(`caddy not found: put it in ${paths.bin} (bun scripts/bins.ts caddy) or on PATH`);
+    expect(() => childSpecs(config, paths, noCaddy)).toThrow(
+      `caddy not found: put it in ${paths.bin} (bun scripts/bins.ts caddy) or on PATH`,
+    );
   });
 });
 
 describe('childBaseEnv', () => {
   test('drops telinha keys and Go-flag prefixes, keeps the rest', () => {
     const env: Record<string, string | undefined> = {
-      PATH: '/usr/bin', HOME: '/home/u', SystemRoot: 'C:\\Windows', TEMP: 'C:\\Temp', LANG: 'C.UTF-8',
+      PATH: '/usr/bin',
+      HOME: '/home/u',
+      SystemRoot: 'C:\\Windows',
+      TEMP: 'C:\\Temp',
+      LANG: 'C.UTF-8',
       HTTPS_PROXY: 'http://proxy:3128',
-      LIVEKIT_FOO: 'x', TUNNEL_FOO: 'x', DISCORD_FOO: 'x', TELINHA_FOO: 'x', LIVEKIT_KEYS: 'k: s',
+      LIVEKIT_FOO: 'x',
+      TUNNEL_FOO: 'x',
+      DISCORD_FOO: 'x',
+      TELINHA_FOO: 'x',
+      LIVEKIT_KEYS: 'k: s',
       tunnel_token: 'lowercase still reaches Go on Windows',
       UNSET: undefined,
     };
     for (const k of KNOWN_KEYS) env[k] = 'x';
     expect(childBaseEnv(env)).toEqual({
-      PATH: '/usr/bin', HOME: '/home/u', SystemRoot: 'C:\\Windows', TEMP: 'C:\\Temp', LANG: 'C.UTF-8',
+      PATH: '/usr/bin',
+      HOME: '/home/u',
+      SystemRoot: 'C:\\Windows',
+      TEMP: 'C:\\Temp',
+      LANG: 'C.UTF-8',
       HTTPS_PROXY: 'http://proxy:3128',
     });
   });

@@ -1,19 +1,37 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { loadVersions } from '../src/bins.ts';
-import { loadConfig, type Config } from '../src/config.ts';
+import { type Config, loadConfig } from '../src/config.ts';
 import { broadAclEntries, CHECKS, compareVersions, inviteUrl, neededPorts, runChecks } from '../src/doctor/checks.ts';
 import type {
-  Check, CheckContext, CheckResult, ControlStatusLike, NatProbeLike, NetLike, ServiceStatusLike, SysLike, TrayStateLike, UpdateStateLike,
+  Check,
+  CheckContext,
+  CheckResult,
+  ControlStatusLike,
+  NatProbeLike,
+  NetLike,
+  ServiceStatusLike,
+  SysLike,
+  TrayStateLike,
+  UpdateStateLike,
 } from '../src/doctor/types.ts';
 import type { Locale } from '../src/i18n.ts';
 import { SYSCTL_SCRIPT } from '../src/service/systemd.ts';
 
 const ENV = {
-  DISCORD_TOKEN: 'bot-tok', DISCORD_CLIENT_ID: '111', DISCORD_CLIENT_SECRET: 'csecret', // gitleaks:allow
-  GUILD_ID: '100', ROLE_ID: '200', CHANNEL_IDS: '300,301',
-  PUBLIC_URL: 'https://telinha.example.com', COOKIE_SECRET: 'secret', // gitleaks:allow
-  LIVEKIT_API_KEY: 'devkey', LIVEKIT_API_SECRET: 'lksecret', // gitleaks:allow
-  INGRESS: 'direct', TELINHA_HOME: '/srv/telinha', HTTPS_PORT: '443', HTTP_PORT: '80',
+  DISCORD_TOKEN: 'bot-tok',
+  DISCORD_CLIENT_ID: '111',
+  DISCORD_CLIENT_SECRET: 'csecret', // gitleaks:allow
+  GUILD_ID: '100',
+  ROLE_ID: '200',
+  CHANNEL_IDS: '300,301',
+  PUBLIC_URL: 'https://telinha.example.com',
+  COOKIE_SECRET: 'secret', // gitleaks:allow
+  LIVEKIT_API_KEY: 'devkey',
+  LIVEKIT_API_SECRET: 'lksecret', // gitleaks:allow
+  INGRESS: 'direct',
+  TELINHA_HOME: '/srv/telinha',
+  HTTPS_PORT: '443',
+  HTTP_PORT: '80',
 };
 const ENV_FILE = '/srv/telinha/config/telinha.env';
 const API = 'https://discord.com/api/v10';
@@ -26,12 +44,24 @@ const norm = (p: string) => p.replaceAll('\\', '/');
 
 type Route = unknown | number | Error | ((init?: RequestInit) => Response);
 
-const APP = { id: '111', name: 'Telinha', flags: (1 << 13) | (1 << 15), redirect_uris: ['https://telinha.example.com/auth/callback'] };
+const APP = {
+  id: '111',
+  name: 'Telinha',
+  flags: (1 << 13) | (1 << 15),
+  redirect_uris: ['https://telinha.example.com/auth/callback'],
+};
 const DISCORD: Record<string, Route> = {
   [`${API}/applications/@me`]: APP,
-  [`${API}/users/@me/guilds`]: [{ id: '100', name: 'Gurizada' }, { id: '9', name: 'Other' }],
+  [`${API}/users/@me/guilds`]: [
+    { id: '100', name: 'Gurizada' },
+    { id: '9', name: 'Other' },
+  ],
   [`${API}/guilds/100/roles`]: [{ id: '200', name: 'Members' }],
-  [`${API}/guilds/100/channels`]: [{ id: '300', name: 'geral', type: 0 }, { id: '301', name: 'avisos', type: 5 }, { id: '302', name: 'Voz', type: 2 }],
+  [`${API}/guilds/100/channels`]: [
+    { id: '300', name: 'geral', type: 0 },
+    { id: '301', name: 'avisos', type: 5 },
+    { id: '302', name: 'Voz', type: 2 },
+  ],
   'https://telinha.example.com/healthz': { ok: true },
   'http://127.0.0.1:8081/healthz': { ok: true, rooms: 2, children: { livekit: 'up', caddy: 'up' } },
   'http://127.0.0.1:7880/': 'OK',
@@ -86,12 +116,18 @@ function ctxFor(o: Opts = {}) {
   const net: NetLike = {
     lookupPublicIp: async () => PUBLIC,
     resolveA: async () => [PUBLIC],
-    tlsInfo: async () => ({ validTo: Date.now() + 60 * 86_400_000, issuer: "Let's Encrypt", subjectAltNames: ['telinha.example.com'], authorized: true }),
+    tlsInfo: async () => ({
+      validTo: Date.now() + 60 * 86_400_000,
+      issuer: "Let's Encrypt",
+      subjectAltNames: ['telinha.example.com'],
+      authorized: true,
+    }),
     tcpOpen: async () => true,
     ...o.net,
   };
   const sys: Partial<SysLike> = {
-    platform: 'linux', isRoot: false,
+    platform: 'linux',
+    isRoot: false,
     readText: (p) => files[norm(p)] ?? null,
     fileMode: (p) => (norm(p) in files ? 0o100600 : null),
     icacls: async () => null,
@@ -102,17 +138,55 @@ function ctxFor(o: Opts = {}) {
   };
   let latestCalls = 0;
   const ctx: CheckContext = {
-    env, envFile: ENV_FILE, paths: { ...(config?.paths ?? { home: '', bin: '/srv/telinha/bin', config: '', data: '', run: '/srv/telinha/data/run', logs: '', logFile: '' }), ...(o.bin ? { bin: o.bin } : {}) },
-    config, configError, fetch: f.fetch, locale: o.locale ?? 'en', local: o.local ?? false,
-    nat: o.nat === null ? null : { probe: async () => o.nat ?? { gateway: { kind: 'igd', gatewayIp: '192.168.0.1', localIp: '192.168.0.10' }, externalIp: PUBLIC, localIp: '192.168.0.10', errors: [] } },
-    service: o.service === null ? null : async () => o.service ?? { installed: true, running: true, enabled: true, detail: '' },
-    control: o.control === undefined || o.control === null ? null : { available: async () => true, status: async () => o.control! },
+    env,
+    envFile: ENV_FILE,
+    paths: {
+      ...(config?.paths ?? {
+        home: '',
+        bin: '/srv/telinha/bin',
+        config: '',
+        data: '',
+        run: '/srv/telinha/data/run',
+        logs: '',
+        logFile: '',
+      }),
+      ...(o.bin ? { bin: o.bin } : {}),
+    },
+    config,
+    configError,
+    fetch: f.fetch,
+    locale: o.locale ?? 'en',
+    local: o.local ?? false,
+    nat:
+      o.nat === null
+        ? null
+        : {
+            probe: async () =>
+              o.nat ?? {
+                gateway: { kind: 'igd', gatewayIp: '192.168.0.1', localIp: '192.168.0.10' },
+                externalIp: PUBLIC,
+                localIp: '192.168.0.10',
+                errors: [],
+              },
+          },
+    service:
+      o.service === null
+        ? null
+        : async () => o.service ?? { installed: true, running: true, enabled: true, detail: '' },
+    control:
+      o.control === undefined || o.control === null
+        ? null
+        : { available: async () => true, status: async () => o.control! },
     compiled: o.compiled ?? true,
     version: o.version ?? '0.7.0',
-    latestTag: async () => { latestCalls++; return o.latest === undefined ? 'v0.7.0' : o.latest; },
+    latestTag: async () => {
+      latestCalls++;
+      return o.latest === undefined ? 'v0.7.0' : o.latest;
+    },
     updateState: o.updateState ?? null,
     trayState: o.trayState ?? null,
-    net, sys,
+    net,
+    sys,
   };
   return { ctx, calls: f.calls, latestCalls: () => latestCalls };
 }
@@ -130,19 +204,45 @@ const one = async (id: string, o: Opts = {}) => {
 
 const BIN_FILES = {
   [ENV_FILE]: 'GUILD_ID=100\n',
-  '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': `${LIVEKIT}\n`,
-  '/srv/telinha/bin/caddy': '', '/srv/telinha/bin/caddy.version': 'v0.7.0\n',
+  '/srv/telinha/bin/livekit-server': '',
+  '/srv/telinha/bin/livekit.version': `${LIVEKIT}\n`,
+  '/srv/telinha/bin/caddy': '',
+  '/srv/telinha/bin/caddy.version': 'v0.7.0\n',
 };
 
 // The standard home setup without a domain: DuckDNS name, HTTPS on 8443, DNS-01.
 const DUCK = {
-  HOSTING: 'home', PUBLIC_URL: 'https://grupo.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns', DUCKDNS_TOKEN: 'duck-tok', // gitleaks:allow
+  HOSTING: 'home',
+  PUBLIC_URL: 'https://grupo.duckdns.org:8443',
+  HTTPS_PORT: '8443',
+  HTTP_PORT: '0',
+  ACME_DNS: 'duckdns',
+  DUCKDNS_TOKEN: 'duck-tok', // gitleaks:allow
 };
 
 test('checks run in the documented order', () => {
   expect(CHECKS.map((c) => c.id)).toEqual([
-    'config', 'binaries', 'discord-token', 'discord-intents', 'discord-guild', 'discord-role', 'discord-channels', 'discord-redirect',
-    'public-ip', 'dns', 'certificate', 'tls', 'livekit-cloud', 'turn', 'listeners', 'service', 'tray', 'gateway', 'cgnat', 'mappings', 'update',
+    'config',
+    'binaries',
+    'discord-token',
+    'discord-intents',
+    'discord-guild',
+    'discord-role',
+    'discord-channels',
+    'discord-redirect',
+    'public-ip',
+    'dns',
+    'certificate',
+    'tls',
+    'livekit-cloud',
+    'turn',
+    'listeners',
+    'service',
+    'tray',
+    'gateway',
+    'cgnat',
+    'mappings',
+    'update',
   ]);
 });
 
@@ -181,7 +281,7 @@ describe('config', () => {
     expect(r.detail).toContain('mode 644');
   });
 
-  test('linux: the root install\'s root:telinha 0640 is fine; group-readable and owned by someone else is not', async () => {
+  test("linux: the root install's root:telinha 0640 is fine; group-readable and owned by someone else is not", async () => {
     expect((await one('config', { sys: { fileMode: () => 0o100640, fileUid: () => 0 } })).status).toBe('ok');
     expect((await one('config', { sys: { fileMode: () => 0o100640, fileUid: () => 1000 } })).status).toBe('fail');
     expect((await one('config', { sys: { fileMode: () => 0o100660, fileUid: () => 0 } })).status).toBe('fail');
@@ -205,8 +305,12 @@ describe('config', () => {
 });
 
 test('broadAclEntries reads English and Portuguese (mangled code page) Windows', () => {
-  expect(broadAclEntries('f BUILTIN\\Usu�rios:(I)(RX)\n NT AUTHORITY\\Usuários autenticados:(I)(M)\n Todos:(R)')).toHaveLength(3);
-  expect(broadAclEntries('f NT AUTHORITY\\Authenticated Users:(I)(M)\n Everyone:(R)\n PC\\UsersGroupX:(F)')).toHaveLength(2);
+  expect(
+    broadAclEntries('f BUILTIN\\Usu�rios:(I)(RX)\n NT AUTHORITY\\Usuários autenticados:(I)(M)\n Todos:(R)'),
+  ).toHaveLength(3);
+  expect(
+    broadAclEntries('f NT AUTHORITY\\Authenticated Users:(I)(M)\n Everyone:(R)\n PC\\UsersGroupX:(F)'),
+  ).toHaveLength(2);
   expect(broadAclEntries('f NT AUTHORITY\\SYSTEM:(F)\n PC\\joao:(F)')).toEqual([]);
 });
 
@@ -214,7 +318,10 @@ describe('binaries', () => {
   test('present with matching sidecars', async () => {
     const r = await one('binaries', { files: BIN_FILES });
     expect(r.status).toBe('ok');
-    expect(r.detail?.map(norm)).toEqual([`livekit ${LIVEKIT} (/srv/telinha/bin/livekit-server)`, 'caddy v0.7.0 (/srv/telinha/bin/caddy)']);
+    expect(r.detail?.map(norm)).toEqual([
+      `livekit ${LIVEKIT} (/srv/telinha/bin/livekit-server)`,
+      'caddy v0.7.0 (/srv/telinha/bin/caddy)',
+    ]);
   });
 
   test('stale sidecar is a pending update (warn); missing is a fail', async () => {
@@ -238,27 +345,61 @@ describe('binaries', () => {
 
   test('DNS-01: the caddy in use must have the DuckDNS module', async () => {
     // What a Go binary carries: the module IDs and the build info's module paths, as plain strings.
-    const binary = (...strings: string[]) => async () => new TextEncoder().encode(`\x7fELF...${strings.join('\0')}...`);
+    const binary =
+      (...strings: string[]) =>
+      async () =>
+        new TextEncoder().encode(`\x7fELF...${strings.join('\0')}...`);
     const onPath = { which: (n: string) => (n === 'caddy' ? '/usr/bin/caddy' : null) };
-    const files = { [ENV_FILE]: '', '/srv/telinha/bin/livekit-server': '', '/srv/telinha/bin/livekit.version': `${LIVEKIT}\n` };
+    const files = {
+      [ENV_FILE]: '',
+      '/srv/telinha/bin/livekit-server': '',
+      '/srv/telinha/bin/livekit.version': `${LIVEKIT}\n`,
+    };
     const ours = { ...files, '/srv/telinha/bin/caddy': '', '/srv/telinha/bin/caddy.version': 'v0.7.0' };
 
-    const dev = await one('binaries', { env: DUCK, files, compiled: false, sys: { ...onPath, readBytes: binary('tls.issuance.acme') } });
+    const dev = await one('binaries', {
+      env: DUCK,
+      files,
+      compiled: false,
+      sys: { ...onPath, readBytes: binary('tls.issuance.acme') },
+    });
     expect(dev.status).toBe('fail');
-    expect(dev.summary).toBe('The caddy at /usr/bin/caddy has no DuckDNS module: the certificate (DNS challenge) cannot be obtained.');
-    expect(norm(dev.fix!)).toBe('Fetch Telinha\'s Caddy build (bun scripts/bins.ts --out /srv/telinha/bin caddy) or build one (bun run caddy --out /srv/telinha/bin).');
+    expect(dev.summary).toBe(
+      'The caddy at /usr/bin/caddy has no DuckDNS module: the certificate (DNS challenge) cannot be obtained.',
+    );
+    expect(norm(dev.fix!)).toBe(
+      "Fetch Telinha's Caddy build (bun scripts/bins.ts --out /srv/telinha/bin caddy) or build one (bun run caddy --out /srv/telinha/bin).",
+    );
 
     // Compiled, a caddy on PATH is in use only because Telinha's own download failed: never "delete /usr/bin/caddy".
-    const compiled = await one('binaries', { env: DUCK, files, sys: { ...onPath, readBytes: binary('tls.issuance.acme') } });
-    expect(norm(compiled.fix!)).toBe('Telinha\'s own Caddy is not in /srv/telinha/bin, so the one on PATH is used: run telinha setup again (or restart telinha) while online and it downloads Telinha\'s build into /srv/telinha/bin. The caddy at /usr/bin/caddy is left as it is.');
+    const compiled = await one('binaries', {
+      env: DUCK,
+      files,
+      sys: { ...onPath, readBytes: binary('tls.issuance.acme') },
+    });
+    expect(norm(compiled.fix!)).toBe(
+      "Telinha's own Caddy is not in /srv/telinha/bin, so the one on PATH is used: run telinha setup again (or restart telinha) while online and it downloads Telinha's build into /srv/telinha/bin. The caddy at /usr/bin/caddy is left as it is.",
+    );
     expect(compiled.fix).not.toContain('Delete');
     // A wrong caddy in bin/ is Telinha's to replace.
     const inBin = await one('binaries', { env: DUCK, files: ours, sys: { readBytes: binary('tls.issuance.acme') } });
-    expect(norm(inBin.fix!)).toBe('Delete /srv/telinha/bin/caddy and run telinha setup again: it downloads Telinha\'s own Caddy build.');
+    expect(norm(inBin.fix!)).toBe(
+      "Delete /srv/telinha/bin/caddy and run telinha setup again: it downloads Telinha's own Caddy build.",
+    );
 
     const seen: string[] = [];
     for (const marker of ['dns.providers.duckdns', 'github.com/caddy-dns/duckdns']) {
-      const ok = await one('binaries', { env: DUCK, files: ours, sys: { readBytes: async (p, max) => { seen.push(norm(p)); expect(max).toBeGreaterThan(100_000_000); return binary(marker)(); } } });
+      const ok = await one('binaries', {
+        env: DUCK,
+        files: ours,
+        sys: {
+          readBytes: async (p, max) => {
+            seen.push(norm(p));
+            expect(max).toBeGreaterThan(100_000_000);
+            return binary(marker)();
+          },
+        },
+      });
       expect(ok.status).toBe('ok');
     }
     expect(seen).toEqual(['/srv/telinha/bin/caddy', '/srv/telinha/bin/caddy']);
@@ -269,19 +410,38 @@ describe('binaries', () => {
 
     // HTTP-01 never looks.
     let asked = false;
-    await one('binaries', { files: BIN_FILES, sys: { readBytes: async () => { asked = true; return null; } } });
+    await one('binaries', {
+      files: BIN_FILES,
+      sys: {
+        readBytes: async () => {
+          asked = true;
+          return null;
+        },
+      },
+    });
     expect(asked).toBe(false);
   });
 
   test('DNS-01 as root with bin/ owned by the service user: the caddy there is read, never run', async () => {
     const spawned: unknown[] = [];
-    const spawn = spyOn(Bun, 'spawn').mockImplementation(((...a: unknown[]) => { spawned.push(a); throw new Error('no spawning in doctor'); }) as typeof Bun.spawn);
-    const spawnSync = spyOn(Bun, 'spawnSync').mockImplementation(((...a: unknown[]) => { spawned.push(a); throw new Error('no spawning in doctor'); }) as typeof Bun.spawnSync);
+    const spawn = spyOn(Bun, 'spawn').mockImplementation(((...a: unknown[]) => {
+      spawned.push(a);
+      throw new Error('no spawning in doctor');
+    }) as typeof Bun.spawn);
+    const spawnSync = spyOn(Bun, 'spawnSync').mockImplementation(((...a: unknown[]) => {
+      spawned.push(a);
+      throw new Error('no spawning in doctor');
+    }) as typeof Bun.spawnSync);
     try {
       const files = { ...BIN_FILES, [ENV_FILE]: '' };
       const r = await one('binaries', {
-        env: DUCK, files,
-        sys: { isRoot: true, fileUid: (p) => (norm(p).startsWith('/srv/telinha/bin/') ? 999 : 0), readBytes: async () => new TextEncoder().encode('dns.providers.duckdns') },
+        env: DUCK,
+        files,
+        sys: {
+          isRoot: true,
+          fileUid: (p) => (norm(p).startsWith('/srv/telinha/bin/') ? 999 : 0),
+          readBytes: async () => new TextEncoder().encode('dns.providers.duckdns'),
+        },
       });
       expect(r.status).toBe('ok');
       expect(spawned).toEqual([]);
@@ -292,7 +452,11 @@ describe('binaries', () => {
   });
 
   test('on PATH counts (Docker image)', async () => {
-    const r = await one('binaries', { files: { [ENV_FILE]: '' }, sys: { which: (n) => `/usr/local/bin/${n}` }, env: { INGRESS: 'tunnel', TUNNEL_TOKEN: 't' } });
+    const r = await one('binaries', {
+      files: { [ENV_FILE]: '' },
+      sys: { which: (n) => `/usr/local/bin/${n}` },
+      env: { INGRESS: 'tunnel', TUNNEL_TOKEN: 't' },
+    });
     expect(r.status).toBe('ok');
     expect(r.detail).toContain('cloudflared found on PATH (/usr/local/bin/cloudflared)');
   });
@@ -301,7 +465,10 @@ describe('binaries', () => {
 describe('discord', () => {
   test('every call carries the Bot token', async () => {
     const { ctx, calls } = ctxFor();
-    await runChecks(CHECKS.filter((c) => c.id.startsWith('discord-')), ctx);
+    await runChecks(
+      CHECKS.filter((c) => c.id.startsWith('discord-')),
+      ctx,
+    );
     const discord = calls.filter((c) => c.url.startsWith(API));
     expect(discord.length).toBe(4); // app, guilds, roles, channels: each fetched once
     for (const c of discord) expect(c.auth).toBe('Bot bot-tok');
@@ -309,10 +476,16 @@ describe('discord', () => {
 
   test('401: token fails, the rest skip', async () => {
     const { ctx } = ctxFor({ routes: { [`${API}/applications/@me`]: 401, [`${API}/users/@me/guilds`]: 401 } });
-    const rs = byId(await runChecks(CHECKS.filter((c) => c.id.startsWith('discord-')), ctx));
+    const rs = byId(
+      await runChecks(
+        CHECKS.filter((c) => c.id.startsWith('discord-')),
+        ctx,
+      ),
+    );
     expect(rs['discord-token']!.status).toBe('fail');
     expect(rs['discord-token']!.fix).toContain('Reset Token');
-    for (const id of ['discord-intents', 'discord-guild', 'discord-role', 'discord-channels', 'discord-redirect']) expect(rs[id]!.status).toBe('skip');
+    for (const id of ['discord-intents', 'discord-guild', 'discord-role', 'discord-channels', 'discord-redirect'])
+      expect(rs[id]!.status).toBe('skip');
   });
 
   test('client id of another application fails', async () => {
@@ -322,7 +495,13 @@ describe('discord', () => {
   });
 
   test('intents: limited or full bits count; missing ones are named', async () => {
-    expect((await one('discord-intents', { routes: { [`${API}/applications/@me`]: { ...APP, flags: (1 << 12) | (1 << 14) } } })).status).toBe('ok');
+    expect(
+      (
+        await one('discord-intents', {
+          routes: { [`${API}/applications/@me`]: { ...APP, flags: (1 << 12) | (1 << 14) } },
+        })
+      ).status,
+    ).toBe('ok');
     const r = await one('discord-intents', { routes: { [`${API}/applications/@me`]: { ...APP, flags: 1 << 13 } } });
     expect(r.status).toBe('fail');
     expect(r.summary).toContain('Server Members');
@@ -334,7 +513,9 @@ describe('discord', () => {
     const r = await run('discord-guild', { routes: { [`${API}/users/@me/guilds`]: [{ id: '9', name: 'Other' }] } });
     expect(r.status).toBe('fail');
     expect(r.fix).toContain(inviteUrl('111', '100'));
-    expect(inviteUrl('111', '100')).toBe('https://discord.com/oauth2/authorize?client_id=111&scope=bot%20applications.commands&permissions=68608&guild_id=100&disable_guild_select=true');
+    expect(inviteUrl('111', '100')).toBe(
+      'https://discord.com/oauth2/authorize?client_id=111&scope=bot%20applications.commands&permissions=68608&guild_id=100&disable_guild_select=true',
+    );
   });
 
   test('role and channels', async () => {
@@ -347,21 +528,35 @@ describe('discord', () => {
   });
 
   test('redirect missing: fail naming the exact URI', async () => {
-    const r = await run('discord-redirect', { routes: { [`${API}/applications/@me`]: { ...APP, redirect_uris: ['http://localhost/auth/callback'] } } });
+    const r = await run('discord-redirect', {
+      routes: { [`${API}/applications/@me`]: { ...APP, redirect_uris: ['http://localhost/auth/callback'] } },
+    });
     expect(r.status).toBe('fail');
     expect(r.fix).toContain('https://telinha.example.com/auth/callback');
     expect(r.detail?.[0]).toContain('http://localhost/auth/callback');
   });
 
   test('dev login skips Discord', async () => {
-    const r = await one('discord-token', { env: { DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:8081', INGRESS: 'external' } });
+    const r = await one('discord-token', {
+      env: { DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:8081', INGRESS: 'external' },
+    });
     expect(r.status).toBe('skip');
   });
 });
 
 describe('public address', () => {
   test('public-ip fails offline', async () => {
-    expect((await run('public-ip', { net: { lookupPublicIp: async () => { throw new Error('offline'); } } })).status).toBe('fail');
+    expect(
+      (
+        await run('public-ip', {
+          net: {
+            lookupPublicIp: async () => {
+              throw new Error('offline');
+            },
+          },
+        })
+      ).status,
+    ).toBe('fail');
   });
 
   test('dns: direct must point at the public IP', async () => {
@@ -369,21 +564,45 @@ describe('public address', () => {
     const wrong = await run('dns', { net: { resolveA: async () => ['198.51.100.1'] } });
     expect(wrong.status).toBe('fail');
     expect(wrong.fix).toContain(PUBLIC);
-    const none = await run('dns', { net: { resolveA: async () => { throw new Error('ENOTFOUND'); } } });
+    const none = await run('dns', {
+      net: {
+        resolveA: async () => {
+          throw new Error('ENOTFOUND');
+        },
+      },
+    });
     expect(none.status).toBe('fail');
   });
 
   test('dns: LIVEKIT_NODE_IP is the expected address', async () => {
-    expect((await run('dns', { env: { LIVEKIT_NODE_IP: '198.51.100.1' }, net: { resolveA: async () => ['198.51.100.1'] } })).status).toBe('ok');
+    expect(
+      (await run('dns', { env: { LIVEKIT_NODE_IP: '198.51.100.1' }, net: { resolveA: async () => ['198.51.100.1'] } }))
+        .status,
+    ).toBe('ok');
   });
 
   test('dns: tunnel only needs to resolve; DuckDNS mismatch is reported, not fixed', async () => {
-    expect((await run('dns', { env: { INGRESS: 'tunnel', TUNNEL_TOKEN: 't' }, net: { resolveA: async () => ['104.16.1.1'] } })).status).toBe('ok');
+    expect(
+      (
+        await run('dns', {
+          env: { INGRESS: 'tunnel', TUNNEL_TOKEN: 't' },
+          net: { resolveA: async () => ['104.16.1.1'] },
+        })
+      ).status,
+    ).toBe('ok');
     const duck = await run('dns', {
-      env: { PUBLIC_URL: 'https://grupo.duckdns.org', DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'grupo', DUCKDNS_TOKEN: 't' }, net: { resolveA: async () => ['198.51.100.1'] },
+      env: {
+        PUBLIC_URL: 'https://grupo.duckdns.org',
+        DDNS_PROVIDER: 'duckdns',
+        DUCKDNS_DOMAIN: 'grupo',
+        DUCKDNS_TOKEN: 't',
+      },
+      net: { resolveA: async () => ['198.51.100.1'] },
     });
     expect(duck.status).toBe('warn');
-    expect(duck.summary).toBe(`DuckDNS points grupo.duckdns.org at 198.51.100.1, the public IP is ${PUBLIC}; the running service updates it.`);
+    expect(duck.summary).toBe(
+      `DuckDNS points grupo.duckdns.org at 198.51.100.1, the public IP is ${PUBLIC}; the running service updates it.`,
+    );
   });
 
   test('dns: a DuckDNS name has its token checked, with the IP the record already holds', async () => {
@@ -394,16 +613,25 @@ describe('public address', () => {
     expect(ok.detail).toEqual(['DuckDNS accepts the token for grupo.duckdns.org.']);
 
     // The certificate alone (ACME_DNS without the updater) uses the same token; the record's IP, not the public one, goes out.
-    const { ctx, calls } = ctxFor({ env: DUCK, routes: { [update('198.51.100.1')]: 'KO' }, net: { resolveA: async () => ['198.51.100.1'] } });
+    const { ctx, calls } = ctxFor({
+      env: DUCK,
+      routes: { [update('198.51.100.1')]: 'KO' },
+      net: { resolveA: async () => ['198.51.100.1'] },
+    });
     const bad = await CHECKS.find((c) => c.id === 'dns')!.run(ctx);
     expect(bad.status).toBe('fail');
-    expect(bad.summary).toBe('DuckDNS rejected the token for grupo.duckdns.org: the record cannot be updated and the certificate (DNS challenge) cannot be obtained.');
+    expect(bad.summary).toBe(
+      'DuckDNS rejected the token for grupo.duckdns.org: the record cannot be updated and the certificate (DNS challenge) cannot be obtained.',
+    );
     expect(bad.fix).toContain('run telinha setup again');
     expect(calls.map((c) => c.url)).toContain(update('198.51.100.1'));
     expect(JSON.stringify(bad)).not.toContain('duck-tok');
 
     // DuckDNS unreachable: a detail, never a finding, and never the token.
-    const down = await run('dns', { env: home, routes: { [update(PUBLIC)]: new Error(`fetch failed for ${update(PUBLIC)}`) } });
+    const down = await run('dns', {
+      env: home,
+      routes: { [update(PUBLIC)]: new Error(`fetch failed for ${update(PUBLIC)}`) },
+    });
     expect(down.status).toBe('ok');
     expect(down.detail?.[0]).toStartWith('Could not ask DuckDNS about the token: ');
     expect(JSON.stringify(down)).not.toContain('duck-tok');
@@ -411,9 +639,28 @@ describe('public address', () => {
 
   test('tls: expiring soon warns, untrusted fails, healthz must answer', async () => {
     expect((await run('tls')).status).toBe('ok');
-    const soon = await run('tls', { net: { tlsInfo: async () => ({ validTo: Date.now() + 5 * 86_400_000, issuer: 'LE', subjectAltNames: [], authorized: true }) } });
+    const soon = await run('tls', {
+      net: {
+        tlsInfo: async () => ({
+          validTo: Date.now() + 5 * 86_400_000,
+          issuer: 'LE',
+          subjectAltNames: [],
+          authorized: true,
+        }),
+      },
+    });
     expect(soon.status).toBe('warn');
-    const bad = await run('tls', { net: { tlsInfo: async () => ({ validTo: 0, issuer: '', subjectAltNames: [], authorized: false, error: 'self-signed certificate' }) } });
+    const bad = await run('tls', {
+      net: {
+        tlsInfo: async () => ({
+          validTo: 0,
+          issuer: '',
+          subjectAltNames: [],
+          authorized: false,
+          error: 'self-signed certificate',
+        }),
+      },
+    });
     expect(bad.status).toBe('fail');
     expect(bad.summary).toContain('self-signed');
     expect(bad.fix).toContain('Caddy');
@@ -423,26 +670,44 @@ describe('public address', () => {
   });
 
   test('tls: a DNS-01 certificate failure points at DuckDNS and the HTTPS port, not at 80/443', async () => {
-    const bad = { tlsInfo: async () => ({ validTo: 0, issuer: '', subjectAltNames: [], authorized: false, error: 'self-signed certificate' }) };
+    const bad = {
+      tlsInfo: async () => ({
+        validTo: 0,
+        issuer: '',
+        subjectAltNames: [],
+        authorized: false,
+        error: 'self-signed certificate',
+      }),
+    };
     const r = await run('tls', { env: DUCK, net: bad });
     expect(r.status).toBe('fail');
-    expect(r.fix).toBe('Caddy asks Let\'s Encrypt through DuckDNS: check the DuckDNS token (dns check), that port 8443 is free for Caddy (listeners) and the [caddy] lines in the log; a fresh install can take a few minutes.');
+    expect(r.fix).toBe(
+      "Caddy asks Let's Encrypt through DuckDNS: check the DuckDNS token (dns check), that port 8443 is free for Caddy (listeners) and the [caddy] lines in the log; a fresh install can take a few minutes.",
+    );
     expect((await run('tls', { net: bad })).fix).toContain('ports 80 and 443');
   });
 });
 
 const CLOUD = { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc.livekit.cloud' };
-const AUTO_CREATE = 'In the project\'s settings, turn automatic room creation off: Telinha creates and deletes rooms itself, and a closed room must not come back when someone opens an old link.';
-const LIMITS = 'Free Build plan: 5,000 WebRTC participant-minutes and 50 GB downstream a month, as a hard cap (past that, LiveKit Cloud refuses new connections until the next month), and up to 100 participants connected at once.';
+const AUTO_CREATE =
+  "In the project's settings, turn automatic room creation off: Telinha creates and deletes rooms itself, and a closed room must not come back when someone opens an old link.";
+const LIMITS =
+  'Free Build plan: 5,000 WebRTC participant-minutes and 50 GB downstream a month, as a hard cap (past that, LiveKit Cloud refuses new connections until the next month), and up to 100 participants connected at once.';
 
 describe('livekit-cloud', () => {
   const rooms = (n: number, seen: string[][] = []): Partial<NetLike> => ({
     livekitListRooms: async (url, key, secret) => (seen.push([url, key, secret]), { rooms: n }),
   });
-  const failing = (e: unknown): Partial<NetLike> => ({ livekitListRooms: async () => { throw e; } });
+  const failing = (e: unknown): Partial<NetLike> => ({
+    livekitListRooms: async () => {
+      throw e;
+    },
+  });
 
   test('skips without a config and with MEDIA=self', async () => {
-    expect((await one('livekit-cloud', { env: { PUBLIC_URL: '' } })).summary).toBe('Skipped: fix the configuration first.');
+    expect((await one('livekit-cloud', { env: { PUBLIC_URL: '' } })).summary).toBe(
+      'Skipped: fix the configuration first.',
+    );
     const self = await one('livekit-cloud', { net: rooms(0) });
     expect(self.status).toBe('skip');
     expect(self.summary).toBe('Skipped: MEDIA=self runs LiveKit on this machine.');
@@ -453,7 +718,9 @@ describe('livekit-cloud', () => {
     const r = await run('livekit-cloud', { env: CLOUD, net: rooms(3, seen) });
     expect(seen).toEqual([['https://proj-abc.livekit.cloud', 'devkey', 'lksecret']]); // gitleaks:allow
     expect(r).toEqual({
-      id: 'livekit-cloud', title: 'LiveKit Cloud', status: 'ok',
+      id: 'livekit-cloud',
+      title: 'LiveKit Cloud',
+      status: 'ok',
       summary: 'Connected to proj-abc.livekit.cloud: 3 room(s) open there.',
       detail: [AUTO_CREATE, LIMITS],
     });
@@ -465,16 +732,25 @@ describe('livekit-cloud', () => {
       const r = await one('livekit-cloud', { env: CLOUD, net: failing(e) });
       expect(r.status).toBe('fail');
       expect(r.summary).toBe('LiveKit Cloud rejected the API key or secret for proj-abc.livekit.cloud.');
-      expect(r.fix).toStartWith('Cloud dashboard → your project → Settings → Keys: copy the key and secret into LIVEKIT_API_KEY / LIVEKIT_API_SECRET');
+      expect(r.fix).toStartWith(
+        'Cloud dashboard → your project → Settings → Keys: copy the key and secret into LIVEKIT_API_KEY / LIVEKIT_API_SECRET',
+      );
       expect(r.detail).toEqual([AUTO_CREATE, LIMITS]);
     }
   });
 
   test('anything else is unreachable, with the error and never the key or secret', async () => {
-    const r = await one('livekit-cloud', { env: CLOUD, net: failing(new Error('getaddrinfo ENOTFOUND proj-abc.livekit.cloud')) });
+    const r = await one('livekit-cloud', {
+      env: CLOUD,
+      net: failing(new Error('getaddrinfo ENOTFOUND proj-abc.livekit.cloud')),
+    });
     expect(r.status).toBe('fail');
-    expect(r.summary).toBe('Could not reach LiveKit Cloud at proj-abc.livekit.cloud: getaddrinfo ENOTFOUND proj-abc.livekit.cloud');
-    expect(r.fix).toBe('Check LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<project>.livekit.cloud) and this machine\'s internet access.');
+    expect(r.summary).toBe(
+      'Could not reach LiveKit Cloud at proj-abc.livekit.cloud: getaddrinfo ENOTFOUND proj-abc.livekit.cloud',
+    );
+    expect(r.fix).toBe(
+      "Check LIVEKIT_CLOUD_URL (Settings → Project → URL, wss://<project>.livekit.cloud) and this machine's internet access.",
+    );
     expect(r.detail).toEqual([AUTO_CREATE, LIMITS]);
     const leaky = await one('livekit-cloud', { env: CLOUD, net: failing(new Error('bad request for lksecret')) });
     expect(JSON.stringify(leaky)).not.toContain('lksecret');
@@ -483,13 +759,22 @@ describe('livekit-cloud', () => {
   test('the default asks the server through the SDK (Twirp 401 reads as a rejected key)', async () => {
     const paths: string[] = [];
     const server = Bun.serve({
-      port: 0, hostname: '127.0.0.1',
-      fetch: (req) => (paths.push(new URL(req.url).pathname), Response.json({ code: 'unauthenticated', msg: 'invalid token' }, { status: 401 })),
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch: (req) => (
+        paths.push(new URL(req.url).pathname),
+        Response.json({ code: 'unauthenticated', msg: 'invalid token' }, { status: 401 })
+      ),
     });
     try {
       const env = {
-        ...CLOUD, DEV_USER: '1:Dev', PUBLIC_URL: 'http://localhost:8081', INGRESS: 'external',
-        LIVEKIT_CLOUD_URL: `http://127.0.0.1:${server.port}`, HTTPS_PORT: '', HTTP_PORT: '',
+        ...CLOUD,
+        DEV_USER: '1:Dev',
+        PUBLIC_URL: 'http://localhost:8081',
+        INGRESS: 'external',
+        LIVEKIT_CLOUD_URL: `http://127.0.0.1:${server.port}`,
+        HTTPS_PORT: '',
+        HTTP_PORT: '',
       };
       const r = await one('livekit-cloud', { env });
       expect(paths).toEqual(['/twirp/livekit.RoomService/ListRooms']);
@@ -512,15 +797,23 @@ describe('livekit-cloud', () => {
     const { ctx } = ctxFor({ env: CLOUD, net: rooms(0) });
     const rs = byId(await runChecks(CHECKS, ctx));
     expect(rs['livekit-cloud']!.status).toBe('ok');
-    expect(rs.turn!.summary).toBe('Skipped: TURN over TLS on 443 is for a VPS in direct mode on port 443 (MEDIA=cloud brings LiveKit Cloud\'s own TURN).');
+    expect(rs.turn!.summary).toBe(
+      "Skipped: TURN over TLS on 443 is for a VPS in direct mode on port 443 (MEDIA=cloud brings LiveKit Cloud's own TURN).",
+    );
   });
 });
 
 describe('turn', () => {
   const ON = { HOSTING: 'vps', TURN: 'on' };
   const TURN_HOST = 'turn.telinha.example.com';
-  const OK = 'turn.telinha.example.com:443 has a valid certificate and LiveKit\'s TURN is listening on 127.0.0.1:5349 behind Caddy. Whether a phone can relay through it is what the phone test\'s TURN/TLS row shows.';
-  const goodTls = async () => ({ validTo: Date.now() + 60 * 86_400_000, issuer: "Let's Encrypt", subjectAltNames: [TURN_HOST], authorized: true });
+  const OK =
+    "turn.telinha.example.com:443 has a valid certificate and LiveKit's TURN is listening on 127.0.0.1:5349 behind Caddy. Whether a phone can relay through it is what the phone test's TURN/TLS row shows.";
+  const goodTls = async () => ({
+    validTo: Date.now() + 60 * 86_400_000,
+    issuer: "Let's Encrypt",
+    subjectAltNames: [TURN_HOST],
+    authorized: true,
+  });
 
   test('skips: no config, TURN=off, and every config TURN cannot run with, naming why', async () => {
     expect((await one('turn', { env: { PUBLIC_URL: '' } })).summary).toBe('Skipped: fix the configuration first.');
@@ -528,7 +821,10 @@ describe('turn', () => {
     const rows: [Record<string, string>, string][] = [
       [{ INGRESS: 'tunnel', TUNNEL_TOKEN: 't' }, 'it needs INGRESS=direct (Caddy must own port 443)'],
       [{ HOSTING: 'home' }, 'home installs get no TURN: home connections do not let port 443 in'],
-      [{ HTTPS_PORT: '8443', HTTP_PORT: '0' }, 'it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)'],
+      [
+        { HTTPS_PORT: '8443', HTTP_PORT: '0' },
+        'it needs HTTPS on port 443 (HTTPS_PORT=443 and a PUBLIC_URL without a port)',
+      ],
     ];
     for (const [env, why] of rows) {
       const r = await one('turn', { env });
@@ -539,12 +835,19 @@ describe('turn', () => {
 
   test('eligible but left off by auto (own domain): a skip naming the record and TURN=on', async () => {
     const resolved: string[] = [];
-    const r = await one('turn', { env: { HOSTING: 'vps' }, net: { resolveA: async (h) => (resolved.push(h), [PUBLIC]) } });
+    const r = await one('turn', {
+      env: { HOSTING: 'vps' },
+      net: { resolveA: async (h) => (resolved.push(h), [PUBLIC]) },
+    });
     expect(r.status).toBe('skip');
-    expect(r.summary).toBe('TURN over TLS is available: create the DNS record turn.telinha.example.com → 203.0.113.7 (A record, same IP as telinha.example.com) and set TURN=on in telinha.env. It lets people on networks that only allow port 443 watch and stream.');
+    expect(r.summary).toBe(
+      'TURN over TLS is available: create the DNS record turn.telinha.example.com → 203.0.113.7 (A record, same IP as telinha.example.com) and set TURN=on in telinha.env. It lets people on networks that only allow port 443 watch and stream.',
+    );
     expect(resolved).toEqual([]);
     // LIVEKIT_NODE_IP is the address to point at.
-    expect((await one('turn', { env: { HOSTING: 'vps', LIVEKIT_NODE_IP: '198.51.100.4' } })).summary).toContain('turn.telinha.example.com → 198.51.100.4');
+    expect((await one('turn', { env: { HOSTING: 'vps', LIVEKIT_NODE_IP: '198.51.100.4' } })).summary).toContain(
+      'turn.telinha.example.com → 198.51.100.4',
+    );
   });
 
   test('on: DNS, certificate and the local listener all good is ok, the SANs as detail', async () => {
@@ -573,7 +876,14 @@ describe('turn', () => {
 
   test('DNS: no record or the wrong address fails with the record to create', async () => {
     const fix = 'Create an A record turn.telinha.example.com → 203.0.113.7. DuckDNS and sslip.io names need nothing.';
-    const missing = await one('turn', { env: ON, net: { resolveA: async () => { throw new Error('ENOTFOUND'); } } });
+    const missing = await one('turn', {
+      env: ON,
+      net: {
+        resolveA: async () => {
+          throw new Error('ENOTFOUND');
+        },
+      },
+    });
     expect(missing.status).toBe('fail');
     expect(missing.summary).toBe('turn.telinha.example.com does not resolve: ENOTFOUND');
     expect(missing.fix).toBe(fix);
@@ -586,28 +896,52 @@ describe('turn', () => {
   });
 
   test('DNS: an unknown public IP warns and the other probes still run', async () => {
-    const r = await one('turn', { env: ON, net: { lookupPublicIp: async () => { throw new Error('offline'); } } });
+    const r = await one('turn', {
+      env: ON,
+      net: {
+        lookupPublicIp: async () => {
+          throw new Error('offline');
+        },
+      },
+    });
     expect(r.status).toBe('warn');
-    expect(r.summary).toBe('turn.telinha.example.com resolves to 203.0.113.7; the public IP is unknown, so it could not be compared.');
+    expect(r.summary).toBe(
+      'turn.telinha.example.com resolves to 203.0.113.7; the public IP is unknown, so it could not be compared.',
+    );
   });
 
   test('certificate: not valid for turn.<host> fails with where Caddy gets it', async () => {
     const r = await one('turn', {
       env: ON,
-      net: { tlsInfo: async () => ({ validTo: 0, issuer: '', subjectAltNames: ['telinha.example.com'], authorized: false, error: 'Hostname/IP does not match certificate\'s altnames' }) },
+      net: {
+        tlsInfo: async () => ({
+          validTo: 0,
+          issuer: '',
+          subjectAltNames: ['telinha.example.com'],
+          authorized: false,
+          error: "Hostname/IP does not match certificate's altnames",
+        }),
+      },
     });
     expect(r.status).toBe('fail');
-    expect(r.summary).toBe('turn.telinha.example.com:443 has no valid certificate: Hostname/IP does not match certificate\'s altnames');
-    expect(r.fix).toBe('Caddy obtains it after the start (a few minutes; it needs port 80 open for the HTTP challenge, or 443 for TLS-ALPN). Look at the [caddy] lines in the log.');
+    expect(r.summary).toBe(
+      "turn.telinha.example.com:443 has no valid certificate: Hostname/IP does not match certificate's altnames",
+    );
+    expect(r.fix).toBe(
+      'Caddy obtains it after the start (a few minutes; it needs port 80 open for the HTTP challenge, or 443 for TLS-ALPN). Look at the [caddy] lines in the log.',
+    );
     expect(r.detail).toEqual(['telinha.example.com']);
   });
 
   test('nothing listening on TURN_PORT locally warns with how to start telinha', async () => {
     const probed: number[] = [];
-    const r = await one('turn', { env: { ...ON, TURN_PORT: '5400' }, net: { tlsInfo: goodTls, tcpOpen: async (_h, p) => (probed.push(p), false) } });
+    const r = await one('turn', {
+      env: { ...ON, TURN_PORT: '5400' },
+      net: { tlsInfo: goodTls, tcpOpen: async (_h, p) => (probed.push(p), false) },
+    });
     expect(probed).toEqual([5400]);
     expect(r.status).toBe('warn');
-    expect(r.summary).toBe('LiveKit\'s TURN is not listening on 127.0.0.1:5400 (TURN_PORT).');
+    expect(r.summary).toBe("LiveKit's TURN is not listening on 127.0.0.1:5400 (TURN_PORT).");
     expect(r.fix).toBe('Start it: telinha service start (or telinha run).');
     expect(JSON.stringify(r)).not.toMatch(/handshake|answers TURN/i);
   });
@@ -625,15 +959,28 @@ describe('turn', () => {
 describe('certificate', () => {
   test('every way the certificate comes; informational, never a warning', async () => {
     const rows: [Record<string, string>, string, string[]?][] = [
-      [{ INGRESS: 'tunnel', TUNNEL_TOKEN: 't' }, 'Cloudflare terminates HTTPS for telinha.example.com; nothing to obtain here.'],
+      [
+        { INGRESS: 'tunnel', TUNNEL_TOKEN: 't' },
+        'Cloudflare terminates HTTPS for telinha.example.com; nothing to obtain here.',
+      ],
       [{ INGRESS: 'external' }, 'Your reverse proxy holds the certificate for telinha.example.com.'],
-      [DUCK, 'Let\'s Encrypt through DuckDNS (DNS challenge) for grupo.duckdns.org; HTTPS on port 8443, ports 80 and 443 are not used.'],
-      [{}, 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com.'],
-      [{ HTTPS_PORT: '8443', HTTP_PORT: '0' }, 'Let\'s Encrypt over port 443 (TLS-ALPN challenge) for telinha.example.com.'],
-      [{ HOSTING: 'vps' }, 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com.'],
-      [{ HOSTING: 'home' }, 'Let\'s Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com.', [
-        'Advanced home setup: ports 80 and 443 must reach this machine, forwarded by hand. The standard home options (a Cloudflare Tunnel, or a DuckDNS address with HTTPS on port 8443) need neither.',
-      ]],
+      [
+        DUCK,
+        "Let's Encrypt through DuckDNS (DNS challenge) for grupo.duckdns.org; HTTPS on port 8443, ports 80 and 443 are not used.",
+      ],
+      [{}, "Let's Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com."],
+      [
+        { HTTPS_PORT: '8443', HTTP_PORT: '0' },
+        "Let's Encrypt over port 443 (TLS-ALPN challenge) for telinha.example.com.",
+      ],
+      [{ HOSTING: 'vps' }, "Let's Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com."],
+      [
+        { HOSTING: 'home' },
+        "Let's Encrypt over ports 80 and 443 (HTTP challenge) for telinha.example.com.",
+        [
+          'Advanced home setup: ports 80 and 443 must reach this machine, forwarded by hand. The standard home options (a Cloudflare Tunnel, or a DuckDNS address with HTTPS on port 8443) need neither.',
+        ],
+      ],
     ];
     for (const [env, summary, detail] of rows) {
       const r = await one('certificate', { env });
@@ -649,7 +996,7 @@ describe('certificate', () => {
     expect(pt.detail?.[0]).toContain('Cloudflare Tunnel, ou um endereço DuckDNS com HTTPS na porta 8443');
   });
 
-  test('the advanced home setup keeps setup\'s final doctor run clean', async () => {
+  test("the advanced home setup keeps setup's final doctor run clean", async () => {
     const { ctx } = ctxFor({ env: { HOSTING: 'home' }, files: BIN_FILES });
     const rs = byId(await runChecks(CHECKS, ctx));
     expect(rs.certificate!.status).toBe('ok');
@@ -666,7 +1013,10 @@ describe('listeners and service', () => {
 
   test('children down and closed ports are listed', async () => {
     const r = await one('listeners', {
-      routes: { 'http://127.0.0.1:8081/healthz': { ok: true, rooms: 0, children: { livekit: 'down', caddy: 'up' } }, 'http://127.0.0.1:7880/': 503 },
+      routes: {
+        'http://127.0.0.1:8081/healthz': { ok: true, rooms: 0, children: { livekit: 'down', caddy: 'up' } },
+        'http://127.0.0.1:7880/': 503,
+      },
       net: { tcpOpen: async () => false },
     });
     expect(r.status).toBe('warn');
@@ -675,11 +1025,20 @@ describe('listeners and service', () => {
 
   test('low port as non-root on Linux explains the sysctl', async () => {
     const closed443 = { tcpOpen: async (_h: string, p: number) => p !== 443 };
-    const r = await one('listeners', { net: closed443, routes: { 'http://127.0.0.1:8081/healthz': { ok: true, children: {} } } });
+    const r = await one('listeners', {
+      net: closed443,
+      routes: { 'http://127.0.0.1:8081/healthz': { ok: true, children: {} } },
+    });
     // The same one sudo step setup offers; no router translation of 443 is ever suggested.
-    expect(r.fix).toBe(`Ports below 1024 need root on Linux. Allow them once (it survives every update): sudo sh -c '${SYSCTL_SCRIPT}'. The standard home options of telinha setup need no low port.`);
+    expect(r.fix).toBe(
+      `Ports below 1024 need root on Linux. Allow them once (it survives every update): sudo sh -c '${SYSCTL_SCRIPT}'. The standard home options of telinha setup need no low port.`,
+    );
     expect(r.fix).not.toMatch(/8443|forward/);
-    const root = await one('listeners', { net: closed443, sys: { isRoot: true }, routes: { 'http://127.0.0.1:8081/healthz': { ok: true, children: {} } } });
+    const root = await one('listeners', {
+      net: closed443,
+      sys: { isRoot: true },
+      routes: { 'http://127.0.0.1:8081/healthz': { ok: true, children: {} } },
+    });
     expect(root.fix).toBeUndefined();
   });
 
@@ -688,17 +1047,25 @@ describe('listeners and service', () => {
     const tools = (names: string[]) => ({ which: (n: string) => (names.includes(n) ? `/usr/sbin/${n}` : null) });
     const both = await one('listeners', { env, sys: tools(['ufw', 'firewall-cmd']) });
     expect(both.status).toBe('ok');
-    expect(both.detail).toContain('If ufw is active, open the ports: sudo ufw allow 8443/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp');
+    expect(both.detail).toContain(
+      'If ufw is active, open the ports: sudo ufw allow 8443/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp',
+    );
     expect(both.detail).toContain(
       'If firewalld is running, open the ports: sudo firewall-cmd --permanent --add-port=8443/tcp --add-port=7881/tcp --add-port=7882/udp && sudo firewall-cmd --reload',
     );
     // Shown even when telinha is down: a closed firewall is one reason it looks down.
-    const down = await one('listeners', { env, sys: tools(['ufw']), routes: { 'http://127.0.0.1:8081/healthz': new Error('ECONNREFUSED') } });
+    const down = await one('listeners', {
+      env,
+      sys: tools(['ufw']),
+      routes: { 'http://127.0.0.1:8081/healthz': new Error('ECONNREFUSED') },
+    });
     expect(down.detail?.join('\n')).toContain('sudo ufw allow 8443/tcp');
     const pt = await one('listeners', { env, sys: tools(['ufw']), locale: 'pt-BR' });
     expect(pt.detail?.join('\n')).toContain('Se o ufw estiver ativo');
     expect((await one('listeners', { env })).detail?.join('\n')).not.toMatch(/ufw|firewall/);
-    expect((await one('listeners', { env, sys: { platform: 'win32', ...tools(['ufw']) } })).detail?.join('\n')).not.toContain('ufw');
+    expect(
+      (await one('listeners', { env, sys: { platform: 'win32', ...tools(['ufw']) } })).detail?.join('\n'),
+    ).not.toContain('ufw');
   });
 
   test('TURN on: a TURN (TURN_PORT) row says whether 127.0.0.1:<port> is listening, and a closed one warns', async () => {
@@ -708,7 +1075,7 @@ describe('listeners and service', () => {
     expect(up.detail).toContain('TURN (TURN_PORT): listening on 127.0.0.1:5349');
     const down = await one('listeners', { env, local: true, net: { tcpOpen: async (_h, p) => p !== 5349 } });
     expect(down.status).toBe('warn');
-    expect(down.summary).toBe('LiveKit\'s TURN is not listening on 127.0.0.1:5349 (TURN_PORT).');
+    expect(down.summary).toBe("LiveKit's TURN is not listening on 127.0.0.1:5349 (TURN_PORT).");
     expect(down.fix).toBe('Start it: telinha service start (or telinha run).');
     expect(down.detail).toContain('TURN (TURN_PORT): nothing listening on 127.0.0.1:5349');
     // TURN off: no row, no probe of its port.
@@ -722,9 +1089,13 @@ describe('listeners and service', () => {
 
   test('service states', async () => {
     expect((await one('service', { service: null })).status).toBe('skip');
-    const notInstalled = await one('service', { service: { installed: false, running: false, enabled: false, detail: '' } });
+    const notInstalled = await one('service', {
+      service: { installed: false, running: false, enabled: false, detail: '' },
+    });
     expect(notInstalled.fix).toBe('Run: telinha service install');
-    expect((await one('service', { service: { installed: true, running: false, enabled: true, detail: 'inactive' } })).fix).toBe('Run: telinha service start');
+    expect(
+      (await one('service', { service: { installed: true, running: false, enabled: true, detail: 'inactive' } })).fix,
+    ).toBe('Run: telinha service start');
     expect((await one('service')).status).toBe('ok');
   });
 
@@ -732,11 +1103,15 @@ describe('listeners and service', () => {
     const missing = { installed: false, running: false, enabled: false, detail: '' };
     const disabled = { installed: true, running: true, enabled: false, detail: '' };
     const win = { sys: { platform: 'win32' as const } };
-    expect((await one('service', { ...win, service: missing })).fix).toContain('Run telinha setup again: it installs the service (and the firewall rules)');
+    expect((await one('service', { ...win, service: missing })).fix).toContain(
+      'Run telinha setup again: it installs the service (and the firewall rules)',
+    );
     expect((await one('service', { ...win, service: disabled })).fix).toContain('Run telinha setup again');
     const root = { sys: { platform: 'linux' as const, isRoot: true } };
     expect((await one('service', { ...root, service: missing })).fix).toBe('Run: sudo telinha service install');
-    expect((await one('service', { ...root, service: disabled })).fix).toBe('Run: sudo telinha service install (again)');
+    expect((await one('service', { ...root, service: disabled })).fix).toBe(
+      'Run: sudo telinha service install (again)',
+    );
   });
 });
 
@@ -746,12 +1121,21 @@ describe('tray', () => {
   const RUN_VALUE = `"${EXE}"`;
   const win = { platform: 'win32' as const };
   const installed = { [norm(EXE)]: '' };
-  const state = (version: string, pid = 4242): TrayStateLike => ({ version, pid, startedAt: 1_700_000_000_000, exe: EXE });
+  const state = (version: string, pid = 4242): TrayStateLike => ({
+    version,
+    pid,
+    startedAt: 1_700_000_000_000,
+    exe: EXE,
+  });
   const alive = (exe = 'telinha-tray.exe') => ({ processInfo: () => ({ alive: true, exe }) });
   const gone = { processInfo: () => ({ alive: false, exe: null }) };
   const reg = (v: string | null) => ({ registryValue: async () => v });
   // No real PowerShell: the signature defaults to unanswered.
-  const o = (sys: Partial<SysLike>, extra: Opts = {}): Opts => ({ bin: BIN, sys: { ...win, signature: async () => null, ...sys }, ...extra });
+  const o = (sys: Partial<SysLike>, extra: Opts = {}): Opts => ({
+    bin: BIN,
+    sys: { ...win, signature: async () => null, ...sys },
+    ...extra,
+  });
 
   test('skips off Windows and outside the native binary', async () => {
     const linux = await one('tray', { bin: BIN });
@@ -786,32 +1170,55 @@ describe('tray', () => {
 
   test('running with the same version: ok, whatever the v prefix', async () => {
     for (const have of ['0.7.0', 'v0.7.0']) {
-      const r = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state(have), version: '0.7.0' }));
+      const r = await one(
+        'tray',
+        o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state(have), version: '0.7.0' }),
+      );
       expect(r.status).toBe('ok');
       expect(r.summary).toBe(`Tray icon running (${have}).`);
     }
-    const pt = await one('tray', o({ ...alive('TELINHA-TRAY.EXE'), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0'), locale: 'pt-BR' }));
+    const pt = await one(
+      'tray',
+      o(
+        { ...alive('TELINHA-TRAY.EXE'), ...reg(RUN_VALUE) },
+        { files: installed, trayState: state('0.7.0'), locale: 'pt-BR' },
+      ),
+    );
     expect(pt.summary).toBe('Ícone na bandeja rodando (0.7.0).');
   });
 
   test('running with another version: warn, prereleases compare by their own tag', async () => {
-    const r = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.6.0'), version: '0.7.0' }));
+    const r = await one(
+      'tray',
+      o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.6.0'), version: '0.7.0' }),
+    );
     expect(r.status).toBe('warn');
     expect(r.summary).toBe('Tray icon 0.6.0 does not match Telinha 0.7.0.');
     expect(r.fix).toBe('telinha tray stop, then telinha tray start.');
-    const rc = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0-rc.1'), version: '0.7.0-rc.2' }));
+    const rc = await one(
+      'tray',
+      o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0-rc.1'), version: '0.7.0-rc.2' }),
+    );
     expect(rc.status).toBe('warn');
     expect(rc.summary).toBe('Tray icon 0.7.0-rc.1 does not match Telinha 0.7.0-rc.2.');
-    const same = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0-rc.2'), version: '0.7.0-rc.2' }));
+    const same = await one(
+      'tray',
+      o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.7.0-rc.2'), version: '0.7.0-rc.2' }),
+    );
     expect(same.status).toBe('ok');
-    const pt = await one('tray', o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.6.0'), locale: 'pt-BR' }));
+    const pt = await one(
+      'tray',
+      o({ ...alive(), ...reg(RUN_VALUE) }, { files: installed, trayState: state('0.6.0'), locale: 'pt-BR' }),
+    );
     expect(pt.summary).toBe('O ícone na bandeja 0.6.0 não bate com a Telinha 0.7.0.');
     expect(pt.fix).toBe('telinha tray stop, depois telinha tray start.');
   });
 
   test('installed but not running: no tray.json, a dead pid, or another program on the pid', async () => {
     const cases: [Partial<SysLike>, TrayStateLike | null][] = [
-      [alive(), null], [gone, state('0.7.0')], [alive('chrome.exe'), state('0.7.0')],
+      [alive(), null],
+      [gone, state('0.7.0')],
+      [alive('chrome.exe'), state('0.7.0')],
     ];
     for (const [s, st] of cases) {
       const r = await one('tray', o({ ...s, ...reg(null) }, { files: installed, trayState: st }));
@@ -819,7 +1226,10 @@ describe('tray', () => {
       expect(r.summary).toBe('Tray icon installed, not running.');
       expect(r.detail).toEqual(['starts with Windows: no', 'Start it: telinha tray start']);
     }
-    const pt = await one('tray', o({ ...gone, ...reg(null) }, { files: installed, trayState: state('0.7.0'), locale: 'pt-BR' }));
+    const pt = await one(
+      'tray',
+      o({ ...gone, ...reg(null) }, { files: installed, trayState: state('0.7.0'), locale: 'pt-BR' }),
+    );
     expect(pt.summary).toBe('Ícone na bandeja instalado, parado.');
     expect(pt.detail).toEqual(['inicia com o Windows: não', 'Pra iniciar: telinha tray start']);
   });
@@ -836,22 +1246,36 @@ describe('tray', () => {
 
   test('signature line: signed, unsigned, or absent when it cannot be asked; never a warning', async () => {
     const at = async (signature: SysLike['signature'], locale: Locale = 'en') =>
-      one('tray', o({ ...alive(), ...reg(RUN_VALUE), signature }, { files: installed, trayState: state('0.7.0'), locale }));
+      one(
+        'tray',
+        o({ ...alive(), ...reg(RUN_VALUE), signature }, { files: installed, trayState: state('0.7.0'), locale }),
+      );
     const signed = await at(async () => ({ status: 'Valid', signer: 'SignPath Foundation' }));
     expect(signed.status).toBe('ok');
     expect(signed.detail).toEqual(['starts with Windows: yes', 'signed by SignPath Foundation']);
-    expect((await at(async () => ({ status: 'Valid', signer: 'SignPath Foundation' }), 'pt-BR')).detail).toEqual(['inicia com o Windows: sim', 'assinado por SignPath Foundation']);
+    expect((await at(async () => ({ status: 'Valid', signer: 'SignPath Foundation' }), 'pt-BR')).detail).toEqual([
+      'inicia com o Windows: sim',
+      'assinado por SignPath Foundation',
+    ]);
     const unsigned = await at(async () => ({ status: 'NotSigned', signer: null }));
     expect(unsigned.status).toBe('ok');
     expect(unsigned.detail).toEqual(['starts with Windows: yes', 'not code-signed']);
-    expect((await at(async () => ({ status: 'NotSigned', signer: null }), 'pt-BR')).detail).toEqual(['inicia com o Windows: sim', 'sem assinatura de código']);
+    expect((await at(async () => ({ status: 'NotSigned', signer: null }), 'pt-BR')).detail).toEqual([
+      'inicia com o Windows: sim',
+      'sem assinatura de código',
+    ]);
     expect((await at(async () => null)).detail).toEqual(['starts with Windows: yes']);
   });
 });
 
 describe('router', () => {
   const gw = { kind: 'igd' as const, gatewayIp: '192.168.0.1', localIp: '192.168.0.10' };
-  const nat = (externalIp: string | null, gateway: typeof gw | null = gw): NatProbeLike => ({ gateway, externalIp, localIp: '192.168.0.10', errors: [] });
+  const nat = (externalIp: string | null, gateway: typeof gw | null = gw): NatProbeLike => ({
+    gateway,
+    externalIp,
+    localIp: '192.168.0.10',
+    errors: [],
+  });
 
   test('CGNAT fails, double NAT warns, a public external IP is ok', async () => {
     const cg = await run('cgnat', { nat: nat('100.72.3.4') });
@@ -867,10 +1291,18 @@ describe('router', () => {
 
   test('CGNAT: the fix offers a public IPv4 or MEDIA=cloud; with MEDIA=cloud it is only a warning about the pages', async () => {
     const self = await run('cgnat', { nat: nat('100.72.3.4') });
-    expect(self.fix).toBe('For the web side use INGRESS=tunnel or a VPS. For the video, either ask your provider for a public IPv4 (a public IP or a CGNAT opt-out) or set MEDIA=cloud: LiveKit Cloud carries the media and needs no open port (free Build plan: 5,000 participant-minutes and 50 GB a month, up to 100 participants connected at once).');
-    const cloud = await run('cgnat', { env: CLOUD, nat: nat('100.72.3.4'), net: { livekitListRooms: async () => ({ rooms: 0 }) } });
+    expect(self.fix).toBe(
+      'For the web side use INGRESS=tunnel or a VPS. For the video, either ask your provider for a public IPv4 (a public IP or a CGNAT opt-out) or set MEDIA=cloud: LiveKit Cloud carries the media and needs no open port (free Build plan: 5,000 participant-minutes and 50 GB a month, up to 100 participants connected at once).',
+    );
+    const cloud = await run('cgnat', {
+      env: CLOUD,
+      nat: nat('100.72.3.4'),
+      net: { livekitListRooms: async () => ({ rooms: 0 }) },
+    });
     expect(cloud.status).toBe('warn');
-    expect(cloud.summary).toBe('Your provider uses carrier NAT (100.72.3.4); the video goes through LiveKit Cloud, so only the pages need a way in: INGRESS=tunnel or a VPS.');
+    expect(cloud.summary).toBe(
+      'Your provider uses carrier NAT (100.72.3.4); the video goes through LiveKit Cloud, so only the pages need a way in: INGRESS=tunnel or a VPS.',
+    );
     expect(cloud.fix).toBeUndefined();
     const pt = await run('cgnat', { env: CLOUD, nat: nat('100.72.3.4'), locale: 'pt-BR' });
     expect(pt.summary).toContain('o vídeo passa pelo LiveKit Cloud');
@@ -907,21 +1339,33 @@ describe('router', () => {
     expect(r.summary).toBe('Not forwarded: UDP 7882.');
     expect(r.fix).toContain('192.168.0.10');
     // The mapper never asks for 80/443; they are named as by hand, not as missing.
-    expect(r.detail).toEqual(['UDP 7882: ConflictInMappingEntry', 'Forwarded by hand, not asked of the router: TCP 443, TCP 80']);
+    expect(r.detail).toEqual([
+      'UDP 7882: ConflictInMappingEntry',
+      'Forwarded by hand, not asked of the router: TCP 443, TCP 80',
+    ]);
     upnp.mappings[3]!.state = 'mapped';
     expect((await run('mappings', { control: { upnp } })).status).toBe('ok');
   });
 
   test('mappings from upnp.json when the service is not reachable; UPNP=off skips', async () => {
-    const file = JSON.stringify({ mappings: [443, 80, 7881].map((p) => ({ protocol: 'tcp', externalPort: p })).concat([{ protocol: 'udp', externalPort: 7882 }]) });
-    expect((await run('mappings', { files: { [ENV_FILE]: '', '/srv/telinha/data/run/upnp.json': file } })).status).toBe('ok');
+    const file = JSON.stringify({
+      mappings: [443, 80, 7881]
+        .map((p) => ({ protocol: 'tcp', externalPort: p }))
+        .concat([{ protocol: 'udp', externalPort: 7882 }]),
+    });
+    expect((await run('mappings', { files: { [ENV_FILE]: '', '/srv/telinha/data/run/upnp.json': file } })).status).toBe(
+      'ok',
+    );
     const off = await run('mappings', { env: { UPNP: 'off' } });
     expect(off.status).toBe('skip');
     expect(off.summary).toContain('UDP 7882');
   });
 
   test('mappings judge only what the mapper asks of the router', async () => {
-    const mapped = (...ports: [string, number][]) => ({ enabled: true, mappings: ports.map(([protocol, p]) => ({ protocol, externalPort: p, internalPort: p, state: 'mapped' })) });
+    const mapped = (...ports: [string, number][]) => ({
+      enabled: true,
+      mappings: ports.map(([protocol, p]) => ({ protocol, externalPort: p, internalPort: p, state: 'mapped' })),
+    });
     const media = mapped(['tcp', 7881], ['udp', 7882]);
 
     const advanced = await run('mappings', { env: { HOSTING: 'home', UPNP: 'auto' }, control: { upnp: media } });
@@ -934,7 +1378,10 @@ describe('router', () => {
     expect(duck.summary).toBe('Not forwarded: TCP 8443.');
     expect(duck.fix).toBe('Forward them by hand on the router to 192.168.0.10: TCP 8443');
     expect(duck.detail).toBeUndefined();
-    expect((await run('mappings', { env: DUCK, control: { upnp: mapped(['tcp', 8443], ['tcp', 7881], ['udp', 7882]) } })).status).toBe('ok');
+    expect(
+      (await run('mappings', { env: DUCK, control: { upnp: mapped(['tcp', 8443], ['tcp', 7881], ['udp', 7882]) } }))
+        .status,
+    ).toBe('ok');
 
     // MEDIA=cloud is refused by loadConfig for now; the doctor still has to handle it.
     // Direct on 443 asks nothing of the router but still needs 443 and 80 forwarded.
@@ -943,7 +1390,10 @@ describe('router', () => {
     const cloud = await mappingsCheck.run({ ...ctx, config: { ...ctx.config!, media: 'cloud' } });
     expect(cloud.status).toBe('skip');
     expect(cloud.summary).toBe('Skipped: nothing here is asked of the router. Forward by hand: TCP 443, TCP 80');
-    const tunnelCloud = await mappingsCheck.run({ ...ctx, config: { ...ctx.config!, media: 'cloud', ingress: 'tunnel' } });
+    const tunnelCloud = await mappingsCheck.run({
+      ...ctx,
+      config: { ...ctx.config!, media: 'cloud', ingress: 'tunnel' },
+    });
     expect(tunnelCloud.status).toBe('skip');
     expect(tunnelCloud.summary).toBe('Skipped: this configuration needs no inbound ports.');
 
@@ -974,13 +1424,21 @@ describe('update', () => {
   });
 
   test('failed / staged / pending from update.json', async () => {
-    const failed = await one('update', { latest: 'v0.8.0', updateState: { failed: { tag: 'v0.8.0', at: 1, reason: 'start failed twice (exit 1)' } } });
+    const failed = await one('update', {
+      latest: 'v0.8.0',
+      updateState: { failed: { tag: 'v0.8.0', at: 1, reason: 'start failed twice (exit 1)' } },
+    });
     expect(failed.status).toBe('warn');
     expect(failed.summary).toContain('start failed twice');
     expect(failed.detail).toBeUndefined(); // the failed tag is the latest: not repeated as "available"
     expect(failed.fix).toBe('Retry now: telinha update --now');
-    expect((await one('update', { updateState: { staged: { tag: 'v0.8.0', previous: '0.7.0', at: 1, failedStarts: 0 } } })).summary).toContain('waiting for the restart');
-    expect((await one('update', { updateState: { pending: { tag: 'v0.8.0', since: 1 } } })).summary).toContain('not ready yet');
+    expect(
+      (await one('update', { updateState: { staged: { tag: 'v0.8.0', previous: '0.7.0', at: 1, failedStarts: 0 } } }))
+        .summary,
+    ).toContain('waiting for the restart');
+    expect((await one('update', { updateState: { pending: { tag: 'v0.8.0', since: 1 } } })).summary).toContain(
+      'not ready yet',
+    );
   });
 
   test('the running service is asked first', async () => {
@@ -1011,7 +1469,17 @@ describe('runChecks', () => {
     const seen: string[] = [];
     const rs = await runChecks(CHECKS, ctx, (r) => seen.push(r.id));
     expect(seen).toEqual(CHECKS.map((c) => c.id));
-    for (const id of ['discord-token', 'discord-intents', 'discord-guild', 'discord-role', 'discord-channels', 'discord-redirect', 'public-ip', 'dns', 'tls']) {
+    for (const id of [
+      'discord-token',
+      'discord-intents',
+      'discord-guild',
+      'discord-role',
+      'discord-channels',
+      'discord-redirect',
+      'public-ip',
+      'dns',
+      'tls',
+    ]) {
       expect(byId(rs)[id]!.status).toBe('skip');
     }
     expect(calls.some((c) => !c.url.startsWith('http://127.0.0.1'))).toBe(false);
@@ -1019,7 +1487,12 @@ describe('runChecks', () => {
 
   test('a hung check times out, a throwing one fails, the rest still run', async () => {
     const hang: Check = { id: 'hang', run: () => new Promise(() => {}) };
-    const boom: Check = { id: 'boom', run: async () => { throw new Error('kaput'); } };
+    const boom: Check = {
+      id: 'boom',
+      run: async () => {
+        throw new Error('kaput');
+      },
+    };
     const ok: Check = { id: 'ok', run: async (ctx) => ({ id: 'ok', title: 'OK', status: 'ok', summary: ctx.locale }) };
     const rs = await runChecks([hang, boom, ok], ctxFor().ctx, undefined, { timeoutMs: 20 });
     expect(rs.map((r) => r.status)).toEqual(['fail', 'fail', 'ok']);
@@ -1028,7 +1501,12 @@ describe('runChecks', () => {
   });
 
   test('pt-BR', async () => {
-    const cg: NatProbeLike = { gateway: { kind: 'igd', gatewayIp: '192.168.0.1', localIp: '192.168.0.10' }, externalIp: '100.64.1.1', localIp: '192.168.0.10', errors: [] };
+    const cg: NatProbeLike = {
+      gateway: { kind: 'igd', gatewayIp: '192.168.0.1', localIp: '192.168.0.10' },
+      externalIp: '100.64.1.1',
+      localIp: '192.168.0.10',
+      errors: [],
+    };
     const rs = byId(await runChecks(CHECKS, ctxFor({ locale: 'pt-BR', nat: cg }).ctx));
     expect(rs.cgnat!.title).toBe('NAT da operadora');
     expect(rs.cgnat!.summary).toContain('operadora');

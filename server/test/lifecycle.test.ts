@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { TrackSource } from 'livekit-server-sdk';
-import { renderCard, type Card } from '../src/card.ts';
+import { type Card, renderCard } from '../src/card.ts';
 import { createLifecycle, isPermanentEditError } from '../src/lifecycle.ts';
 import type { LiveParticipant, RoomService } from '../src/livekit.ts';
 import { createRooms, type NewRoom } from '../src/rooms.ts';
@@ -8,15 +8,25 @@ import { createRooms, type NewRoom } from '../src/rooms.ts';
 const T0 = 1_700_000_000_000;
 const MIN = 60_000;
 const NEW: NewRoom = {
-  room: 'lamo-futi', guildId: '100', channelId: '300', locale: 'en',
-  openerId: '7', openerName: 'Zé', what: null,
+  room: 'lamo-futi',
+  guildId: '100',
+  channelId: '300',
+  locale: 'en',
+  openerId: '7',
+  openerName: 'Zé',
+  what: null,
 };
 
 const viewer = (id: string, tab = 'aa'): LiveParticipant => ({
-  identity: `${id}:${tab}`, metadata: JSON.stringify({ id, avatar: null }), attributes: {}, tracks: [],
+  identity: `${id}:${tab}`,
+  metadata: JSON.stringify({ id, avatar: null }),
+  attributes: {},
+  tracks: [],
 });
 const streamer = (id: string, stream?: string, tab = 'bb'): LiveParticipant => ({
-  ...viewer(id, tab), attributes: stream === undefined ? {} : { stream }, tracks: [{ source: TrackSource.SCREEN_SHARE }],
+  ...viewer(id, tab),
+  attributes: stream === undefined ? {} : { stream },
+  tracks: [{ source: TrackSource.SCREEN_SHARE }],
 });
 
 // The real Room module on :memory: with a fake LiveKit; the lifecycle only paces the cards.
@@ -42,40 +52,66 @@ async function setup(o: { message?: boolean; gapMs?: number; closeEmptyMs?: numb
     ensureRoom: async () => {},
   };
   const rooms = createRooms({
-    path: ':memory:', livekit, closeEmptySeconds: (o.closeEmptyMs ?? 5 * MIN) / 1000, devAutoOpen: true, now: () => clock,
+    path: ':memory:',
+    livekit,
+    closeEmptySeconds: (o.closeEmptyMs ?? 5 * MIN) / 1000,
+    devAutoOpen: true,
+    now: () => clock,
     log: (...a) => void logs.push(a),
   });
   /** A room /telinha opened (its card is message 999), or with message: false a dev room (no card). */
-  const open = (room: string) => (o.message === false
-    ? rooms.admit(room, { id: '7', name: 'Zé', locale: 'en' })
-    : rooms.open({ ...NEW, room }, async () => ({ channelId: '300', messageId: '999' })));
+  const open = (room: string) =>
+    o.message === false
+      ? rooms.admit(room, { id: '7', name: 'Zé', locale: 'en' })
+      : rooms.open({ ...NEW, room }, async () => ({ channelId: '300', messageId: '999' }));
   await open(NEW.room);
-  const newLifecycle = () => createLifecycle({
-    rooms,
-    render: (rec, live) => renderCard(rec, live, { publicUrl: 'https://tela.example.com', group: 'Crew' }),
-    editMessage: async (channelId, messageId, card) => {
-      editTries++;
-      if (editError) throw editError;
-      edits.push({ at: clock, channelId, messageId, card });
-    },
-    now: () => clock,
-    editGapMs: o.gapMs,
-    log: (...a) => void logs.push(a),
-  });
+  const newLifecycle = () =>
+    createLifecycle({
+      rooms,
+      render: (rec, live) => renderCard(rec, live, { publicUrl: 'https://tela.example.com', group: 'Crew' }),
+      editMessage: async (channelId, messageId, card) => {
+        editTries++;
+        if (editError) throw editError;
+        edits.push({ at: clock, channelId, messageId, card });
+      },
+      now: () => clock,
+      editGapMs: o.gapMs,
+      log: (...a) => void logs.push(a),
+    });
   let lc = newLifecycle();
   return {
-    rooms, open, present, deleted, edits, logs,
-    get lc() { return lc; },
+    rooms,
+    open,
+    present,
+    deleted,
+    edits,
+    logs,
+    get lc() {
+      return lc;
+    },
     /** A fresh process on the same database (in-memory card state lost). */
-    restart: () => { lc = newLifecycle(); },
+    restart: () => {
+      lc = newLifecycle();
+    },
     editTries: () => editTries,
-    failDeletes: (e: unknown) => { deleteError = e; },
+    failDeletes: (e: unknown) => {
+      deleteError = e;
+    },
     set: (ps: LiveParticipant[], room = NEW.room) => present.set(room, ps),
-    at: (ms: number) => { clock = T0 + ms; },
-    failEdits: (e: unknown) => { editError = e; },
-    failList: (e: unknown) => { listError = e; },
+    at: (ms: number) => {
+      clock = T0 + ms;
+    },
+    failEdits: (e: unknown) => {
+      editError = e;
+    },
+    failList: (e: unknown) => {
+      listError = e;
+    },
     /** Advances the clock to `ms` and runs one tick. */
-    tickAt: async (ms: number) => { clock = T0 + ms; await lc.tick(); },
+    tickAt: async (ms: number) => {
+      clock = T0 + ms;
+      await lc.tick();
+    },
   };
 }
 
@@ -102,7 +138,12 @@ describe('closing', () => {
     expect(s.rooms.get(NEW.room)!.closedAt).toBeNull();
     await s.tickAt(14 * MIN);
     const rec = s.rooms.get(NEW.room)!;
-    expect(rec).toMatchObject({ closedAt: T0 + 14 * MIN, firstJoinAt: T0 + MIN, lastSeenAt: T0 + 9 * MIN, seen: ['1'] });
+    expect(rec).toMatchObject({
+      closedAt: T0 + 14 * MIN,
+      firstJoinAt: T0 + MIN,
+      lastSeenAt: T0 + 9 * MIN,
+      seen: ['1'],
+    });
     expect(s.deleted).toEqual([NEW.room]);
     expect(s.edits.at(-1)!.card.content).toBe('📺 Telinha by **Zé** ended\n⏱️ Lasted 8 min\n👥 Stopped by: <@1>');
   });
@@ -300,7 +341,12 @@ test('ticks never overlap', async () => {
   const lc = createLifecycle({
     rooms: {
       openRooms: () => [NEW.room],
-      observe: () => { calls++; return new Promise((r) => { release = () => r(null); }); },
+      observe: () => {
+        calls++;
+        return new Promise((r) => {
+          release = () => r(null);
+        });
+      },
       retryDeletes: async () => {},
       cardsDue: () => [],
       markCardDone: () => {},

@@ -1,9 +1,10 @@
 // `bun run image`: builds the image locally with docker or podman and runs the
 // same smoke test as CI inside it (scripts/smoke.sh ships in the image, so no
 // mount). Exits non-zero on any failure.
-import { $ } from 'bun';
+
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { $ } from 'bun';
 
 const TAG = 'telinha:dev';
 

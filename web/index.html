@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="/src/assets/apple-touch-icon.png" />
     <script>
       // Paint the saved theme before the bundle loads (same rules as src/lib/theme.ts).
-      (function () {
+      (() => {
         var c = 'system';
         try {
           c = JSON.parse(localStorage.getItem('telinha.theme')) || 'system';

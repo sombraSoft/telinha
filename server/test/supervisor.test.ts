@@ -2,7 +2,14 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createSupervisor, RECENT_RESTART_WINDOW_MS, redactLine, type ChildHandle, type ChildSpec, type SupervisorDeps } from '../src/supervisor.ts';
+import {
+  type ChildHandle,
+  type ChildSpec,
+  createSupervisor,
+  RECENT_RESTART_WINDOW_MS,
+  redactLine,
+  type SupervisorDeps,
+} from '../src/supervisor.ts';
 
 const T0 = 1_700_000_000_000;
 // Not a pid anywhere: Windows pids are multiples of 4, Linux pid_max is <= 4194304.
@@ -37,12 +44,24 @@ function fakes(o: { autoExit?: boolean; fakeTime?: boolean } = {}) {
   const spawn: NonNullable<SupervisorDeps['spawn']> = (spec, env) => {
     const pid = ++nextPid;
     let resolveExit!: (code: number | null) => void;
-    const exited = new Promise<number | null>((r) => { resolveExit = r; });
+    const exited = new Promise<number | null>((r) => {
+      resolveExit = r;
+    });
     let out!: ReadableStreamDefaultController<Uint8Array>;
-    const stdout = new ReadableStream<Uint8Array>({ start(c) { out = c; } });
+    const stdout = new ReadableStream<Uint8Array>({
+      start(c) {
+        out = c;
+      },
+    });
     let done = false;
     const h: FakeHandle = {
-      name: spec.name, pid, exited, stdout, stderr: null, env, kills: [],
+      name: spec.name,
+      pid,
+      exited,
+      stdout,
+      stderr: null,
+      env,
+      kills: [],
       kill(signal) {
         h.kills.push(signal);
         events.push(`kill ${spec.name}#${pid}`);
@@ -65,15 +84,23 @@ function fakes(o: { autoExit?: boolean; fakeTime?: boolean } = {}) {
   // Fake clock and sleep: delays are recorded, resolved by the test or by the abort signal.
   let clock = T0;
   const sleeps: { ms: number; aborted: boolean; resolve: () => void }[] = [];
-  const sleep: NonNullable<SupervisorDeps['sleep']> = (ms, signal) => new Promise<void>((resolve) => {
-    const s = { ms, aborted: false, resolve };
-    sleeps.push(s);
-    if (signal?.aborted) {
-      s.aborted = true;
-      return resolve();
-    }
-    signal?.addEventListener('abort', () => { s.aborted = true; resolve(); }, { once: true });
-  });
+  const sleep: NonNullable<SupervisorDeps['sleep']> = (ms, signal) =>
+    new Promise<void>((resolve) => {
+      const s = { ms, aborted: false, resolve };
+      sleeps.push(s);
+      if (signal?.aborted) {
+        s.aborted = true;
+        return resolve();
+      }
+      signal?.addEventListener(
+        'abort',
+        () => {
+          s.aborted = true;
+          resolve();
+        },
+        { once: true },
+      );
+    });
 
   const spec = (name: string, extra: Partial<ChildSpec> = {}): ChildSpec => ({
     name,
@@ -81,20 +108,28 @@ function fakes(o: { autoExit?: boolean; fakeTime?: boolean } = {}) {
     prepare: async () => void events.push(`prepare ${name}`),
     ...extra,
   });
-  const create = (specs: ChildSpec[], extra: Partial<SupervisorDeps> = {}) => createSupervisor({
-    specs,
-    log: (...a) => void logs.push(a.map(String).join(' ')),
-    spawn,
-    platform: 'linux',
-    ...(o.fakeTime === false ? {} : { now: () => clock, sleep }),
-    ...extra,
-  });
+  const create = (specs: ChildSpec[], extra: Partial<SupervisorDeps> = {}) =>
+    createSupervisor({
+      specs,
+      log: (...a) => void logs.push(a.map(String).join(' ')),
+      spawn,
+      platform: 'linux',
+      ...(o.fakeTime === false ? {} : { now: () => clock, sleep }),
+      ...extra,
+    });
   return {
-    events, logs, handles, sleeps, spec, create,
+    events,
+    logs,
+    handles,
+    sleeps,
+    spec,
+    create,
     last: () => handles.at(-1)!,
     byName: (name: string) => handles.filter((h) => h.name === name),
     delays: () => sleeps.map((s) => s.ms),
-    advance: (ms: number) => { clock += ms; },
+    advance: (ms: number) => {
+      clock += ms;
+    },
     /** Resolves the i-th recorded sleep (default: the newest) as if its time passed. */
     fire: (i = sleeps.length - 1) => sleeps[i]!.resolve(),
   };
@@ -108,7 +143,10 @@ describe('start', () => {
     expect(f.events).toEqual(['prepare a', 'spawn a#1001', 'prepare b', 'spawn b#1002']);
     expect(f.handles[0]!.env).toEqual({ PATH: '/bin', A: '1' });
     expect(f.handles[1]!.env).toEqual({ PATH: '/bin', A: '0' });
-    expect(sup.status().map((s) => [s.name, s.state, s.pid])).toEqual([['a', 'up', 1001], ['b', 'up', 1002]]);
+    expect(sup.status().map((s) => [s.name, s.state, s.pid])).toEqual([
+      ['a', 'up', 1001],
+      ['b', 'up', 1002],
+    ]);
     await sup.stop();
   });
 
@@ -131,7 +169,9 @@ describe('start', () => {
 
   test('the spawning log line has argv only, never an env value', async () => {
     const f = fakes();
-    const sup = f.create([f.spec('cloudflared', { env: { TUNNEL_TOKEN: 'eyJ-very-secret' } })], { baseEnv: { PATH: '/base/path' } });
+    const sup = f.create([f.spec('cloudflared', { env: { TUNNEL_TOKEN: 'eyJ-very-secret' } })], {
+      baseEnv: { PATH: '/base/path' },
+    });
     await sup.start();
     const line = f.logs.find((l) => l.startsWith('spawning cloudflared'))!;
     expect(line).toBe('spawning cloudflared: /opt/bin/cloudflared-bin --flag cloudflared');
@@ -215,7 +255,11 @@ describe('ready probes (real Bun.serve, real time)', () => {
 
   function probeServer(okAfter: number) {
     let hits = 0;
-    server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response(++hits > okAfter ? 'ok' : 'nope', { status: hits > okAfter ? 200 : 503 }) });
+    server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch: () => new Response(++hits > okAfter ? 'ok' : 'nope', { status: hits > okAfter ? 200 : 503 }),
+    });
     return { url: `http://127.0.0.1:${server.port}/`, hits: () => hits };
   }
 
@@ -264,7 +308,8 @@ describe('ready probes (real Bun.serve, real time)', () => {
     // Another LiveKit on the port answers; ours failed to bind and exited meanwhile.
     const f = fakes({ fakeTime: false });
     server = Bun.serve({
-      port: 0, hostname: '127.0.0.1',
+      port: 0,
+      hostname: '127.0.0.1',
       fetch: () => {
         f.last().exit(1);
         return new Response('ok');
@@ -325,10 +370,24 @@ describe('crash restarts', () => {
     f.advance(10);
     f.last().exit(1);
     await settle();
-    expect(sup.status()[0]).toEqual({ name: 'a', state: 'restarting', pid: null, restarts: 0, recentRestarts: 0, since: T0 + 10 });
+    expect(sup.status()[0]).toEqual({
+      name: 'a',
+      state: 'restarting',
+      pid: null,
+      restarts: 0,
+      recentRestarts: 0,
+      since: T0 + 10,
+    });
     f.fire();
     await settle();
-    expect(sup.status()[0]).toEqual({ name: 'a', state: 'up', pid: 1002, restarts: 1, recentRestarts: 1, since: T0 + 10 });
+    expect(sup.status()[0]).toEqual({
+      name: 'a',
+      state: 'up',
+      pid: 1002,
+      restarts: 1,
+      recentRestarts: 1,
+      since: T0 + 10,
+    });
     await sup.stop();
     expect(sup.status()[0]!.state).toBe('stopped');
   });
@@ -336,7 +395,14 @@ describe('crash restarts', () => {
   test('a failing prepare is retried with backoff, never given up on', async () => {
     const f = fakes();
     let fail = 2;
-    const sup = f.create([f.spec('a', { prepare: async () => { if (fail-- > 0) throw new Error('disk full'); f.events.push('prepare a'); } })]);
+    const sup = f.create([
+      f.spec('a', {
+        prepare: async () => {
+          if (fail-- > 0) throw new Error('disk full');
+          f.events.push('prepare a');
+        },
+      }),
+    ]);
     fail = 0;
     await sup.start();
     fail = 2;
@@ -386,7 +452,8 @@ describe('stop', () => {
       const sup = f.create([f.spec('a', { stopGraceMs: 2000 }), f.spec('b')], { pidfile });
       await sup.start();
       expect(JSON.parse(readFileSync(pidfile, 'utf8'))).toEqual([
-        { name: 'a', pid: 1001, exe: 'a-bin' }, { name: 'b', pid: 1002, exe: 'b-bin' },
+        { name: 'a', pid: 1001, exe: 'a-bin' },
+        { name: 'b', pid: 1002, exe: 'b-bin' },
       ]);
       const [a, b] = f.handles as [FakeHandle, FakeHandle];
       const stopping = sup.stop();
@@ -404,7 +471,10 @@ describe('stop', () => {
       a.exit(null);
       await stopping;
       expect(existsSync(pidfile)).toBe(false);
-      expect(sup.status().map((s) => [s.state, s.pid])).toEqual([['stopped', null], ['stopped', null]]);
+      expect(sup.status().map((s) => [s.state, s.pid])).toEqual([
+        ['stopped', null],
+        ['stopped', null],
+      ]);
       expect(f.logs).toContain('[a] exited with code null');
       expect(f.handles).toHaveLength(2);
     } finally {
@@ -482,9 +552,17 @@ describe('stop', () => {
   test('prepare in flight when stop() is called: no spawn after it resolves', async () => {
     const f = fakes();
     let release!: () => void;
-    const held = new Promise<void>((r) => { release = r; });
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
     let calls = 0;
-    const sup = f.create([f.spec('a', { prepare: async () => { if (++calls > 1) await held; } })]);
+    const sup = f.create([
+      f.spec('a', {
+        prepare: async () => {
+          if (++calls > 1) await held;
+        },
+      }),
+    ]);
     await sup.start();
     f.last().exit(1);
     await settle();
@@ -502,7 +580,9 @@ describe('stop', () => {
   test('stop() during start(): the remaining children are not spawned', async () => {
     const f = fakes();
     let release!: () => void;
-    const held = new Promise<void>((r) => { release = r; });
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
     const sup = f.create([f.spec('a'), f.spec('b', { prepare: () => held })]);
     const started = sup.start();
     await settle();
@@ -539,7 +619,13 @@ describe('recentRestarts', () => {
   test('a prepare that keeps throwing counts every attempt, restarts stays 0', async () => {
     const f = fakes();
     let fail = false;
-    const sup = f.create([f.spec('a', { prepare: async () => { if (fail) throw new Error('no disk'); } })]);
+    const sup = f.create([
+      f.spec('a', {
+        prepare: async () => {
+          if (fail) throw new Error('no disk');
+        },
+      }),
+    ]);
     await sup.start();
     fail = true;
     f.last().exit(1);
@@ -617,8 +703,14 @@ describe('restart', () => {
     f.events.length = 0;
     await Promise.all([sup.restart('a'), sup.restart('a')]);
     expect(f.events).toEqual([
-      'kill a#1001', 'exit a#1001', 'prepare a', 'spawn a#1002',
-      'kill a#1002', 'exit a#1002', 'prepare a', 'spawn a#1003',
+      'kill a#1001',
+      'exit a#1001',
+      'prepare a',
+      'spawn a#1002',
+      'kill a#1002',
+      'exit a#1002',
+      'prepare a',
+      'spawn a#1003',
     ]);
     expect(sup.status()[0]).toMatchObject({ state: 'up', pid: 1003, restarts: 0 });
     await sup.stop();
@@ -627,7 +719,14 @@ describe('restart', () => {
   test('a restart whose prepare fails rejects, and the child is retried with backoff', async () => {
     const f = fakes();
     let fail = false;
-    const sup = f.create([f.spec('a', { prepare: async () => { if (fail) throw new Error('no disk'); f.events.push('prepare a'); } })]);
+    const sup = f.create([
+      f.spec('a', {
+        prepare: async () => {
+          if (fail) throw new Error('no disk');
+          f.events.push('prepare a');
+        },
+      }),
+    ]);
     await sup.start();
     fail = true;
     await expect(sup.restart('a')).rejects.toThrow('no disk');
@@ -671,12 +770,15 @@ describe('pidfile stale cleanup', () => {
     const dir = mkdtempSync(join(tmpdir(), 'telinha-sup-'));
     const pidfile = join(dir, 'children.json');
     try {
-      writeFileSync(pidfile, JSON.stringify([
-        { name: 'livekit', pid: NO_PID, exe: 'livekit-server' },        // alive, same exe -> killed
-        { name: 'caddy', pid: NO_PID - 4, exe: 'caddy' },               // alive, pid recycled by something else -> left alone
-        { name: 'cloudflared', pid: NO_PID - 8, exe: 'cloudflared' },   // gone
-        { name: 'me', pid: process.pid, exe: 'bun' },                   // never ourselves
-      ]));
+      writeFileSync(
+        pidfile,
+        JSON.stringify([
+          { name: 'livekit', pid: NO_PID, exe: 'livekit-server' }, // alive, same exe -> killed
+          { name: 'caddy', pid: NO_PID - 4, exe: 'caddy' }, // alive, pid recycled by something else -> left alone
+          { name: 'cloudflared', pid: NO_PID - 8, exe: 'cloudflared' }, // gone
+          { name: 'me', pid: process.pid, exe: 'bun' }, // never ourselves
+        ]),
+      );
       const asked: number[] = [];
       const sup = f.create([f.spec('livekit')], {
         pidfile,
@@ -706,12 +808,19 @@ describe('pidfile stale cleanup', () => {
     const dir = mkdtempSync(join(tmpdir(), 'telinha-sup-'));
     const pidfile = join(dir, 'children.json');
     try {
-      writeFileSync(pidfile, JSON.stringify([
-        { name: 'a', pid: NO_PID, exe: 'livekit-server' },
-        { name: 'b', pid: NO_PID - 4, exe: 'a-very-long-binary-name' },
-        { name: 'junk', pid: 'x', exe: 1 },
-      ]));
-      const win = f.create([f.spec('a')], { pidfile, platform: 'win32', processInfo: () => ({ alive: true, exe: 'LiveKit-Server.EXE' }) });
+      writeFileSync(
+        pidfile,
+        JSON.stringify([
+          { name: 'a', pid: NO_PID, exe: 'livekit-server' },
+          { name: 'b', pid: NO_PID - 4, exe: 'a-very-long-binary-name' },
+          { name: 'junk', pid: 'x', exe: 1 },
+        ]),
+      );
+      const win = f.create([f.spec('a')], {
+        pidfile,
+        platform: 'win32',
+        processInfo: () => ({ alive: true, exe: 'LiveKit-Server.EXE' }),
+      });
       await win.start();
       expect(f.logs.filter((l) => l.includes(`stale pid ${NO_PID}`))).toHaveLength(1);
       expect(f.logs.filter((l) => l.includes(`stale pid ${NO_PID - 4}`))).toHaveLength(0);

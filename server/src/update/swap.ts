@@ -9,7 +9,7 @@
 // one is kept as telinha-tray.dist.exe, so setup can install it again offline.
 import { join } from 'node:path';
 import type { UpdateFailed, UpdateStaged } from '../cli/control.ts';
-import { ASIDE_RE, TRAY_DIST, TRAY_EXE, TRAY_NEW, asideBase, exeName, exeSuffix, newExeName } from '../release.ts';
+import { ASIDE_RE, asideBase, exeName, exeSuffix, newExeName, TRAY_DIST, TRAY_EXE, TRAY_NEW } from '../release.ts';
 import { readState, writeState } from './state.ts';
 import { errorMessage, type UpdateFs } from './types.ts';
 
@@ -80,12 +80,22 @@ export async function stage(o: StageOptions): Promise<UpdateStaged> {
   try {
     await o.fs.rename(fresh, current);
   } catch (e) {
-    if (hadCurrent) await o.fs.rename(old, current).catch((undo: unknown) => log(`update: could not restore ${exe}: ${errorMessage(undo)}`));
+    if (hadCurrent)
+      await o.fs
+        .rename(old, current)
+        .catch((undo: unknown) => log(`update: could not restore ${exe}: ${errorMessage(undo)}`));
     throw e;
   }
   log(`update: ${o.tag} installed as ${exe} (previous ${o.current} kept as ${oldName})`);
   const trayPreviousFile = await stageTray(o, log);
-  return { tag: o.tag, previous: o.current, previousFile: oldName, at: o.now(), failedStarts: 0, ...(trayPreviousFile ? { trayPreviousFile } : {}) };
+  return {
+    tag: o.tag,
+    previous: o.current,
+    previousFile: oldName,
+    at: o.now(),
+    failedStarts: 0,
+    ...(trayPreviousFile ? { trayPreviousFile } : {}),
+  };
 }
 
 /**
@@ -117,7 +127,9 @@ async function stageTray(o: StageOptions, log: Log): Promise<string | undefined>
     try {
       await o.fs.rename(fresh, current);
     } catch (e) {
-      await o.fs.rename(old, current).catch((undo: unknown) => log(`update: could not restore ${name}: ${errorMessage(undo)}`));
+      await o.fs
+        .rename(old, current)
+        .catch((undo: unknown) => log(`update: could not restore ${name}: ${errorMessage(undo)}`));
       throw e;
     }
     log(`update: ${o.tag} ${what} (previous kept as ${oldName})`);
@@ -155,7 +167,13 @@ export async function rollback(o: RollbackOptions): Promise<UpdateFailed> {
     log(`update: ${o.staged.tag} failed to start twice and no previous executable exists; keeping it`);
     return failed;
   }
-  const failedName = await freeName(o.fs, o.bin, asideBase('telinha', 'failed', o.staged.tag), exeSuffix(o.platform), o.now());
+  const failedName = await freeName(
+    o.fs,
+    o.bin,
+    asideBase('telinha', 'failed', o.staged.tag),
+    exeSuffix(o.platform),
+    o.now(),
+  );
   const aside = join(o.bin, failedName);
   try {
     await o.fs.rename(current, aside);
@@ -214,7 +232,13 @@ async function rollbackTray(o: RollbackOptions, log: Log): Promise<void> {
 }
 
 /** A started version proved itself: record it as applied, forget the staged record and sweep the leftovers. */
-export async function finish(o: { fs: UpdateFs; bin: string; statePath: string; now?: () => number; log?: Log }): Promise<void> {
+export async function finish(o: {
+  fs: UpdateFs;
+  bin: string;
+  statePath: string;
+  now?: () => number;
+  log?: Log;
+}): Promise<void> {
   const state = await readState(o.fs, o.statePath);
   const { staged } = state;
   if (staged) {

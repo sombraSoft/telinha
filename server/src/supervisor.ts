@@ -26,9 +26,9 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { basename, dirname } from 'node:path';
 
 export interface ChildSpec {
-  name: string;                       // log prefix, restart key: "livekit" | "caddy" | "cloudflared" | "caddy-l4" (TURN over TLS, later)
-  cmd: string[];                      // argv; cmd[0] absolute (from findBinary). NEVER a secret (shows in ps/tasklist and logs)
-  env?: Record<string, string>;       // merged over deps.baseEnv, not over process.env
+  name: string; // log prefix, restart key: "livekit" | "caddy" | "cloudflared" | "caddy-l4" (TURN over TLS, later)
+  cmd: string[]; // argv; cmd[0] absolute (from findBinary). NEVER a secret (shows in ps/tasklist and logs)
+  env?: Record<string, string>; // merged over deps.baseEnv, not over process.env
   cwd?: string;
   /** Runs before every (re)start: render config files, create dirs. */
   prepare?: () => Promise<void>;
@@ -45,12 +45,19 @@ export interface ChildSpec {
 export type ChildState = 'starting' | 'up' | 'restarting' | 'stopped';
 
 export interface Supervisor {
-  start(): Promise<void>;                  // spawns all, waits for ready probes
-  restart(name: string): Promise<void>;    // graceful stop + prepare + spawn, no backoff
-  stop(): Promise<void>;                   // stops all; idempotent
+  start(): Promise<void>; // spawns all, waits for ready probes
+  restart(name: string): Promise<void>; // graceful stop + prepare + spawn, no backoff
+  stop(): Promise<void>; // stops all; idempotent
   /** Last resort for process.on('exit'): kills without waiting (Linux SIGKILL, Windows taskkill), skips reaped children. */
   stopSync(): void;
-  status(): { name: string; state: ChildState; pid: number | null; restarts: number; recentRestarts: number; since: number }[];
+  status(): {
+    name: string;
+    state: ChildState;
+    pid: number | null;
+    restarts: number;
+    recentRestarts: number;
+    since: number;
+  }[];
 }
 
 /** Is `pid` alive, and which executable runs there (basename; Linux comm may be cut at 15 chars). */
@@ -72,7 +79,13 @@ export interface SupervisorDeps {
   processInfo?: ProcessInfo;
   platform?: NodeJS.Platform;
 }
-export interface ChildHandle { pid: number; exited: Promise<number | null>; stdout: ReadableStream<Uint8Array> | null; stderr: ReadableStream<Uint8Array> | null; kill(signal?: NodeJS.Signals): void }
+export interface ChildHandle {
+  pid: number;
+  exited: Promise<number | null>;
+  stdout: ReadableStream<Uint8Array> | null;
+  stderr: ReadableStream<Uint8Array> | null;
+  kill(signal?: NodeJS.Signals): void;
+}
 
 const DEFAULT_RESTART = { minMs: 1000, maxMs: 60_000, resetAfterMs: 60_000 };
 /** Window of `recentRestarts`: respawn attempts older than this stop counting. */
@@ -109,12 +122,19 @@ interface Child {
   restarting: boolean;
 }
 
-interface PidEntry { name: string; pid: number; exe: string }
+interface PidEntry {
+  name: string;
+  pid: number;
+  exe: string;
+}
 
 /** Windows has no SIGTERM and proc.kill() ends only the direct process; taskkill /T takes the tree. False when it is missing or found no such pid (exit 128). */
 function taskkill(pid: number): boolean {
   try {
-    return Bun.spawnSync(['taskkill', '/PID', String(pid), '/T', '/F'], { stdout: 'ignore', stderr: 'ignore' }).exitCode === 0;
+    return (
+      Bun.spawnSync(['taskkill', '/PID', String(pid), '/T', '/F'], { stdout: 'ignore', stderr: 'ignore' }).exitCode ===
+      0
+    );
   } catch {
     return false; // no taskkill: the caller ends the direct process instead
   }
@@ -168,7 +188,10 @@ export function defaultProcessInfo(platform: NodeJS.Platform = process.platform)
     return (pid) => {
       try {
         // CSV rows: "livekit-server.exe","1234","Console","1","12,345 K"; a sentence instead when no task matches.
-        const out = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { stdout: 'pipe', stderr: 'ignore' }).stdout.toString();
+        const out = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
+          stdout: 'pipe',
+          stderr: 'ignore',
+        }).stdout.toString();
         const m = /^"([^"]*)","(\d+)"/m.exec(out);
         return m && Number(m[2]) === pid ? { alive: true, exe: m[1]! } : dead;
       } catch {
@@ -250,8 +273,19 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
   const sleep = deps.sleep ?? defaultSleep;
   const processInfo = deps.processInfo ?? defaultProcessInfo(platform);
   const children: Child[] = deps.specs.map((spec) => ({
-    spec, state: 'stopped', since: now(), handle: null, exitCode: undefined, startedAt: 0,
-    shortRuns: 0, restarts: 0, restartTimes: [], generation: 0, pending: null, op: Promise.resolve(), restarting: false,
+    spec,
+    state: 'stopped',
+    since: now(),
+    handle: null,
+    exitCode: undefined,
+    startedAt: 0,
+    shortRuns: 0,
+    restarts: 0,
+    restartTimes: [],
+    generation: 0,
+    pending: null,
+    op: Promise.resolve(),
+    restarting: false,
   }));
   const byName = new Map(children.map((c) => [c.spec.name, c]));
   let started = false;
@@ -418,7 +452,8 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     while (now() < deadline) {
       if (stopping) throw new Error(`${spec.name}: stopped while waiting for it`);
       if (child.handle !== handle) return; // restart() took over; it runs its own probe
-      if (child.exitCode !== undefined) throw new Error(`${spec.name} exited with code ${child.exitCode} before it was ready`);
+      if (child.exitCode !== undefined)
+        throw new Error(`${spec.name} exited with code ${child.exitCode} before it was ready`);
       try {
         const res = await fetch(spec.ready.url, { signal: AbortSignal.timeout(1000) });
         // Our child must still be running: a 2xx from a process that already died
@@ -545,12 +580,12 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       return children.map((c) => {
         pruneRestartTimes(c);
         return {
-        name: c.spec.name,
-        state: c.state,
-        pid: c.handle && c.exitCode === undefined ? c.handle.pid : null,
-        restarts: c.restarts,
-        recentRestarts: c.restartTimes.length,
-        since: c.since,
+          name: c.spec.name,
+          state: c.state,
+          pid: c.handle && c.exitCode === undefined ? c.handle.pid : null,
+          restarts: c.restarts,
+          recentRestarts: c.restartTimes.length,
+          since: c.since,
         };
       });
     },

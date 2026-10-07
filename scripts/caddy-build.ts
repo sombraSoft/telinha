@@ -17,9 +17,11 @@ type CaddyBuild = { version: string; xcaddy: string; modules: Record<string, str
 // What the release needs from this build; list-modules must show both.
 const REQUIRED_MODULES = ['dns.providers.duckdns', 'layer4'];
 
-const USAGE = 'usage: bun scripts/caddy-build.ts [--out DIR] [--os linux|windows] [--arch amd64|arm64] [--versions versions.json]';
+const USAGE =
+  'usage: bun scripts/caddy-build.ts [--out DIR] [--os linux|windows] [--arch amd64|arm64] [--versions versions.json]';
 
-const hostOs = (): Os | null => (process.platform === 'linux' ? 'linux' : process.platform === 'win32' ? 'windows' : null);
+const hostOs = (): Os | null =>
+  process.platform === 'linux' ? 'linux' : process.platform === 'win32' ? 'windows' : null;
 const hostArch = (): Arch | null => (process.arch === 'x64' ? 'amd64' : process.arch === 'arm64' ? 'arm64' : null);
 
 function parseArgs(argv: string[]) {
@@ -61,9 +63,12 @@ async function readRecipe(file: string): Promise<CaddyBuild> {
   const c = ((await Bun.file(file).json()) as { caddy?: Partial<CaddyBuild> }).caddy;
   const modules = c?.modules && typeof c.modules === 'object' ? Object.entries(c.modules) : [];
   if (
-    typeof c?.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(c.version)
-    || typeof c.xcaddy !== 'string' || !c.xcaddy.startsWith('v')
-    || !modules.length || modules.some(([, tag]) => typeof tag !== 'string' || !tag.startsWith('v'))
+    typeof c?.version !== 'string' ||
+    !/^\d+\.\d+\.\d+$/.test(c.version) ||
+    typeof c.xcaddy !== 'string' ||
+    !c.xcaddy.startsWith('v') ||
+    !modules.length ||
+    modules.some(([, tag]) => typeof tag !== 'string' || !tag.startsWith('v'))
   ) {
     throw new Error(`${file}: caddy needs version (x.y.z), xcaddy (vX.Y.Z) and modules ({ path: vX.Y.Z })`);
   }
@@ -80,13 +85,16 @@ async function run(cmd: string[], env: Record<string, string | undefined>): Prom
 
 function capture(cmd: string[], env?: Record<string, string | undefined>): string {
   const r = Bun.spawnSync(cmd, { env, stdout: 'pipe', stderr: 'pipe' });
-  if (!r.success) throw new Error(`${cmd.join(' ')} failed (${r.exitCode ?? r.signalCode}): ${r.stderr.toString().trim()}`);
+  if (!r.success)
+    throw new Error(`${cmd.join(' ')} failed (${r.exitCode ?? r.signalCode}): ${r.stderr.toString().trim()}`);
   return r.stdout.toString();
 }
 
 /** Where `go install` puts binaries: GOBIN, else the first GOPATH entry's bin. */
 function goBin(env: Record<string, string | undefined>): string {
-  const [gobin = '', gopath = ''] = capture(['go', 'env', 'GOBIN', 'GOPATH'], env).split(/\r?\n/).map((l) => l.trim());
+  const [gobin = '', gopath = ''] = capture(['go', 'env', 'GOBIN', 'GOPATH'], env)
+    .split(/\r?\n/)
+    .map((l) => l.trim());
   if (gobin) return gobin;
   const first = gopath.split(delimiter).find(Boolean);
   if (!first) throw new Error('go env reports neither GOBIN nor GOPATH');
@@ -99,7 +107,12 @@ async function main(argv: string[]): Promise<void> {
   // Same toolchain settings for both commands. The official golang images pin
   // GOTOOLCHAIN=local; auto lets a Caddy whose go directive is newer than the
   // image fetch the toolchain it needs (checked against Go's checksum database).
-  const toolEnv: Record<string, string | undefined> = { ...process.env, CGO_ENABLED: '0', GOFLAGS: '-trimpath', GOTOOLCHAIN: 'auto' };
+  const toolEnv: Record<string, string | undefined> = {
+    ...process.env,
+    CGO_ENABLED: '0',
+    GOFLAGS: '-trimpath',
+    GOTOOLCHAIN: 'auto',
+  };
   // xcaddy runs here, so it is built for this host whatever GOOS/GOARCH say.
   delete toolEnv.GOOS;
   delete toolEnv.GOARCH;
@@ -110,7 +123,11 @@ async function main(argv: string[]): Promise<void> {
   const exe = join(o.out, o.os === 'windows' ? 'caddy.exe' : 'caddy');
   const withs = Object.entries(recipe.modules).flatMap(([mod, tag]) => ['--with', `${mod}@${tag}`]);
   // xcaddy passes GOOS/GOARCH through to go build: that is the cross-compile.
-  await run([xcaddy, 'build', `v${recipe.version}`, ...withs, '--output', exe], { ...toolEnv, GOOS: o.os, GOARCH: o.arch });
+  await run([xcaddy, 'build', `v${recipe.version}`, ...withs, '--output', exe], {
+    ...toolEnv,
+    GOOS: o.os,
+    GOARCH: o.arch,
+  });
   console.log(exe);
 
   if (o.os !== hostOs() || o.arch !== hostArch()) {
@@ -120,8 +137,13 @@ async function main(argv: string[]): Promise<void> {
   // Go's minimal version selection raises Caddy when a module requires a newer
   // one, silently: the pin in versions.json must stay the truth.
   const got = capture([exe, 'version']).trim().split(/\s+/)[0];
-  if (got !== `v${recipe.version}`) throw new Error(`built caddy is ${got}, versions.json says v${recipe.version}: a module requires a newer Caddy`);
-  const listed = new Set(capture([exe, 'list-modules']).split(/\r?\n/).map((l) => l.trim()));
+  if (got !== `v${recipe.version}`)
+    throw new Error(`built caddy is ${got}, versions.json says v${recipe.version}: a module requires a newer Caddy`);
+  const listed = new Set(
+    capture([exe, 'list-modules'])
+      .split(/\r?\n/)
+      .map((l) => l.trim()),
+  );
   const missing = REQUIRED_MODULES.filter((m) => !listed.has(m));
   if (missing.length) throw new Error(`built caddy lacks ${missing.join(', ')}`);
   console.log(`[caddy] ${got} with ${REQUIRED_MODULES.join(', ')}`);

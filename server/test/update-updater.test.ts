@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { basename } from 'node:path';
 import { writeArchive } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
-import { TRAY_EXE, assetName, exeName, parseSums } from '../src/release.ts';
-import { PendingError, type GitHubReleases, type UpdateFs } from '../src/update/types.ts';
+import { assetName, exeName, parseSums, TRAY_EXE } from '../src/release.ts';
+import { type GitHubReleases, PendingError, type UpdateFs } from '../src/update/types.ts';
 import { compareVersions, createUpdater, type UpdaterOptions } from '../src/update/updater.ts';
 import type { Target } from '../src/version.ts';
 
@@ -23,7 +23,9 @@ function memFs() {
   const fs: UpdateFs = {
     async readdir(dir) {
       const d = `${n(dir).replace(/\/$/, '')}/`;
-      return [...files.keys()].filter((k) => k.startsWith(d) && !k.slice(d.length).includes('/')).map((k) => k.slice(d.length));
+      return [...files.keys()]
+        .filter((k) => k.startsWith(d) && !k.slice(d.length).includes('/'))
+        .map((k) => k.slice(d.length));
     },
     async rename(from, to) {
       const e = files.get(n(from));
@@ -69,14 +71,24 @@ function memFs() {
     const e = files.get(n(p));
     return e ? dec.decode(e.data) : null;
   };
-  const names = (dir: string) => [...files.keys()].filter((k) => k.startsWith(`${dir}/`)).map((k) => basename(k)).sort();
+  const names = (dir: string) =>
+    [...files.keys()]
+      .filter((k) => k.startsWith(`${dir}/`))
+      .map((k) => basename(k))
+      .sort();
   return { fs, ops, put, text, names, state: () => JSON.parse(text(STATE) ?? '{}') as Record<string, unknown> };
 }
 
-interface Release { sums?: string; assets: Record<string, Uint8Array> }
+interface Release {
+  sums?: string;
+  assets: Record<string, Uint8Array>;
+}
 
 /** A target's archive (linux-x64 by default) holding one executable, plus its SHA256SUMS line. */
-function release(tag: string, o: { target?: Target; content?: string; badSum?: boolean; noLine?: boolean; member?: string; tray?: string } = {}): Release {
+function release(
+  tag: string,
+  o: { target?: Target; content?: string; badSum?: boolean; noLine?: boolean; member?: string; tray?: string } = {},
+): Release {
   const target = o.target ?? 'linux-x64';
   const asset = assetName(target);
   const entries = [{ path: o.member ?? exeName(target), mode: 0o755, data: enc.encode(o.content ?? `binary ${tag}`) }];
@@ -110,7 +122,14 @@ function fakeGitHub(latest: string | null, releases: Record<string, Release> = {
   return { gh, calls, state };
 }
 
-function setup(o: Partial<UpdaterOptions> & { latest?: string | null; releases?: Record<string, Release>; rooms?: number; exe?: string } = {}) {
+function setup(
+  o: Partial<UpdaterOptions> & {
+    latest?: string | null;
+    releases?: Record<string, Release>;
+    rooms?: number;
+    exe?: string;
+  } = {},
+) {
   const m = memFs();
   m.put(`${PATHS.bin}/${o.exe ?? 'telinha'}`, 'binary 0.7.0');
   const gh = fakeGitHub(o.latest ?? null, o.releases ?? {});
@@ -119,14 +138,28 @@ function setup(o: Partial<UpdaterOptions> & { latest?: string | null; releases?:
   const applied: string[] = [];
   const logs: string[] = [];
   const sleeps: { ms: number; resolve: () => void }[] = [];
-  const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
-    sleeps.push({ ms, resolve });
-    signal?.addEventListener('abort', () => resolve(), { once: true });
-  });
+  const sleep = (ms: number, signal?: AbortSignal) =>
+    new Promise<void>((resolve) => {
+      sleeps.push({ ms, resolve });
+      signal?.addEventListener('abort', () => resolve(), { once: true });
+    });
   const updater = createUpdater({
-    current: '0.7.0', checkMs: 6 * HOUR, maxDeferMs: 12 * HOUR, startDelayMs: 120_000, deferPollMs: 60_000,
-    paths: PATHS, target: 'linux-x64', platform: 'linux', openRooms: () => rooms.n, github: gh.gh, fs: m.fs,
-    now: () => clock.t, sleep, log: (...a) => logs.push(a.join(' ')), onApplied: (tag) => applied.push(tag), compiled: true,
+    current: '0.7.0',
+    checkMs: 6 * HOUR,
+    maxDeferMs: 12 * HOUR,
+    startDelayMs: 120_000,
+    deferPollMs: 60_000,
+    paths: PATHS,
+    target: 'linux-x64',
+    platform: 'linux',
+    openRooms: () => rooms.n,
+    github: gh.gh,
+    fs: m.fs,
+    now: () => clock.t,
+    sleep,
+    log: (...a) => logs.push(a.join(' ')),
+    onApplied: (tag) => applied.push(tag),
+    compiled: true,
     ...o,
   });
   return { m, gh, clock, rooms, applied, logs, sleeps, updater };
@@ -164,14 +197,24 @@ describe('createUpdater', () => {
       staged: { tag: 'v0.8.0', previous: '0.7.0', previousFile: 'telinha.old-0.7.0', at: T0, failedStarts: 0 },
       lastCheck: T0,
     });
-    expect(s.updater.status()).toMatchObject({ enabled: true, current: '0.7.0', latest: 'v0.8.0', pin: null, failed: null, pending: null });
+    expect(s.updater.status()).toMatchObject({
+      enabled: true,
+      current: '0.7.0',
+      latest: 'v0.8.0',
+      pin: null,
+      failed: null,
+      pending: null,
+    });
     expect(s.updater.status().staged?.tag).toBe('v0.8.0');
   });
 
   test('Windows target: zip, telinha.exe, .exe names', async () => {
     const s = setup({
-      target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
-      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64' }) },
+      target: 'windows-x64',
+      platform: 'win32',
+      exe: 'telinha.exe',
+      latest: 'v0.8.0',
+      releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64' }) },
     });
     expect((await s.updater.update('now')).action).toBe('staged');
     expect(s.m.text(`${PATHS.bin}/telinha.exe`)).toBe('binary v0.8.0');
@@ -180,8 +223,11 @@ describe('createUpdater', () => {
 
   test('Windows target with the tray in the release: an installed tray is replaced and recorded', async () => {
     const s = setup({
-      target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
-      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64', tray: 'tray v0.8.0' }) },
+      target: 'windows-x64',
+      platform: 'win32',
+      exe: 'telinha.exe',
+      latest: 'v0.8.0',
+      releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64', tray: 'tray v0.8.0' }) },
     });
     s.m.put(`${PATHS.bin}/telinha-tray.exe`, 'tray v0.7.0');
     expect((await s.updater.update('now')).action).toBe('staged');
@@ -192,8 +238,11 @@ describe('createUpdater', () => {
 
   test('a failed install removes both staged .new files', async () => {
     const s = setup({
-      target: 'windows-x64', platform: 'win32', exe: 'telinha.exe',
-      latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64', tray: 'tray v0.8.0' }) },
+      target: 'windows-x64',
+      platform: 'win32',
+      exe: 'telinha.exe',
+      latest: 'v0.8.0',
+      releases: { 'v0.8.0': release('v0.8.0', { target: 'windows-x64', tray: 'tray v0.8.0' }) },
     });
     s.m.put(`${PATHS.bin}/telinha-tray.exe`, 'tray v0.7.0');
     // The main swap fails after the download wrote both .new files.
@@ -229,7 +278,11 @@ describe('createUpdater', () => {
   });
 
   test('pin: that exact tag, prerelease or downgrade included; pin equal to current means up to date', async () => {
-    const rc = setup({ pin: 'v0.8.0-rc.1', latest: 'v0.8.0-rc.1', releases: { 'v0.8.0-rc.1': release('v0.8.0-rc.1') } });
+    const rc = setup({
+      pin: 'v0.8.0-rc.1',
+      latest: 'v0.8.0-rc.1',
+      releases: { 'v0.8.0-rc.1': release('v0.8.0-rc.1') },
+    });
     const r = await rc.updater.update('scheduled');
     expect(r.action).toBe('staged');
     expect(r.latest).toBe('v0.8.0-rc.1');
@@ -339,7 +392,11 @@ describe('createUpdater', () => {
   });
 
   test('a new target restarts the deferral clock', async () => {
-    const s = setup({ latest: 'v0.8.0', releases: { 'v0.8.0': release('v0.8.0'), 'v0.8.1': release('v0.8.1') }, rooms: 1 });
+    const s = setup({
+      latest: 'v0.8.0',
+      releases: { 'v0.8.0': release('v0.8.0'), 'v0.8.1': release('v0.8.1') },
+      rooms: 1,
+    });
     await s.updater.update('scheduled');
     s.clock.t += 10 * HOUR;
     s.gh.state.latest = 'v0.8.1';

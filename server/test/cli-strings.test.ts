@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { defineStrings, dicts, localeFromTag, pickLocale, ts } from '../src/cli/strings.ts';
 import { at as applyStrings } from '../src/cli/setup/apply-strings.ts';
 import { t as setupStrings } from '../src/cli/setup/strings.ts';
+import { defineStrings, dicts, localeFromTag, pickLocale, ts } from '../src/cli/strings.ts';
 
 describe('ts', () => {
   test('substitutes params once and falls back to the key text', () => {
-    expect(ts('en', 'alreadyRunning', { pid: 42 })).toBe('Telinha is already running (pid 42). Use: telinha service status | telinha service stop');
+    expect(ts('en', 'alreadyRunning', { pid: 42 })).toBe(
+      'Telinha is already running (pid 42). Use: telinha service status | telinha service stop',
+    );
     expect(ts('pt-BR', 'noConfig', { path: '{path}' })).toBe('Ainda não tem configuração ({path}).');
     expect(ts('en', 'argNeedsValue')).toBe('{flag} needs a value');
   });
@@ -21,40 +23,77 @@ describe('ts', () => {
   test('help lists every command and never says "phase"', () => {
     for (const l of ['en', 'pt-BR'] as const) {
       const help = ts(l, 'help');
-      for (const cmd of ['run', 'setup', 'doctor', 'update', 'service', 'tray <', '--lang', '--home', '--yes', '--version', '--help']) expect(help).toContain(cmd);
+      for (const cmd of [
+        'run',
+        'setup',
+        'doctor',
+        'update',
+        'service',
+        'tray <',
+        '--lang',
+        '--home',
+        '--yes',
+        '--version',
+        '--help',
+      ])
+        expect(help).toContain(cmd);
       for (const v of Object.values(dicts[l])) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b/);
     }
   });
 
   test('tray help: the actions, then what the icon is', () => {
-    expect(ts('en', 'helpTray')).toBe('Usage: telinha tray start | stop | status | autostart on|off\n\nThe Windows tray icon next to the clock: start or stop it, see whether it runs and whether it starts when you sign in. Windows only.');
-    expect(ts('pt-BR', 'helpTray')).toBe('Uso: telinha tray start | stop | status | autostart on|off\n\nO ícone da Telinha na bandeja, ao lado do relógio: inicia ou para ele, mostra se está rodando e se inicia quando você entra no Windows. Só no Windows.');
+    expect(ts('en', 'helpTray')).toBe(
+      'Usage: telinha tray start | stop | status | autostart on|off\n\nThe Windows tray icon next to the clock: start or stop it, see whether it runs and whether it starts when you sign in. Windows only.',
+    );
+    expect(ts('pt-BR', 'helpTray')).toBe(
+      'Uso: telinha tray start | stop | status | autostart on|off\n\nO ícone da Telinha na bandeja, ao lado do relógio: inicia ou para ele, mostra se está rodando e se inicia quando você entra no Windows. Só no Windows.',
+    );
   });
 
   test('setup help names the non-interactive home rules', () => {
     for (const l of ['en', 'pt-BR'] as const) {
       const help = ts(l, 'helpSetup');
-      for (const flag of ['--non-interactive', '--host home|vps', '--duckdns-domain', '--advanced', '80/443']) expect(help).toContain(flag);
+      for (const flag of ['--non-interactive', '--host home|vps', '--duckdns-domain', '--advanced', '80/443'])
+        expect(help).toContain(flag);
     }
   });
 
   test('setup and doctor help say what a terminal shows', () => {
-    expect(ts('en', 'helpSetup')).toContain('On a terminal it opens the setup screens: arrows and Enter answer, Esc goes back, Tab jumps to a step, then Review and Install.');
-    expect(ts('pt-BR', 'helpSetup')).toContain('Num terminal ele abre as telas de configuração: setas e Enter respondem, Esc volta, Tab pula pra uma etapa, depois Revisão e Instalação.');
-    expect(ts('en', 'helpDoctor')).toContain('On a terminal the results are an interactive checklist: Enter shows how to fix a row, r runs the checks again.');
-    expect(ts('pt-BR', 'helpDoctor')).toContain('Num terminal o resultado é uma lista interativa: Enter mostra como corrigir uma linha, r roda as verificações de novo.');
+    expect(ts('en', 'helpSetup')).toContain(
+      'On a terminal it opens the setup screens: arrows and Enter answer, Esc goes back, Tab jumps to a step, then Review and Install.',
+    );
+    expect(ts('pt-BR', 'helpSetup')).toContain(
+      'Num terminal ele abre as telas de configuração: setas e Enter respondem, Esc volta, Tab pula pra uma etapa, depois Revisão e Instalação.',
+    );
+    expect(ts('en', 'helpDoctor')).toContain(
+      'On a terminal the results are an interactive checklist: Enter shows how to fix a row, r runs the checks again.',
+    );
+    expect(ts('pt-BR', 'helpDoctor')).toContain(
+      'Num terminal o resultado é uma lista interativa: Enter mostra como corrigir uma linha, r roda as verificações de novo.',
+    );
   });
 
   test('the prompt texts left with the prompts', () => {
-    for (const k of ['needsInput', 'yesNo', 'answerYesNo', 'pickAtLeast', 'selectHint', 'multiHint', 'keepCurrent']) expect(Object.keys(dicts.en)).not.toContain(k);
-    for (const k of ['welcome', 'hostingQ', 'cfDomainQ', 'reviewQ', 'sysctlQ', 'autoUpdateQ']) expect(Object.keys(setupStrings.en)).not.toContain(k);
+    for (const k of ['needsInput', 'yesNo', 'answerYesNo', 'pickAtLeast', 'selectHint', 'multiHint', 'keepCurrent'])
+      expect(Object.keys(dicts.en)).not.toContain(k);
+    for (const k of ['welcome', 'hostingQ', 'cfDomainQ', 'reviewQ', 'sysctlQ', 'autoUpdateQ'])
+      expect(Object.keys(setupStrings.en)).not.toContain(k);
   });
 
   test('setup help names the media flags, the Cloud secret only through env or file', () => {
     expect(Object.keys(dicts['pt-BR']).sort()).toEqual(Object.keys(dicts.en).sort());
     for (const l of ['en', 'pt-BR'] as const) {
       const help = ts(l, 'helpSetup');
-      for (const flag of ['--media self|cloud', '--cloud-url', '--livekit-key', 'LIVEKIT_API_SECRET', '--livekit-secret-file', '--turn auto|on|off', '443']) expect(help).toContain(flag);
+      for (const flag of [
+        '--media self|cloud',
+        '--cloud-url',
+        '--livekit-key',
+        'LIVEKIT_API_SECRET',
+        '--livekit-secret-file',
+        '--turn auto|on|off',
+        '443',
+      ])
+        expect(help).toContain(flag);
       expect(help).not.toMatch(/--livekit-secret(?!-file)/);
     }
   });
@@ -62,7 +101,10 @@ describe('ts', () => {
 
 describe('setup strings', () => {
   // The questions' texts (qstrings.ts) are tested next to the setup model.
-  for (const [name, dict] of [['install lines', setupStrings], ['task list', applyStrings]] as const) {
+  for (const [name, dict] of [
+    ['install lines', setupStrings],
+    ['task list', applyStrings],
+  ] as const) {
     test(`${name}: pt-BR keeps every key and placeholder of en; nothing says "phase" or tells a home to open 80/443`, () => {
       const en = dict.en as Record<string, string>;
       const pt = dict.ptBR as Record<string, string>;
@@ -75,7 +117,9 @@ describe('setup strings', () => {
       for (const d of [en, pt]) {
         for (const v of Object.values(d)) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b/);
         // The old ports question and the 443 -> 8443 router rewrite are gone.
-        expect(Object.values(d).join('\n')).not.toMatch(/reach this machine\?|chegam nesta máquina\?|Switch to port 8443|Mudar pra porta 8443|open (ports )?80|abra a 80/);
+        expect(Object.values(d).join('\n')).not.toMatch(
+          /reach this machine\?|chegam nesta máquina\?|Switch to port 8443|Mudar pra porta 8443|open (ports )?80|abra a 80/,
+        );
       }
     });
   }
@@ -108,9 +152,11 @@ describe('pickLocale', () => {
   });
 
   test('a broken Intl falls back to en', () => {
-    expect(pickLocale({}, undefined, () => {
-      throw new Error('no ICU');
-    })).toBe('en');
+    expect(
+      pickLocale({}, undefined, () => {
+        throw new Error('no ICU');
+      }),
+    ).toBe('en');
   });
 
   test('localeFromTag', () => {

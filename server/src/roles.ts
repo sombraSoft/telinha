@@ -1,6 +1,6 @@
 // Role check through the bot's REST client, cached per user for the TTL, so
 // removing the role locks someone out without waiting for the cookie to expire.
-import { REST, Routes } from 'discord.js';
+import { type REST, Routes } from 'discord.js';
 
 export type IsMember = (userId: string) => Promise<boolean>;
 export type GetMember = (userId: string) => Promise<{ roles: string[] }>;
@@ -36,4 +36,7 @@ export function restGetMember(rest: REST, guildId: string): GetMember {
 }
 
 // DEV_USER mode: only the fake user is a member.
-export const devIsMember = (devId: string): IsMember => async (id) => id === devId;
+export const devIsMember =
+  (devId: string): IsMember =>
+  async (id) =>
+    id === devId;

@@ -65,10 +65,13 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
     // The streamer reports its quality for the /telinha card (read by the server's poller).
     const lk = new RoomServiceClient('http://127.0.0.1:7880', 'devkey', 'dev-only-livekit-secret-0123456789'); // scripts/stack.ts
     await expect
-      .poll(async () => {
-        const ps = await lk.listParticipants(room);
-        return ps.find((p) => p.tracks.some((t) => t.source === TrackSource.SCREEN_SHARE))?.attributes.stream ?? '';
-      }, { timeout: 15_000 })
+      .poll(
+        async () => {
+          const ps = await lk.listParticipants(room);
+          return ps.find((p) => p.tracks.some((t) => t.source === TrackSource.SCREEN_SHARE))?.attributes.stream ?? '';
+        },
+        { timeout: 15_000 },
+      )
       .toMatch(/^720p\d+ · [A-Z0-9]+$/);
   } finally {
     await pubCtx.close();

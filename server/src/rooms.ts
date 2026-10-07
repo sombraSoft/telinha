@@ -8,7 +8,7 @@ import { Database } from 'bun:sqlite';
 import { TrackSource } from 'livekit-server-sdk';
 import type { Live } from './card.ts';
 import type { Locale } from './i18n.ts';
-import { roomTimeouts, type LiveParticipant, type RoomService } from './livekit.ts';
+import { type LiveParticipant, type RoomService, roomTimeouts } from './livekit.ts';
 
 export interface NewRoom {
   room: string;
@@ -131,10 +131,12 @@ function presence(ps: LiveParticipant[], order: string[]): { ids: string[]; live
   return {
     ids,
     live: {
-      streamers: ids.filter((id) => users.get(id)!.streaming).map((id) => {
-        const q = users.get(id)!.quality;
-        return q ? { id, quality: q } : { id };
-      }),
+      streamers: ids
+        .filter((id) => users.get(id)!.streaming)
+        .map((id) => {
+          const q = users.get(id)!.quality;
+          return q ? { id, quality: q } : { id };
+        }),
       viewers: ids.filter((id) => !users.get(id)!.streaming),
     },
   };
@@ -193,9 +195,18 @@ export function createRooms(o: {
       let rec = registry.get(room);
       // Dev/E2E have no slash command: any valid room code opens one (closed stays closed).
       if (!rec && o.devAutoOpen) {
-        rec = registry.create({
-          room, guildId: '', channelId: '', locale: member.locale, openerId: member.id, openerName: member.name, what: null,
-        }, now());
+        rec = registry.create(
+          {
+            room,
+            guildId: '',
+            channelId: '',
+            locale: member.locale,
+            openerId: member.id,
+            openerName: member.name,
+            what: null,
+          },
+          now(),
+        );
         log('dev room', room);
       }
       if (!rec) return 'unknown';
@@ -226,7 +237,12 @@ export function createRooms(o: {
       const t = now();
       const { ids, live } = presence(ps, rec.seen);
       if (ids.length) {
-        registry.markSeen(room, ids, live.streamers.map((s) => s.id), t);
+        registry.markSeen(
+          room,
+          ids,
+          live.streamers.map((s) => s.id),
+          t,
+        );
       } else if (registry.closeIfEmpty(room, t, emptyMs)) {
         // Judged on the stored row: a token minted while LiveKit was asked keeps it open.
         log('room closed', room);
@@ -235,7 +251,9 @@ export function createRooms(o: {
         // Still open but empty in LiveKit, maybe gone from it (a LiveKit restart
         // forgets every room). auto_create is off, so the clients' reconnect
         // only works if we bring it back. Idempotent.
-        await livekit.ensureRoom(room, timeouts).catch((e: unknown) => log('lifecycle ensureRoom', room, (e as Error).message));
+        await livekit
+          .ensureRoom(room, timeouts)
+          .catch((e: unknown) => log('lifecycle ensureRoom', room, (e as Error).message));
       }
       const cur = registry.get(room)!;
       // Ordered by the updated first-seen list, so newcomers keep their place next poll.
@@ -282,10 +300,22 @@ interface Registry {
 }
 
 interface Row {
-  room: string; guild_id: string; channel_id: string; message_id: string | null; locale: string;
-  opener_id: string; opener_name: string; what: string | null; created_at: number;
-  first_join_at: number | null; last_seen_at: number | null; last_token_at: number | null; closed_at: number | null;
-  card_done: number; seen: string; streamed: string;
+  room: string;
+  guild_id: string;
+  channel_id: string;
+  message_id: string | null;
+  locale: string;
+  opener_id: string;
+  opener_name: string;
+  what: string | null;
+  created_at: number;
+  first_join_at: number | null;
+  last_seen_at: number | null;
+  last_token_at: number | null;
+  closed_at: number | null;
+  card_done: number;
+  seen: string;
+  streamed: string;
 }
 
 const SCHEMA = `CREATE TABLE IF NOT EXISTS rooms (
@@ -348,12 +378,18 @@ function openRegistry(path: string): Registry {
   // WAL: a crash mid-write never loses the closed flag of earlier rooms.
   db.exec('PRAGMA journal_mode = WAL');
   db.exec(SCHEMA);
-  const have = new Set(db.query<{ name: string }, []>('PRAGMA table_info(rooms)').all().map((c) => c.name));
+  const have = new Set(
+    db
+      .query<{ name: string }, []>('PRAGMA table_info(rooms)')
+      .all()
+      .map((c) => c.name),
+  );
   for (const [col, type] of ADDED) if (!have.has(col)) db.exec(`ALTER TABLE rooms ADD COLUMN ${col} ${type}`);
 
   const getQ = db.query<Row, { room: string }>('SELECT * FROM rooms WHERE room = $room');
   const openQ = db.query<Row, []>('SELECT * FROM rooms WHERE closed_at IS NULL ORDER BY created_at, room');
-  const insertQ = db.query(`INSERT INTO rooms (room, guild_id, channel_id, locale, opener_id, opener_name, what, created_at)
+  const insertQ =
+    db.query(`INSERT INTO rooms (room, guild_id, channel_id, locale, opener_id, opener_name, what, created_at)
     VALUES ($room, $guildId, $channelId, $locale, $openerId, $openerName, $what, $createdAt)`);
   const seenQ = db.query(`UPDATE rooms SET first_join_at = COALESCE(first_join_at, $now), last_seen_at = $now,
     seen = $seen, streamed = $streamed WHERE room = $room AND closed_at IS NULL`);
@@ -377,7 +413,10 @@ function openRegistry(path: string): Registry {
     const cur = get(room);
     if (!cur || cur.closedAt !== null) return;
     seenQ.run({
-      room, now, seen: JSON.stringify(union(cur.seen, present)), streamed: JSON.stringify(union(cur.streamed, streamers)),
+      room,
+      now,
+      seen: JSON.stringify(union(cur.seen, present)),
+      streamed: JSON.stringify(union(cur.streamed, streamers)),
     });
   });
 

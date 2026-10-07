@@ -7,9 +7,17 @@
 // actions only (it takes just the global flags).
 import generated from '../data/generated.json';
 import {
-  DOCTOR_FLAG_DOCS, GLOBAL_FLAG_DOCS, SERVICE_ACTION_DOCS, SERVICE_FLAG_DOCS, SETUP_FLAG_DOCS, TRAY_ACTION_DOCS, UPDATE_FLAG_DOCS, UI,
   codeSegments,
-  type FlagDoc, type Locale,
+  DOCTOR_FLAG_DOCS,
+  type FlagDoc,
+  GLOBAL_FLAG_DOCS,
+  type Locale,
+  SERVICE_ACTION_DOCS,
+  SERVICE_FLAG_DOCS,
+  SETUP_FLAG_DOCS,
+  TRAY_ACTION_DOCS,
+  UI,
+  UPDATE_FLAG_DOCS,
 } from '../data/reference.ts';
 
 type FlagCommand = 'global' | 'setup' | 'doctor' | 'update' | 'service';
@@ -18,36 +26,56 @@ type Props =
   | { locale: Locale; command: 'tray'; actions: true };
 const { locale, command, actions = false } = Astro.props;
 
-interface Spec { kind: string; short?: string }
+interface Spec {
+  kind: string;
+  short?: string;
+}
 const cli = generated.cli as unknown as {
-  global: Record<string, Spec>; setup: Record<string, Spec>; doctor: Record<string, Spec>; update: Record<string, Spec>;
+  global: Record<string, Spec>;
+  setup: Record<string, Spec>;
+  doctor: Record<string, Spec>;
+  update: Record<string, Spec>;
   service: { actions: string[]; linux: Record<string, Spec>; windows: Record<string, Spec> };
   tray: { actions: string[] };
 };
 const t = (k: string) => UI[k]![locale];
-const actionDocs: Record<string, { en: string; 'pt-BR': string; internal?: boolean }> = command === 'tray' ? TRAY_ACTION_DOCS : SERVICE_ACTION_DOCS;
+const actionDocs: Record<string, { en: string; 'pt-BR': string; internal?: boolean }> =
+  command === 'tray' ? TRAY_ACTION_DOCS : SERVICE_ACTION_DOCS;
 const actionRows = actions
-  ? cli[command === 'tray' ? 'tray' : 'service'].actions.map((a) => ({ action: a, meaning: actionDocs[a]?.[locale] ?? '', internal: !!actionDocs[a]?.internal }))
+  ? cli[command === 'tray' ? 'tray' : 'service'].actions.map((a) => ({
+      action: a,
+      meaning: actionDocs[a]?.[locale] ?? '',
+      internal: !!actionDocs[a]?.internal,
+    }))
   : [];
 const flagCommand: FlagCommand = command === 'tray' ? 'global' : command;
-const specs: Record<string, Spec> = flagCommand === 'service' ? { ...cli.service.linux, ...cli.service.windows } : cli[flagCommand];
+const specs: Record<string, Spec> =
+  flagCommand === 'service' ? { ...cli.service.linux, ...cli.service.windows } : cli[flagCommand];
 const docs: Record<string, FlagDoc> = {
-  global: GLOBAL_FLAG_DOCS, setup: SETUP_FLAG_DOCS, doctor: DOCTOR_FLAG_DOCS, update: UPDATE_FLAG_DOCS, service: SERVICE_FLAG_DOCS,
+  global: GLOBAL_FLAG_DOCS,
+  setup: SETUP_FLAG_DOCS,
+  doctor: DOCTOR_FLAG_DOCS,
+  update: UPDATE_FLAG_DOCS,
+  service: SERVICE_FLAG_DOCS,
 }[flagCommand];
 
 const rows = Object.entries(specs).map(([name, spec]) => {
   const doc = docs[name] ?? { en: '', 'pt-BR': '' };
   const flag = doc.negated ? `--no-${name}` : `--${name}`;
-  const valueOf = (s: Spec) => (s.kind === 'boolean' ? '' : doc.value ?? 'TEXT');
+  const valueText = (s: Spec) => (s.kind === 'boolean' ? '' : (doc.value ?? 'TEXT'));
   // [platform label, value] pairs when the platforms disagree on the flag's kind.
   const linux = command === 'service' ? cli.service.linux[name] : undefined;
   const windows = command === 'service' ? cli.service.windows[name] : undefined;
-  const perPlatform = linux && windows && valueOf(linux) !== valueOf(windows)
-    ? [[t('linux'), valueOf(linux)], [t('windows'), valueOf(windows)]] as const
-    : undefined;
+  const perPlatform =
+    linux && windows && valueText(linux) !== valueText(windows)
+      ? ([
+          [t('linux'), valueText(linux)],
+          [t('windows'), valueText(windows)],
+        ] as const)
+      : undefined;
   return {
     flag: spec.short ? `${flag}, -${spec.short}` : flag,
-    value: valueOf(spec),
+    value: valueText(spec),
     perPlatform,
     sets: doc.sets ?? '',
     meaning: doc[locale],
@@ -58,39 +86,78 @@ const withSets = rows.some((r) => r.sets);
 ---
 
 {actions ? (
-<table>
-  <thead>
-    <tr><th>{t('action')}</th><th>{t('meaning')}</th></tr>
-  </thead>
-  <tbody>
-    {actionRows.map((r) => (
-      <tr class:list={[{ internal: r.internal }]}>
-        <td><code class="ref-name">{r.action}</code></td>
-        <td>{codeSegments(r.meaning).map((s, i) => (i % 2 ? <code>{s}</code> : s))}{r.internal && <> {t('internal')}</>}</td>
+  <table>
+    <thead>
+      <tr>
+        <th>{t('action')}</th>
+        <th>{t('meaning')}</th>
       </tr>
-    ))}
-  </tbody>
-</table>
+    </thead>
+    <tbody>
+      {actionRows.map((r) => (
+        <tr class:list={[{ internal: r.internal }]}>
+          <td>
+            <code class="ref-name">{r.action}</code>
+          </td>
+          <td>
+            {codeSegments(r.meaning).map((s, i) => (i % 2 ? <code>{s}</code> : s))}
+            {r.internal && <> {t('internal')}</>}
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
 ) : (
-<table>
-  <thead>
-    <tr><th>{t('flag')}</th><th>{t('value')}</th>{withSets && <th>{t('sets')}</th>}<th>{t('meaning')}</th></tr>
-  </thead>
-  <tbody>
-    {rows.map((r) => (
-      <tr class:list={[{ internal: r.internal }]}>
-        <td><code class="ref-name">{r.flag}</code></td>
-        <td>{r.perPlatform
-          ? r.perPlatform.map(([os, v], i) => <>{i > 0 && '; '}{os}: {v ? <code>{v}</code> : t('none')}</>)
-          : r.value && <code>{r.value}</code>}</td>
-        {withSets && <td>{r.sets.split(', ').filter(Boolean).map((s, i) => <>{i > 0 && ', '}<code>{s}</code></>)}</td>}
-        <td>{codeSegments(r.meaning).map((s, i) => (i % 2 ? <code>{s}</code> : s))}{r.internal && <> {t('internal')}</>}</td>
+  <table>
+    <thead>
+      <tr>
+        <th>{t('flag')}</th>
+        <th>{t('value')}</th>
+        {withSets && <th>{t('sets')}</th>}
+        <th>{t('meaning')}</th>
       </tr>
-    ))}
-  </tbody>
-</table>
+    </thead>
+    <tbody>
+      {rows.map((r) => (
+        <tr class:list={[{ internal: r.internal }]}>
+          <td>
+            <code class="ref-name">{r.flag}</code>
+          </td>
+          <td>
+            {r.perPlatform
+              ? r.perPlatform.map(([os, v], i) => (
+                  <>
+                    {i > 0 && '; '}
+                    {os}: {v ? <code>{v}</code> : t('none')}
+                  </>
+                ))
+              : r.value && <code>{r.value}</code>}
+          </td>
+          {withSets && (
+            <td>
+              {r.sets
+                .split(', ')
+                .filter(Boolean)
+                .map((s, i) => (
+                  <>
+                    {i > 0 && ', '}
+                    <code>{s}</code>
+                  </>
+                ))}
+            </td>
+          )}
+          <td>
+            {codeSegments(r.meaning).map((s, i) => (i % 2 ? <code>{s}</code> : s))}
+            {r.internal && <> {t('internal')}</>}
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
 )}
 
 <style>
-  tr.internal { opacity: 0.6; }
+  tr.internal {
+    opacity: 0.6;
+  }
 </style>

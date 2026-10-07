@@ -19,7 +19,16 @@ export interface LivekitProxy {
 }
 
 // Hop-by-hop headers (plus any the Connection header names) are for one leg only.
-const HOP = ['connection', 'upgrade', 'keep-alive', 'transfer-encoding', 'te', 'trailer', 'proxy-authorization', 'proxy-authenticate'];
+const HOP = [
+  'connection',
+  'upgrade',
+  'keep-alive',
+  'transfer-encoding',
+  'te',
+  'trailer',
+  'proxy-authorization',
+  'proxy-authenticate',
+];
 // Client messages held while LiveKit has not answered yet; more than this is a flood.
 const MAX_QUEUED = 1 << 20;
 
@@ -63,7 +72,8 @@ export function createLivekitProxy(o: { apiUrl: string; log: (...a: unknown[]) =
   // Twirp (RoomService) needs the API secret anyway; this is defense in depth.
   // No percent escapes: an encoded slash could be decoded upstream into another route.
   const allows = (rest: string) => (rest === '/rtc' || rest.startsWith('/rtc/')) && !rest.includes('%');
-  const notFound = () => Response.json({ error: 'not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  const notFound = () =>
+    Response.json({ error: 'not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
 
   async function forward(req: Request, rest: string, search: string): Promise<Response> {
     if (!allows(rest)) return notFound();
@@ -87,7 +97,13 @@ export function createLivekitProxy(o: { apiUrl: string; log: (...a: unknown[]) =
   }
 
   // Ends both legs once, with the one log line of the connection (never the URL: it has the token).
-  function end(ws: ServerWebSocket<ProxyData>, st: Conn, code: number, reason: string, by: 'client' | 'livekit' | 'proxy') {
+  function end(
+    ws: ServerWebSocket<ProxyData>,
+    st: Conn,
+    code: number,
+    reason: string,
+    by: 'client' | 'livekit' | 'proxy',
+  ) {
     if (st.done) return;
     st.done = true;
     st.queue = [];
@@ -95,7 +111,8 @@ export function createLivekitProxy(o: { apiUrl: string; log: (...a: unknown[]) =
     const r = clip(reason);
     o.log('[proxy] ws close', `code=${code}`, `by=${by}`);
     if (by !== 'client') ws.close(c, r);
-    if (by !== 'livekit' && (st.up.readyState === WebSocket.CONNECTING || st.up.readyState === WebSocket.OPEN)) st.up.close(c, r);
+    if (by !== 'livekit' && (st.up.readyState === WebSocket.CONNECTING || st.up.readyState === WebSocket.OPEN))
+      st.up.close(c, r);
   }
 
   const websocket: WebSocketHandler<ProxyData> = {
@@ -106,7 +123,12 @@ export function createLivekitProxy(o: { apiUrl: string; log: (...a: unknown[]) =
       } catch (e) {
         // A bad LIVEKIT_API_URL (config.ts validates it, so this is a backstop). Never
         // the error message: Bun puts the whole URL, access token included, in it.
-        o.log('[proxy] ws close', 'code=1011', 'by=proxy', `upstream WebSocket refused the URL (${(e as Error).name}), check LIVEKIT_API_URL`);
+        o.log(
+          '[proxy] ws close',
+          'code=1011',
+          'by=proxy',
+          `upstream WebSocket refused the URL (${(e as Error).name}), check LIVEKIT_API_URL`,
+        );
         return ws.close(1011, 'livekit unreachable');
       }
       up.binaryType = 'arraybuffer';

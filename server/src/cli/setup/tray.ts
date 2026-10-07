@@ -7,33 +7,51 @@
 import { win32 } from 'node:path';
 import { TRAY_EXE } from '../../release.ts';
 import {
-  defaultTrayLauncher, readTrayState, removeTray, setAutostart, stopTray, trayDistPath, trayEnv, trayExePath, trayRunning,
+  defaultTrayLauncher,
+  readTrayState,
+  removeTray,
+  setAutostart,
+  stopTray,
+  trayDistPath,
+  trayEnv,
+  trayExePath,
+  trayRunning,
 } from '../../service/tray.ts';
 import { isSplitElevated } from '../../service/windows.ts';
 import { defaultProcessInfo } from '../../supervisor.ts';
 import { defineStrings } from '../strings.ts';
 import type { Wizard } from './steps.ts';
 
-const t = defineStrings({
-  started: 'Tray icon started (next to the clock).',
-  running: 'Tray icon running.',
-  optedOut: 'Tray icon not installed.',
-  notFound: 'telinha-tray.exe is neither in {bin} nor next to this telinha.exe; the tray is not installed. Run telinha.exe setup from the unpacked release zip to install it.',
-  elevated: 'Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.',
-  failed: 'Tray icon: {error}',
-}, {
-  started: 'Ícone na bandeja iniciado (ao lado do relógio).',
-  running: 'Ícone na bandeja rodando.',
-  optedOut: 'Ícone na bandeja não instalado.',
-  notFound: 'o telinha-tray.exe não está em {bin} nem ao lado deste telinha.exe; o ícone na bandeja não foi instalado. Rode telinha.exe setup da pasta do zip da versão descompactado para instalar.',
-  elevated: 'Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.',
-  failed: 'Ícone na bandeja: {error}',
-});
+const t = defineStrings(
+  {
+    started: 'Tray icon started (next to the clock).',
+    running: 'Tray icon running.',
+    optedOut: 'Tray icon not installed.',
+    notFound:
+      'telinha-tray.exe is neither in {bin} nor next to this telinha.exe; the tray is not installed. Run telinha.exe setup from the unpacked release zip to install it.',
+    elevated: 'Running as administrator: the tray icon was not started; run telinha tray start from a normal terminal.',
+    failed: 'Tray icon: {error}',
+  },
+  {
+    started: 'Ícone na bandeja iniciado (ao lado do relógio).',
+    running: 'Ícone na bandeja rodando.',
+    optedOut: 'Ícone na bandeja não instalado.',
+    notFound:
+      'o telinha-tray.exe não está em {bin} nem ao lado deste telinha.exe; o ícone na bandeja não foi instalado. Rode telinha.exe setup da pasta do zip da versão descompactado para instalar.',
+    elevated:
+      'Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.',
+    failed: 'Ícone na bandeja: {error}',
+  },
+);
+
 export { t as trayStrings };
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export interface TrayChoice { install: boolean; autostart: boolean | null }
+export interface TrayChoice {
+  install: boolean;
+  autostart: boolean | null;
+}
 
 export async function trayStep(w: Wizard, o: TrayChoice): Promise<void> {
   const { deps, out, locale } = w;

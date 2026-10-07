@@ -10,7 +10,9 @@ import type { ApplyHooks, ApplyResult, TaskList } from './apply.ts';
 import type { SetupSession } from './session.ts';
 
 export interface SetupUiContext {
-  ctx: CliContext; version: string; docker: boolean;
+  ctx: CliContext;
+  version: string;
+  docker: boolean;
   session: SetupSession;
   /** What apply did, one row per task, across re-applies: the screens render the rows. */
   tasks: Pick<TaskList, 'subscribe' | 'rows' | 'wroteAny'>;
@@ -30,8 +32,10 @@ export interface SetupUiContext {
 }
 
 export type SetupUiResult =
-  | { kind: 'declined' }                          // welcome card: Quit -> offerSetup resolves null
+  | { kind: 'declined' } // welcome card: Quit -> offerSetup resolves null
   | { kind: 'quit'; reason: 'ctrl-c' | 'review' } // left before or during apply without finishing
-  | { kind: 'applied'; result: ApplyResult };     // apply reached done (or aborted after the file was written)
+  | { kind: 'applied'; result: ApplyResult }; // apply reached done (or aborted after the file was written)
 
-export interface SetupUi { run(c: SetupUiContext): Promise<SetupUiResult> }
+export interface SetupUi {
+  run(c: SetupUiContext): Promise<SetupUiResult>;
+}

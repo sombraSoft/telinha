@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { newRoomCode, ROOM_RE as SERVER_ROOM_RE } from '../../../server/src/codes';
 import { avatarUrl, discordIdOf, parseMeta } from './avatar';
 import { isValidRoom, ROOM_RE } from './room-name';
-import { newRoomCode, ROOM_RE as SERVER_ROOM_RE } from '../../../server/src/codes';
 
 describe('room codes', () => {
   test('same rule as the server', () => {
@@ -17,11 +17,36 @@ describe('room codes', () => {
   test('anything else is not', () => {
     for (const ok of ['lamo-futi', 'bafo-kiru', 'lamofu-tibare']) expect(isValidRoom(ok)).toBe(true);
     for (const bad of [
-      null, undefined, '', 'abcd', 'Room_1-x', 'x'.repeat(40), 'AbC_dEf-123', 'q3Jx_9aZ-kP2w', // old ids
-      'lamofuti', 'lamo-', '-futi', 'la-futi', 'lamo-fu', 'lamofu-ti', 'lamo-futiba', 'lamofuti-bare', 'lamofutiba-re',
-      'Lamo-futi', 'lamo_futi', 'lamo--futi', 'lamo-futi-bare', 'cama-futi', 'lamo-fyti', 'lamo-futi ', ' lamo-futi',
-      'lamo-futi\n', '../etc', 'sala!',
-    ]) expect(isValidRoom(bad)).toBe(false);
+      null,
+      undefined,
+      '',
+      'abcd',
+      'Room_1-x',
+      'x'.repeat(40),
+      'AbC_dEf-123',
+      'q3Jx_9aZ-kP2w', // old ids
+      'lamofuti',
+      'lamo-',
+      '-futi',
+      'la-futi',
+      'lamo-fu',
+      'lamofu-ti',
+      'lamo-futiba',
+      'lamofuti-bare',
+      'lamofutiba-re',
+      'Lamo-futi',
+      'lamo_futi',
+      'lamo--futi',
+      'lamo-futi-bare',
+      'cama-futi',
+      'lamo-fyti',
+      'lamo-futi ',
+      ' lamo-futi',
+      'lamo-futi\n',
+      '../etc',
+      'sala!',
+    ])
+      expect(isValidRoom(bad)).toBe(false);
   });
 });
 

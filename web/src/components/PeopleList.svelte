@@ -6,17 +6,13 @@
 <script lang="ts">
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
-  import { splitMembers, statusKey, type Member } from '../lib/members';
+  import { type Member, splitMembers, statusKey } from '../lib/members';
   import { prefs } from '../lib/prefs.svelte';
   import type { Participant, RoomSession } from '../lib/room.svelte';
   import { qualityLabel } from '../lib/stats';
 
-  let {
-    rc,
-    members,
-    open,
-    ontoggle,
-  }: { rc: RoomSession; members: Member[]; open: boolean; ontoggle: () => void } = $props();
+  let { rc, members, open, ontoggle }: { rc: RoomSession; members: Member[]; open: boolean; ontoggle: () => void } =
+    $props();
 
   const byId = $derived(new Map(rc.participants.map((p) => [p.identity, p])));
   // Whoever is in the room is listed above, with what they are doing. Never
@@ -38,7 +34,9 @@
   }
 </script>
 
-{#snippet member(m: Member)}
+{#snippet member(
+  m: Member,
+)}
   {@const label = t(statusKey(m.status))}
   <li class="member" data-testid="member-item" data-status={m.status}>
     <span class="av">
@@ -55,14 +53,17 @@
 <div class="people" class:open data-testid="people">
   <!-- On the list's edge, so it stays reachable as a tab on the stage edge when collapsed. -->
   <button
+    type="button"
     class="handle"
     data-testid="people-handle"
     aria-label={t('people.toggle')}
     title={t('people.toggle')}
     aria-expanded={open}
     aria-controls={PEOPLE_ID}
-    onclick={ontoggle}><span aria-hidden="true">{open ? '›' : '‹'}</span></button
+    onclick={ontoggle}
   >
+    <span aria-hidden="true">{open ? '›' : '‹'}</span>
+  </button>
   <div class="clip">
     <aside class="side" id={PEOPLE_ID} inert={!open}>
       <h2>{t('people.title')} <span class="muted">— {rc.participants.length}</span></h2>
@@ -91,6 +92,7 @@
       {#if split.offline.length}
         <h2 class="sec">
           <button
+            type="button"
             class="sec-toggle"
             data-testid="offline-toggle"
             aria-expanded={prefs.offline}
@@ -160,7 +162,9 @@
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
-    transition: color 0.12s, background-color 0.12s;
+    transition:
+      color 0.12s,
+      background-color 0.12s;
   }
   .handle:hover {
     background: var(--bg-2);

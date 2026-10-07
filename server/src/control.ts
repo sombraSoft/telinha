@@ -41,7 +41,8 @@ const MAX_WAIT_MS = 30_000;
 const ID_RE = /^[0-9a-f]{32}$/;
 const MODES: readonly UpdateMode[] = ['check', 'scheduled', 'now'];
 const notFound = () => new Response('Not found', { status: 404 });
-const json = (status: number, body: unknown) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+const json = (status: number, body: unknown) =>
+  Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 // Hashing first makes the comparison constant-time whatever the lengths.
 const digest = (s: string) => createHash('sha256').update(s).digest();
 
@@ -115,7 +116,8 @@ export function createControl(deps: ControlDeps): Control {
         if (readFileSync(deps.tokenFile, 'utf8').trim() !== token) return;
         unlinkSync(deps.tokenFile);
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') log('control: could not remove the token file', (e as Error).message);
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT')
+          log('control: could not remove the token file', (e as Error).message);
       }
     },
   };

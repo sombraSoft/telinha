@@ -21,12 +21,17 @@ export interface Paths {
   logFile: string;
 }
 
-export function resolvePaths(env: Env, platform: NodeJS.Platform = process.platform, isRoot = process.getuid?.() === 0): Paths {
+export function resolvePaths(
+  env: Env,
+  platform: NodeJS.Platform = process.platform,
+  isRoot = process.getuid?.() === 0,
+): Paths {
   const set = (k: string) => (env[k] ? env[k] : undefined);
   // Joined with the target platform's rules so a linux layout reads right on a win32 test host.
   const p = platform === 'win32' ? win32 : posix;
-  const home = set('TELINHA_HOME')
-    ?? (platform === 'win32'
+  const home =
+    set('TELINHA_HOME') ??
+    (platform === 'win32'
       ? p.join(set('LOCALAPPDATA') ?? p.join(homedir(), 'AppData', 'Local'), 'Telinha')
       : isRoot
         ? '/opt/telinha'
@@ -49,7 +54,11 @@ export function resolvePaths(env: Env, platform: NodeJS.Platform = process.platf
  * one) or already holds config/telinha.env. Anything else (a download folder,
  * ~/bin) is no home: null, and the defaults apply.
  */
-export function homeOfExe(exe: string, platform: NodeJS.Platform = process.platform, exists: (p: string) => boolean = existsSync): string | null {
+export function homeOfExe(
+  exe: string,
+  platform: NodeJS.Platform = process.platform,
+  exists: (p: string) => boolean = existsSync,
+): string | null {
   const p = platform === 'win32' ? win32 : posix;
   const dir = p.dirname(exe);
   if (p.basename(dir).toLowerCase() !== 'bin') return null;

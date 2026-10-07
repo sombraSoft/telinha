@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { basename, join } from 'node:path';
-import { writeArchive } from '../src/archive.ts';
 import type { Entry } from '../src/archive.ts';
+import { writeArchive } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
 import { assetName, parseSums } from '../src/release.ts';
 import { downloadRelease } from '../src/update/download.ts';
@@ -71,7 +71,11 @@ function memFs() {
 /** One release of one target: its archive and a SHA256SUMS that matches it. */
 function github(target: Target, members: Record<string, string>): GitHubReleases {
   const asset = assetName(target);
-  const entries: Entry[] = Object.entries(members).map(([path, content]) => ({ path, mode: 0o755, data: enc.encode(content) }));
+  const entries: Entry[] = Object.entries(members).map(([path, content]) => ({
+    path,
+    mode: 0o755,
+    data: enc.encode(content),
+  }));
   const bytes = writeArchive(target, entries);
   return {
     latestTag: async () => TAG,
@@ -112,7 +116,11 @@ describe('downloadRelease', () => {
 
   test('Linux never looks for the tray, whatever the archive holds', async () => {
     const m = memFs();
-    const r = await download(m, 'linux-x64', { telinha: 'telinha v0.8.0', 'telinha-tray.exe': 'tray', 'x/telinha-tray.exe': 'tray' });
+    const r = await download(m, 'linux-x64', {
+      telinha: 'telinha v0.8.0',
+      'telinha-tray.exe': 'tray',
+      'x/telinha-tray.exe': 'tray',
+    });
     expect(r).toEqual({ exe: join(BIN, 'telinha.new'), tray: null });
     expect(m.names()).toEqual(['telinha.new']);
   });

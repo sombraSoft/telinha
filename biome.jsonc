@@ -1,0 +1,50 @@
+// Biome lints and formats the TypeScript, JavaScript, Svelte, Astro, JSON and
+// CSS. mise.toml pins it; CI's lint job runs `biome ci`, and `bun run lint` /
+// `bun run format` run it locally.
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  // .gitignore decides what is skipped: node_modules, build output, the docs
+  // site's generated.json.
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true, "defaultBranch": "main" },
+  "files": { "ignoreUnknown": true },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120, "lineEnding": "lf" },
+  "javascript": { "formatter": { "quoteStyle": "single", "trailingCommas": "all", "arrowParentheses": "always" } },
+  "css": { "formatter": { "quoteStyle": "single" } },
+  // Parses and formats the markup of .svelte, .astro and .html files too, not
+  // just their scripts, so a name used only in the markup does not show up as
+  // unused. Script and style blocks stay indented and void elements keep their
+  // `/>`, as Svelte's own formatting has them.
+  "html": {
+    "experimentalFullSupportEnabled": true,
+    "formatter": { "enabled": true, "indentScriptAndStyle": true, "selfCloseVoidElements": "always" }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // The rules below start as warnings; each is fixed across the code and
+      // then raised to an error in its own PR.
+      "suspicious": { "noConsole": "warn", "noExplicitAny": "warn" },
+      "style": { "noNonNullAssertion": "warn" },
+      // `(a(), b())` in arrow bodies is deliberate here: it keeps one-line
+      // callbacks one line.
+      "complexity": { "noCommaOperator": "off" },
+      // Type-aware rules: they turn on Biome's type inference.
+      "nursery": { "noFloatingPromises": "warn", "noMisusedPromises": "warn", "useExhaustiveSwitchCases": "warn" }
+    }
+  },
+  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      // Build and dev scripts and the e2e tests talk to whoever runs them.
+      "includes": ["scripts/**", "docs/scripts/**", "e2e/**"],
+      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+    },
+    {
+      // noUncheckedIndexedAccess makes `!` the plain way for a test to say
+      // "this element exists"; a wrong guess fails the test anyway.
+      "includes": ["**/test/**", "**/*.test.ts", "**/*.test.tsx", "e2e/**"],
+      "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+    }
+  ]
+}

@@ -3,12 +3,7 @@
 // hand, prefs in memory, a screen picker (navigator.mediaDevices) that hands
 // out fake tracks, and Chrome's breakout box for the crop to multiples of 8.
 // restoreGlobals puts back the browser globals these replace.
-import {
-  Track,
-  type LocalTrackPublication,
-  type RoomEventCallbacks,
-  type TrackPublication,
-} from 'livekit-client';
+import { type LocalTrackPublication, type RoomEventCallbacks, Track, type TrackPublication } from 'livekit-client';
 import type {
   Clock,
   LiveRoom,
@@ -38,7 +33,9 @@ export class ManualClock implements Clock {
   after(ms: number, fn: () => void) {
     const id = ++this.#seq;
     this.#timers.push({ id, at: this.#now + ms, every: null, fn });
-    return () => void (this.#timers = this.#timers.filter((t) => t.id !== id));
+    return () => {
+      this.#timers = this.#timers.filter((t) => t.id !== id);
+    };
   }
   frame(fn: () => void) {
     this.#frames.push(fn);
@@ -162,8 +159,26 @@ export class FakeSender {
 /** Stats a published or subscribed video reports: one video RTP stream. */
 export function videoStats(out: boolean, height: number, fps: number, codec = 'H264'): Map<string, unknown> {
   const rtp = out
-    ? { id: 'rtp', type: 'outbound-rtp', kind: 'video', frameHeight: height, frameWidth: (height * 16) / 9, framesPerSecond: fps, codecId: 'c', bytesSent: 0 }
-    : { id: 'rtp', type: 'inbound-rtp', kind: 'video', frameHeight: height, frameWidth: (height * 16) / 9, framesPerSecond: fps, codecId: 'c', bytesReceived: 0 };
+    ? {
+        id: 'rtp',
+        type: 'outbound-rtp',
+        kind: 'video',
+        frameHeight: height,
+        frameWidth: (height * 16) / 9,
+        framesPerSecond: fps,
+        codecId: 'c',
+        bytesSent: 0,
+      }
+    : {
+        id: 'rtp',
+        type: 'inbound-rtp',
+        kind: 'video',
+        frameHeight: height,
+        frameWidth: (height * 16) / 9,
+        framesPerSecond: fps,
+        codecId: 'c',
+        bytesReceived: 0,
+      };
   return new Map<string, unknown>([
     ['rtp', rtp],
     ['c', { id: 'c', type: 'codec', mimeType: `video/${codec}` }],
@@ -247,7 +262,12 @@ export class FakeLocalParticipant extends FakeParticipant implements RoomLocalPa
   }
   async unpublishTrack(track: unknown) {
     for (const [source, pub] of this.pubs) {
-      const tracks = [pub.videoTrack, pub.audioTrack, pub.videoTrack?.mediaStreamTrack, pub.audioTrack?.mediaStreamTrack];
+      const tracks = [
+        pub.videoTrack,
+        pub.audioTrack,
+        pub.videoTrack?.mediaStreamTrack,
+        pub.audioTrack?.mediaStreamTrack,
+      ];
       if (tracks.includes(track as never)) {
         this.pubs.delete(source);
         return pub as unknown as LocalTrackPublication;
@@ -318,7 +338,11 @@ type DisplayOptions = DisplayMediaStreamOptions & Record<string, unknown>;
 export function fakeScreen(size = { width: 1920, height: 1080 }, audio = true, log: Log = []) {
   const picks: { options: DisplayOptions; video: FakeMediaTrack; audio: FakeMediaTrack | null }[] = [];
   const getDisplayMedia = async (options: DisplayOptions) => {
-    const pick = { options, video: new FakeMediaTrack('video', size, log), audio: audio && options.audio ? new FakeMediaTrack('audio') : null };
+    const pick = {
+      options,
+      video: new FakeMediaTrack('video', size, log),
+      audio: audio && options.audio ? new FakeMediaTrack('audio') : null,
+    };
     picks.push(pick);
     const tracks = pick.audio ? [pick.video, pick.audio] : [pick.video];
     return {
@@ -361,7 +385,11 @@ export function fakeBreakoutBox() {
     readable: ReadableStream<FakeVideoFrame>;
     constructor({ track }: { track: FakeMediaTrack }) {
       const { width = 0, height = 0 } = track.getSettings();
-      const frame = new FakeVideoFrame(null, { visibleRect: { x: 0, y: 0, width, height }, displayWidth: width, displayHeight: height });
+      const frame = new FakeVideoFrame(null, {
+        visibleRect: { x: 0, y: 0, width, height },
+        displayWidth: width,
+        displayHeight: height,
+      });
       this.readable = new ReadableStream({ start: (ctl) => ctl.enqueue(frame) });
     }
   }

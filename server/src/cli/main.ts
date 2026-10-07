@@ -6,13 +6,20 @@
 import { existsSync } from 'node:fs';
 import type { RunOptions } from '../run.ts';
 import { versionLine } from '../version.ts';
-import { buildContext, GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, type ParsedArgs } from './args.ts';
+import { buildContext, type CliContext, GLOBAL_FLAGS, type ParsedArgs, parseArgs, UsageError } from './args.ts';
 import type { SetupUi } from './setup/ui.ts';
-import { pickLocale, ts, type Key } from './strings.ts';
+import { type Key, pickLocale, ts } from './strings.ts';
 
 export type Command = 'run' | 'setup' | 'doctor' | 'update' | 'service' | 'tray';
 const COMMANDS: readonly Command[] = ['run', 'setup', 'doctor', 'update', 'service', 'tray'];
-const HELP: Record<Command, Key> = { run: 'helpRun', setup: 'helpSetup', doctor: 'helpDoctor', update: 'helpUpdate', service: 'helpService', tray: 'helpTray' };
+const HELP: Record<Command, Key> = {
+  run: 'helpRun',
+  setup: 'helpSetup',
+  doctor: 'helpDoctor',
+  update: 'helpUpdate',
+  service: 'helpService',
+  tray: 'helpTray',
+};
 
 type Runner = (args: ParsedArgs, ctx: CliContext) => Promise<number>;
 type SetupModule = Pick<typeof import('./setup.ts'), 'run' | 'offerSetup'>;
@@ -86,7 +93,8 @@ export async function loadSetupUi(): Promise<SetupUi> {
 
 const setupModule = async (deps: MainDeps): Promise<SetupModule> => (deps.setup ?? (() => import('./setup.ts')))();
 /** The screens for setup on a terminal; nothing (the plain run) otherwise. */
-const setupDeps = async (ctx: CliContext, deps: MainDeps) => (ctx.tty ? { ui: await (deps.loadSetupUi ?? loadSetupUi)() } : {});
+const setupDeps = async (ctx: CliContext, deps: MainDeps) =>
+  ctx.tty ? { ui: await (deps.loadSetupUi ?? loadSetupUi)() } : {};
 
 async function defaultRunner(command: Exclude<Command, 'run'>, deps: MainDeps): Promise<Runner> {
   switch (command) {
@@ -118,7 +126,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number 
     stdout(versionLine());
     return 0;
   }
-  const helpTopic = g.command === 'help' ? g.positionals[0] ?? null : g.help ? g.command : undefined;
+  const helpTopic = g.command === 'help' ? (g.positionals[0] ?? null) : g.help ? g.command : undefined;
   if (helpTopic !== undefined) {
     if (helpTopic === null) stdout(ts(early, 'help'));
     else if ((COMMANDS as readonly string[]).includes(helpTopic)) stdout(ts(early, HELP[helpTopic as Command]));
@@ -156,7 +164,9 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number 
   }
 
   if (command !== 'run') {
-    const runner = deps.commands?.[command as Exclude<Command, 'run'>] ?? (await defaultRunner(command as Exclude<Command, 'run'>, deps));
+    const runner =
+      deps.commands?.[command as Exclude<Command, 'run'>] ??
+      (await defaultRunner(command as Exclude<Command, 'run'>, deps));
     return runner({ flags: {}, positionals: [command, ...g.positionals], rest: [] }, ctx);
   }
 
@@ -176,7 +186,8 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number 
   // up: the wizard, not a config error in a window that closes at once.
   const bare = argv.length === 0 && ctx.tty;
   if (bare && !existsSync(ctx.envFile) && !ctx.env.PUBLIC_URL) {
-    const offer = deps.offerSetup ?? (async (c: CliContext) => (await setupModule(deps)).offerSetup(c, await setupDeps(c, deps)));
+    const offer =
+      deps.offerSetup ?? (async (c: CliContext) => (await setupModule(deps)).offerSetup(c, await setupDeps(c, deps)));
     let code: number | null;
     try {
       code = await offer(ctx);

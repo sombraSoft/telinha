@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { verify, type Session } from '../src/auth.ts';
-import { uaFamily, type Deps, type Fetch } from '../src/http.ts';
+import { type Session, verify } from '../src/auth.ts';
+import { type Deps, type Fetch, uaFamily } from '../src/http.ts';
 import type { ProxyData } from '../src/proxy.ts';
 import { DEV_ENV, jwtPayload, NOW, PROD_ENV, setup, VERSION } from './helpers.ts';
 
@@ -17,12 +17,26 @@ describe('/healthz', () => {
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toContain('application/json');
     expect(r.headers.get('cache-control')).toBe('no-store');
-    expect(await r.json()).toEqual({ ok: true, version: VERSION, discord: true, dev: false, rooms: 3, children: { livekit: 'up', caddy: 'restarting' } });
+    expect(await r.json()).toEqual({
+      ok: true,
+      version: VERSION,
+      discord: true,
+      dev: false,
+      rooms: 3,
+      children: { livekit: 'up', caddy: 'restarting' },
+    });
   });
 
-  test('defaults: the Room module\'s open rooms, no children', async () => {
+  test("defaults: the Room module's open rooms, no children", async () => {
     const s = setup({ rooms: ['lamofu-tibare'] });
-    expect(await (await s.get('/healthz')).json()).toEqual({ ok: true, version: VERSION, discord: true, dev: false, rooms: 1, children: {} });
+    expect(await (await s.get('/healthz')).json()).toEqual({
+      ok: true,
+      version: VERSION,
+      discord: true,
+      dev: false,
+      rooms: 1,
+      children: {},
+    });
   });
 
   test('through a proxy: only ok, room count and children stay private', async () => {
@@ -86,17 +100,25 @@ describe('Discord OAuth', () => {
     const c = setCookies(r)[0]!;
     expect(c).toStartWith('telinha_state=');
     for (const f of ['Path=/auth', 'HttpOnly', 'Secure', 'SameSite=Lax', 'Max-Age=600']) expect(c).toContain(f);
-    const st = verify<{ s: string; next: string; exp: number }>(s.config.cookieSecret, cookieValue(r, 'telinha_state'), NOW);
+    const st = verify<{ s: string; next: string; exp: number }>(
+      s.config.cookieSecret,
+      cookieValue(r, 'telinha_state'),
+      NOW,
+    );
     expect(st?.s).toBe(loc.searchParams.get('state')!);
     expect(st?.next).toBe('/r/bafo-kiru?x=1');
   });
 
   async function loginState(s: ReturnType<typeof setup>, next = '/r/bafo-kiru') {
     const r = await s.get(`/auth/login?next=${encodeURIComponent(next)}`);
-    return { state: new URL(r.headers.get('location')!).searchParams.get('state')!, cookie: `telinha_state=${encodeURIComponent(cookieValue(r, 'telinha_state')!)}` };
+    return {
+      state: new URL(r.headers.get('location')!).searchParams.get('state')!,
+      cookie: `telinha_state=${encodeURIComponent(cookieValue(r, 'telinha_state')!)}`,
+    };
   }
 
-  const discord = (user: Record<string, unknown>, calls: Array<{ url: string; init?: RequestInit }> = []): Fetch =>
+  const discord =
+    (user: Record<string, unknown>, calls: Array<{ url: string; init?: RequestInit }> = []): Fetch =>
     async (url, init) => {
       calls.push({ url, init });
       if (url.endsWith('/oauth2/token')) return Response.json({ access_token: 'AT' });
@@ -106,7 +128,9 @@ describe('Discord OAuth', () => {
 
   test('/auth/callback stores the Discord locale in the session', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
-    const s = setup({ fetch: discord({ id: '1', username: 'ze', global_name: 'Zé', avatar: 'av', locale: 'pt-BR' }, calls) });
+    const s = setup({
+      fetch: discord({ id: '1', username: 'ze', global_name: 'Zé', avatar: 'av', locale: 'pt-BR' }, calls),
+    });
     const { state, cookie } = await loginState(s);
     const r = await s.get(`/auth/callback?code=C&state=${state}`, { cookie });
     expect(r.status).toBe(200);
@@ -184,7 +208,18 @@ describe('/auth/token', () => {
     expect(denied.status).toBe(403);
     expect(await denied.json()).toEqual({ error: 'members' });
     // Room codes only: no old base64url ids, no near-misses.
-    for (const room of ['', 'abcd', 'q3Jx_9aZ-kP2w', 'a'.repeat(40), 'Bafo-kiru', 'bafo-ki', 'bafokiru', 'bafo-kiru-mole', 'ab cd', 'bafo-kiru%2F..']) {
+    for (const room of [
+      '',
+      'abcd',
+      'q3Jx_9aZ-kP2w',
+      'a'.repeat(40),
+      'Bafo-kiru',
+      'bafo-ki',
+      'bafokiru',
+      'bafo-kiru-mole',
+      'ab cd',
+      'bafo-kiru%2F..',
+    ]) {
       const r = await s.get(`/auth/token?room=${room}`, { cookie: s.sessionCookie() });
       expect(r.status).toBe(400);
       expect(await r.json()).toEqual({ error: 'room' });
@@ -206,14 +241,22 @@ describe('/auth/token', () => {
     expect(p.name).toBe('Zé');
     expect(JSON.parse(p.metadata)).toEqual({ id: '1', avatar: 'abc' });
     expect(p.video).toMatchObject({
-      room: 'lamofu-tibare', roomJoin: true, canSubscribe: true, canPublish: true, canPublishData: true, canUpdateOwnMetadata: true,
+      room: 'lamofu-tibare',
+      roomJoin: true,
+      canSubscribe: true,
+      canPublish: true,
+      canPublishData: true,
+      canUpdateOwnMetadata: true,
     });
     expect(p.video.canPublishSources).toEqual(['screen_share', 'screen_share_audio']);
   });
 
   test('locale falls back to Accept-Language for 0.1.1 sessions', async () => {
     const s = setup();
-    const r = await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie({ avatar: null }), 'accept-language': 'pt-BR,en;q=0.5' });
+    const r = await s.get('/auth/token?room=bafo-kiru', {
+      cookie: s.sessionCookie({ avatar: null }),
+      'accept-language': 'pt-BR,en;q=0.5',
+    });
     const body = (await r.json()) as Record<string, any>;
     expect(body.user).toEqual({ id: '1', name: 'Zé', avatar: null, locale: 'pt-BR' });
     expect(body.group).toBe('Galera');
@@ -230,27 +273,37 @@ describe('/auth/token', () => {
     expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: 'fresh' });
     // Not in the directory (or the bot not ready): the session's avatar.
     const s = setup({ directory: () => [] });
-    const kept = (await (await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie({ avatar: 'old' }) })).json()) as Record<string, any>;
+    const kept = (await (
+      await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie({ avatar: 'old' }) })
+    ).json()) as Record<string, any>;
     expect(kept.user).toMatchObject({ name: 'Zé', avatar: 'old' });
   });
 
   test('a token only once the room admits the member: unknown 404, closed 410, LiveKit down 503', async () => {
-    for (const [admission, status, error] of [['unknown', 404, 'unknown'], ['closed', 410, 'closed'], ['media-down', 503, 'livekit']] as const) {
+    for (const [admission, status, error] of [
+      ['unknown', 404, 'unknown'],
+      ['closed', 410, 'closed'],
+      ['media-down', 503, 'livekit'],
+    ] as const) {
       const s = setup({ admit: async () => admission });
       const r = await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() });
       expect([r.status, await r.json()]).toEqual([status, { error }]);
     }
   });
 
-  test('admits the session\'s member in their locale (a dev room opens under them)', async () => {
+  test("admits the session's member in their locale (a dev room opens under them)", async () => {
     const s = setup();
-    expect((await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie({ locale: 'pt-BR' }) })).status).toBe(200);
+    expect((await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie({ locale: 'pt-BR' }) })).status).toBe(
+      200,
+    );
     expect(s.admitted).toEqual([['bafo-kiru', { id: '1', name: 'Zé', locale: 'pt-BR' }]]);
   });
 
   test('LIVEKIT_PUBLIC_URL override', async () => {
     const s = setup({ env: { ...PROD_ENV, LIVEKIT_PUBLIC_URL: 'ws://localhost:7880' } });
-    const body = (await (await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() })).json()) as { url: string };
+    const body = (await (await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() })).json()) as {
+      url: string;
+    };
     expect(body.url).toBe('ws://localhost:7880');
   });
 
@@ -278,7 +331,9 @@ describe('/auth/members', () => {
     expect(await none.json()).toEqual({ error: 'login' });
     const forged = await s.get('/auth/members', { cookie: 'telinha=eyJ9.abc' });
     expect(forged.status).toBe(401);
-    const denied = await setup({ members: [], directory: () => list }).get('/auth/members', { cookie: s.sessionCookie() });
+    const denied = await setup({ members: [], directory: () => list }).get('/auth/members', {
+      cookie: s.sessionCookie(),
+    });
     expect(denied.status).toBe(403);
     expect(await denied.json()).toEqual({ error: 'members' });
   });
@@ -307,7 +362,9 @@ describe('/auth/members', () => {
     expect((await s.get('/auth/members', { cookie: s.sessionCookie({ id: '2' }) })).status).toBe(403);
     const r = await s.get('/auth/members', { cookie: s.sessionCookie({ id: '1', name: 'Dev' }) });
     expect(r.status).toBe(200);
-    const { members } = (await r.json()) as { members: Array<{ id: string; name: string; avatar: string | null; status: string }> };
+    const { members } = (await r.json()) as {
+      members: Array<{ id: string; name: string; avatar: string | null; status: string }>;
+    };
     expect(members).toHaveLength(8);
     expect(members.find((m) => m.id === '1')).toEqual({ id: '1', name: 'Dev', avatar: null, status: 'online' });
     expect(new Set(members.map((m) => m.status))).toEqual(new Set(['online', 'idle', 'dnd', 'offline']));
@@ -328,9 +385,19 @@ test('/auth/logout clears the session', async () => {
 describe('the gate', () => {
   test('no session: 302 to the login with the path and query as next', async () => {
     const s = setup();
-    for (const [p, next] of [['/r/bafo-kiru', '/r/bafo-kiru'], ['/r/bafo-kiru?x=1&y=2', '/r/bafo-kiru?x=1&y=2'], ['/r/', '/r/'], ['/', '/'], ['/nope', '/nope']]) {
+    for (const [p, next] of [
+      ['/r/bafo-kiru', '/r/bafo-kiru'],
+      ['/r/bafo-kiru?x=1&y=2', '/r/bafo-kiru?x=1&y=2'],
+      ['/r/', '/r/'],
+      ['/', '/'],
+      ['/nope', '/nope'],
+    ]) {
       const r = await s.get(p!);
-      expect([p, r.status, r.headers.get('location')]).toEqual([p, 302, `/auth/login?next=${encodeURIComponent(next!)}`]);
+      expect([p, r.status, r.headers.get('location')]).toEqual([
+        p,
+        302,
+        `/auth/login?next=${encodeURIComponent(next!)}`,
+      ]);
     }
     // expired or forged sessions count as none
     expect((await s.get('/r/bafo-kiru', { cookie: s.sessionCookie({ exp: NOW - 1 }) })).status).toBe(302);
@@ -339,7 +406,13 @@ describe('the gate', () => {
 
   test('no session: 401 JSON for upgrades and anything under /livekit', async () => {
     const s = setup();
-    for (const [p, h] of [['/livekit/rtc', {}], ['/livekit/rtc/validate?access_token=x', {}], ['/livekit', {}], ['/livekit/rtc', { upgrade: 'websocket' }], ['/r/bafo-kiru', { upgrade: 'websocket' }]] as const) {
+    for (const [p, h] of [
+      ['/livekit/rtc', {}],
+      ['/livekit/rtc/validate?access_token=x', {}],
+      ['/livekit', {}],
+      ['/livekit/rtc', { upgrade: 'websocket' }],
+      ['/r/bafo-kiru', { upgrade: 'websocket' }],
+    ] as const) {
       const r = await s.get(p, h);
       expect([p, r.status, await r.json()]).toEqual([p, 401, { error: 'login' }]);
     }
@@ -398,9 +471,11 @@ describe('/livekit/* (member)', () => {
     const { proxy, calls } = fakeProxy();
     const upgrades: ProxyData[] = [];
     const s = setup({ proxy, upgrade: (_req, data) => (upgrades.push(data), true) });
-    const r = await s.handler(new Request('https://telinha.example.com/livekit/rtc?access_token=AT', {
-      headers: { cookie: s.sessionCookie(), upgrade: 'websocket' },
-    }));
+    const r = await s.handler(
+      new Request('https://telinha.example.com/livekit/rtc?access_token=AT', {
+        headers: { cookie: s.sessionCookie(), upgrade: 'websocket' },
+      }),
+    );
     expect(r).toBeUndefined();
     expect(upgrades).toEqual([{ upstream: 'ws://lk/rtc?access_token=AT' }]);
     expect(calls).toEqual([]);
@@ -417,7 +492,13 @@ describe('/livekit/* (member)', () => {
     const { proxy, calls } = fakeProxy();
     const upgrades: ProxyData[] = [];
     const s = setup({ proxy, upgrade: (_req, data) => (upgrades.push(data), true) });
-    for (const p of ['/livekit/twirp/livekit.RoomService/ListRooms', '/livekit', '/livekit/', '/livekit/rtcx', '/livekit/RTC']) {
+    for (const p of [
+      '/livekit/twirp/livekit.RoomService/ListRooms',
+      '/livekit',
+      '/livekit/',
+      '/livekit/rtcx',
+      '/livekit/RTC',
+    ]) {
       for (const h of [{}, { upgrade: 'websocket' }] as Record<string, string>[]) {
         const r = await s.member(p, h);
         expect([p, r.status, await r.json()]).toEqual([p, 404, { error: 'not found' }]);
@@ -450,7 +531,17 @@ describe('redirects (members)', () => {
 
 test('unknown paths -> 404 (members)', async () => {
   const s = setup();
-  const paths = ['/nope', '/auth', '/healthz/x', '/livekitx', '/rx', '/r/bafo-kiru/x', '/sala', '/sala/?room=bafo-kiru', '/sala/bafo-kiru'];
+  const paths = [
+    '/nope',
+    '/auth',
+    '/healthz/x',
+    '/livekitx',
+    '/rx',
+    '/r/bafo-kiru/x',
+    '/sala',
+    '/sala/?room=bafo-kiru',
+    '/sala/bafo-kiru',
+  ];
   for (const p of paths) expect([p, (await s.member(p)).status]).toEqual([p, 404]);
 });
 
@@ -467,7 +558,9 @@ describe('DEV_USER mode', () => {
     const sess = verify<Session>(s.config.cookieSecret, cookieValue(r, 'telinha'), NOW);
     expect(sess).toMatchObject({ id: '1', name: 'Dev', avatar: null, locale: 'pt-BR' });
 
-    const tok = await s.get('/auth/token?room=bafo-kiru', { cookie: `telinha=${encodeURIComponent(cookieValue(r, 'telinha')!)}` });
+    const tok = await s.get('/auth/token?room=bafo-kiru', {
+      cookie: `telinha=${encodeURIComponent(cookieValue(r, 'telinha')!)}`,
+    });
     expect(tok.status).toBe(200);
     const body = (await tok.json()) as Record<string, any>;
     expect(body.identity).toMatch(/^1:[0-9a-f]{6}$/);
@@ -498,7 +591,9 @@ describe('DEV_USER mode', () => {
 
   test('the dev member is admitted under their name and locale (rooms.ts opens an unknown code in dev)', async () => {
     const s = setup({ env: DEV_ENV, rooms: [], admit: async () => 'ok' });
-    const r = await s.get('/auth/token?room=debu-gamo', { cookie: s.sessionCookie({ id: '1', name: 'Dev', locale: 'pt-BR' }) });
+    const r = await s.get('/auth/token?room=debu-gamo', {
+      cookie: s.sessionCookie({ id: '1', name: 'Dev', locale: 'pt-BR' }),
+    });
     expect(r.status).toBe(200);
     expect(s.admitted).toEqual([['debu-gamo', { id: '1', name: 'Dev', locale: 'pt-BR' }]]);
   });
@@ -512,8 +607,12 @@ describe('DEV_USER mode', () => {
 
 test('uaFamily spots in-app and mobile browsers', () => {
   expect(uaFamily(null)).toBe('none');
-  expect(uaFamily('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1')).toBe('safari-mobile');
-  expect(uaFamily('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/154.0 Safari/537.36 Edg/154.0')).toBe('edge');
+  expect(
+    uaFamily('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'),
+  ).toBe('safari-mobile');
+  expect(uaFamily('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/154.0 Safari/537.36 Edg/154.0')).toBe(
+    'edge',
+  );
   expect(uaFamily('Mozilla/5.0 (Linux; Android 14) Discord/250.0')).toBe('discord-app');
 });
 
@@ -528,7 +627,9 @@ describe('/r/assets/* (no login)', () => {
     expect([head.status, await head.text()]).toEqual([200, '']);
     expect((await s.get('/r/assets/nope.js')).status).toBe(404);
     // Only GET/HEAD and only the assets: the room page stays behind the login.
-    expect((await s.call(new Request('https://telinha.example.com/r/assets/index-abc123.js', { method: 'POST' }))).status).toBe(302);
+    expect(
+      (await s.call(new Request('https://telinha.example.com/r/assets/index-abc123.js', { method: 'POST' }))).status,
+    ).toBe(302);
     expect((await s.get('/r/')).status).toBe(302);
     expect((await s.get('/r/favicon.svg')).status).toBe(302);
   });
@@ -558,7 +659,8 @@ describe('/doctor', () => {
       upgradeData: (rest) => ({ upstream: `ws://lk${rest}` }),
     };
     const s = setup({
-      proxy, members: [],
+      proxy,
+      members: [],
       doctorCookie: (value, now) => (value === 'good' && now === NOW ? { id: 'a'.repeat(32) } : null),
     });
     const doctor = { cookie: 'telinha_doctor=good' };
@@ -585,7 +687,10 @@ describe('/internal/* (control endpoint)', () => {
   test("an authorized request loses Bun's idle timeout (long polls, updates); others keep it", async () => {
     const lifted: [string, number][] = [];
     const s = setup({
-      control: { handle: async () => new Response('ctl'), authorized: (req) => req.headers.get('authorization') === 'Bearer ok' },
+      control: {
+        handle: async () => new Response('ctl'),
+        authorized: (req) => req.headers.get('authorization') === 'Bearer ok',
+      },
       timeout: (req, seconds) => void lifted.push([new URL(req.url).pathname, seconds]),
     });
     await s.get('/internal/status');

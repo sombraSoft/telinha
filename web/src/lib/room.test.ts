@@ -6,10 +6,10 @@ import {
   FakeParticipant,
   FakeRoom,
   FixedTokens,
-  ManualClock,
-  MemoryPrefs,
   fakeBreakoutBox,
   fakeScreen,
+  ManualClock,
+  MemoryPrefs,
   restoreGlobals,
   settle,
   tokenFor,
@@ -180,7 +180,13 @@ describe('going live', () => {
 
   test('any window size gets exact integer layer factors', async () => {
     // 992x1080 broke H.265 in 0.1.1: a 1280x720 preset gave factor 1.378, and the HW encoder sent nothing
-    for (const [width, height] of [[992, 1080], [1856, 1010], [993, 1079], [2560, 1440], [800, 600]] as const) {
+    for (const [width, height] of [
+      [992, 1080],
+      [1856, 1010],
+      [993, 1079],
+      [2560, 1440],
+      [800, 600],
+    ] as const) {
       const { lp } = await live(SMOOTH, { width, height });
       expect(factorsOf(lp)).toEqual(height > 720 ? [2, 4] : [2]);
     }

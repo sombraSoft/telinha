@@ -1,36 +1,72 @@
 import { describe, expect, test } from 'bun:test';
-import { hints, selectedPath, tcpFromForced, turnFromForced, udpFromInitial, type Path } from './analyze';
+import { hints, type Path, selectedPath, tcpFromForced, turnFromForced, udpFromInitial } from './analyze';
 import { pickLocale, tr } from './strings';
 
 const report = (stats: Record<string, unknown>[]) => new Map(stats.map((s) => [s.id as string, s]));
 
-const pairStats = (o: { protocol: string; address?: string; rtt?: number; viaTransport?: boolean; relay?: boolean; relayProtocol?: string }) =>
+const pairStats = (o: {
+  protocol: string;
+  address?: string;
+  rtt?: number;
+  viaTransport?: boolean;
+  relay?: boolean;
+  relayProtocol?: string;
+}) =>
   report([
     ...(o.viaTransport === false ? [] : [{ id: 't', type: 'transport', selectedCandidatePairId: 'p' }]),
-    { id: 'old', type: 'candidate-pair', localCandidateId: 'l0', remoteCandidateId: 'r0', nominated: false, state: 'failed' },
     {
-      id: 'p', type: 'candidate-pair', localCandidateId: 'l', remoteCandidateId: 'r', nominated: true, state: 'succeeded',
+      id: 'old',
+      type: 'candidate-pair',
+      localCandidateId: 'l0',
+      remoteCandidateId: 'r0',
+      nominated: false,
+      state: 'failed',
+    },
+    {
+      id: 'p',
+      type: 'candidate-pair',
+      localCandidateId: 'l',
+      remoteCandidateId: 'r',
+      nominated: true,
+      state: 'succeeded',
       ...(o.rtt !== undefined ? { currentRoundTripTime: o.rtt } : {}),
     },
     { id: 'l0', type: 'local-candidate', protocol: 'udp', candidateType: 'host' },
     { id: 'r0', type: 'remote-candidate', protocol: 'udp', address: '10.0.0.5' },
     {
-      id: 'l', type: 'local-candidate', protocol: o.protocol, candidateType: o.relay ? 'relay' : 'srflx',
+      id: 'l',
+      type: 'local-candidate',
+      protocol: o.protocol,
+      candidateType: o.relay ? 'relay' : 'srflx',
       ...(o.relayProtocol !== undefined ? { relayProtocol: o.relayProtocol } : {}),
     },
-    { id: 'r', type: 'remote-candidate', protocol: o.protocol, address: o.address ?? '203.0.113.7', candidateType: 'host' },
+    {
+      id: 'r',
+      type: 'remote-candidate',
+      protocol: o.protocol,
+      address: o.address ?? '203.0.113.7',
+      candidateType: 'host',
+    },
   ]);
 
 describe('selectedPath', () => {
   test('the transport-selected pair: protocol, server address, rtt in ms', () => {
     expect(selectedPath(pairStats({ protocol: 'udp', rtt: 0.0412 }))).toEqual({
-      protocol: 'udp', candidateIp: '203.0.113.7', rttMs: 41, relay: false, relayProtocol: null,
+      protocol: 'udp',
+      candidateIp: '203.0.113.7',
+      rttMs: 41,
+      relay: false,
+      relayProtocol: null,
     });
   });
 
   test('without transport stats (Firefox) the nominated, succeeded pair', () => {
     expect(selectedPath(pairStats({ protocol: 'TCP', viaTransport: false }))).toEqual({
-      protocol: 'tcp', candidateIp: '203.0.113.7', rttMs: null, relay: false, relayProtocol: null,
+      protocol: 'tcp',
+      candidateIp: '203.0.113.7',
+      rttMs: null,
+      relay: false,
+      relayProtocol: null,
     });
   });
 
@@ -45,13 +81,20 @@ describe('selectedPath', () => {
   });
 
   test('no selected pair yet: null', () => {
-    expect(selectedPath(report([{ id: 'p', type: 'candidate-pair', nominated: true, state: 'in-progress' }]))).toBeNull();
+    expect(
+      selectedPath(report([{ id: 'p', type: 'candidate-pair', nominated: true, state: 'in-progress' }])),
+    ).toBeNull();
     expect(selectedPath(new Map())).toBeNull();
   });
 });
 
 const path = (protocol: string, o: Partial<Path> = {}): Path => ({
-  protocol, candidateIp: '203.0.113.7', rttMs: 30, relay: false, relayProtocol: null, ...o,
+  protocol,
+  candidateIp: '203.0.113.7',
+  rttMs: 30,
+  relay: false,
+  relayProtocol: null,
+  ...o,
 });
 
 describe('udp and tcp results', () => {
@@ -75,12 +118,18 @@ describe('udp and tcp results', () => {
   });
 
   test('TURN: works only relayed over TLS (or relayed with no protocol given)', () => {
-    expect(turnFromForced(path('udp', { relay: true, relayProtocol: 'tls', rttMs: 80 }), true)).toEqual({ ok: true, rttMs: 80 });
+    expect(turnFromForced(path('udp', { relay: true, relayProtocol: 'tls', rttMs: 80 }), true)).toEqual({
+      ok: true,
+      rttMs: 80,
+    });
     expect(turnFromForced(path('udp', { relay: true, rttMs: null }), true)).toEqual({ ok: true });
     expect(turnFromForced(null, false)).toEqual({ ok: false, error: 'did not reconnect through TURN' });
     expect(turnFromForced(null, true)).toEqual({ ok: false, error: 'no media path' });
     expect(turnFromForced(path('udp'), true)).toEqual({ ok: false, error: 'not relayed' });
-    expect(turnFromForced(path('udp', { relay: true, relayProtocol: 'udp' }), true)).toEqual({ ok: false, error: 'relayed over udp, not TLS' });
+    expect(turnFromForced(path('udp', { relay: true, relayProtocol: 'udp' }), true)).toEqual({
+      ok: false,
+      error: 'relayed over udp, not TLS',
+    });
   });
 });
 
@@ -121,10 +170,16 @@ describe('hints', () => {
 
   test('a failed TURN step adds hintTurn after the main hint; ok or absent adds nothing', () => {
     expect(hints({ ...base, turn: bad }, ports).map((h) => h.key)).toEqual(['hintAllGood', 'hintTurn']);
-    expect(hints({ ...base, udp: bad, turn: bad }, null, 'cloud').map((h) => h.key)).toEqual(['hintCloudUdp', 'hintTurn']);
+    expect(hints({ ...base, udp: bad, turn: bad }, null, 'cloud').map((h) => h.key)).toEqual([
+      'hintCloudUdp',
+      'hintTurn',
+    ]);
     expect(hints({ ...base, turn: ok }, ports).map((h) => h.key)).toEqual(['hintAllGood']);
     expect(hints({ ...base, turn: null }, ports).map((h) => h.key)).toEqual(['hintAllGood']);
-    expect(hints({ ...base, turn: bad }, ports, 'self', 'turn.x.duckdns.org')[1]).toEqual({ key: 'hintTurn', params: { turnHost: 'turn.x.duckdns.org' } });
+    expect(hints({ ...base, turn: bad }, ports, 'self', 'turn.x.duckdns.org')[1]).toEqual({
+      key: 'hintTurn',
+      params: { turnHost: 'turn.x.duckdns.org' },
+    });
     expect(hints({ ...base, turn: bad }, ports)[1]!.params).toEqual({ turnHost: 'turn.<host>' });
     expect(tr('pt-BR', 'hintTurn', { turnHost: 'turn.x.duckdns.org' })).toContain('certificado de turn.x.duckdns.org)');
     expect(tr('en', 'hintTurn', { turnHost: 'turn.x.duckdns.org' })).toContain('certificate for turn.x.duckdns.org)');

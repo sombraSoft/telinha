@@ -1,16 +1,24 @@
 import { describe, expect, test } from 'bun:test';
-import { loadConfig, turnIneligibility, type Hosting, type Ingress, type Media } from '../src/config.ts';
-import { footprintOf, helpersOf, type Footprint } from '../src/footprint.ts';
+import { type Hosting, type Ingress, loadConfig, type Media, turnIneligibility } from '../src/config.ts';
+import { type Footprint, footprintOf, helpersOf } from '../src/footprint.ts';
 import { PROD_ENV } from './helpers.ts';
 
 // A DuckDNS name on 443: TURN can run here, on a VPS in direct mode with MEDIA=self.
 const BASE = { ...PROD_ENV, PUBLIC_URL: 'https://g.duckdns.org' };
 const MODE_ENV: Record<Media | Ingress, Record<string, string>> = {
-  self: {}, cloud: { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj.livekit.cloud' },
-  direct: {}, tunnel: { INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' }, external: { INGRESS: 'external' },
+  self: {},
+  cloud: { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj.livekit.cloud' },
+  direct: {},
+  tunnel: { INGRESS: 'tunnel', TUNNEL_TOKEN: 'tt' },
+  external: { INGRESS: 'external' },
 };
 
-interface Shape { helpers: string[]; ports: string[]; exposures: string[]; relay: boolean }
+interface Shape {
+  helpers: string[];
+  ports: string[];
+  exposures: string[];
+  relay: boolean;
+}
 const shape = (f: Footprint): Shape => ({
   helpers: f.helpers.map((h) => `${h.name}(${h.binary}): ${h.ports.map((p) => p.key).join(' ')}`),
   ports: f.ports.map((p) => p.key),
@@ -28,14 +36,47 @@ const WEB_EXPOSED = ['caddy HTTPS_PORT/tcp', 'caddy HTTP_PORT/tcp'];
 
 // Every mode, as loadConfig produces it; HOSTING changes the footprint only through TURN.
 const TABLE: [Media, Ingress, turn: boolean, Shape][] = [
-  ['self', 'direct', false, { helpers: [LIVEKIT, CADDY], ports: [...MEDIA_PORTS, 'LISTEN', ...WEB_PORTS], exposures: [...MEDIA_EXPOSED, ...WEB_EXPOSED], relay: true }],
-  ['self', 'direct', true, {
-    // TURN binds loopback only (Caddy reaches it through 443): a port, no exposure.
-    helpers: [`${LIVEKIT} TURN_PORT`, CADDY], ports: [...MEDIA_PORTS, 'LISTEN', ...WEB_PORTS, 'TURN_PORT'], exposures: [...MEDIA_EXPOSED, ...WEB_EXPOSED], relay: true,
-  }],
-  ['self', 'tunnel', false, { helpers: [LIVEKIT, CLOUDFLARED], ports: [...MEDIA_PORTS, 'LISTEN'], exposures: MEDIA_EXPOSED, relay: true }],
-  ['self', 'external', false, { helpers: [LIVEKIT], ports: [...MEDIA_PORTS, 'LISTEN'], exposures: MEDIA_EXPOSED, relay: true }],
-  ['cloud', 'direct', false, { helpers: [CADDY], ports: ['LISTEN', ...WEB_PORTS], exposures: WEB_EXPOSED, relay: false }],
+  [
+    'self',
+    'direct',
+    false,
+    {
+      helpers: [LIVEKIT, CADDY],
+      ports: [...MEDIA_PORTS, 'LISTEN', ...WEB_PORTS],
+      exposures: [...MEDIA_EXPOSED, ...WEB_EXPOSED],
+      relay: true,
+    },
+  ],
+  [
+    'self',
+    'direct',
+    true,
+    {
+      // TURN binds loopback only (Caddy reaches it through 443): a port, no exposure.
+      helpers: [`${LIVEKIT} TURN_PORT`, CADDY],
+      ports: [...MEDIA_PORTS, 'LISTEN', ...WEB_PORTS, 'TURN_PORT'],
+      exposures: [...MEDIA_EXPOSED, ...WEB_EXPOSED],
+      relay: true,
+    },
+  ],
+  [
+    'self',
+    'tunnel',
+    false,
+    { helpers: [LIVEKIT, CLOUDFLARED], ports: [...MEDIA_PORTS, 'LISTEN'], exposures: MEDIA_EXPOSED, relay: true },
+  ],
+  [
+    'self',
+    'external',
+    false,
+    { helpers: [LIVEKIT], ports: [...MEDIA_PORTS, 'LISTEN'], exposures: MEDIA_EXPOSED, relay: true },
+  ],
+  [
+    'cloud',
+    'direct',
+    false,
+    { helpers: [CADDY], ports: ['LISTEN', ...WEB_PORTS], exposures: WEB_EXPOSED, relay: false },
+  ],
   ['cloud', 'tunnel', false, { helpers: [CLOUDFLARED], ports: ['LISTEN'], exposures: [], relay: false }],
   ['cloud', 'external', false, { helpers: [], ports: ['LISTEN'], exposures: [], relay: false }],
 ];
@@ -45,9 +86,17 @@ describe('footprintOf', () => {
     for (const hosting of ['home', 'vps'] as Hosting[]) {
       const name = `${media} ${ingress} ${hosting}${turn ? ' TURN' : ''}`;
       const env = { ...BASE, ...MODE_ENV[media], ...MODE_ENV[ingress], HOSTING: hosting, TURN: turn ? 'on' : 'off' };
-      const config = { media, ingress, hosting, httpsPort: 443, publicUrl: BASE.PUBLIC_URL, publicHost: 'g.duckdns.org' };
+      const config = {
+        media,
+        ingress,
+        hosting,
+        httpsPort: 443,
+        publicUrl: BASE.PUBLIC_URL,
+        publicHost: 'g.duckdns.org',
+      };
       if (turn && turnIneligibility(config)) {
-        test(`${name}: refused by loadConfig`, () => expect(() => loadConfig(env)).toThrow('TURN=on is not possible here'));
+        test(`${name}: refused by loadConfig`, () =>
+          expect(() => loadConfig(env)).toThrow('TURN=on is not possible here'));
         continue;
       }
       test(name, () => {
@@ -60,12 +109,26 @@ describe('footprintOf', () => {
   }
 
   test('port numbers; Caddy exposures carry the port the outside dials', () => {
-    const f = footprintOf(loadConfig({
-      ...BASE, HOSTING: 'vps', PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '9443', HTTP_PORT: '8080',
-      MEDIA_TCP_PORT: '7001', MEDIA_UDP_PORT: '7002', LIVEKIT_PORT: '7000', LISTEN: '127.0.0.1:8000',
-    }));
+    const f = footprintOf(
+      loadConfig({
+        ...BASE,
+        HOSTING: 'vps',
+        PUBLIC_URL: 'https://g.duckdns.org:8443',
+        HTTPS_PORT: '9443',
+        HTTP_PORT: '8080',
+        MEDIA_TCP_PORT: '7001',
+        MEDIA_UDP_PORT: '7002',
+        LIVEKIT_PORT: '7000',
+        LISTEN: '127.0.0.1:8000',
+      }),
+    );
     expect(f.ports.map((p) => `${p.key}=${p.port}/${p.protocol}`)).toEqual([
-      'MEDIA_TCP_PORT=7001/tcp', 'MEDIA_UDP_PORT=7002/udp', 'LIVEKIT_PORT=7000/tcp', 'LISTEN=8000/tcp', 'HTTPS_PORT=9443/tcp', 'HTTP_PORT=8080/tcp',
+      'MEDIA_TCP_PORT=7001/tcp',
+      'MEDIA_UDP_PORT=7002/udp',
+      'LIVEKIT_PORT=7000/tcp',
+      'LISTEN=8000/tcp',
+      'HTTPS_PORT=9443/tcp',
+      'HTTP_PORT=8080/tcp',
     ]);
     expect(f.exposures).toEqual([
       { helper: 'livekit', key: 'MEDIA_TCP_PORT', protocol: 'tcp', port: 7001 },
@@ -73,7 +136,11 @@ describe('footprintOf', () => {
       { helper: 'caddy', key: 'HTTPS_PORT', protocol: 'tcp', port: 9443, externalPort: 8443 },
       { helper: 'caddy', key: 'HTTP_PORT', protocol: 'tcp', port: 8080, externalPort: 80 },
     ]);
-    expect(footprintOf(loadConfig({ ...BASE, HOSTING: 'vps' })).helpers[0]!.ports.at(-1)).toEqual({ key: 'TURN_PORT', protocol: 'tcp', port: 5349 });
+    expect(footprintOf(loadConfig({ ...BASE, HOSTING: 'vps' })).helpers[0]!.ports.at(-1)).toEqual({
+      key: 'TURN_PORT',
+      protocol: 'tcp',
+      port: 5349,
+    });
   });
 
   test('HTTP_PORT=0: no redirect listener, nothing bound or exposed', () => {

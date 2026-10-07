@@ -5,7 +5,7 @@
 // against fakes; every line goes through Wizard.out.
 import { randomBytes } from 'node:crypto';
 import { posix, win32 } from 'node:path';
-import { loadConfig, type Config } from '../../config.ts';
+import { type Config, loadConfig } from '../../config.ts';
 import type { Ddns } from '../../ddns.ts';
 import { firewallCommands } from '../../doctor/checks.ts';
 import type { CheckResult } from '../../doctor/types.ts';
@@ -15,7 +15,13 @@ import type { NatProbe } from '../../nat/index.ts';
 import { isCgnatIpv4, isPrivateIpv4 } from '../../netinfo.ts';
 import type { Paths } from '../../paths.ts';
 import { exeName } from '../../release.ts';
-import { must, ServiceInstallError, type InstallResult, type ServiceManager, type SpawnFn } from '../../service/index.ts';
+import {
+  type InstallResult,
+  must,
+  ServiceInstallError,
+  type ServiceManager,
+  type SpawnFn,
+} from '../../service/index.ts';
 import { SERVICE_USER, SYSCTL_SCRIPT } from '../../service/systemd.ts';
 import type { TrayLauncher } from '../../service/tray.ts';
 import { parseWhoami, whoamiExe } from '../../service/windows.ts';
@@ -26,8 +32,8 @@ import type { Locale, Params } from '../strings.ts';
 import type { Out, Spinner, Term } from '../term.ts';
 import { at } from './apply-strings.ts';
 import type { DiscordSetup } from './discord.ts';
-import { lockWindowsHome, renderEnvFile, writeEnvFile, type EnvFs, type PreviousEnv } from './envwrite.ts';
-import { routerLabel, type HostInfo, type Hosting } from './host.ts';
+import { type EnvFs, lockWindowsHome, type PreviousEnv, renderEnvFile, writeEnvFile } from './envwrite.ts';
+import { type HostInfo, type Hosting, routerLabel } from './host.ts';
 import type { SKey } from './strings.ts';
 import type { SetupUi } from './ui.ts';
 
@@ -36,7 +42,10 @@ export type Values = Record<string, string>;
 
 /** Ends setup with a message and an exit code. */
 export class SetupAbort extends Error {
-  constructor(message: string, readonly code: number) {
+  constructor(
+    message: string,
+    readonly code: number,
+  ) {
     super(message);
     this.name = 'SetupAbort';
   }
@@ -61,7 +70,9 @@ export interface SetupDeps {
   control: Pick<ControlClient, 'available' | 'shutdown' | 'status' | 'doctorSession' | 'doctorWait'>;
   /** progress: bytes per tool while downloading (the setup screens draw a bar). */
   bins: (
-    config: Pick<Config, 'media' | 'ingress'>, paths: Pick<Paths, 'bin'>, log: (msg: string) => void,
+    config: Pick<Config, 'media' | 'ingress'>,
+    paths: Pick<Paths, 'bin'>,
+    log: (msg: string) => void,
     progress?: (tool: string, received: number, total: number | null) => void,
   ) => Promise<unknown>;
   /** Captured output, no terminal. */
@@ -87,7 +98,10 @@ export interface SetupDeps {
   /** `telinha doctor` with the given context (its argv carries the doctor flags). */
   doctor: (ctx: CliContext) => Promise<number>;
   /** The doctor checks as data, for the setup screens; onResult after each one. */
-  doctorChecks: (ctx: CliContext, onResult?: (r: CheckResult, done: number, total: number) => void) => Promise<CheckResult[]>;
+  doctorChecks: (
+    ctx: CliContext,
+    onResult?: (r: CheckResult, done: number, total: number) => void,
+  ) => Promise<CheckResult[]>;
   /** The running executable (the native binary, or bun in dev). */
   execPath: string;
   /** Bun.which: a command on this process's PATH, or null. */
@@ -131,7 +145,10 @@ export function cliName(w: Wizard): string {
   if (!w.ctx.compiled) return 'bun server/src/index.ts';
   if (w.deps.which('telinha')) return 'telinha';
   const { platform } = w.deps;
-  const exe = platform === 'linux' && w.deps.isRoot ? w.deps.execPath : pathFor(platform).join(w.ctx.paths.bin, exeName(platform));
+  const exe =
+    platform === 'linux' && w.deps.isRoot
+      ? w.deps.execPath
+      : pathFor(platform).join(w.ctx.paths.bin, exeName(platform));
   if (platform === 'win32') return `& "${exe}"`;
   return /\s/.test(exe) ? `"${exe}"` : exe;
 }
@@ -149,7 +166,11 @@ const b64url = (b: Uint8Array) => Buffer.from(b).toString('base64url');
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 
 /** Generates what is missing (and the cookie secret when rotating); returns the keys it made. */
-export function generateSecrets(values: Values, random: (n: number) => Uint8Array = (n) => randomBytes(n), rotateCookie = false): string[] {
+export function generateSecrets(
+  values: Values,
+  random: (n: number) => Uint8Array = (n) => randomBytes(n),
+  rotateCookie = false,
+): string[] {
   const made: string[] = [];
   if (!values.COOKIE_SECRET || rotateCookie) {
     values.COOKIE_SECRET = b64(random(48));
@@ -173,7 +194,12 @@ export function generateSecrets(values: Values, random: (n: number) => Uint8Arra
 // --- write
 
 /** The file text, and the config loadConfig makes of it (the same check `run` does at start). */
-export function validateValues(values: Values, previous: PreviousEnv | null, home: string, o: { compiled?: boolean } = {}): { text: string; config: Config } {
+export function validateValues(
+  values: Values,
+  previous: PreviousEnv | null,
+  home: string,
+  o: { compiled?: boolean } = {},
+): { text: string; config: Config } {
   const text = renderEnvFile(values, previous);
   const config = loadConfig({ ...parseEnvFile(text).vars, TELINHA_HOME: home }, { compiled: o.compiled });
   return { text, config };
@@ -193,7 +219,12 @@ export async function writeConfig(w: Wizard, file: string, text: string, shown =
   if (w.deps.platform === 'win32') {
     // The whole home (control token, task XML, bin\), before the secrets land in it.
     await w.deps.fs.mkdir(w.ctx.paths.home);
-    await lockWindowsHome({ home: w.ctx.paths.home, user, spawn: w.deps.spawn, warn: (m) => w.out.warn(w.s('aclFailed', { error: m })) });
+    await lockWindowsHome({
+      home: w.ctx.paths.home,
+      user,
+      spawn: w.deps.spawn,
+      warn: (m) => w.out.warn(w.s('aclFailed', { error: m })),
+    });
   }
   await writeEnvFile({
     file,
@@ -213,7 +244,10 @@ export async function writeConfig(w: Wizard, file: string, text: string, shown =
 
 const HELPER_NAMES = { livekit: 'LiveKit', caddy: 'Caddy', cloudflared: 'cloudflared' } as const;
 /** The programs this config runs, by name ("LiveKit, Caddy"). */
-const helperNames = (config: Pick<Config, 'media' | 'ingress'>) => helpersOf(config).map((t) => HELPER_NAMES[t]).join(', ');
+const helperNames = (config: Pick<Config, 'media' | 'ingress'>) =>
+  helpersOf(config)
+    .map((t) => HELPER_NAMES[t])
+    .join(', ');
 
 export async function downloadBinaries(w: Wizard, config: Pick<Config, 'media' | 'ingress'>): Promise<boolean> {
   const { out, s } = w;
@@ -230,7 +264,12 @@ export async function downloadBinaries(w: Wizard, config: Pick<Config, 'media' |
   }
   const spin = out.spinner(s('binsChecking', { tools: helperNames(config) }));
   try {
-    await w.deps.bins(config, w.ctx.paths, (m) => spin.update(m.replace(/^\[bins\]\s*/, '')), (tool, received, total) => out.progress?.(received, total, tool));
+    await w.deps.bins(
+      config,
+      w.ctx.paths,
+      (m) => spin.update(m.replace(/^\[bins\]\s*/, '')),
+      (tool, received, total) => out.progress?.(received, total, tool),
+    );
     spin.stop(s('binsOk', { dir: w.ctx.paths.bin }));
     return true;
   } catch (e) {
@@ -318,7 +357,8 @@ async function installedExe(w: Wizard): Promise<string> {
     w.out.ok(w.s('exeCopied', { path: target }));
   }
   // The hints from here on say `telinha ...`; a double-clicked exe has no PATH entry yet.
-  if (platform === 'win32' && (await addToUserPath(w.deps.spawn, w.ctx.paths.bin))) w.out.ok(w.s('pathAdded', { dir: w.ctx.paths.bin }));
+  if (platform === 'win32' && (await addToUserPath(w.deps.spawn, w.ctx.paths.bin)))
+    w.out.ok(w.s('pathAdded', { dir: w.ctx.paths.bin }));
   return target;
 }
 
@@ -327,7 +367,16 @@ async function windowsInstall(w: Wizard, exe: string, firewall: boolean): Promis
   const home = w.ctx.paths.home;
   const account = await windowsAccount(w);
   const manual = (who: { user: string; sid: string } | null) =>
-    elevationHint(exe, ['service', 'install', ...(firewall ? ['--firewall'] : []), '--home', home, '--lang', w.locale, ...(who ? ['--user', who.user, '--sid', who.sid] : [])]);
+    elevationHint(exe, [
+      'service',
+      'install',
+      ...(firewall ? ['--firewall'] : []),
+      '--home',
+      home,
+      '--lang',
+      w.locale,
+      ...(who ? ['--user', who.user, '--sid', who.sid] : []),
+    ]);
   if (!account) {
     out.warn(s('whoamiFailed'));
     out.info(s('serviceManual', { cmd: manual(null) }));
@@ -336,7 +385,21 @@ async function windowsInstall(w: Wizard, exe: string, firewall: boolean): Promis
   const result = installResultPath(home);
   await deps.fs.mkdir(win32.dirname(result));
   await deps.fs.rm(result).catch(() => {});
-  const args = ['service', 'install', ...(firewall ? ['--firewall'] : []), '--home', home, '--lang', w.locale, '--user', account.user, '--sid', account.sid, '--result', result];
+  const args = [
+    'service',
+    'install',
+    ...(firewall ? ['--firewall'] : []),
+    '--home',
+    home,
+    '--lang',
+    w.locale,
+    '--user',
+    account.user,
+    '--sid',
+    account.sid,
+    '--result',
+    result,
+  ];
   lines(out, s('uacExplain'));
   // The elevated child runs behind UAC's secure desktop and never reads this
   // terminal: the setup screens stay up and say what they wait for.
@@ -391,7 +454,11 @@ async function linuxInstall(w: Wizard, exe: string): Promise<boolean> {
  * terminal (the setup screens step aside); auto is sudo -n (nobody to ask);
  * manual, or a refusal, prints the command for later.
  */
-export async function unprivilegedPorts(w: Wizard, values: Values, o: { mode: 'sudo' | 'manual' | 'auto'; withTerminal?: WithTerminal }): Promise<void> {
+export async function unprivilegedPorts(
+  w: Wizard,
+  values: Values,
+  o: { mode: 'sudo' | 'manual' | 'auto'; withTerminal?: WithTerminal },
+): Promise<void> {
   const { out, s, deps } = w;
   if ((values.INGRESS || 'direct') !== 'direct') return;
   const low = [Number(values.HTTP_PORT || 80), Number(values.HTTPS_PORT || 443)].filter((p) => p > 0 && p < 1024);
@@ -416,13 +483,18 @@ export async function unprivilegedPorts(w: Wizard, values: Values, o: { mode: 's
 }
 
 /** Installs and starts the service (and the Windows firewall rules); true when it is registered. */
-export async function serviceStep(w: Wizard, values: Values, o: { firewall: boolean; sysctl: 'sudo' | 'manual' | 'auto'; withTerminal?: WithTerminal }): Promise<boolean> {
+export async function serviceStep(
+  w: Wizard,
+  values: Values,
+  o: { firewall: boolean; sysctl: 'sudo' | 'manual' | 'auto'; withTerminal?: WithTerminal },
+): Promise<boolean> {
   const { out, s, deps } = w;
   if (!w.ctx.compiled) {
     out.info(s('serviceNeedsBinary'));
     return false;
   }
-  if (deps.platform === 'linux' && !deps.isRoot) await unprivilegedPorts(w, values, { mode: o.sysctl, withTerminal: o.withTerminal });
+  if (deps.platform === 'linux' && !deps.isRoot)
+    await unprivilegedPorts(w, values, { mode: o.sysctl, withTerminal: o.withTerminal });
   let exe: string;
   try {
     exe = await installedExe(w);
@@ -454,7 +526,13 @@ function publicUrlPort(url: string | undefined): string {
  */
 function routerEntries(values: Values): { port: string; mapper: boolean }[] {
   // LiveKit Cloud carries the media: nothing of it reaches this machine.
-  const out: { port: string; mapper: boolean }[] = values.MEDIA === 'cloud' ? [] : [{ port: `TCP ${values.MEDIA_TCP_PORT || '7881'}`, mapper: true }, { port: `UDP ${values.MEDIA_UDP_PORT || '7882'}`, mapper: true }];
+  const out: { port: string; mapper: boolean }[] =
+    values.MEDIA === 'cloud'
+      ? []
+      : [
+          { port: `TCP ${values.MEDIA_TCP_PORT || '7881'}`, mapper: true },
+          { port: `UDP ${values.MEDIA_UDP_PORT || '7882'}`, mapper: true },
+        ];
   if ((values.INGRESS || 'direct') === 'direct') {
     const https = values.HTTPS_PORT || '443';
     const pub = publicUrlPort(values.PUBLIC_URL);
@@ -471,7 +549,10 @@ export function publicPorts(values: Values): string[] {
 
 /** What this host listens on, for its own firewall (ufw/firewalld take the internal ports). */
 export function hostPorts(values: Values): string[] {
-  const out: string[] = values.MEDIA === 'cloud' ? [] : [`${values.MEDIA_TCP_PORT || '7881'}/tcp`, `${values.MEDIA_UDP_PORT || '7882'}/udp`];
+  const out: string[] =
+    values.MEDIA === 'cloud'
+      ? []
+      : [`${values.MEDIA_TCP_PORT || '7881'}/tcp`, `${values.MEDIA_UDP_PORT || '7882'}/udp`];
   if ((values.INGRESS || 'direct') === 'direct') {
     out.push(`${values.HTTPS_PORT || '443'}/tcp`);
     if ((values.HTTP_PORT || '80') !== '0') out.push(`${values.HTTP_PORT || '80'}/tcp`);
@@ -511,7 +592,15 @@ export async function routerStep(w: Wizard, values: Values, hosting: Hosting = '
   }
   // The mapper never asks for 80/443 (the advanced path forwards them by hand): name only what it owns.
   const entries = routerEntries(values);
-  if (entries.some((e) => e.mapper)) out.info(s('upnpWillMap', { ports: entries.filter((e) => e.mapper).map((e) => e.port).join(', ') }));
+  if (entries.some((e) => e.mapper))
+    out.info(
+      s('upnpWillMap', {
+        ports: entries
+          .filter((e) => e.mapper)
+          .map((e) => e.port)
+          .join(', '),
+      }),
+    );
   const byHand = entries.filter((e) => !e.mapper).map((e) => e.port);
   if (byHand.length) out.info(s('forwardByHand', { ports: byHand.join(', ') }));
 }
@@ -549,7 +638,10 @@ export async function startService(w: Wizard, o: { installed: boolean; wasRunnin
   const { out, s, deps } = w;
   let spin: Spinner;
   if (o.wasRunning) {
-    const supervised = await deps.control.status().then((st) => st.supervised, () => true);
+    const supervised = await deps.control.status().then(
+      (st) => st.supervised,
+      () => true,
+    );
     if (!supervised) {
       out.warn(s('consoleRestart'));
       return 'console';
@@ -583,7 +675,11 @@ export async function startService(w: Wizard, o: { installed: boolean; wasRunnin
  * 127.0.0.1, so a router without hairpin NAT does not matter). True once it
  * is there; progress hears the time waited against the limit.
  */
-export async function waitForCertificate(w: Wizard, values: Values, progress?: (waitedMs: number, limitMs: number) => void): Promise<boolean> {
+export async function waitForCertificate(
+  w: Wizard,
+  values: Values,
+  progress?: (waitedMs: number, limitMs: number) => void,
+): Promise<boolean> {
   const { out, s, deps } = w;
   let host: string;
   try {
@@ -633,5 +729,13 @@ export function nextSteps(w: Wizard, values: Values, o: { file: string }): void 
     lines(out, s('nextDocker'));
     return;
   }
-  lines(out, s('nextNative', { url: values.PUBLIC_URL ?? '', command: values.COMMAND_NAME || 'telinha', file: o.file, telinha: cliName(w) }));
+  lines(
+    out,
+    s('nextNative', {
+      url: values.PUBLIC_URL ?? '',
+      command: values.COMMAND_NAME || 'telinha',
+      file: o.file,
+      telinha: cliName(w),
+    }),
+  );
 }

@@ -5,26 +5,49 @@
 
 export type Protocol = 'tcp' | 'udp';
 
-export interface Mapping { protocol: Protocol; externalPort: number; internalPort: number; description: string }
+export interface Mapping {
+  protocol: Protocol;
+  externalPort: number;
+  internalPort: number;
+  description: string;
+}
 
 export type Gateway =
   | {
-    kind: 'igd'; version: 1 | 2; location: string; controlUrl: string; serviceType: string; localIp: string; gatewayIp: string;
-    /** The router's friendlyName from its device description, when it has one. */
-    name?: string;
-  }
+      kind: 'igd';
+      version: 1 | 2;
+      location: string;
+      controlUrl: string;
+      serviceType: string;
+      localIp: string;
+      gatewayIp: string;
+      /** The router's friendlyName from its device description, when it has one. */
+      name?: string;
+    }
   | { kind: 'pcp' | 'natpmp'; gatewayIp: string; localIp: string };
 
-export interface NatProbe { gateway: Gateway | null; externalIp: string | null; localIp: string | null; errors: string[] }
+export interface NatProbe {
+  gateway: Gateway | null;
+  externalIp: string | null;
+  localIp: string | null;
+  errors: string[];
+}
 
 export type MappingState = 'mapped' | 'failed' | 'pending';
 
 export interface MapperStatus {
-  enabled: boolean; gateway: Gateway | null; externalIp: string | null;
+  enabled: boolean;
+  gateway: Gateway | null;
+  externalIp: string | null;
   mappings: (Mapping & { state: MappingState; leaseEndsAt?: number; error?: string })[];
 }
 
-export interface PortMapper { start(): Promise<void>; stop(): Promise<void>; status(): MapperStatus; refresh(): Promise<void> }
+export interface PortMapper {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  status(): MapperStatus;
+  refresh(): Promise<void>;
+}
 
 /** The slice of a UDP socket the protocols need; the default wraps Bun.udpSocket bound to 0.0.0.0:<ephemeral>. */
 export interface UdpSocket {
@@ -49,5 +72,5 @@ export interface NatDeps {
   random: (n: number) => Uint8Array;
 }
 
-export { createPortMapper, defaultNatDeps, discoverGateways, probe } from './mapper.ts';
 export { defaultRoute } from './gateway.ts';
+export { createPortMapper, defaultNatDeps, discoverGateways, probe } from './mapper.ts';

@@ -7,21 +7,30 @@
 // otherwise, and with --json, a plain table.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig, type Config } from '../config.ts';
+import { type Config, loadConfig } from '../config.ts';
 import { CHECKS, checkTitle, runChecks } from '../doctor/checks.ts';
-import { PhoneTest, type DoctorControl, type PhoneOutcome, type PhoneTestState } from '../doctor/phone-test.ts';
+import { type DoctorControl, type PhoneOutcome, PhoneTest, type PhoneTestState } from '../doctor/phone-test.ts';
 import { renderQr } from '../doctor/qr.ts';
-import type { Check, CheckContext, CheckResult, CheckStatus, NatProberLike, ServiceStatusFn, TrayStateLike, UpdateStateLike } from '../doctor/types.ts';
+import type {
+  Check,
+  CheckContext,
+  CheckResult,
+  CheckStatus,
+  NatProberLike,
+  ServiceStatusFn,
+  TrayStateLike,
+  UpdateStateLike,
+} from '../doctor/types.ts';
 import { loadEnvFile, mergeEnv } from '../envfile.ts';
 import * as nat from '../nat/index.ts';
 import { serviceManager } from '../service/index.ts';
 import { latestStable } from '../update/github.ts';
 import { readState, statePath } from '../update/state.ts';
 import { nodeFs } from '../update/types.ts';
-import { GLOBAL_FLAGS, parseArgs, UsageError, type CliContext, type ParsedArgs } from './args.ts';
+import { type CliContext, GLOBAL_FLAGS, type ParsedArgs, parseArgs, UsageError } from './args.ts';
 import { createControlClient } from './control.ts';
-import { doctorStrings, type DoctorStrKey } from './doctor-strings.ts';
-import { ts, type Locale } from './strings.ts';
+import { type DoctorStrKey, doctorStrings } from './doctor-strings.ts';
+import { type Locale, ts } from './strings.ts';
 import { createTerm, type Term, type TermOut } from './term.ts';
 
 // --no-phone is the parser's --no-<boolean>.
@@ -47,7 +56,11 @@ export interface DoctorCliDeps {
   tui?: DoctorTuiRunner;
 }
 
-export type DoctorTuiRunner = (o: { ctx: CliContext; flags: { phone?: boolean; local?: boolean }; deps: DoctorCliDeps }) => Promise<number>;
+export type DoctorTuiRunner = (o: {
+  ctx: CliContext;
+  flags: { phone?: boolean; local?: boolean };
+  deps: DoctorCliDeps;
+}) => Promise<number>;
 
 // Both imports are dynamic: nothing on the plain path may load Solid/OpenTUI.
 const tuiRunner: DoctorTuiRunner = async (o) => {
@@ -76,7 +89,10 @@ function readTrayState(path: string): TrayStateLike | null {
 }
 
 /** The checks' context from the merged environment (telinha.env, then the process environment over it). */
-export async function buildCheckContext(ctx: CliContext, o: { local: boolean; control: DoctorControl }): Promise<CheckContext> {
+export async function buildCheckContext(
+  ctx: CliContext,
+  o: { local: boolean; control: DoctorControl },
+): Promise<CheckContext> {
   let fileVars: Record<string, string> = {};
   let configError: string | null = null;
   try {
@@ -94,14 +110,29 @@ export async function buildCheckContext(ctx: CliContext, o: { local: boolean; co
     }
   }
   const manager = serviceManager({
-    platform: process.platform, isRoot: process.getuid?.() === 0, paths: ctx.paths, envFile: ctx.envFile, env: ctx.env,
+    platform: process.platform,
+    isRoot: process.getuid?.() === 0,
+    paths: ctx.paths,
+    envFile: ctx.envFile,
+    env: ctx.env,
   });
   // Only a native install has a service to report on: Docker and dev skip the check.
   const service: ServiceStatusFn | null = ctx.compiled && manager ? () => manager.status() : null;
   const natProbe: NatProberLike = { probe: () => nat.probe() };
   return {
-    env, envFile: ctx.envFile, paths: ctx.paths, config, configError, fetch, locale: ctx.locale, local: o.local,
-    nat: natProbe, service, control: o.control, compiled: ctx.compiled, version: ctx.version,
+    env,
+    envFile: ctx.envFile,
+    paths: ctx.paths,
+    config,
+    configError,
+    fetch,
+    locale: ctx.locale,
+    local: o.local,
+    nat: natProbe,
+    service,
+    control: o.control,
+    compiled: ctx.compiled,
+    version: ctx.version,
     latestTag: () => latestStable(),
     updateState: await readUpdateState(statePath(ctx.paths)),
     trayState: readTrayState(join(ctx.paths.run, 'tray.json')),
@@ -141,13 +172,18 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps
   };
   let index = 0;
   paintPending(index);
-  const results = await runChecks(checks, checkCtx, (r) => {
-    if (!json) {
-      if (live) out.write('\r\x1b[2K');
-      printResult(term, r, width);
-    }
-    paintPending(++index);
-  }, deps.checkTimeoutMs ? { timeoutMs: deps.checkTimeoutMs } : {});
+  const results = await runChecks(
+    checks,
+    checkCtx,
+    (r) => {
+      if (!json) {
+        if (live) out.write('\r\x1b[2K');
+        printResult(term, r, width);
+      }
+      paintPending(++index);
+    },
+    deps.checkTimeoutMs ? { timeoutMs: deps.checkTimeoutMs } : {},
+  );
 
   const count = (st: CheckStatus) => results.filter((r) => r.status === st).length;
   if (!json) {
@@ -160,7 +196,16 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps
     if (!ctx.tty) {
       if (!json) term.info(s('phoneNoTty'));
     } else {
-      phone = await phoneTest({ term, s, locale: L, control, now, qr: deps.qr ?? ((u) => renderQr(u, { env: ctx.env })), onInterrupt: deps.onInterrupt ?? sigint, config: checkCtx.config });
+      phone = await phoneTest({
+        term,
+        s,
+        locale: L,
+        control,
+        now,
+        qr: deps.qr ?? ((u) => renderQr(u, { env: ctx.env })),
+        onInterrupt: deps.onInterrupt ?? sigint,
+        config: checkCtx.config,
+      });
     }
   }
 
@@ -173,7 +218,9 @@ export async function run(args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps
 function printResult(term: Term, r: CheckResult, width: number) {
   const st = term.style;
   const paint = { ok: st.green, warn: st.yellow, fail: st.red, skip: st.dim }[r.status];
-  term.line(`${paint(ICON[r.status])} ${r.title.padEnd(width)}  ${r.status === 'skip' ? st.dim(r.summary) : r.summary}`);
+  term.line(
+    `${paint(ICON[r.status])} ${r.title.padEnd(width)}  ${r.status === 'skip' ? st.dim(r.summary) : r.summary}`,
+  );
   const pad = ' '.repeat(width + 4);
   for (const d of r.detail ?? []) term.line(`${pad}${st.dim(d)}`);
   if (r.fix && r.status !== 'ok') term.line(`${pad}${st.cyan('→')} ${r.fix}`);

@@ -1,12 +1,20 @@
 import { describe, expect, test } from 'bun:test';
-import { resolvePaths } from '../src/paths.ts';
 import type { CliContext } from '../src/cli/args.ts';
-import type { Spinner, Term } from '../src/cli/term.ts';
 import {
-  checkDiscord, createDiscordSetup, DiscordError, hasIntents, inviteUrl, INVITE_PERMISSIONS, pickableRoles, sortChannels, validCommand,
+  checkDiscord,
+  createDiscordSetup,
+  DiscordError,
+  hasIntents,
+  INVITE_PERMISSIONS,
+  inviteUrl,
+  pickableRoles,
+  sortChannels,
+  validCommand,
 } from '../src/cli/setup/discord.ts';
 import type { SetupDeps, Values, Wizard } from '../src/cli/setup/steps.ts';
 import { t } from '../src/cli/setup/strings.ts';
+import type { Spinner, Term } from '../src/cli/term.ts';
+import { resolvePaths } from '../src/paths.ts';
 
 const APP = '111111111111111111';
 const GUILD = '222222222222222222';
@@ -16,7 +24,14 @@ const URL_ = 'https://telinha.example.com';
 class FakeTerm implements Term {
   out: string[] = [];
   colors = false;
-  style = { bold: (s: string) => s, dim: (s: string) => s, red: (s: string) => s, green: (s: string) => s, yellow: (s: string) => s, cyan: (s: string) => s };
+  style = {
+    bold: (s: string) => s,
+    dim: (s: string) => s,
+    red: (s: string) => s,
+    green: (s: string) => s,
+    yellow: (s: string) => s,
+    cyan: (s: string) => s,
+  };
   info = (m: string) => void this.out.push(m);
   ok = (m: string) => void this.out.push(`ok ${m}`);
   warn = (m: string) => void this.out.push(`warn ${m}`);
@@ -25,7 +40,11 @@ class FakeTerm implements Term {
   line = (m = '') => void this.out.push(m);
   spinner(label: string): Spinner {
     this.out.push(`spin ${label}`);
-    return { update: (l) => void this.out.push(`spin ${l}`), stop: (l) => void this.out.push(`ok ${l ?? label}`), fail: (l) => void this.out.push(`fail ${l ?? label}`) };
+    return {
+      update: (l) => void this.out.push(`spin ${l}`),
+      stop: (l) => void this.out.push(`ok ${l ?? label}`),
+      fail: (l) => void this.out.push(`fail ${l ?? label}`),
+    };
   }
   table = (rows: string[][]) => void this.out.push(...rows.map((r) => r.join(' ')));
   link = (u: string) => u;
@@ -43,7 +62,8 @@ interface Fixture {
   patched?: number[];
 }
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 function discordFetch(f: Fixture): typeof fetch {
   let flags = f.flags ?? 0;
@@ -55,14 +75,18 @@ function discordFetch(f: Fixture): typeof fetch {
     const auth = new Headers(init?.headers).get('authorization');
     f.calls.push(`${method} ${url}`);
     if (url === '/oauth2/token') {
-      return auth === `Basic ${Buffer.from(`${APP}:good-secret`).toString('base64')}` ? json({ access_token: 'a' }) : json({ error: 'invalid_client' }, 401);
+      return auth === `Basic ${Buffer.from(`${APP}:good-secret`).toString('base64')}`
+        ? json({ access_token: 'a' })
+        : json({ error: 'invalid_client' }, 401);
     }
     if (auth !== 'Bot tok-good') return json({ message: '401: Unauthorized', code: 0 }, 401);
-    if (url === '/applications/@me' && method === 'GET') return json({ id: APP, name: 'Telinha Bot', flags, redirect_uris: f.redirects ?? [], bot_public: true });
+    if (url === '/applications/@me' && method === 'GET')
+      return json({ id: APP, name: 'Telinha Bot', flags, redirect_uris: f.redirects ?? [], bot_public: true });
     if (url === '/applications/@me' && method === 'PATCH') {
       if (f.patch === 'fail') return json({ message: 'Invalid Form Body', code: 50035 }, 400);
       flags = (JSON.parse(String(init!.body)) as { flags: number }).flags;
-      (f.patched ??= []).push(flags);
+      f.patched ??= [];
+      f.patched.push(flags);
       return json({ id: APP, flags });
     }
     if (url === '/users/@me/guilds') return json(guildLists[Math.min(guildCall++, guildLists.length - 1)]);
@@ -88,16 +112,43 @@ function discordFetch(f: Fixture): typeof fetch {
 
 function wizard(out: FakeTerm, fx: Fixture, extra: Partial<SetupDeps> = {}): Wizard {
   const env = { TELINHA_HOME: '/srv/telinha' };
-  const ctx = { argv: ['setup'], env, paths: resolvePaths(env, 'linux'), envFile: '/srv/telinha/config/telinha.env', locale: 'en', tty: true, yes: false, stdout: () => {}, stderr: () => {}, compiled: false, version: '0.7.0' } satisfies CliContext;
+  const ctx = {
+    argv: ['setup'],
+    env,
+    paths: resolvePaths(env, 'linux'),
+    envFile: '/srv/telinha/config/telinha.env',
+    locale: 'en',
+    tty: true,
+    yes: false,
+    stdout: () => {},
+    stderr: () => {},
+    compiled: false,
+    version: '0.7.0',
+  } satisfies CliContext;
   const opened: string[] = [];
   const deps = {
-    discord: (token: string) => createDiscordSetup({ token, fetch: discordFetch(fx), version: 'test', sleep: async () => {} }),
+    discord: (token: string) =>
+      createDiscordSetup({ token, fetch: discordFetch(fx), version: 'test', sleep: async () => {} }),
     openUrl: async (u: string) => void opened.push(u),
     ...extra,
   } as unknown as SetupDeps;
   return {
-    ctx, deps, out, locale: 'en', s: (k, p) => t('en', k, p), docker: false,
-    host: { kind: 'linux-root', platform: 'linux', arch: 'x64', isRoot: true, docker: false, osName: 'Linux', publicIp: '203.0.113.9', nat: null },
+    ctx,
+    deps,
+    out,
+    locale: 'en',
+    s: (k, p) => t('en', k, p),
+    docker: false,
+    host: {
+      kind: 'linux-root',
+      platform: 'linux',
+      arch: 'x64',
+      isRoot: true,
+      docker: false,
+      osName: 'Linux',
+      publicIp: '203.0.113.9',
+      nat: null,
+    },
   };
 }
 
@@ -105,13 +156,20 @@ describe('client', () => {
   test('sends Bot auth and the DiscordBot user agent; maps the application', async () => {
     const seen: Headers[] = [];
     const c = createDiscordSetup({
-      token: 'tok', version: '0.7.0',
+      token: 'tok',
+      version: '0.7.0',
       fetch: (async (_u: string, init: RequestInit) => {
         seen.push(new Headers(init.headers));
         return json({ id: APP, name: 'B', flags: 1 << 13, redirect_uris: ['x'], bot_public: false });
       }) as unknown as typeof fetch,
     });
-    expect(await c.application()).toEqual({ id: APP, name: 'B', flags: 1 << 13, redirectUris: ['x'], botPublic: false });
+    expect(await c.application()).toEqual({
+      id: APP,
+      name: 'B',
+      flags: 1 << 13,
+      redirectUris: ['x'],
+      botPublic: false,
+    });
     expect(seen[0]!.get('authorization')).toBe('Bot tok');
     expect(seen[0]!.get('user-agent')).toBe('DiscordBot (https://github.com/sombraSoft/telinha, 0.7.0)');
   });
@@ -120,8 +178,13 @@ describe('client', () => {
     const waits: number[] = [];
     let n = 0;
     const c = createDiscordSetup({
-      token: 'tok', version: 'v', sleep: async (ms) => void waits.push(ms),
-      fetch: (async () => (n++ === 0 ? json({ message: 'You are being rate limited.', retry_after: 1.5 }, 429) : json([{ id: GUILD, name: 'G' }]))) as unknown as typeof fetch,
+      token: 'tok',
+      version: 'v',
+      sleep: async (ms) => void waits.push(ms),
+      fetch: (async () =>
+        n++ === 0
+          ? json({ message: 'You are being rate limited.', retry_after: 1.5 }, 429)
+          : json([{ id: GUILD, name: 'G' }])) as unknown as typeof fetch,
     });
     expect(await c.guilds()).toEqual([{ id: GUILD, name: 'G' }]);
     expect(waits).toEqual([1500]);
@@ -150,19 +213,26 @@ describe('client', () => {
 
   test('invite URL: bot + commands scope, permissions 68608, optional fixed guild', () => {
     expect(INVITE_PERMISSIONS).toBe(68608);
-    expect(inviteUrl(APP)).toBe(`https://discord.com/oauth2/authorize?client_id=${APP}&scope=bot%20applications.commands&permissions=68608`);
-    expect(inviteUrl(APP, GUILD)).toBe(`https://discord.com/oauth2/authorize?client_id=${APP}&scope=bot%20applications.commands&permissions=68608&guild_id=${GUILD}&disable_guild_select=true`);
+    expect(inviteUrl(APP)).toBe(
+      `https://discord.com/oauth2/authorize?client_id=${APP}&scope=bot%20applications.commands&permissions=68608`,
+    );
+    expect(inviteUrl(APP, GUILD)).toBe(
+      `https://discord.com/oauth2/authorize?client_id=${APP}&scope=bot%20applications.commands&permissions=68608&guild_id=${GUILD}&disable_guild_select=true`,
+    );
   });
 });
 
 describe('helpers', () => {
   test('roles: no @everyone, no managed role, highest first', () => {
-    const roles = pickableRoles([
-      { id: GUILD, name: '@everyone', position: 0, managed: false },
-      { id: 'a', name: 'A', position: 1, managed: false },
-      { id: 'b', name: 'Bot', position: 3, managed: true },
-      { id: 'c', name: 'C', position: 2, managed: false },
-    ], GUILD);
+    const roles = pickableRoles(
+      [
+        { id: GUILD, name: '@everyone', position: 0, managed: false },
+        { id: 'a', name: 'A', position: 1, managed: false },
+        { id: 'b', name: 'Bot', position: 3, managed: true },
+        { id: 'c', name: 'C', position: 2, managed: false },
+      ],
+      GUILD,
+    );
     expect(roles.map((r) => r.id)).toEqual(['c', 'a']);
   });
 
@@ -191,15 +261,30 @@ describe('helpers', () => {
 describe("checkDiscord (the install's Discord task)", () => {
   test('fills the client id and reports what does not exist', async () => {
     const term = new FakeTerm();
-    const values: Values = { DISCORD_TOKEN: 'tok-good', DISCORD_CLIENT_SECRET: 'good-secret', GUILD_ID: GUILD, ROLE_ID: '999999999999999999', CHANNEL_IDS: '444444444444444442' };
+    const values: Values = {
+      DISCORD_TOKEN: 'tok-good',
+      DISCORD_CLIENT_SECRET: 'good-secret',
+      GUILD_ID: GUILD,
+      ROLE_ID: '999999999999999999',
+      CHANNEL_IDS: '444444444444444442',
+    };
     const problems = await checkDiscord(wizard(term, { calls: [] }), values, URL_);
     expect(values.DISCORD_CLIENT_ID).toBe(APP);
-    expect(problems).toEqual(['Role 999999999999999999 does not exist in the server.', 'Channel 444444444444444442 is not a text channel the bot can see.']);
+    expect(problems).toEqual([
+      'Role 999999999999999999 does not exist in the server.',
+      'Channel 444444444444444442 is not a text channel the bot can see.',
+    ]);
     expect(term.text_()).toContain(`Login will fail until ${URL_}/auth/callback`);
   });
 
   test('missing guild names the invite URL; a bad token is one problem', async () => {
-    const values: Values = { DISCORD_TOKEN: 'tok-good', DISCORD_CLIENT_SECRET: 'good-secret', GUILD_ID: '555555555555555555', ROLE_ID: GUILD, CHANNEL_IDS: '1' };
+    const values: Values = {
+      DISCORD_TOKEN: 'tok-good',
+      DISCORD_CLIENT_SECRET: 'good-secret',
+      GUILD_ID: '555555555555555555',
+      ROLE_ID: GUILD,
+      CHANNEL_IDS: '1',
+    };
     const problems = await checkDiscord(wizard(new FakeTerm(), { calls: [] }), values, URL_);
     expect(problems[0]).toContain(inviteUrl(APP, '555555555555555555'));
     const bad = await checkDiscord(wizard(new FakeTerm(), { calls: [] }), { ...values, DISCORD_TOKEN: 'nope' }, URL_);
@@ -207,7 +292,13 @@ describe("checkDiscord (the install's Discord task)", () => {
   });
 
   test('intents off: switched on through the API; a refused PATCH is a warning, not a problem', async () => {
-    const values = (): Values => ({ DISCORD_TOKEN: 'tok-good', DISCORD_CLIENT_SECRET: 'good-secret', GUILD_ID: GUILD, ROLE_ID: GUILD, CHANNEL_IDS: '444444444444444441' });
+    const values = (): Values => ({
+      DISCORD_TOKEN: 'tok-good',
+      DISCORD_CLIENT_SECRET: 'good-secret',
+      GUILD_ID: GUILD,
+      ROLE_ID: GUILD,
+      CHANNEL_IDS: '444444444444444441',
+    });
     const on: Fixture = { calls: [], redirects: [`${URL_}/auth/callback`] };
     const term = new FakeTerm();
     expect(await checkDiscord(wizard(term, on), values(), URL_)).toEqual([]);
@@ -216,15 +307,35 @@ describe("checkDiscord (the install's Discord task)", () => {
     expect(hasIntents(on.patched![0]!)).toBe(true);
 
     const refused = new FakeTerm();
-    expect(await checkDiscord(wizard(refused, { calls: [], patch: 'fail', redirects: [`${URL_}/auth/callback`] }), values(), URL_)).toEqual([]);
-    expect(refused.text_()).toContain('warn Could not switch the intents on automatically: Invalid Form Body (HTTP 400)');
+    expect(
+      await checkDiscord(
+        wizard(refused, { calls: [], patch: 'fail', redirects: [`${URL_}/auth/callback`] }),
+        values(),
+        URL_,
+      ),
+    ).toEqual([]);
+    expect(refused.text_()).toContain(
+      'warn Could not switch the intents on automatically: Invalid Form Body (HTTP 400)',
+    );
     expect(refused.text_()).toContain('warn The intents are still off');
   });
 
   test('a wrong client secret is a problem; secrets never reach the output', async () => {
     const term = new FakeTerm();
-    const values: Values = { DISCORD_TOKEN: 'tok-good', DISCORD_CLIENT_SECRET: 'nope', GUILD_ID: GUILD, ROLE_ID: GUILD, CHANNEL_IDS: '444444444444444443' };
-    expect(await checkDiscord(wizard(term, { calls: [], flags: (1 << 13) | (1 << 15), redirects: [`${URL_}/auth/callback`] }), values, URL_)).toEqual(['Discord rejected the client secret.']);
+    const values: Values = {
+      DISCORD_TOKEN: 'tok-good',
+      DISCORD_CLIENT_SECRET: 'nope',
+      GUILD_ID: GUILD,
+      ROLE_ID: GUILD,
+      CHANNEL_IDS: '444444444444444443',
+    };
+    expect(
+      await checkDiscord(
+        wizard(term, { calls: [], flags: (1 << 13) | (1 << 15), redirects: [`${URL_}/auth/callback`] }),
+        values,
+        URL_,
+      ),
+    ).toEqual(['Discord rejected the client secret.']);
     expect(term.text_()).toContain(`ok Bot: Telinha Bot (app id ${APP})`);
     expect(term.text_()).not.toContain('tok-good');
   });

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n/i18n.svelte';
-  import { prefs, type LangChoice } from '../lib/prefs.svelte';
+  import { type LangChoice, prefs } from '../lib/prefs.svelte';
   import { codecCaps } from '../lib/stats';
   import { THEME_CHOICES } from '../lib/theme';
 
@@ -62,6 +62,7 @@
 
 <div class="settings" bind:this={root} onfocusout={onFocusout}>
   <button
+    type="button"
     class="btn ghost icon"
     data-testid="settings-button"
     aria-label={t('settings.title')}
@@ -70,16 +71,27 @@
     aria-expanded={open}
     aria-controls={open ? `${id}-menu` : undefined}
     bind:this={cog}
-    onclick={() => (open = !open)}><span class="cog" aria-hidden="true">⚙</span></button
+    onclick={() => (open = !open)}
   >
+    <span class="cog" aria-hidden="true">⚙</span>
+  </button>
 
   {#if open}
-    <div class="menu" id="{id}-menu" role="dialog" aria-label={t('settings.title')} data-testid="settings-menu" {@attach focusCurrent}>
+    <div
+      class="menu"
+      id="{id}-menu"
+      role="dialog"
+      aria-label={t('settings.title')}
+      data-testid="settings-menu"
+      {@attach focusCurrent}
+    >
       <section>
         <h3 id="{id}-theme">{t('top.theme')}</h3>
+        <!-- biome-ignore lint/a11y/useSemanticElements: a fieldset would bring its own border and legend layout -->
         <div class="swatches" role="group" aria-labelledby="{id}-theme">
           {#each THEME_CHOICES as c (c)}
             <button
+              type="button"
               class="swatch"
               data-testid="theme-{c}"
               aria-pressed={prefs.theme === c}
@@ -120,6 +132,7 @@
             <span class="hint" id="{id}-debug-hint">{t('settings.debugHint')}</span>
           </span>
           <!-- Named by the title alone; the hint is a description, not the name. -->
+          <!-- biome-ignore-start lint/a11y/useAriaPropsForRole: a native checkbox exposes its checked state itself -->
           <input
             type="checkbox"
             role="switch"
@@ -130,8 +143,11 @@
             checked={prefs.stats}
             onchange={(e) => prefs.setStats(e.currentTarget.checked)}
           />
+          <!-- biome-ignore-end lint/a11y/useAriaPropsForRole: end of the switch -->
         </label>
-        {#if prefs.stats}<p class="caps" data-testid="codec-caps">{capsLine}</p>{/if}
+        {#if prefs.stats}
+          <p class="caps" data-testid="codec-caps">{capsLine}</p>
+        {/if}
       </section>
     </div>
   {/if}
@@ -299,7 +315,9 @@
     height: 14px;
     border-radius: 50%;
     background: var(--text-muted);
-    transition: transform 0.12s, background-color 0.12s;
+    transition:
+      transform 0.12s,
+      background-color 0.12s;
   }
   input[type='checkbox']:checked {
     background: var(--accent);

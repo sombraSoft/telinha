@@ -2,7 +2,7 @@
 // internet sees it, A records, the certificate a host serves, open TCP ports.
 import { promises as dns } from 'node:dns';
 import { connect as netConnect } from 'node:net';
-import { checkServerIdentity, connect as tlsConnect, type PeerCertificate } from 'node:tls';
+import { checkServerIdentity, type PeerCertificate, connect as tlsConnect } from 'node:tls';
 import { IPV4_RE } from './config.ts';
 
 const SOURCES: { url: string; parse: (body: string) => string }[] = [
@@ -69,9 +69,20 @@ export function tlsInfo(host: string, port: number, timeoutMs = 10_000, connectT
       socket.destroy();
       resolve(info);
     };
-    const fail = (error: string): TlsInfo => ({ validTo: 0, issuer: '', subjectAltNames: [], authorized: false, error });
+    const fail = (error: string): TlsInfo => ({
+      validTo: 0,
+      issuer: '',
+      subjectAltNames: [],
+      authorized: false,
+      error,
+    });
     // rejectUnauthorized off so an untrusted chain is still described, not just refused.
-    const socket = tlsConnect({ host: connectTo ?? host, port, servername: IPV4_RE.test(host) ? undefined : host, rejectUnauthorized: false });
+    const socket = tlsConnect({
+      host: connectTo ?? host,
+      port,
+      servername: IPV4_RE.test(host) ? undefined : host,
+      rejectUnauthorized: false,
+    });
     const timer = setTimeout(() => finish(fail(`timed out after ${timeoutMs} ms`)), timeoutMs);
     socket.once('secureConnect', () => {
       const cert = socket.getPeerCertificate() as PeerCertificate | undefined;
@@ -97,7 +108,10 @@ const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 /** "DNS:a.example, DNS:b.example, IP Address:1.2.3.4" -> ['a.example', 'b.example', '1.2.3.4'] */
 export function parseAltNames(s: string | undefined): string[] {
   if (!s) return [];
-  return s.split(',').map((p) => p.trim().replace(/^(DNS|IP Address):/, '')).filter(Boolean);
+  return s
+    .split(',')
+    .map((p) => p.trim().replace(/^(DNS|IP Address):/, ''))
+    .filter(Boolean);
 }
 
 function octets(ip: string): number[] | null {

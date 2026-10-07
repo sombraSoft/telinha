@@ -8,9 +8,21 @@ import type { Helper } from './bins.ts';
 import type { Config } from './config.ts';
 
 /** publicUrl is optional so a telinha.env that does not load yet still has a footprint (service/firewall.ts). */
-export type FootprintInput = Pick<Config,
-  'media' | 'ingress' | 'turn' | 'port' | 'livekitPort' | 'mediaTcpPort' | 'mediaUdpPort' | 'httpsPort' | 'httpPort'
-  | 'ipWatchSeconds' | 'livekitNodeIp'> & Partial<Pick<Config, 'publicUrl'>>;
+export type FootprintInput = Pick<
+  Config,
+  | 'media'
+  | 'ingress'
+  | 'turn'
+  | 'port'
+  | 'livekitPort'
+  | 'mediaTcpPort'
+  | 'mediaUdpPort'
+  | 'httpsPort'
+  | 'httpPort'
+  | 'ipWatchSeconds'
+  | 'livekitNodeIp'
+> &
+  Partial<Pick<Config, 'publicUrl'>>;
 
 /** The ports an exposure can name; the firewall and router adapters key their names on these. */
 export type ExposedKey = 'MEDIA_TCP_PORT' | 'MEDIA_UDP_PORT' | 'HTTPS_PORT' | 'HTTP_PORT';
@@ -18,7 +30,11 @@ export type ExposedKey = 'MEDIA_TCP_PORT' | 'MEDIA_UDP_PORT' | 'HTTPS_PORT' | 'H
 export type PortKey = ExposedKey | 'LISTEN' | 'LIVEKIT_PORT' | 'TURN_PORT';
 export type Protocol = 'tcp' | 'udp';
 
-export interface BoundPort { key: PortKey; protocol: Protocol; port: number }
+export interface BoundPort {
+  key: PortKey;
+  protocol: Protocol;
+  port: number;
+}
 
 export interface HelperRun {
   name: Helper;
@@ -78,7 +94,10 @@ export function footprintOf(c: FootprintInput): Footprint {
     cloudflared: [],
   };
   const exposed: Record<Helper, Exposure[]> = {
-    livekit: [{ helper: 'livekit', ...mediaTcp }, { helper: 'livekit', ...mediaUdp }],
+    livekit: [
+      { helper: 'livekit', ...mediaTcp },
+      { helper: 'livekit', ...mediaUdp },
+    ],
     caddy: [
       // PUBLIC_URL's port reaches HTTPS_PORT (a router may translate 443 -> 8443).
       { helper: 'caddy', ...https, ...(c.publicUrl ? { externalPort: Number(new URL(c.publicUrl).port || 443) } : {}) },

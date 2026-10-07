@@ -6,8 +6,25 @@ import { run } from '../src/cli/setup.ts';
 import { parseEnvFile } from '../src/envfile.ts';
 import { paste, press, typeText, until } from './tui-harness.tsx';
 import {
-  APP, at, CHANNEL, CHANNEL2, ctxFor, defaultsToReview, discordKeys, DUCK, ENV, GUILD, homeDuckKeys, machine, PUBLIC_IP, ROLE, SECRET, startSetup, TOKEN, TUNNEL,
+  APP,
+  at,
+  CHANNEL,
+  CHANNEL2,
+  ctxFor,
+  DUCK,
+  defaultsToReview,
+  discordKeys,
+  ENV,
+  GUILD,
+  homeDuckKeys,
+  machine,
+  PUBLIC_IP,
+  ROLE,
+  SECRET,
   type Started,
+  startSetup,
+  TOKEN,
+  TUNNEL,
 } from './tui-setup-fixtures.ts';
 
 setDefaultTimeout(20_000);
@@ -18,7 +35,12 @@ const DISCORD_FLAGS = ['--guild', GUILD, '--role', ROLE, '--channels', CHANNEL, 
 const SSLIP = `https://${PUBLIC_IP.replaceAll('.', '-')}.sslip.io`;
 
 /** The file the screens write after `keys`, and the one --non-interactive writes for `flags`. */
-async function both(o: { keys(r: Started): Promise<void>; flags: string[]; env: Record<string, string>; extra?: string[] }) {
+async function both(o: {
+  keys(r: Started): Promise<void>;
+  flags: string[];
+  env: Record<string, string>;
+  extra?: string[];
+}) {
   const r = await startSetup([...QUIET, ...(o.extra ?? [])]);
   await o.keys(r);
   await defaultsToReview(r);
@@ -27,7 +49,10 @@ async function both(o: { keys(r: Started): Promise<void>; flags: string[]; env: 
   await press(r.s, 'enter');
   expect(await r.code).toBe(0);
   const plain = machine();
-  const { ctx, err } = ctxFor(['setup', '--non-interactive', ...QUIET, ...(o.extra ?? []), ...o.flags], { tty: false, env: o.env });
+  const { ctx, err } = ctxFor(['setup', '--non-interactive', ...QUIET, ...(o.extra ?? []), ...o.flags], {
+    tty: false,
+    env: o.env,
+  });
   expect(await run({ flags: {}, positionals: [], rest: [] }, ctx, plain.deps), err.join('\n')).toBe(0);
   return { screens: r.files.get(ENV)!, plain: plain.files.get(ENV)! };
 }
@@ -53,7 +78,12 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
       env: { ...SECRETS, DUCKDNS_TOKEN: DUCK },
     });
     expect(f.screens).toBe(f.plain);
-    expect(parseEnvFile(f.screens).vars).toMatchObject({ HOSTING: 'home', PUBLIC_URL: 'https://my-group.duckdns.org:8443', ACME_DNS: 'duckdns', UPNP: 'auto' });
+    expect(parseEnvFile(f.screens).vars).toMatchObject({
+      HOSTING: 'home',
+      PUBLIC_URL: 'https://my-group.duckdns.org:8443',
+      ACME_DNS: 'duckdns',
+      UPNP: 'auto',
+    });
   });
 
   test('home, a domain on Cloudflare: the tunnel from the pasted install command', async () => {
@@ -91,7 +121,12 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
       env: SECRETS,
     });
     expect(f.screens).toBe(f.plain);
-    expect(parseEnvFile(f.screens).vars).toMatchObject({ HOSTING: 'vps', PUBLIC_URL: SSLIP, LIVEKIT_NODE_IP: PUBLIC_IP, UPNP: 'off' });
+    expect(parseEnvFile(f.screens).vars).toMatchObject({
+      HOSTING: 'vps',
+      PUBLIC_URL: SSLIP,
+      LIVEKIT_NODE_IP: PUBLIC_IP,
+      UPNP: 'off',
+    });
   });
 
   test('VPS, own domain, media ports changed', async () => {
@@ -112,11 +147,28 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
         await typeText(r.s, '50001');
         await press(r.s, 'enter');
       },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--media-tcp', '50000', '--media-udp', '50001', '--turn', 'on', ...DISCORD_FLAGS],
+      flags: [
+        '--host',
+        'vps',
+        '--public-url',
+        'https://t.example.com',
+        '--media-tcp',
+        '50000',
+        '--media-udp',
+        '50001',
+        '--turn',
+        'on',
+        ...DISCORD_FLAGS,
+      ],
       env: SECRETS,
     });
     expect(f.screens).toBe(f.plain);
-    expect(parseEnvFile(f.screens).vars).toMatchObject({ HTTP_PORT: '80', HTTPS_PORT: '443', MEDIA_TCP_PORT: '50000', MEDIA_UDP_PORT: '50001' });
+    expect(parseEnvFile(f.screens).vars).toMatchObject({
+      HTTP_PORT: '80',
+      HTTPS_PORT: '443',
+      MEDIA_TCP_PORT: '50000',
+      MEDIA_UDP_PORT: '50001',
+    });
   });
 
   test('Discord offline: the ids typed', async () => {
@@ -143,20 +195,43 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
         await typeText(r.s, `${CHANNEL},${CHANNEL2}`);
         await press(r.s, 'enter');
       },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, '--turn', 'on', ...DISCORD_FLAGS.map((x) => (x === CHANNEL ? `${CHANNEL},${CHANNEL2}` : x))],
+      flags: [
+        '--host',
+        'vps',
+        '--public-url',
+        'https://t.example.com',
+        '--client-id',
+        APP,
+        '--turn',
+        'on',
+        ...DISCORD_FLAGS.map((x) => (x === CHANNEL ? `${CHANNEL},${CHANNEL2}` : x)),
+      ],
       env: SECRETS,
     });
     expect(f.screens).toBe(f.plain);
-    expect(parseEnvFile(f.screens).vars).toMatchObject({ DISCORD_CLIENT_ID: APP, CHANNEL_IDS: `${CHANNEL},${CHANNEL2}` });
+    expect(parseEnvFile(f.screens).vars).toMatchObject({
+      DISCORD_CLIENT_ID: APP,
+      CHANNEL_IDS: `${CHANNEL},${CHANNEL2}`,
+    });
   });
 
-  test('online: the client id comes from the token\'s application, as --client-id gives it', async () => {
+  test("online: the client id comes from the token's application, as --client-id gives it", async () => {
     const f = await both({
       keys: async (r) => {
         await vpsDomain(r);
         await discordKeys(r);
       },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, '--turn', 'on', ...DISCORD_FLAGS],
+      flags: [
+        '--host',
+        'vps',
+        '--public-url',
+        'https://t.example.com',
+        '--client-id',
+        APP,
+        '--turn',
+        'on',
+        ...DISCORD_FLAGS,
+      ],
       env: SECRETS,
     });
     expect(f.screens).toBe(f.plain);

@@ -2,11 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-// mise.toml is where a Bun or Go bump starts, and every other copy must follow
-// it. Renovate's "bun" and "go" groups move them in one PR, but each copy comes
-// from its own registry (GitHub, Docker Hub, npm), which publish at different
-// times, so a group PR can arrive with a copy left behind. This test turns that
-// PR red, which keeps it from automerging until the missing copy lands.
+// mise.toml is where a Bun, Go or Biome bump starts, and every other copy must
+// follow it. Renovate's "bun", "go" and "biome" groups move them in one PR, but
+// each copy comes from its own registry (GitHub, Docker Hub, npm), which
+// publish at different times, so a group PR can arrive with a copy left
+// behind. This test turns that PR red, which keeps it from merging until the
+// missing copy lands.
 
 const ROOT = resolve(import.meta.dir, '..');
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
@@ -41,7 +42,7 @@ function expectAll(copies: Record<string, string>, version: string) {
 describe('mise.toml pins exact versions', () => {
   // A fuzzy selector (bun = "1.4") would leave nothing exact to compare the
   // other copies against; mise.lock would hold the real version instead.
-  test.each(['bun', 'go'])('%s', (tool) => {
+  test.each(['bun', 'go', 'biome'])('%s', (tool) => {
     expect(tools[tool]).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });
@@ -79,7 +80,6 @@ describe('every Bun copy equals mise.toml', () => {
     }
     expectAll(copies, bun);
   });
-
 });
 
 describe('every Go copy equals mise.toml', () => {
@@ -87,5 +87,14 @@ describe('every Go copy equals mise.toml', () => {
     // The image builds Caddy with this Go, so the Caddy a developer builds
     // locally comes from the same compiler as the shipped one.
     expectAll(dockerImages('golang'), tools.go as string);
+  });
+});
+
+describe('every Biome copy equals mise.toml', () => {
+  test('the $schema in biome.jsonc', () => {
+    // A schema from another release flags options the pinned Biome reads
+    // fine, or misses ones it rejects, in the editor.
+    const schema = /biomejs\.dev\/schemas\/([^/]+)\/schema\.json/.exec(read('biome.jsonc'))?.[1];
+    expect(schema).toBe(tools.biome as string);
   });
 });

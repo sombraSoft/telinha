@@ -27,7 +27,9 @@ export async function smoke(): Promise<number> {
       console.log(`tui smoke ok:\n${second.trimEnd()}`);
       return 0;
     }
-    console.error(`tui smoke FAILED: the key press did not re-render\n--- before\n${first.trimEnd()}\n--- after\n${second.trimEnd()}`);
+    console.error(
+      `tui smoke FAILED: the key press did not re-render\n--- before\n${first.trimEnd()}\n--- after\n${second.trimEnd()}`,
+    );
     return 1;
   } finally {
     s.renderer.destroy();

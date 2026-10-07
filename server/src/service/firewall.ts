@@ -8,14 +8,22 @@
 // leaves Block rules for them, and Block beats Allow.
 import { loadConfig } from '../config.ts';
 import { loadEnvFile, mergeEnv } from '../envfile.ts';
-import { footprintOf, type ExposedKey, type FootprintInput } from '../footprint.ts';
+import { type ExposedKey, type FootprintInput, footprintOf } from '../footprint.ts';
 import type { SpawnFn } from './index.ts';
 
-export interface FirewallRule { name: string; program: string; protocol: 'TCP' | 'UDP'; port: number }
+export interface FirewallRule {
+  name: string;
+  program: string;
+  protocol: 'TCP' | 'UDP';
+  port: number;
+}
 
 export const RULE_NAMES = ['Telinha LiveKit TCP', 'Telinha LiveKit UDP', 'Telinha HTTPS', 'Telinha HTTP'] as const;
 const RULE_FOR: Record<ExposedKey, (typeof RULE_NAMES)[number]> = {
-  MEDIA_TCP_PORT: 'Telinha LiveKit TCP', MEDIA_UDP_PORT: 'Telinha LiveKit UDP', HTTPS_PORT: 'Telinha HTTPS', HTTP_PORT: 'Telinha HTTP',
+  MEDIA_TCP_PORT: 'Telinha LiveKit TCP',
+  MEDIA_UDP_PORT: 'Telinha LiveKit UDP',
+  HTTPS_PORT: 'Telinha HTTPS',
+  HTTP_PORT: 'Telinha HTTP',
 };
 
 /** One Allow rule per exposure, scoped to the helper's program in bin. */
@@ -59,7 +67,11 @@ export function portsFromEnv(env: Record<string, string | undefined>, o: { compi
   }
 }
 
-export function loadFirewallPorts(envFile: string, env: Record<string, string | undefined>, o: { compiled?: boolean } = {}): FootprintInput {
+export function loadFirewallPorts(
+  envFile: string,
+  env: Record<string, string | undefined>,
+  o: { compiled?: boolean } = {},
+): FootprintInput {
   let vars: Record<string, string> = {};
   try {
     vars = loadEnvFile(envFile)?.vars ?? {};
@@ -69,15 +81,41 @@ export function loadFirewallPorts(envFile: string, env: Record<string, string | 
   return portsFromEnv(mergeEnv(vars, env), o);
 }
 
-export const deleteRuleArgv = (name: string): string[] => ['netsh', 'advfirewall', 'firewall', 'delete', 'rule', `name=${name}`];
+export const deleteRuleArgv = (name: string): string[] => [
+  'netsh',
+  'advfirewall',
+  'firewall',
+  'delete',
+  'rule',
+  `name=${name}`,
+];
 
 /** Every inbound rule (any name, Allow or Block) for one program; none matching is not an error. */
-export const deleteProgramRulesArgv = (program: string): string[] =>
-  ['netsh', 'advfirewall', 'firewall', 'delete', 'rule', 'name=all', 'dir=in', `program=${program}`];
+export const deleteProgramRulesArgv = (program: string): string[] => [
+  'netsh',
+  'advfirewall',
+  'firewall',
+  'delete',
+  'rule',
+  'name=all',
+  'dir=in',
+  `program=${program}`,
+];
 
 export const addRuleArgv = (r: FirewallRule): string[] => [
-  'netsh', 'advfirewall', 'firewall', 'add', 'rule',
-  `name=${r.name}`, 'dir=in', 'action=allow', `protocol=${r.protocol}`, `localport=${r.port}`, `program=${r.program}`, 'profile=any', 'enable=yes',
+  'netsh',
+  'advfirewall',
+  'firewall',
+  'add',
+  'rule',
+  `name=${r.name}`,
+  'dir=in',
+  'action=allow',
+  `protocol=${r.protocol}`,
+  `localport=${r.port}`,
+  `program=${r.program}`,
+  'profile=any',
+  'enable=yes',
 ];
 
 /**

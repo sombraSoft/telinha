@@ -71,7 +71,8 @@ export function createLogger(o: LoggerOptions = {}): Logger {
       size += bytes.length;
     } catch (e) {
       // A full disk or a vanished directory must not take the service down; say it once.
-      if (!failed) console.error(`${now().toISOString()} log: cannot write ${file}: ${e instanceof Error ? e.message : e}`);
+      if (!failed)
+        console.error(`${now().toISOString()} log: cannot write ${file}: ${e instanceof Error ? e.message : e}`);
       failed = true;
     }
   };

@@ -1,8 +1,8 @@
 // GitHub releases without the API: `releases/latest` answers with a redirect to
 // the newest published non-prerelease tag (no rate limit, no token), and the
 // assets live under `releases/download/<release tag>/`.
-import { REPO, SUMS, isStableTag, latestReleaseTag, parseSums, releaseAssetUrl } from '../release.ts';
-import { PendingError, errorMessage, type GitHubReleases } from './types.ts';
+import { isStableTag, latestReleaseTag, parseSums, REPO, releaseAssetUrl, SUMS } from '../release.ts';
+import { errorMessage, type GitHubReleases, PendingError } from './types.ts';
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -10,7 +10,8 @@ export function createGitHubReleases(o: { fetch?: FetchFn; repo?: string; timeou
   const fetchFn: FetchFn = o.fetch ?? fetch;
   const repo = o.repo ?? REPO;
   const timeoutMs = o.timeoutMs ?? 30_000;
-  const get = (url: string, init: RequestInit = {}) => fetchFn(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  const get = (url: string, init: RequestInit = {}) =>
+    fetchFn(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const assetUrl = (tag: string, asset: string) => releaseAssetUrl(tag, asset, repo);
   return {
     latestTag: () => latestReleaseTag(fetchFn, repo, timeoutMs),

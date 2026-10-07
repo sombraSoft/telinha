@@ -95,7 +95,10 @@ export interface TrayStateLike {
 export interface NetLike {
   lookupPublicIp(fetch: typeof globalThis.fetch, timeoutMs?: number): Promise<string>;
   resolveA(host: string): Promise<string[]>;
-  tlsInfo(host: string, port: number): Promise<{ validTo: number; issuer: string; subjectAltNames: string[]; authorized: boolean; error?: string }>;
+  tlsInfo(
+    host: string,
+    port: number,
+  ): Promise<{ validTo: number; issuer: string; subjectAltNames: string[]; authorized: boolean; error?: string }>;
   tcpOpen(host: string, port: number, timeoutMs?: number): Promise<boolean>;
   /** RoomService.ListRooms on a remote LiveKit: proves the URL and the key/secret in one call. Defaults to the SDK. */
   livekitListRooms?(apiUrl: string, key: string, secret: string): Promise<{ rooms: number }>;

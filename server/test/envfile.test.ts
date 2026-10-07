@@ -4,14 +4,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadEnvFile, mergeEnv, parseEnvFile } from '../src/envfile.ts';
 
-const parityWarning = (k: string) => `envfile: ${k} contains $, \\ or #; single-quote it so Docker and native read the same value`;
+const parityWarning = (k: string) =>
+  `envfile: ${k} contains $, \\ or #; single-quote it so Docker and native read the same value`;
 
 describe('parseEnvFile', () => {
   test('comments, blank lines, export prefix, trimming', () => {
-    const { vars, warnings } = parseEnvFile([
-      '# a comment', '', '   ', '  # indented comment',
-      'A=1', '  B = two words  ', 'export C=3', 'export\tD=4', 'E=', 'F=a=b', 'exportG=5',
-    ].join('\n'));
+    const { vars, warnings } = parseEnvFile(
+      [
+        '# a comment',
+        '',
+        '   ',
+        '  # indented comment',
+        'A=1',
+        '  B = two words  ',
+        'export C=3',
+        'export\tD=4',
+        'E=',
+        'F=a=b',
+        'exportG=5',
+      ].join('\n'),
+    );
     expect(vars).toEqual({ A: '1', B: 'two words', C: '3', D: '4', E: '', F: 'a=b', exportG: '5' });
     expect(warnings).toEqual([]);
   });
@@ -21,12 +33,26 @@ describe('parseEnvFile', () => {
   });
 
   test('matching quotes are stripped, nothing is unescaped or interpolated', () => {
-    const { vars } = parseEnvFile([
-      `S='it''s'`, 'D="a\\nb"', `Q=''`, 'DQ=""', `MIX='abc"`, `ONE='`, 'HASH=abc #not a comment',
-      `INNER='a "b" c'`,
-    ].join('\n'));
+    const { vars } = parseEnvFile(
+      [
+        `S='it''s'`,
+        'D="a\\nb"',
+        `Q=''`,
+        'DQ=""',
+        `MIX='abc"`,
+        `ONE='`,
+        'HASH=abc #not a comment',
+        `INNER='a "b" c'`,
+      ].join('\n'),
+    );
     expect(vars).toEqual({
-      S: "it''s", D: 'a\\nb', Q: '', DQ: '', MIX: `'abc"`, ONE: "'", HASH: 'abc #not a comment',
+      S: "it''s",
+      D: 'a\\nb',
+      Q: '',
+      DQ: '',
+      MIX: `'abc"`,
+      ONE: "'",
+      HASH: 'abc #not a comment',
       INNER: 'a "b" c',
     });
   });

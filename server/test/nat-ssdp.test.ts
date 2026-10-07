@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { UdpFactory } from '../src/nat/index.ts';
 import {
-  acceptableLocation, fetchIgdService, findAll, parseDeviceDescription, parseSsdpReply, parseXml, SEARCH_TARGETS, ssdpSearch,
+  acceptableLocation,
+  fetchIgdService,
+  findAll,
+  parseDeviceDescription,
+  parseSsdpReply,
+  parseXml,
+  SEARCH_TARGETS,
+  ssdpSearch,
 } from '../src/nat/ssdp.ts';
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -21,7 +28,11 @@ function fakeUdp(answer: (data: Uint8Array, port: number, address: string, reply
       send(data, port, address) {
         const bytes = typeof data === 'string' ? enc(data) : data;
         sent.push({ data: dec(bytes), port, address });
-        answer(bytes, port, address, (d, p, a) => queueMicrotask(() => { if (!closed) o.onMessage(enc(d), p, a); }));
+        answer(bytes, port, address, (d, p, a) =>
+          queueMicrotask(() => {
+            if (!closed) o.onMessage(enc(d), p, a);
+          }),
+        );
       },
       close() {
         if (!closed) open--;
@@ -46,18 +57,39 @@ describe('ssdpSearch', () => {
     sleeps.length = 0;
     const net = fakeUdp((data, _port, _address, reply) => {
       const st = /\r\nST: (.*)\r\n/.exec(dec(data))?.[1] ?? '';
-      if (st.includes('InternetGatewayDevice')) reply(ssdpReply('http://192.168.0.1:49152/desc.xml', st), 1900, '192.168.0.1');
+      if (st.includes('InternetGatewayDevice'))
+        reply(ssdpReply('http://192.168.0.1:49152/desc.xml', st), 1900, '192.168.0.1');
       if (st === 'upnp:rootdevice') reply(ssdpReply('http://192.168.0.20:8080/tv.xml', st), 1900, '192.168.0.20');
     });
     const seen: string[] = [];
-    const found = await ssdpSearch({ udp: net.udp, sleep, localIp: '192.168.0.10', timeoutMs: 2500, onReply: (r) => seen.push(r.location) });
-    expect(net.sent.map((s) => `${s.address}:${s.port}`)).toEqual(Array(SEARCH_TARGETS.length * 2).fill('239.255.255.250:1900'));
-    expect(net.sent[0]!.data).toBe('M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\n'
-      + 'ST: urn:schemas-upnp-org:device:InternetGatewayDevice:2\r\n\r\n');
+    const found = await ssdpSearch({
+      udp: net.udp,
+      sleep,
+      localIp: '192.168.0.10',
+      timeoutMs: 2500,
+      onReply: (r) => seen.push(r.location),
+    });
+    expect(net.sent.map((s) => `${s.address}:${s.port}`)).toEqual(
+      Array(SEARCH_TARGETS.length * 2).fill('239.255.255.250:1900'),
+    );
+    expect(net.sent[0]!.data).toBe(
+      'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\n' +
+        'ST: urn:schemas-upnp-org:device:InternetGatewayDevice:2\r\n\r\n',
+    );
     expect(sleeps).toEqual([300, 2200]);
     expect(found).toEqual([
-      { location: 'http://192.168.0.1:49152/desc.xml', st: 'urn:schemas-upnp-org:device:InternetGatewayDevice:2', usn: 'uuid:abc::urn:schemas-upnp-org:device:InternetGatewayDevice:2', address: '192.168.0.1' },
-      { location: 'http://192.168.0.20:8080/tv.xml', st: 'upnp:rootdevice', usn: 'uuid:abc::upnp:rootdevice', address: '192.168.0.20' },
+      {
+        location: 'http://192.168.0.1:49152/desc.xml',
+        st: 'urn:schemas-upnp-org:device:InternetGatewayDevice:2',
+        usn: 'uuid:abc::urn:schemas-upnp-org:device:InternetGatewayDevice:2',
+        address: '192.168.0.1',
+      },
+      {
+        location: 'http://192.168.0.20:8080/tv.xml',
+        st: 'upnp:rootdevice',
+        usn: 'uuid:abc::upnp:rootdevice',
+        address: '192.168.0.20',
+      },
     ]);
     expect(seen).toEqual(['http://192.168.0.1:49152/desc.xml', 'http://192.168.0.20:8080/tv.xml']);
     expect(net.opts[0]!.multicastInterface).toBe('192.168.0.10');
@@ -77,8 +109,9 @@ describe('ssdpSearch', () => {
 
 describe('parsing', () => {
   test('parseSsdpReply: case-insensitive headers', () => {
-    expect(parseSsdpReply('HTTP/1.1 200 OK\r\nlocation: http://10.0.0.1:1900/igd.xml\r\nst: upnp:rootdevice\r\n\r\n'))
-      .toEqual({ location: 'http://10.0.0.1:1900/igd.xml', st: 'upnp:rootdevice', usn: '' });
+    expect(
+      parseSsdpReply('HTTP/1.1 200 OK\r\nlocation: http://10.0.0.1:1900/igd.xml\r\nst: upnp:rootdevice\r\n\r\n'),
+    ).toEqual({ location: 'http://10.0.0.1:1900/igd.xml', st: 'upnp:rootdevice', usn: '' });
     expect(parseSsdpReply('HTTP/1.1 404 Not Found\r\nLOCATION: http://x/\r\n\r\n')).toBeNull();
   });
 
@@ -92,7 +125,9 @@ describe('parsing', () => {
   });
 
   test('parseXml: prefixes dropped, entities and CDATA decoded, comments skipped', () => {
-    const t = parseXml('<?xml version="1.0"?><!-- hi --><s:a xmlns:s="x"><s:b>1 &amp; 2</s:b><c><![CDATA[<raw>]]></c><d/><B>x</B></s:a>');
+    const t = parseXml(
+      '<?xml version="1.0"?><!-- hi --><s:a xmlns:s="x"><s:b>1 &amp; 2</s:b><c><![CDATA[<raw>]]></c><d/><B>x</B></s:a>',
+    );
     expect(findAll(t, 'b').map((n) => n.text)).toEqual(['1 & 2', 'x']);
     expect(findAll(t, 'c')[0]!.text).toBe('<raw>');
     expect(findAll(t, 'd')[0]!.children).toEqual([]);
@@ -172,10 +207,11 @@ describe('parseDeviceDescription', () => {
 });
 
 describe('fetchIgdService', () => {
-  const fetchOf = (r: Response | Error) => (async () => {
-    if (r instanceof Error) throw r;
-    return r;
-  }) as unknown as typeof fetch;
+  const fetchOf = (r: Response | Error) =>
+    (async () => {
+      if (r instanceof Error) throw r;
+      return r;
+    }) as unknown as typeof fetch;
 
   test('fetches and parses', async () => {
     const s = await fetchIgdService(fetchOf(new Response(DESC_URLBASE)), 'http://192.168.1.1:39000/rootDesc.xml');
@@ -183,8 +219,14 @@ describe('fetchIgdService', () => {
   });
 
   test('readable failures: HTTP status, size cap, no WAN service', async () => {
-    await expect(fetchIgdService(fetchOf(new Response('', { status: 404 })), 'http://192.168.0.1/d.xml')).rejects.toThrow('HTTP 404');
-    await expect(fetchIgdService(fetchOf(new Response('x'.repeat(300 * 1024))), 'http://192.168.0.1/d.xml')).rejects.toThrow('larger than');
-    await expect(fetchIgdService(fetchOf(new Response(DESC_TV)), 'http://192.168.0.1/d.xml')).rejects.toThrow('no WANIPConnection');
+    await expect(
+      fetchIgdService(fetchOf(new Response('', { status: 404 })), 'http://192.168.0.1/d.xml'),
+    ).rejects.toThrow('HTTP 404');
+    await expect(
+      fetchIgdService(fetchOf(new Response('x'.repeat(300 * 1024))), 'http://192.168.0.1/d.xml'),
+    ).rejects.toThrow('larger than');
+    await expect(fetchIgdService(fetchOf(new Response(DESC_TV)), 'http://192.168.0.1/d.xml')).rejects.toThrow(
+      'no WANIPConnection',
+    );
   });
 });

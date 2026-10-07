@@ -5,7 +5,10 @@ import type { Locale } from '../data/reference.ts';
 
 type HelpKey = 'help' | 'helpRun' | 'helpSetup' | 'helpDoctor' | 'helpUpdate' | 'helpService' | 'helpTray';
 // `topic`, not `key`: JSX runtimes treat `key` as their own.
-interface Props { locale: Locale; topic: HelpKey }
+interface Props {
+  locale: Locale;
+  topic: HelpKey;
+}
 const { locale, topic } = Astro.props;
 const text = (generated.cli.help as Record<Locale, Record<HelpKey, string>>)[locale][topic];
 ---
@@ -13,5 +16,7 @@ const text = (generated.cli.help as Record<Locale, Record<HelpKey, string>>)[loc
 <pre class="help"><code>{text}</code></pre>
 
 <style>
-  pre.help { white-space: pre-wrap; }
+  pre.help {
+    white-space: pre-wrap;
+  }
 </style>

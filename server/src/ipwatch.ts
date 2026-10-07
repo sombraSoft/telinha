@@ -17,7 +17,9 @@ export interface IpWatch {
 const TIMEOUT_MS = 10_000;
 
 export function createIpWatch(o: {
-  fetch: typeof fetch; intervalMs: number; log: (...a: unknown[]) => void;
+  fetch: typeof fetch;
+  intervalMs: number;
+  log: (...a: unknown[]) => void;
   onChange: (ip: string, previous: string) => Promise<void>;
   /** What a change means here, for the log: a cloud install has no livekit to restart. */
   labels: { changed: string; startedWith: string };
@@ -80,7 +82,9 @@ export function createIpWatch(o: {
 
   // One check at a time: start()'s tick and a manual check() share the run.
   const check = () => {
-    running ??= run().finally(() => { running = null; });
+    running ??= run().finally(() => {
+      running = null;
+    });
     return running;
   };
 

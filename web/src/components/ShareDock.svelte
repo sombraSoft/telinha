@@ -1,6 +1,16 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
-  import { DOCK_MARGIN, clampTo, homeOf, nearHome, parseDockPos, placeDock, toFraction, type Point, type Screen } from '../lib/dock';
+  import {
+    clampTo,
+    DOCK_MARGIN,
+    homeOf,
+    nearHome,
+    type Point,
+    parseDockPos,
+    placeDock,
+    type Screen,
+    toFraction,
+  } from '../lib/dock';
   import { t } from '../lib/i18n/i18n.svelte';
   import type { RoomSession } from '../lib/room.svelte';
   import { canShareScreen } from '../lib/share';
@@ -143,6 +153,7 @@
   <!-- Spans the stage only, so the dock can't be dragged over the people list. -->
   <div class="area" bind:this={area} bind:clientWidth={stageW} bind:clientHeight={stageH}>
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions (double click = the grip's Home key) -->
+    <!-- biome-ignore lint/a11y/useSemanticElements: a fieldset would bring its own border and legend layout -->
     <div
       class="dock"
       class:ready={stageW > 0 && dockW > 0}
@@ -157,6 +168,7 @@
       ondblclick={onDblclick}
     >
       <button
+        type="button"
         class="grip"
         data-testid="dock-grip"
         aria-label={t('dock.grip')}
@@ -166,11 +178,14 @@
         onpointermove={onMove}
         onpointerup={onUp}
         onpointercancel={onUp}
-        onkeydown={onGripKey}><span aria-hidden="true">⋮⋮</span></button
+        onkeydown={onGripKey}
       >
+        <span aria-hidden="true">⋮⋮</span>
+      </button>
 
       <!-- One button for both states: Share opens the modal, Stop ends the share at once. -->
       <button
+        type="button"
         bind:this={shareBtn}
         class="btn share"
         class:primary={!rc.share}
@@ -187,6 +202,7 @@
 
       {#if rc.share}
         <button
+          type="button"
           bind:this={qualityBtn}
           class="btn share"
           data-testid="share-quality"

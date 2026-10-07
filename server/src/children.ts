@@ -3,7 +3,7 @@
 // ps/tasklist and printed in the "spawning" log line) and never a rendered file.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { KNOWN_KEYS, type Config } from './config.ts';
+import { type Config, KNOWN_KEYS } from './config.ts';
 import { footprintOf } from './footprint.ts';
 import { findBinary as defaultFindBinary, type Paths } from './paths.ts';
 import { renderCaddyfile, renderLivekitYaml } from './render.ts';
@@ -27,7 +27,10 @@ export const portInUse: PortInUse = async (port) => {
     const socket = await Promise.race([connecting, timeout]);
     if (!socket) {
       // No answer at all (filtered): nobody we could be confused with. Close it if it lands late.
-      connecting.then((s) => s.end(), () => {});
+      connecting.then(
+        (s) => s.end(),
+        () => {},
+      );
       return false;
     }
     socket.end();
@@ -55,12 +58,17 @@ export function childBaseEnv(processEnv: Record<string, string | undefined>): Re
 }
 
 export function childSpecs(
-  config: Config, paths: Paths, findBinary: FindBinary = defaultFindBinary, inUse: PortInUse = portInUse,
+  config: Config,
+  paths: Paths,
+  findBinary: FindBinary = defaultFindBinary,
+  inUse: PortInUse = portInUse,
 ): ChildSpec[] {
   // Every helper the footprint names; bins.ts downloads each under its name.
+  // biome-ignore lint/suspicious/useIterableCallbackReturn: the switch covers every Helper, which TypeScript checks
   return footprintOf(config).helpers.map((h): ChildSpec => {
     const found = findBinary(h.binary, paths);
-    if (!found) throw new Error(`${h.binary} not found: put it in ${paths.bin} (bun scripts/bins.ts ${h.name}) or on PATH`);
+    if (!found)
+      throw new Error(`${h.binary} not found: put it in ${paths.bin} (bun scripts/bins.ts ${h.name}) or on PATH`);
     switch (h.name) {
       case 'livekit': {
         const file = join(paths.run, 'livekit.yaml');
@@ -92,7 +100,9 @@ export function childSpecs(
           cmd: [found, 'run', '--config', file, '--adapter', 'caddyfile'],
           // Certificates must survive restarts and live on the data volume.
           env: {
-            XDG_DATA_HOME: storage, XDG_CONFIG_HOME: storage, HOME: storage,
+            XDG_DATA_HOME: storage,
+            XDG_CONFIG_HOME: storage,
+            HOME: storage,
             ...(config.acmeDns ? { DUCKDNS_TOKEN: config.acmeDns.token } : {}),
           },
           // Caddy's failed DNS challenges log the DuckDNS URL, token included.

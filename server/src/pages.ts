@@ -1,6 +1,6 @@
 // Small self-contained HTML pages for the auth flow (no external assets).
 // Colors are the web app's Dark theme tokens, with a Light variant.
-import { t, type Locale } from './i18n.ts';
+import { type Locale, t } from './i18n.ts';
 
 // JSON for an inline <script>: escape "<" so "</script>" can't end it early
 const js = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
@@ -18,14 +18,20 @@ export function page(locale: Locale, body: string): string {
 <style>${CSS}</style><main>${body}</main></html>`;
 }
 
-export const denied = (l: Locale, name: string, group: string) => page(l, `<h1>📺 Telinha</h1>
-<p>${esc(t(l, 'denied', { name, group }))}</p><p><a href="/auth/logout">${esc(t(l, 'otherAccount'))}</a></p>`);
+export const denied = (l: Locale, name: string, group: string) =>
+  page(
+    l,
+    `<h1>📺 Telinha</h1>
+<p>${esc(t(l, 'denied', { name, group }))}</p><p><a href="/auth/logout">${esc(t(l, 'otherAccount'))}</a></p>`,
+  );
 
 export const welcome = (l: Locale, next: string) =>
   page(l, `<p>${esc(t(l, 'enter'))}</p><script>location.replace(${js(next)});</script>`);
 
-export const expired = (l: Locale) => page(l, `<p>${esc(t(l, 'expired'))} <a href="/">${esc(t(l, 'tryAgain'))}</a></p>`);
+export const expired = (l: Locale) =>
+  page(l, `<p>${esc(t(l, 'expired'))} <a href="/">${esc(t(l, 'tryAgain'))}</a></p>`);
 
-export const loggedOut = (l: Locale) => page(l, `<p>${esc(t(l, 'loggedOut'))} <a href="/">${esc(t(l, 'signInAgain'))}</a></p>`);
+export const loggedOut = (l: Locale) =>
+  page(l, `<p>${esc(t(l, 'loggedOut'))} <a href="/">${esc(t(l, 'signInAgain'))}</a></p>`);
 
 export const failed = (l: Locale) => page(l, `<p>${esc(t(l, 'error'))} <a href="/">${esc(t(l, 'tryAgain'))}</a></p>`);

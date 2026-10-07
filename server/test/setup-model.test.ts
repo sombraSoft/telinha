@@ -1,24 +1,69 @@
 import { describe, expect, test } from 'bun:test';
-import type { NatProbe } from '../src/nat/index.ts';
 import type { HostInfo } from '../src/cli/setup/host.ts';
 import {
-  addressChoice, addressValues, ALWAYS_COUNTED, answered, cloudUrl, flowIds, kindOf, lowPorts, question, QUESTIONS, redirectUri, stepsFor, trayChoice, turnBlocked,
-  type Answers, type ModelEnv, type QuestionId,
+  ALWAYS_COUNTED,
+  type Answers,
+  addressChoice,
+  addressValues,
+  answered,
+  cloudUrl,
+  flowIds,
+  kindOf,
+  lowPorts,
+  type ModelEnv,
+  QUESTIONS,
+  type QuestionId,
+  question,
+  redirectUri,
+  stepsFor,
+  trayChoice,
+  turnBlocked,
 } from '../src/cli/setup/model.ts';
 import { q } from '../src/cli/setup/qstrings.ts';
+import type { NatProbe } from '../src/nat/index.ts';
 
 const NAT: NatProbe = {
-  gateway: { kind: 'igd', version: 2, location: 'http://192.168.0.1:49152/d.xml', controlUrl: 'http://192.168.0.1/c', serviceType: 'x', localIp: '192.168.0.10', gatewayIp: '192.168.0.1', name: 'Fritz!Box' },
-  externalIp: '203.0.113.9', localIp: '192.168.0.10', errors: [],
+  gateway: {
+    kind: 'igd',
+    version: 2,
+    location: 'http://192.168.0.1:49152/d.xml',
+    controlUrl: 'http://192.168.0.1/c',
+    serviceType: 'x',
+    localIp: '192.168.0.10',
+    gatewayIp: '192.168.0.1',
+    name: 'Fritz!Box',
+  },
+  externalIp: '203.0.113.9',
+  localIp: '192.168.0.10',
+  errors: [],
 };
-const HOME: HostInfo = { kind: 'linux-root', platform: 'linux', arch: 'x64', isRoot: true, docker: false, osName: 'Debian GNU/Linux 12 (bookworm)', publicIp: '203.0.113.9', nat: NAT };
+const HOME: HostInfo = {
+  kind: 'linux-root',
+  platform: 'linux',
+  arch: 'x64',
+  isRoot: true,
+  docker: false,
+  osName: 'Debian GNU/Linux 12 (bookworm)',
+  publicIp: '203.0.113.9',
+  nat: NAT,
+};
 const VPS: HostInfo = { ...HOME, nat: { gateway: null, externalIp: null, localIp: '203.0.113.9', errors: [] } };
 
 function envOf(o: Partial<ModelEnv> = {}): ModelEnv {
   return {
-    platform: 'linux', isRoot: true, docker: false, compiled: false, offline: false, langFlag: false,
+    platform: 'linux',
+    isRoot: true,
+    docker: false,
+    compiled: false,
+    offline: false,
+    langFlag: false,
     flags: { noService: false, noUpnp: false, noFirewall: false, noDoctor: false },
-    file: {}, host: HOME, unprivilegedPortStart: null, lookups: {}, locale: 'en', ...o,
+    file: {},
+    host: HOME,
+    unprivilegedPortStart: null,
+    lookups: {},
+    locale: 'en',
+    ...o,
   };
 }
 
@@ -38,33 +83,61 @@ describe('the catalog', () => {
   });
 
   test('ALWAYS_COUNTED: the hidden answers and the client id', () => {
-    expect([...ALWAYS_COUNTED].sort()).toEqual(['clientId', 'httpPort', 'httpsPortDirect', 'pinnedIp', 'publicUrl', 'turnSetting']);
+    expect([...ALWAYS_COUNTED].sort()).toEqual([
+      'clientId',
+      'httpPort',
+      'httpsPortDirect',
+      'pinnedIp',
+      'publicUrl',
+      'turnSetting',
+    ]);
   });
 
   test('the first question is only home vs a rented server; the home branch never defaults to advanced', () => {
     const env = envOf();
     expect(question('hosting').options!({}, env).map((o) => o.value)).toEqual(['home', 'vps']);
     const cf = question('homeCf').options!({}, env);
-    expect(cf.map((o) => [o.value, !!o.subtle])).toEqual([['yes', false], ['no', false], ['advanced', true]]);
+    expect(cf.map((o) => [o.value, !!o.subtle])).toEqual([
+      ['yes', false],
+      ['no', false],
+      ['advanced', true],
+    ]);
     const home = (file: Record<string, string>) => question('homeCf').default({ hosting: 'home' }, envOf({ file }));
     expect(home({})).toBe('no');
     expect(home({ HOSTING: 'vps', INGRESS: 'direct', PUBLIC_URL: 'https://t.example.com' })).toBe('no');
-    expect(home({ HOSTING: 'home', INGRESS: 'direct', ACME_DNS: 'duckdns', PUBLIC_URL: 'https://x.duckdns.org:8443' })).toBe('no');
+    expect(
+      home({ HOSTING: 'home', INGRESS: 'direct', ACME_DNS: 'duckdns', PUBLIC_URL: 'https://x.duckdns.org:8443' }),
+    ).toBe('no');
     expect(home({ HOSTING: 'home', INGRESS: 'tunnel', PUBLIC_URL: 'https://t.example.com' })).toBe('yes');
     // Only a file that already is an advanced home setup.
     expect(home({ HOSTING: 'home', INGRESS: 'direct', PUBLIC_URL: 'https://t.example.com' })).toBe('advanced');
     expect(home({ HOSTING: 'home', INGRESS: 'external', PUBLIC_URL: 'https://t.example.com' })).toBe('advanced');
     // The VPS list keeps its own proxy last and quiet too.
-    expect(question('vpsAddress').options!({}, env).map((o) => [o.value, !!o.subtle])).toEqual([['domain', false], ['duckdns', false], ['sslip', false], ['tunnel', false], ['external', true]]);
+    expect(question('vpsAddress').options!({}, env).map((o) => [o.value, !!o.subtle])).toEqual([
+      ['domain', false],
+      ['duckdns', false],
+      ['sslip', false],
+      ['tunnel', false],
+      ['external', true],
+    ]);
   });
 
   test('home questions outside the advanced branch never mention opening 80/443 (EN and pt-BR)', () => {
     const env = envOf();
-    const open = /\b(open|forward)\s+(the\s+)?(web\s+)?(ports?\s+)?(80|443)\b|\b(abra|abrir|redirecione|libere)\s+(as\s+|a\s+)?(portas?\s+)?(80|443)\b/i;
-    for (const a of [{ hosting: 'home', homeCf: 'yes' }, { hosting: 'home', homeCf: 'no' }] as Answers[]) {
+    const open =
+      /\b(open|forward)\s+(the\s+)?(web\s+)?(ports?\s+)?(80|443)\b|\b(abra|abrir|redirecione|libere)\s+(as\s+|a\s+)?(portas?\s+)?(80|443)\b/i;
+    for (const a of [
+      { hosting: 'home', homeCf: 'yes' },
+      { hosting: 'home', homeCf: 'no' },
+    ] as Answers[]) {
       for (const id of flowOf(a, env)) {
         const qd = question(id);
-        const texts = [qd.title, qd.question, ...(qd.hint?.(a, env) ?? []), ...(qd.options?.(a, env) ?? []).filter((o) => !o.subtle).flatMap((o) => [o.label, o.desc, o.preview])];
+        const texts = [
+          qd.title,
+          qd.question,
+          ...(qd.hint?.(a, env) ?? []),
+          ...(qd.options?.(a, env) ?? []).filter((o) => !o.subtle).flatMap((o) => [o.label, o.desc, o.preview]),
+        ];
         for (const t of texts) {
           if (!t || 'raw' in t) continue;
           for (const l of ['en', 'pt-BR'] as const) expect(`${id}: ${q(l, t.key, t.params)}`).not.toMatch(open);
@@ -82,21 +155,51 @@ describe('flowIds', () => {
   });
 
   test('home: tunnel, DuckDNS on the high port, and the advanced choices', () => {
-    const home = (a: Answers) => flowOf({ hosting: 'home', ...a }).filter((id) => question(id).step === 'address' || id === 'upnp');
+    const home = (a: Answers) =>
+      flowOf({ hosting: 'home', ...a }).filter((id) => question(id).step === 'address' || id === 'upnp');
     expect(home({})).toEqual(['homeCf', 'upnp']);
     expect(home({ homeCf: 'yes' })).toEqual(['homeCf', 'tunnelToken', 'tunnelHost', 'upnp']);
     expect(home({ homeCf: 'no' })).toEqual(['homeCf', 'duckName', 'duckToken', 'httpsPort', 'upnp']);
     expect(home({ homeCf: 'advanced' })).toEqual(['homeCf', 'homeAdvanced', 'upnp']);
-    expect(home({ homeCf: 'advanced', homeAdvanced: 'ports' })).toEqual(['homeCf', 'homeAdvanced', 'advancedAddress', 'upnp']);
-    expect(home({ homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: 'domain' })).toEqual(['homeCf', 'homeAdvanced', 'advancedAddress', 'domain', 'upnp']);
-    expect(home({ homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: 'duckdns' })).toEqual(['homeCf', 'homeAdvanced', 'advancedAddress', 'duckName', 'duckToken', 'upnp']);
-    expect(home({ homeCf: 'advanced', homeAdvanced: 'proxy' })).toEqual(['homeCf', 'homeAdvanced', 'externalUrl', 'upnp']);
+    expect(home({ homeCf: 'advanced', homeAdvanced: 'ports' })).toEqual([
+      'homeCf',
+      'homeAdvanced',
+      'advancedAddress',
+      'upnp',
+    ]);
+    expect(home({ homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: 'domain' })).toEqual([
+      'homeCf',
+      'homeAdvanced',
+      'advancedAddress',
+      'domain',
+      'upnp',
+    ]);
+    expect(home({ homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: 'duckdns' })).toEqual([
+      'homeCf',
+      'homeAdvanced',
+      'advancedAddress',
+      'duckName',
+      'duckToken',
+      'upnp',
+    ]);
+    expect(home({ homeCf: 'advanced', homeAdvanced: 'proxy' })).toEqual([
+      'homeCf',
+      'homeAdvanced',
+      'externalUrl',
+      'upnp',
+    ]);
     // Answers on the VPS branch do not leak into a home flow.
-    expect(home({ homeCf: 'yes', vpsAddress: 'sslip', domain: 'x.example.com' })).toEqual(['homeCf', 'tunnelToken', 'tunnelHost', 'upnp']);
+    expect(home({ homeCf: 'yes', vpsAddress: 'sslip', domain: 'x.example.com' })).toEqual([
+      'homeCf',
+      'tunnelToken',
+      'tunnelHost',
+      'upnp',
+    ]);
   });
 
   test('VPS: every address choice; no UPnP question; the IP only when it is not known', () => {
-    const vps = (a: Answers, env = envOf({ host: VPS })) => flowOf({ hosting: 'vps', ...a }, env).filter((id) => question(id).step === 'address' || id === 'upnp');
+    const vps = (a: Answers, env = envOf({ host: VPS })) =>
+      flowOf({ hosting: 'vps', ...a }, env).filter((id) => question(id).step === 'address' || id === 'upnp');
     expect(vps({})).toEqual(['vpsAddress']);
     expect(vps({ vpsAddress: 'domain' })).toEqual(['vpsAddress', 'domain']);
     expect(vps({ vpsAddress: 'duckdns' })).toEqual(['vpsAddress', 'duckName', 'duckToken']);
@@ -108,21 +211,52 @@ describe('flowIds', () => {
   });
 
   test('the Discord step: role and channels after a server; offline asks the client id and types the ids', () => {
-    expect(flowOf({ guild: '222222222222222222' }).filter((id) => question(id).step === 'discord')).toEqual(['discordToken', 'clientSecret', 'guild', 'role', 'channels', 'command', 'group']);
+    expect(flowOf({ guild: '222222222222222222' }).filter((id) => question(id).step === 'discord')).toEqual([
+      'discordToken',
+      'clientSecret',
+      'guild',
+      'role',
+      'channels',
+      'command',
+      'group',
+    ]);
     const offline = envOf({ offline: true });
-    expect(flowOf({ guild: '222222222222222222' }, offline).filter((id) => question(id).step === 'discord')).toEqual(['discordToken', 'clientId', 'clientSecret', 'guild', 'role', 'channels', 'command', 'group']);
-    expect(['guild', 'role', 'channels'].map((id) => kindOf(question(id as QuestionId), offline))).toEqual(['text', 'text', 'text']);
+    expect(flowOf({ guild: '222222222222222222' }, offline).filter((id) => question(id).step === 'discord')).toEqual([
+      'discordToken',
+      'clientId',
+      'clientSecret',
+      'guild',
+      'role',
+      'channels',
+      'command',
+      'group',
+    ]);
+    expect(['guild', 'role', 'channels'].map((id) => kindOf(question(id as QuestionId), offline))).toEqual([
+      'text',
+      'text',
+      'text',
+    ]);
     expect(kindOf(question('channels'), envOf())).toBe('multi');
   });
 
   test('the redirect question shows only when the app was read and lacks this address', () => {
-    const app = { id: '1', name: 'b', flags: 0, botPublic: false, redirectUris: ['https://t.example.com/auth/callback'] };
+    const app = {
+      id: '1',
+      name: 'b',
+      flags: 0,
+      botPublic: false,
+      redirectUris: ['https://t.example.com/auth/callback'],
+    };
     const a: Answers = { hosting: 'vps', vpsAddress: 'domain', domain: 't.example.com' };
     expect(flowOf(a)).not.toContain('redirect');
     expect(flowOf(a, envOf({ lookups: { app } }))).not.toContain('redirect');
     expect(flowOf({ ...a, domain: 'u.example.com' }, envOf({ lookups: { app } }))).toContain('redirect');
-    expect(flowOf({ ...a, domain: 'u.example.com' }, envOf({ lookups: { app }, offline: true }))).not.toContain('redirect');
-    expect(question('redirect').link!({ ...a, domain: 'u.example.com' }, envOf())).toBe('https://u.example.com/auth/callback');
+    expect(flowOf({ ...a, domain: 'u.example.com' }, envOf({ lookups: { app }, offline: true }))).not.toContain(
+      'redirect',
+    );
+    expect(question('redirect').link!({ ...a, domain: 'u.example.com' }, envOf())).toBe(
+      'https://u.example.com/auth/callback',
+    );
   });
 
   test('ports: the media ports only when changing them; the sysctl for a Linux user on ports below 1024', () => {
@@ -145,16 +279,51 @@ describe('flowIds', () => {
 
 describe('steps', () => {
   test('Updates only for the native binary outside Docker', () => {
-    expect(stepsFor({ compiled: true, docker: false })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'updates', 'review', 'install']);
-    expect(stepsFor({ compiled: false, docker: false })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'review', 'install']);
-    expect(stepsFor({ compiled: true, docker: true })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'review', 'install']);
+    expect(stepsFor({ compiled: true, docker: false })).toEqual([
+      'where',
+      'address',
+      'discord',
+      'media',
+      'ports',
+      'updates',
+      'review',
+      'install',
+    ]);
+    expect(stepsFor({ compiled: false, docker: false })).toEqual([
+      'where',
+      'address',
+      'discord',
+      'media',
+      'ports',
+      'review',
+      'install',
+    ]);
+    expect(stepsFor({ compiled: true, docker: true })).toEqual([
+      'where',
+      'address',
+      'discord',
+      'media',
+      'ports',
+      'review',
+      'install',
+    ]);
     expect(flowOf({}, envOf({ compiled: true }))).toContain('autoUpdate');
     expect(flowOf({}, envOf({ compiled: true, docker: true }))).not.toContain('autoUpdate');
     expect(flowOf({}, envOf({ compiled: false }))).not.toContain('autoUpdate');
   });
 
   test('Tray icon only for the native Windows binary outside Docker', () => {
-    expect(stepsFor({ compiled: true, docker: false, platform: 'win32' })).toEqual(['where', 'address', 'discord', 'media', 'ports', 'updates', 'tray', 'review', 'install']);
+    expect(stepsFor({ compiled: true, docker: false, platform: 'win32' })).toEqual([
+      'where',
+      'address',
+      'discord',
+      'media',
+      'ports',
+      'updates',
+      'tray',
+      'review',
+      'install',
+    ]);
     expect(stepsFor({ compiled: true, docker: false, platform: 'linux' })).not.toContain('tray');
     expect(stepsFor({ compiled: false, docker: false, platform: 'win32' })).not.toContain('tray');
     expect(stepsFor({ compiled: true, docker: true, platform: 'win32' })).not.toContain('tray');
@@ -173,10 +342,17 @@ describe('video: this computer or LiveKit Cloud, and TURN on 443', () => {
     expect(flowOf(vps({ vpsAddress: 'tunnel', media: 'self' }))).toEqual(expect.arrayContaining(['mediaPorts']));
   });
 
-  test('a self file\'s generated pair is never offered as the Cloud key', () => {
+  test("a self file's generated pair is never offered as the Cloud key", () => {
     const self = envOf({ file: { LIVEKIT_API_KEY: 'telinha1234', LIVEKIT_API_SECRET: 'x'.repeat(43) } });
     expect(question('cloudKey').default({}, self)).toBeUndefined();
-    const cloud = envOf({ file: { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud', LIVEKIT_API_KEY: 'APIk', LIVEKIT_API_SECRET: 's' } });
+    const cloud = envOf({
+      file: {
+        MEDIA: 'cloud',
+        LIVEKIT_CLOUD_URL: 'wss://p.livekit.cloud',
+        LIVEKIT_API_KEY: 'APIk',
+        LIVEKIT_API_SECRET: 's',
+      },
+    });
     expect(question('cloudKey').default({}, cloud)).toBe('APIk');
     expect(question('media').default({}, cloud)).toBe('cloud');
   });
@@ -193,8 +369,12 @@ describe('video: this computer or LiveKit Cloud, and TURN on 443', () => {
     expect(flowOf(vps({ vpsAddress: 'domain', domain: 't.example.com', media: 'self' }), env)).toContain('turn');
     expect(flowOf(vps({ vpsAddress: 'sslip', media: 'self' }), env)).toContain('turn');
     expect(flowOf(vps({ vpsAddress: 'domain', domain: 't.example.com', media: 'cloud' }), env)).not.toContain('turn');
-    expect(flowOf(vps({ vpsAddress: 'tunnel', tunnelHost: 't.example.com', media: 'self' }), env)).not.toContain('turn');
-    expect(flowOf(vps({ vpsAddress: 'domain', domain: 't.example.com', httpsPortDirect: '8443', media: 'self' }), env)).not.toContain('turn');
+    expect(flowOf(vps({ vpsAddress: 'tunnel', tunnelHost: 't.example.com', media: 'self' }), env)).not.toContain(
+      'turn',
+    );
+    expect(
+      flowOf(vps({ vpsAddress: 'domain', domain: 't.example.com', httpsPortDirect: '8443', media: 'self' }), env),
+    ).not.toContain('turn');
     expect(flowOf({ hosting: 'home', homeCf: 'no', duckName: 'x', media: 'self' }, env)).not.toContain('turn');
     expect(turnBlocked({ HOSTING: 'vps', PUBLIC_URL: 'https://203.0.113.9' })).toContain('DNS name');
   });
@@ -205,16 +385,28 @@ describe('video: this computer or LiveKit Cloud, and TURN on 443', () => {
     const file = { HOSTING: 'vps', PUBLIC_URL: 'https://t.example.com' };
     expect(question('turn').default(a, envOf({ host: VPS, file }))).toBe('off');
     expect(question('turn').default(a, envOf({ host: VPS, file: { ...file, TURN: 'on' } }))).toBe('on');
-    expect(question('turn').default(vps({ vpsAddress: 'duckdns', duckName: 'x' }), envOf({ host: VPS, file: { HOSTING: 'vps', PUBLIC_URL: 'https://x.duckdns.org' } }))).toBe('on');
+    expect(
+      question('turn').default(
+        vps({ vpsAddress: 'duckdns', duckName: 'x' }),
+        envOf({ host: VPS, file: { HOSTING: 'vps', PUBLIC_URL: 'https://x.duckdns.org' } }),
+      ),
+    ).toBe('on');
   });
 
   test('at home behind CGNAT LiveKit Cloud comes picked, with the reason; the router hint says what still fails', () => {
     const cgnat = envOf({ host: { ...HOME, nat: { ...NAT, externalIp: '100.64.12.34' } } });
     expect(question('media').default({ hosting: 'home' }, cgnat)).toBe('cloud');
-    expect(question('media').hint!({ hosting: 'home' }, cgnat).map((t) => ('key' in t ? t.key : t.raw))).toContain('mediaCgnat');
+    expect(question('media').hint!({ hosting: 'home' }, cgnat).map((t) => ('key' in t ? t.key : t.raw))).toContain(
+      'mediaCgnat',
+    );
     expect(question('media').default({ hosting: 'vps' }, cgnat)).toBe('self');
     // A self file behind CGNAT is asked again.
-    expect(question('media').fromFile!({ hosting: 'home' }, { ...cgnat, file: { PUBLIC_URL: 'https://x.duckdns.org:8443' } })).toBe(false);
+    expect(
+      question('media').fromFile!(
+        { hosting: 'home' },
+        { ...cgnat, file: { PUBLIC_URL: 'https://x.duckdns.org:8443' } },
+      ),
+    ).toBe(false);
     const keys = (a: Answers) => question('upnp').hint!(a, cgnat).map((t) => ('key' in t ? t.key : ''));
     expect(keys({ hosting: 'home', homeCf: 'no', duckName: 'x', media: 'self' })).toContain('cgnat');
     expect(keys({ hosting: 'home', homeCf: 'no', duckName: 'x', media: 'cloud' })).toContain('cgnatCloud');
@@ -223,8 +415,14 @@ describe('video: this computer or LiveKit Cloud, and TURN on 443', () => {
   test('the TURN hint: the record to add for an own domain, nothing for DuckDNS', () => {
     const env = envOf({ host: VPS });
     const hint = (a: Answers) => question('turn').hint!(a, env).at(-1)!;
-    expect(hint(vps({ vpsAddress: 'domain', domain: 't.example.com' }))).toEqual({ key: 'turnDnsHint', params: { host: 'turn.t.example.com', ip: '203.0.113.9' } });
-    expect(hint(vps({ vpsAddress: 'duckdns', duckName: 'x' }))).toEqual({ key: 'turnAutoHint', params: { host: 'turn.x.duckdns.org' } });
+    expect(hint(vps({ vpsAddress: 'domain', domain: 't.example.com' }))).toEqual({
+      key: 'turnDnsHint',
+      params: { host: 'turn.t.example.com', ip: '203.0.113.9' },
+    });
+    expect(hint(vps({ vpsAddress: 'duckdns', duckName: 'x' }))).toEqual({
+      key: 'turnAutoHint',
+      params: { host: 'turn.x.duckdns.org' },
+    });
   });
 
   test('at home LiveKit Cloud behind a tunnel leaves nothing for the router', () => {
@@ -277,18 +475,63 @@ describe('the address', () => {
 
   test('every choice writes every column', () => {
     const v = (a: Answers, host: HostInfo | null = HOME) => addressValues(a, { host });
-    const blank = { INGRESS: '', PUBLIC_URL: '', HTTP_PORT: '', HTTPS_PORT: '', ACME_DNS: '', TUNNEL_TOKEN: '', DDNS_PROVIDER: '', DUCKDNS_DOMAIN: '', DUCKDNS_TOKEN: '', LIVEKIT_NODE_IP: '' };
+    const blank = {
+      INGRESS: '',
+      PUBLIC_URL: '',
+      HTTP_PORT: '',
+      HTTPS_PORT: '',
+      ACME_DNS: '',
+      TUNNEL_TOKEN: '',
+      DDNS_PROVIDER: '',
+      DUCKDNS_DOMAIN: '',
+      DUCKDNS_TOKEN: '',
+      LIVEKIT_NODE_IP: '',
+    };
     expect(v({})).toEqual(blank);
     expect(v({ hosting: 'home', homeCf: 'no', duckName: 'my-group', duckToken: 'k', httpsPort: '9443' })).toEqual({
-      ...blank, INGRESS: 'direct', PUBLIC_URL: 'https://my-group.duckdns.org:9443', HTTP_PORT: '0', HTTPS_PORT: '9443', ACME_DNS: 'duckdns', DDNS_PROVIDER: 'duckdns', DUCKDNS_DOMAIN: 'my-group', DUCKDNS_TOKEN: 'k',
+      ...blank,
+      INGRESS: 'direct',
+      PUBLIC_URL: 'https://my-group.duckdns.org:9443',
+      HTTP_PORT: '0',
+      HTTPS_PORT: '9443',
+      ACME_DNS: 'duckdns',
+      DDNS_PROVIDER: 'duckdns',
+      DUCKDNS_DOMAIN: 'my-group',
+      DUCKDNS_TOKEN: 'k',
     });
-    expect(v({ hosting: 'vps', vpsAddress: 'sslip', nodeIp: '198.51.100.7' }).PUBLIC_URL).toBe('https://203-0-113-9.sslip.io');
-    expect(v({ hosting: 'vps', vpsAddress: 'sslip', nodeIp: '198.51.100.7' }, null)).toMatchObject({ PUBLIC_URL: 'https://198-51-100-7.sslip.io', LIVEKIT_NODE_IP: '198.51.100.7' });
-    expect(v({ hosting: 'vps', vpsAddress: 'external', externalUrl: 'https://x.example.com:8443/' })).toEqual({ ...blank, INGRESS: 'external', PUBLIC_URL: 'https://x.example.com:8443' });
-    expect(v({ hosting: 'vps', vpsAddress: 'domain', domain: 't.example.com', httpPort: '8080', httpsPortDirect: '8443', pinnedIp: '198.51.100.7', publicUrl: 'https://t.example.com:8443/' })).toEqual({
-      ...blank, INGRESS: 'direct', PUBLIC_URL: 'https://t.example.com:8443', HTTP_PORT: '8080', HTTPS_PORT: '8443', LIVEKIT_NODE_IP: '198.51.100.7',
+    expect(v({ hosting: 'vps', vpsAddress: 'sslip', nodeIp: '198.51.100.7' }).PUBLIC_URL).toBe(
+      'https://203-0-113-9.sslip.io',
+    );
+    expect(v({ hosting: 'vps', vpsAddress: 'sslip', nodeIp: '198.51.100.7' }, null)).toMatchObject({
+      PUBLIC_URL: 'https://198-51-100-7.sslip.io',
+      LIVEKIT_NODE_IP: '198.51.100.7',
     });
-    expect(redirectUri({ hosting: 'home', homeCf: 'yes', tunnelHost: 't.example.com' }, { host: HOME })).toBe('https://t.example.com/auth/callback');
+    expect(v({ hosting: 'vps', vpsAddress: 'external', externalUrl: 'https://x.example.com:8443/' })).toEqual({
+      ...blank,
+      INGRESS: 'external',
+      PUBLIC_URL: 'https://x.example.com:8443',
+    });
+    expect(
+      v({
+        hosting: 'vps',
+        vpsAddress: 'domain',
+        domain: 't.example.com',
+        httpPort: '8080',
+        httpsPortDirect: '8443',
+        pinnedIp: '198.51.100.7',
+        publicUrl: 'https://t.example.com:8443/',
+      }),
+    ).toEqual({
+      ...blank,
+      INGRESS: 'direct',
+      PUBLIC_URL: 'https://t.example.com:8443',
+      HTTP_PORT: '8080',
+      HTTPS_PORT: '8443',
+      LIVEKIT_NODE_IP: '198.51.100.7',
+    });
+    expect(redirectUri({ hosting: 'home', homeCf: 'yes', tunnelHost: 't.example.com' }, { host: HOME })).toBe(
+      'https://t.example.com/auth/callback',
+    );
     expect(redirectUri({}, { host: HOME })).toBe('');
   });
 
@@ -303,12 +546,17 @@ describe('the address', () => {
     expect(check('httpsPort', '8081')).toEqual({ key: 'httpsPortTaken', params: { what: 'LISTEN' } });
     expect(check('httpsPort', '50000')).toEqual({ key: 'httpsPortTaken', params: { what: 'MEDIA_TCP_PORT' } });
     expect(check('httpsPort', '9443')).toBeNull();
-    expect(check('mediaTcp', '9443', { hosting: 'home', homeCf: 'no', httpsPort: '9443' })).toEqual({ key: 'mediaPortIsHttps' });
+    expect(check('mediaTcp', '9443', { hosting: 'home', homeCf: 'no', httpsPort: '9443' })).toEqual({
+      key: 'mediaPortIsHttps',
+    });
     expect(check('mediaTcp', '0')).toEqual({ key: 'portBad' });
     expect(check('externalUrl', 'https://x.example.com/app')).toEqual({ key: 'urlBad' });
     expect(check('command', 'Sala')).toEqual({ key: 'commandBad' });
     expect(check('channels', '444444444444444441, 12')).toEqual({ key: 'idBad' });
-    expect(question('channels').normalize!(' 444444444444444441, 444444444444444442 ,', env)).toEqual(['444444444444444441', '444444444444444442']);
+    expect(question('channels').normalize!(' 444444444444444441, 444444444444444442 ,', env)).toEqual([
+      '444444444444444441',
+      '444444444444444442',
+    ]);
     const tunnel = Buffer.from(JSON.stringify({ a: 'acct', t: 'tunnel-id', s: 'c2VjcmV0' })).toString('base64');
     expect(check('tunnelToken', `cloudflared service install ${tunnel}`)).toBeNull();
     expect(question('tunnelToken').normalize!(`cloudflared service install ${tunnel}`, env)).toBe(tunnel);
@@ -333,7 +581,11 @@ describe('question strings', () => {
       const got = [...pt[k]!.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
       expect(`${k}: ${got.join(',')}`).toBe(`${k}: ${want.join(',')}`);
     }
-    for (const d of [en, pt]) for (const v of Object.values(d)) expect(v.toLowerCase()).not.toMatch(/\bphase\b|\bfase\b|\bstack\b|prototype|protótipo|telinha\.toml|\.config\/telinha|\bfake\b/);
+    for (const d of [en, pt])
+      for (const v of Object.values(d))
+        expect(v.toLowerCase()).not.toMatch(
+          /\bphase\b|\bfase\b|\bstack\b|prototype|protótipo|telinha\.toml|\.config\/telinha|\bfake\b/,
+        );
   });
 
   test('the hosting title is pinned (the terminal smokes look for it)', () => {
@@ -342,7 +594,8 @@ describe('question strings', () => {
   });
 
   test('only the VPS and advanced texts talk about letting 80/443 in', () => {
-    const open = /\b(open|forward)\s+(the\s+)?(web\s+)?(ports?\s+)?(80|443)\b|\b(abra|abrir|redirecione|libere)\s+(as\s+|a\s+)?(portas?\s+)?(80|443)\b/i;
+    const open =
+      /\b(open|forward)\s+(the\s+)?(web\s+)?(ports?\s+)?(80|443)\b|\b(abra|abrir|redirecione|libere)\s+(as\s+|a\s+)?(portas?\s+)?(80|443)\b/i;
     const homeSafe = (k: string) => !/^(vps|adv)/.test(k);
     for (const d of [q.en, q.ptBR] as Record<string, string>[]) {
       for (const [k, v] of Object.entries(d)) if (homeSafe(k)) expect(`${k}: ${v}`).not.toMatch(open);
@@ -353,7 +606,8 @@ describe('question strings', () => {
   });
 
   test('no ufw automation is offered, and the flag errors match the non-interactive ones', () => {
-    for (const d of [q.en, q.ptBR] as Record<string, string>[]) expect(Object.values(d).join('\n')).not.toMatch(/open them in ufw|abrir no ufw/i);
+    for (const d of [q.en, q.ptBR] as Record<string, string>[])
+      expect(Object.values(d).join('\n')).not.toMatch(/open them in ufw|abrir no ufw/i);
     expect(q.en.homeNeedsAdvanced).toEndWith('; on a rented server pass --host vps');
     expect(q.ptBR.homeNeedsAdvanced).toEndWith('; num servidor alugado passe --host vps');
     expect(q('en', 'badFlagValue', { flag: '--x', value: 'y', allowed: 'z' })).toBe('--x: y is not valid (want z)');

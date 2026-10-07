@@ -32,7 +32,11 @@ describe('hostTarget', () => {
     expect(hostTarget(platform, arch)).toBe(want as ReturnType<typeof hostTarget>);
   });
 
-  test.each([['darwin', 'arm64'], ['linux', 'ia32'], ['freebsd', 'x64']])('%s/%s throws', (platform, arch) => {
+  test.each([
+    ['darwin', 'arm64'],
+    ['linux', 'ia32'],
+    ['freebsd', 'x64'],
+  ])('%s/%s throws', (platform, arch) => {
     expect(() => hostTarget(platform, arch)).toThrow('no telinha build');
   });
 });

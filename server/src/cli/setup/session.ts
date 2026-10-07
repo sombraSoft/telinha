@@ -4,24 +4,57 @@
 // screens subscribe() and re-read the views, whose strings are already in the
 // current language. Secret values never leave it except through values().
 import type { Locale } from '../strings.ts';
-import { inviteUrl, type DiscordSetup } from './discord.ts';
+import { type DiscordSetup, inviteUrl } from './discord.ts';
 import type { HostInfo } from './host.ts';
 import {
-  checkDns, checkPort, checkRedirect, checkSecret, checkToken, loadChannels, loadGuilds, loadRoles, Runs, updateDuckDns,
-  type LookupDeps, type LookupState,
+  checkDns,
+  checkPort,
+  checkRedirect,
+  checkSecret,
+  checkToken,
+  type LookupDeps,
+  type LookupState,
+  loadChannels,
+  loadGuilds,
+  loadRoles,
+  Runs,
+  updateDuckDns,
 } from './lookups.ts';
 import {
-  addressChoice, answered, catalogIndex, flowIds, guildName, HIDDEN_IDS, kindOf, portsValues, question, QUESTIONS, redirectUri, SECRET_ANSWERS, stepsFor, trayChoice, txt,
-  type AnswerId, type Answers, type ModelEnv, type QuestionId, type QuestionKind, type StepId, type Text,
+  type AnswerId,
+  type Answers,
+  addressChoice,
+  answered,
+  catalogIndex,
+  flowIds,
+  guildName,
+  HIDDEN_IDS,
+  kindOf,
+  type ModelEnv,
+  portsValues,
+  QUESTIONS,
+  type QuestionId,
+  type QuestionKind,
+  question,
+  redirectUri,
+  SECRET_ANSWERS,
+  type StepId,
+  stepsFor,
+  type Text,
+  trayChoice,
+  txt,
 } from './model.ts';
-import { q, type QKey } from './qstrings.ts';
-import { defaultAnswers, keepHidden, resolveValues, type ResolveBase } from './resolve.ts';
+import { type QKey, q } from './qstrings.ts';
+import { defaultAnswers, keepHidden, type ResolveBase, resolveValues } from './resolve.ts';
 import { publicPorts, type Values } from './steps.ts';
 import type { TrayChoice } from './tray.ts';
 
 export interface SessionInit {
-  env: Omit<ModelEnv, 'lookups' | 'host'>; host: HostInfo | null; base: ResolveBase;
-  locale: Locale; deps: LookupDeps;
+  env: Omit<ModelEnv, 'lookups' | 'host'>;
+  host: HostInfo | null;
+  base: ResolveBase;
+  locale: Locale;
+  deps: LookupDeps;
   /** answersFromFlags(..., lenient) answers: the questions' defaults (override defaultAnswers). */
   preset: Answers;
   /** --yes: every question with a default counts as answered. */
@@ -33,8 +66,21 @@ export interface SessionInit {
 }
 export type Screen = 'question' | 'review';
 /** summary: the answer in a few words; '\n' separates parts a narrow sidebar puts on their own lines. */
-export interface StepView { id: StepId; label: string; state: 'done' | 'current' | 'pending'; jumpable: boolean; summary: string }
-export interface OptionView { value: string; label: string; desc?: string; preview?: string; subtle: boolean; chosen: boolean }
+export interface StepView {
+  id: StepId;
+  label: string;
+  state: 'done' | 'current' | 'pending';
+  jumpable: boolean;
+  summary: string;
+}
+export interface OptionView {
+  value: string;
+  label: string;
+  desc?: string;
+  preview?: string;
+  subtle: boolean;
+  chosen: boolean;
+}
 export type ActionId = 'retry' | 'keep' | 'quit' | 'open' | 'check';
 /** A lookup's state with its texts in the current language. */
 export type LookupView =
@@ -45,14 +91,23 @@ export type LookupView =
   | { state: 'rejected'; error: string }
   | { state: 'error'; error: string };
 export interface QuestionView {
-  id: QuestionId; step: StepId; kind: QuestionKind; title: string; question: string;
-  hint: string[]; options: OptionView[]; placeholder?: string;
+  id: QuestionId;
+  step: StepId;
+  kind: QuestionKind;
+  title: string;
+  question: string;
+  hint: string[];
+  options: OptionView[];
+  placeholder?: string;
   /** text: the prefill (the answer given before); secret: never the value, only whether one is kept. */
-  initial: string | string[]; keepsSecret: boolean;
+  initial: string | string[];
+  keepsSecret: boolean;
   /** What an empty Enter takes, e.g. "8443" (the field shows "default: 8443"); never set for a secret. */
   defaultText?: string;
-  min?: number; optional: boolean;
-  lookup: LookupView; actions: { id: ActionId; label: string }[];
+  min?: number;
+  optional: boolean;
+  lookup: LookupView;
+  actions: { id: ActionId; label: string }[];
   /** Why the answer was not taken: a validation error, or a rejected lookup (the same text as lookup.error). */
   error?: string;
   /** "Address · Step 2 of 6" */
@@ -60,17 +115,51 @@ export interface QuestionView {
   /** A URL shown on its own line, wrapped and never cut: the redirect to add, the invite link. */
   link?: string;
 }
-export interface ReviewRow { step: string; label: string; value: string; kind: 'plain' | 'secret' | 'url' }
-export interface Notice { kind: 'locked' | 'presetErrors' | 'info'; text: string }
+export interface ReviewRow {
+  step: string;
+  label: string;
+  value: string;
+  kind: 'plain' | 'secret' | 'url';
+}
+export interface Notice {
+  kind: 'locked' | 'presetErrors' | 'info';
+  text: string;
+}
 
-interface Slot { state: LookupState; actions: ActionId[]; running?: Text }
+interface Slot {
+  state: LookupState;
+  actions: ActionId[];
+  running?: Text;
+}
 
 const STEP_LABEL: Record<StepId, QKey> = {
-  where: 'stepWhere', address: 'stepAddress', discord: 'stepDiscord', media: 'stepMedia', ports: 'stepPorts', updates: 'stepUpdates', tray: 'stepTray', review: 'stepReview', install: 'stepInstall',
+  where: 'stepWhere',
+  address: 'stepAddress',
+  discord: 'stepDiscord',
+  media: 'stepMedia',
+  ports: 'stepPorts',
+  updates: 'stepUpdates',
+  tray: 'stepTray',
+  review: 'stepReview',
+  install: 'stepInstall',
 };
-const ACTION_LABEL: Record<ActionId, QKey> = { retry: 'actionRetry', keep: 'actionKeep', quit: 'actionQuit', open: 'actionOpen', check: 'actionCheck' };
+const ACTION_LABEL: Record<ActionId, QKey> = {
+  retry: 'actionRetry',
+  keep: 'actionKeep',
+  quit: 'actionQuit',
+  open: 'actionOpen',
+  check: 'actionCheck',
+};
 const str = (v: string | string[] | undefined): string => (typeof v === 'string' ? v : '');
-const list = (v: string | string[] | undefined): string[] => (Array.isArray(v) ? v : v ? v.split(',').map((c) => c.trim()).filter(Boolean) : []);
+const list = (v: string | string[] | undefined): string[] =>
+  Array.isArray(v)
+    ? v
+    : v
+      ? v
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean)
+      : [];
 const isHidden = (id: AnswerId) => (HIDDEN_IDS as readonly string[]).includes(id);
 
 export class SetupSession {
@@ -176,7 +265,7 @@ export class SetupSession {
     const kind = kindOf(qd, env);
     const value = eff[id];
     const counted = this.#counted(id, eff);
-    const opts = kind === 'select' || kind === 'multi' ? qd.options?.(eff, env) ?? [] : [];
+    const opts = kind === 'select' || kind === 'multi' ? (qd.options?.(eff, env) ?? []) : [];
     const options: OptionView[] = opts.map((o) => ({
       value: o.value,
       label: this.#t(o.label),
@@ -186,7 +275,8 @@ export class SetupSession {
       chosen: counted && (Array.isArray(value) ? value.includes(o.value) : value === o.value),
     }));
     let initial: string | string[] = '';
-    if (kind === 'select') initial = typeof value === 'string' && opts.some((o) => o.value === value) ? value : opts[0]?.value ?? '';
+    if (kind === 'select')
+      initial = typeof value === 'string' && opts.some((o) => o.value === value) ? value : (opts[0]?.value ?? '');
     else if (kind === 'multi') initial = list(value).filter((v) => opts.some((o) => o.value === v));
     else if (kind === 'text') {
       const given = this.#user[id];
@@ -206,18 +296,25 @@ export class SetupSession {
     const placeholder = qd.placeholderFor?.(eff, env) ?? qd.placeholder;
     const steps = stepsFor(env);
     return {
-      id, step: qd.step, kind,
-      title: this.#t(qd.title), question: this.#t(qd.question),
-      hint, options,
+      id,
+      step: qd.step,
+      kind,
+      title: this.#t(qd.title),
+      question: this.#t(qd.question),
+      hint,
+      options,
       placeholder: placeholder && this.#t(placeholder),
       initial,
       keepsSecret: kind === 'secret' && !!shown,
       defaultText: kind === 'text' && shown ? shown : undefined,
-      min: qd.min, optional: !!qd.optional,
+      min: qd.min,
+      optional: !!qd.optional,
       lookup,
       actions: actions.map((a) => ({ id: a, label: this.#actionLabel(id, a) })),
       error: this.#error ? this.#t(this.#error) : lookup.state === 'rejected' ? lookup.error : undefined,
-      badge: this.#t(txt('badge', { step: this.#t(txt(STEP_LABEL[qd.step])), n: steps.indexOf(qd.step) + 1, total: steps.length })),
+      badge: this.#t(
+        txt('badge', { step: this.#t(txt(STEP_LABEL[qd.step])), n: steps.indexOf(qd.step) + 1, total: steps.length }),
+      ),
       link: link || undefined,
     };
   }
@@ -265,10 +362,13 @@ export class SetupSession {
       push('address', this.#t(txt('reviewWeb')), vals.PUBLIC_URL ?? '', 'url');
       // Hidden answers that differ from the defaults (kept from the file or given as flags).
       if (vals.INGRESS === 'direct' && vals.ACME_DNS !== 'duckdns') {
-        if (vals.HTTPS_PORT && vals.HTTPS_PORT !== '443') push('address', this.#t(txt('reviewHttpsPort')), vals.HTTPS_PORT, 'plain');
-        if (vals.HTTP_PORT && vals.HTTP_PORT !== '80') push('address', this.#t(txt('reviewHttpPort')), vals.HTTP_PORT, 'plain');
+        if (vals.HTTPS_PORT && vals.HTTPS_PORT !== '443')
+          push('address', this.#t(txt('reviewHttpsPort')), vals.HTTPS_PORT, 'plain');
+        if (vals.HTTP_PORT && vals.HTTP_PORT !== '80')
+          push('address', this.#t(txt('reviewHttpPort')), vals.HTTP_PORT, 'plain');
       }
-      if (vals.LIVEKIT_NODE_IP && addressChoice(eff) !== 'sslip') push('address', this.#t(txt('reviewNodeIp')), vals.LIVEKIT_NODE_IP, 'plain');
+      if (vals.LIVEKIT_NODE_IP && addressChoice(eff) !== 'sslip')
+        push('address', this.#t(txt('reviewNodeIp')), vals.LIVEKIT_NODE_IP, 'plain');
     }
     return rows;
   }
@@ -276,7 +376,10 @@ export class SetupSession {
   /** Warnings for the Review: a redirect skipped, DuckDNS kept anyway, a DNS mismatch, intents off... */
   reviewNotes(): string[] {
     const nav = this.#nav();
-    return [...this.#notes].filter(([id]) => nav.includes(id)).sort(([a], [b]) => catalogIndex(a) - catalogIndex(b)).map(([, t]) => this.#t(t));
+    return [...this.#notes]
+      .filter(([id]) => nav.includes(id))
+      .sort(([a], [b]) => catalogIndex(a) - catalogIndex(b))
+      .map(([, t]) => this.#t(t));
   }
 
   // --- changing
@@ -521,8 +624,14 @@ export class SetupSession {
     if (id === 'clientSecret' && online) {
       return this.#run(id, v, txt('secretChecking'), async () => {
         const app = await this.#app();
-        const state: LookupState = app ? await checkSecret(this.#client(str(eff.discordToken)), app.id, s) : { state: 'warn', note: txt('secretUnchecked', { error: '?' }) };
-        return { state, actions: [], apply: () => (state.state === 'warn' ? this.#notes.set(id, state.note) : this.#notes.delete(id)) };
+        const state: LookupState = app
+          ? await checkSecret(this.#client(str(eff.discordToken)), app.id, s)
+          : { state: 'warn', note: txt('secretUnchecked', { error: '?' }) };
+        return {
+          state,
+          actions: [],
+          apply: () => (state.state === 'warn' ? this.#notes.set(id, state.note) : this.#notes.delete(id)),
+        };
       });
     }
     if (id === 'redirect') {
@@ -534,20 +643,33 @@ export class SetupSession {
       return this.#run(id, v, txt('redirectChecking'), async () => {
         const r = await checkRedirect(this.#client(str(eff.discordToken)), uri);
         if (r.app) env.lookups.app = r.app;
-        return { state: r.state, actions: r.state.state === 'error' ? ['retry'] : [], stay: r.state.state === 'warn', apply: () => this.#notes.delete(id) };
+        return {
+          state: r.state,
+          actions: r.state.state === 'error' ? ['retry'] : [],
+          stay: r.state.state === 'warn',
+          apply: () => this.#notes.delete(id),
+        };
       });
     }
     if (id === 'duckToken') {
       const name = str(eff.duckName);
       return this.#run(id, v, txt('duckChecking', { name: `${name}.duckdns.org` }), async () => {
         const state = await updateDuckDns(this.#deps, name, s, env.host?.publicIp ?? null);
-        return { state, actions: state.state === 'error' ? ['retry', 'keep'] : [], apply: () => this.#notes.delete(id) };
+        return {
+          state,
+          actions: state.state === 'error' ? ['retry', 'keep'] : [],
+          apply: () => this.#notes.delete(id),
+        };
       });
     }
     if (id === 'domain') {
       return this.#run(id, v, txt('dnsChecking', { host: s }), async () => {
         const state = await checkDns(this.#deps, s, env.host?.publicIp ?? null);
-        return { state, actions: [], apply: () => (state.state === 'warn' ? this.#notes.set(id, state.note) : this.#notes.delete(id)) };
+        return {
+          state,
+          actions: [],
+          apply: () => (state.state === 'warn' ? this.#notes.set(id, state.note) : this.#notes.delete(id)),
+        };
       });
     }
     if (id === 'turn' && s === 'on' && addressChoice(eff) === 'domain') {
@@ -555,13 +677,22 @@ export class SetupSession {
       const host = `turn.${str(eff.domain)}`;
       return this.#run(id, v, txt('turnChecking', { host }), async () => {
         const state = await checkDns(this.#deps, host, env.host?.publicIp ?? null);
-        return { state, actions: state.state === 'warn' ? ['retry', 'keep'] : [], stay: state.state === 'warn', apply: () => this.#notes.delete(id) };
+        return {
+          state,
+          actions: state.state === 'warn' ? ['retry', 'keep'] : [],
+          stay: state.state === 'warn',
+          apply: () => this.#notes.delete(id),
+        };
       });
     }
     if ((id === 'mediaTcp' || id === 'mediaUdp') && !env.docker) {
       return this.#run(id, v, null, async () => {
         const state = await checkPort(this.#deps, id === 'mediaTcp' ? 'TCP' : 'UDP', Number(s));
-        return { state, actions: [], apply: () => (state.state === 'warn' ? this.#notes.set(id, state.note) : this.#notes.delete(id)) };
+        return {
+          state,
+          actions: [],
+          apply: () => (state.state === 'warn' ? this.#notes.set(id, state.note) : this.#notes.delete(id)),
+        };
       });
     }
     return this.#accepted(id, v);
@@ -573,7 +704,9 @@ export class SetupSession {
    * A result whose run is no longer the newest is dropped.
    */
   async #run(
-    id: QuestionId, v: string | string[], running: Text | null,
+    id: QuestionId,
+    v: string | string[],
+    running: Text | null,
     fn: () => Promise<{ state: LookupState; actions: ActionId[]; stay?: boolean; more?: Text[]; apply(): void }>,
   ): Promise<'advanced' | 'stayed'> {
     const run = this.#runs.next();
@@ -632,7 +765,8 @@ export class SetupSession {
     this.#screen = 'question';
     this.#error = null;
     this.#pending = null;
-    for (const [qid, s] of this.#slots) if (s.state.state === 'error' || s.state.state === 'rejected') this.#slots.delete(qid);
+    for (const [qid, s] of this.#slots)
+      if (s.state.state === 'error' || s.state.state === 'rejected') this.#slots.delete(qid);
     this.#enter();
   }
 
@@ -658,7 +792,10 @@ export class SetupSession {
 
   #client(token: string): DiscordSetup {
     let c = this.#clients.get(token);
-    if (!c) this.#clients.set(token, (c = this.#deps.discord(token)));
+    if (!c) {
+      c = this.#deps.discord(token);
+      this.#clients.set(token, c);
+    }
     return c;
   }
 
@@ -736,7 +873,8 @@ export class SetupSession {
     return this.#load(`roles:${guild}`, 'role', txt('rolesLoading'), async () => {
       const r = await loadRoles(this.#client(token), guild);
       if (r.state.state === 'error') return { state: r.state, actions: ['retry'] };
-      (this.#env.lookups.roles ??= {})[guild] = r.roles!;
+      this.#env.lookups.roles ??= {};
+      this.#env.lookups.roles[guild] = r.roles!;
       return null;
     });
   }
@@ -748,7 +886,8 @@ export class SetupSession {
     return this.#load(`channels:${guild}`, 'channels', txt('channelsLoading'), async () => {
       const r = await loadChannels(this.#client(token), guild, guildName(eff, this.#env) || guild);
       if (r.state.state === 'error') return { state: r.state, actions: ['retry'] };
-      (this.#env.lookups.channels ??= {})[guild] = r.channels!;
+      this.#env.lookups.channels ??= {};
+      this.#env.lookups.channels[guild] = r.channels!;
       return r.state.state === 'rejected' ? { state: r.state, actions: ['check'] } : null;
     });
   }
@@ -828,7 +967,10 @@ export class SetupSession {
           const [proto = '', port = ''] = p.split(' ');
           groups.set(proto, [...(groups.get(proto) ?? []), port]);
         }
-        return [...groups].sort(([x], [y]) => x.localeCompare(y)).map(([proto, ports]) => `${proto} ${ports.join(', ')}`).join('\n');
+        return [...groups]
+          .sort(([x], [y]) => x.localeCompare(y))
+          .map(([proto, ports]) => `${proto} ${ports.join(', ')}`)
+          .join('\n');
       }
       case 'updates':
         return a.autoUpdate === 'on' ? this.#t(txt('sumOn')) : a.autoUpdate === 'off' ? this.#t(txt('sumOff')) : '';
@@ -865,7 +1007,10 @@ export class SetupSession {
   }
 
   #loadingFor(id: QuestionId): boolean {
-    return (id === 'guild' && this.#loading.has('guilds')) || [...this.#loading].some((k) => k.startsWith(`${id === 'role' ? 'roles' : id}:`));
+    return (
+      (id === 'guild' && this.#loading.has('guilds')) ||
+      [...this.#loading].some((k) => k.startsWith(`${id === 'role' ? 'roles' : id}:`))
+    );
   }
 
   #emit(): void {

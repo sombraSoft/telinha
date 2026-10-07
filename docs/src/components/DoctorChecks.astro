@@ -1,9 +1,11 @@
 ---
 // Check | Title | What it looks at | What fixes it, in the order the doctor runs them.
 import generated from '../data/generated.json';
-import { DOCTOR_CHECK_DOCS, UI, codeSegments, type Locale } from '../data/reference.ts';
+import { codeSegments, DOCTOR_CHECK_DOCS, type Locale, UI } from '../data/reference.ts';
 
-interface Props { locale: Locale }
+interface Props {
+  locale: Locale;
+}
 const { locale } = Astro.props;
 
 const checks = generated.doctor.checks as { id: string; title: Record<Locale, string> }[];
@@ -16,12 +18,19 @@ const t = (k: string) => UI[k]![locale];
 
 <table>
   <thead>
-    <tr><th>{t('check')}</th><th>{t('title')}</th><th>{t('looksAt')}</th><th>{t('fixes')}</th></tr>
+    <tr>
+      <th>{t('check')}</th>
+      <th>{t('title')}</th>
+      <th>{t('looksAt')}</th>
+      <th>{t('fixes')}</th>
+    </tr>
   </thead>
   <tbody>
     {rows.map((r) => (
       <tr>
-        <td><code>{r.id}</code></td>
+        <td>
+          <code>{r.id}</code>
+        </td>
         <td>{r.title}</td>
         <td>{codeSegments(r.looksAt).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>
         <td>{codeSegments(r.fixes).map((s, i) => (i % 2 ? <code>{s}</code> : s))}</td>

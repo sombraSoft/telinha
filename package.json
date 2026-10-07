@@ -16,6 +16,8 @@
     "docs:build": "bun run --filter @telinha/docs build",
     "test": "bun test --preload ./web/test/svelte-runes.ts ./server ./web ./docs ./scripts",
     "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p .",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "e2e": "playwright test",
     "compile": "bun scripts/build-binary.ts",
     "image": "bun scripts/image.ts",

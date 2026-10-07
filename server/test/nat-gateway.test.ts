@@ -70,9 +70,10 @@ describe('parseProcNetRoute', () => {
   });
 
   test('routes without the gateway flag are ignored', () => {
-    const text = 'Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n'
-      + 'tun0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\n'
-      + 'eth0\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\n';
+    const text =
+      'Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n' +
+      'tun0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\n' +
+      'eth0\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\n';
     expect(parseProcNetRoute(text)).toEqual({ iface: 'eth0', gatewayIp: '192.168.1.1' });
   });
 });
@@ -87,11 +88,16 @@ describe('parseRoutePrint', () => {
   });
 
   test('CRLF output', () => {
-    expect(parseRoutePrint(ROUTE_PRINT_EN.replace(/\n/g, '\r\n'))).toEqual({ gatewayIp: '192.168.0.1', localIp: '192.168.0.10' });
+    expect(parseRoutePrint(ROUTE_PRINT_EN.replace(/\n/g, '\r\n'))).toEqual({
+      gatewayIp: '192.168.0.1',
+      localIp: '192.168.0.10',
+    });
   });
 
   test('no default route -> null', () => {
-    expect(parseRoutePrint('Active Routes:\n        127.0.0.0        255.0.0.0         On-link         127.0.0.1    331\n')).toBeNull();
+    expect(
+      parseRoutePrint('Active Routes:\n        127.0.0.0        255.0.0.0         On-link         127.0.0.1    331\n'),
+    ).toBeNull();
   });
 });
 
@@ -113,18 +119,48 @@ describe('localIpFor', () => {
 
 describe('defaultRoute', () => {
   test('linux: /proc/net/route + interface address', async () => {
-    const r = await defaultRoute({ platform: 'linux', readProcRoute: async () => PROC_ROUTE, interfaces: () => IFACES });
+    const r = await defaultRoute({
+      platform: 'linux',
+      readProcRoute: async () => PROC_ROUTE,
+      interfaces: () => IFACES,
+    });
     expect(r).toEqual({ gatewayIp: '192.168.0.1', localIp: '192.168.0.10' });
   });
 
   test('windows: route print', async () => {
-    const r = await defaultRoute({ platform: 'win32', routePrint: async () => ROUTE_PRINT_PT_BR, interfaces: () => IFACES });
+    const r = await defaultRoute({
+      platform: 'win32',
+      routePrint: async () => ROUTE_PRINT_PT_BR,
+      interfaces: () => IFACES,
+    });
     expect(r).toEqual({ gatewayIp: '10.0.0.1', localIp: '10.0.0.23' });
   });
 
   test('never throws', async () => {
-    expect(await defaultRoute({ platform: 'linux', readProcRoute: async () => { throw new Error('ENOENT'); } })).toBeNull();
-    expect(await defaultRoute({ platform: 'win32', routePrint: async () => { throw new Error('spawn failed'); } })).toBeNull();
-    expect(await defaultRoute({ platform: 'linux', readProcRoute: async () => PROC_ROUTE, interfaces: () => { throw new Error('boom'); } })).toBeNull();
+    expect(
+      await defaultRoute({
+        platform: 'linux',
+        readProcRoute: async () => {
+          throw new Error('ENOENT');
+        },
+      }),
+    ).toBeNull();
+    expect(
+      await defaultRoute({
+        platform: 'win32',
+        routePrint: async () => {
+          throw new Error('spawn failed');
+        },
+      }),
+    ).toBeNull();
+    expect(
+      await defaultRoute({
+        platform: 'linux',
+        readProcRoute: async () => PROC_ROUTE,
+        interfaces: () => {
+          throw new Error('boom');
+        },
+      }),
+    ).toBeNull();
   });
 });

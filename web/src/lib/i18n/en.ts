@@ -16,7 +16,7 @@ export const en = {
   'theme.onyx': 'Onyx',
   'theme.light': 'Light',
   'lang.auto': 'Auto',
-  'you': '(you)',
+  you: '(you)',
   'empty.title': 'Nobody is streaming yet.',
   'empty.hint': 'Click {share} to start.',
   'share.start': 'Share screen',

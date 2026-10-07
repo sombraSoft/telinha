@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { controlBaseUrl, ControlUnavailableError, createControlClient, type ControlStatus } from '../src/cli/control.ts';
+import {
+  type ControlStatus,
+  ControlUnavailableError,
+  controlBaseUrl,
+  createControlClient,
+} from '../src/cli/control.ts';
 
 const TOK = 'a1'.repeat(32);
 
@@ -28,7 +33,12 @@ function fakeFetch(respond: (c: Call) => Response) {
   const calls: Call[] = [];
   const fetch = async (url: string, init?: RequestInit) => {
     const h = new Headers(init?.headers);
-    const c = { url, method: init?.method ?? 'GET', auth: h.get('authorization'), body: init?.body ? JSON.parse(String(init.body)) : undefined };
+    const c = {
+      url,
+      method: init?.method ?? 'GET',
+      auth: h.get('authorization'),
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    };
     calls.push(c);
     return respond(c);
   };
@@ -36,8 +46,19 @@ function fakeFetch(respond: (c: Call) => Response) {
 }
 
 const STATUS: ControlStatus = {
-  version: '0.7.0', startedAt: 1, pid: 42, ingress: 'direct', media: 'self', rooms: 0, children: { livekit: 'up' }, childStatus: { livekit: { state: 'up', pid: 7, restarts: 0, recentRestarts: 0, since: 1 } },
-  publicIp: null, upnp: null, ddns: null, update: null, supervised: true,
+  version: '0.7.0',
+  startedAt: 1,
+  pid: 42,
+  ingress: 'direct',
+  media: 'self',
+  rooms: 0,
+  children: { livekit: 'up' },
+  childStatus: { livekit: { state: 'up', pid: 7, restarts: 0, recentRestarts: 0, since: 1 } },
+  publicIp: null,
+  upnp: null,
+  ddns: null,
+  update: null,
+  supervised: true,
 };
 
 describe('controlBaseUrl', () => {
@@ -48,10 +69,14 @@ describe('controlBaseUrl', () => {
   });
 
   test('the process environment wins over the file, and works with no file (Docker)', () => {
-    expect(controlBaseUrl(home({ envFile: 'LISTEN=127.0.0.1:9000\n' }).envFile, { LISTEN: '127.0.0.1:9100' })).toBe('http://127.0.0.1:9100');
+    expect(controlBaseUrl(home({ envFile: 'LISTEN=127.0.0.1:9000\n' }).envFile, { LISTEN: '127.0.0.1:9100' })).toBe(
+      'http://127.0.0.1:9100',
+    );
     expect(controlBaseUrl(home().envFile, { LISTEN: '0.0.0.0:8082' })).toBe('http://127.0.0.1:8082');
     // An empty variable does not override (mergeEnv's rule).
-    expect(controlBaseUrl(home({ envFile: 'LISTEN=127.0.0.1:9000\n' }).envFile, { LISTEN: '' })).toBe('http://127.0.0.1:9000');
+    expect(controlBaseUrl(home({ envFile: 'LISTEN=127.0.0.1:9000\n' }).envFile, { LISTEN: '' })).toBe(
+      'http://127.0.0.1:9000',
+    );
   });
 
   test('a bad LISTEN falls back to the default', () => {
@@ -65,7 +90,9 @@ describe('createControlClient', () => {
     const f = fakeFetch(() => Response.json(STATUS));
     const c = createControlClient({ ...h, fetch: f.fetch, env: { LISTEN: '127.0.0.1:18081' } });
     expect(await c.status()).toEqual(STATUS);
-    expect(f.calls).toEqual([{ url: 'http://127.0.0.1:18081/internal/status', method: 'GET', auth: `Bearer ${TOK}`, body: undefined }]);
+    expect(f.calls).toEqual([
+      { url: 'http://127.0.0.1:18081/internal/status', method: 'GET', auth: `Bearer ${TOK}`, body: undefined },
+    ]);
   });
 
   test('a token file that is not a token (a planted link to another file) is never sent', async () => {
@@ -85,8 +112,16 @@ describe('createControlClient', () => {
 
   test('available: token present and status answers', async () => {
     const h = home({ token: TOK });
-    expect(await createControlClient({ ...h, fetch: fakeFetch(() => Response.json(STATUS)).fetch, env: {} }).available()).toBe(true);
-    expect(await createControlClient({ ...h, fetch: fakeFetch(() => new Response('Not found', { status: 404 })).fetch, env: {} }).available()).toBe(false);
+    expect(
+      await createControlClient({ ...h, fetch: fakeFetch(() => Response.json(STATUS)).fetch, env: {} }).available(),
+    ).toBe(true);
+    expect(
+      await createControlClient({
+        ...h,
+        fetch: fakeFetch(() => new Response('Not found', { status: 404 })).fetch,
+        env: {},
+      }).available(),
+    ).toBe(false);
     const refused = async () => {
       throw new Error('ECONNREFUSED');
     };
@@ -96,7 +131,8 @@ describe('createControlClient', () => {
   test('doctor session, wait (capped at 30 s), update, shutdown', async () => {
     const h = home({ token: TOK });
     const f = fakeFetch((c) => {
-      if (c.url.endsWith('/internal/doctor/sessions')) return Response.json({ id: 'ab', url: 'https://x.test/doctor?t=1', expiresAt: 5 });
+      if (c.url.endsWith('/internal/doctor/sessions'))
+        return Response.json({ id: 'ab', url: 'https://x.test/doctor?t=1', expiresAt: 5 });
       if (c.url.includes('/internal/doctor/sessions/')) return Response.json({ state: 'opened', openedAt: 3 });
       if (c.url.endsWith('/internal/update')) return Response.json({ action: 'deferred', message: '1 room open' });
       if (c.url.endsWith('/internal/shutdown')) return new Response(null, { status: 202 });
@@ -113,7 +149,11 @@ describe('createControlClient', () => {
   });
 
   test('a non-2xx answer is an error naming the route', async () => {
-    const c = createControlClient({ ...home({ token: TOK }), fetch: fakeFetch(() => new Response('', { status: 404, statusText: 'Not Found' })).fetch, env: {} });
+    const c = createControlClient({
+      ...home({ token: TOK }),
+      fetch: fakeFetch(() => new Response('', { status: 404, statusText: 'Not Found' })).fetch,
+      env: {},
+    });
     await expect(c.status()).rejects.toThrow('control: GET /internal/status: 404 Not Found');
     await expect(c.shutdown('stop')).rejects.toThrow('/internal/shutdown: 404');
   });

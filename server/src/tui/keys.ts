@@ -34,7 +34,11 @@ export function dispatchPaste(stack: KeyStack, text: string): boolean {
 }
 
 export const isPrintable = (k: KeyEvent): boolean =>
-  !k.ctrl && !k.meta && typeof k.sequence === 'string' && k.sequence.length >= 1 && [...k.sequence].every((ch) => ch >= ' ' && ch !== '\x7f');
+  !k.ctrl &&
+  !k.meta &&
+  typeof k.sequence === 'string' &&
+  k.sequence.length >= 1 &&
+  [...k.sequence].every((ch) => ch >= ' ' && ch !== '\x7f');
 
 export const isEnter = (k: KeyEvent): boolean => k.name === 'return' || k.name === 'enter';
 export const isSpace = (k: KeyEvent): boolean => k.name === 'space' || k.sequence === ' ';
