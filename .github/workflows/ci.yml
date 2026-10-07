@@ -16,12 +16,16 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every job has a timeout-minutes well above its slowest cold-cache run so far,
+# so a hung step (an apt mirror that stops answering) fails within minutes
+# instead of holding the runner for the 6-hour default.
 jobs:
   # Which areas a PR touches, so jobs that cannot be affected are skipped (a
   # skipped job counts as passed in `required`). Shared config and lockfiles
   # count as every area, and pushes to main always run everything.
   changes:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
@@ -98,6 +102,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,6 +151,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -224,6 +230,7 @@ jobs:
             # The Windows zips carry the tray icon, built below.
             args: --tray tray/bin/Release/net48/telinha-tray.exe
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     # The run smoke: DEV_USER mode, no Discord, no ingress, no router.
     env:
       INGRESS: external
@@ -608,6 +615,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -685,6 +693,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -717,6 +726,7 @@ jobs:
   # is what this replaces: the action pinned its own older gitleaks.
   gitleaks:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -756,6 +766,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -823,6 +834,7 @@ jobs:
     if: needs.changes.outputs.caddy == 'true'
     name: caddy (windows-x64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -852,6 +864,7 @@ jobs:
     if: always()
     needs: [changes, test, lint, gitleaks, image]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: every gating job passed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
