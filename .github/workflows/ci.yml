@@ -1,6 +1,6 @@
 # Checks every PR (including Release PRs opened by the release app and
-# Renovate PRs). Job names are the required checks in branch protection, so
-# keep them stable.
+# Renovate PRs). The ruleset requires only the `required` job below, so which
+# jobs gate a merge is decided here, in a PR, and jobs can be renamed freely.
 name: ci
 
 on:
@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -39,7 +39,7 @@ jobs:
   # Browser tests against the real stack (LiveKit --dev + server + built page).
   # Not a required check yet.
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -75,9 +75,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: linux
-          - os: windows-latest
+          - os: windows-2025
             target: windows
             # The Windows zips carry the tray icon, built below.
             args: --tray tray/bin/Release/net48/telinha-tray.exe
@@ -442,7 +442,7 @@ jobs:
           }
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -484,7 +484,7 @@ jobs:
         run: bun scripts/versions.ts check
 
   docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -497,7 +497,7 @@ jobs:
       - run: bun run docs:build
 
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       # The action lists the PR's commits to scan only those.
@@ -518,7 +518,7 @@ jobs:
   # smoke test checks its version and modules and validates the DNS-01 and TURN
   # (layer4, PROXY v2) Caddyfiles.
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -572,7 +572,7 @@ jobs:
   # image job covers linux). Not a required check.
   caddy:
     name: caddy (windows-x64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -589,3 +589,15 @@ jobs:
           push: false
       - name: caddy.exe
         run: test -s dist-caddy/caddy.exe
+
+  # The one check the ruleset requires: it passes when every job in `needs`
+  # passed (or was skipped), so adding, renaming or dropping a gating job is a
+  # change to this list, not to the ruleset.
+  required:
+    if: always()
+    needs: [test, lint, gitleaks, image]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: every gating job passed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
