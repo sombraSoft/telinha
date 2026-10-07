@@ -30,6 +30,7 @@ go = "1.25.14"
 # Renovate's mise manager does not know the registry's jactionlint short name.
 "github:jdx/jactionlint" = "1.8.2"
 shellcheck = "0.11.0"
+hadolint = "2.15.1"
 gitleaks = "8.30.1"
 editorconfig-checker = "4.0.2"
 

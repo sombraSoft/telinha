@@ -616,7 +616,7 @@ jobs:
         with:
           version: 2026.10.3
           install: false
-          install_args: bun github:jdx/jactionlint shellcheck editorconfig-checker
+          install_args: bun github:jdx/jactionlint shellcheck hadolint editorconfig-checker
           cache_save: ${{ github.event_name == 'push' }}
       # mise lock keeps every locked version and rewrites only what mise.toml
       # no longer matches, so a diff means mise.lock was not refreshed with it.
@@ -633,7 +633,7 @@ jobs:
       - name: install tools
         env:
           MISE_GITHUB_TOKEN: ${{ github.token }}
-        run: mise install --locked bun github:jdx/jactionlint shellcheck editorconfig-checker
+        run: mise install --locked bun github:jdx/jactionlint shellcheck hadolint editorconfig-checker
       # Listed explicitly: telinha-update has no extension, and a missing file
       # should fail the job rather than be silently skipped.
       - name: shellcheck
@@ -663,6 +663,10 @@ jobs:
       # run: block too. .github/jactionlint.yaml lists what it ignores.
       - name: actionlint
         run: jactionlint -color
+      # The Dockerfile, its RUN lines included (hadolint has shellcheck built
+      # in). .hadolint.yaml lists the rules it ignores and why.
+      - name: hadolint
+        run: hadolint Dockerfile
       # Every tracked text file against .editorconfig; .editorconfig says which
       # check is off and why.
       - name: editorconfig
