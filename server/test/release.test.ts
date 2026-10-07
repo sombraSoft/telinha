@@ -2,10 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { archiveFiles, writeArchive } from '../../scripts/build-binary.ts';
+import { writeArchive } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
 import {
-  ASIDE_RE, SUMS, TRAY_DIST, TRAY_EXE, archiveContents, asideBase, assetName, caddyAssetName, caddyExeName, exeName, formatSums,
+  ASIDE_RE, SUMS, TRAY_DIST, TRAY_EXE, archiveContents, archiveFiles, asideBase, assetName, caddyAssetName, caddyExeName, exeName, formatSums,
   isStableTag, latestReleaseTag, newExeName, parseSums, releaseAssetUrl, tagFromRedirect,
 } from '../src/release.ts';
 import { downloadRelease } from '../src/update/download.ts';

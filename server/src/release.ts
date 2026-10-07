@@ -67,6 +67,15 @@ export const TRAY_EXE = 'telinha-tray.exe';
 export const archiveContents = (t: Target): { exe: string; tray: string | null; license: string } =>
   ({ exe: exeName(t), tray: onWindows(t) ? TRAY_EXE : null, license: 'LICENSE' });
 
+/** A target's archive contents with each file's mode and where it comes from; only Windows zips carry the tray. */
+export function archiveFiles(t: Target, files: { exe: string; tray?: string; license: string }): { path: string; mode: number; source: string }[] {
+  const names = archiveContents(t);
+  const out = [{ path: names.exe, mode: 0o755, source: files.exe }];
+  if (names.tray && files.tray) out.push({ path: names.tray, mode: 0o755, source: files.tray });
+  out.push({ path: names.license, mode: 0o644, source: files.license });
+  return out;
+}
+
 /** A downloaded program waiting in bin for the swap. */
 export const newExeName = (os: OsOf): string => `telinha.new${exeSuffix(os)}`;
 export const TRAY_NEW = 'telinha-tray.new.exe';

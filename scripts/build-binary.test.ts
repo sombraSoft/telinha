@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { archiveFiles, buildConfig, packSources, parseArgs } from './build-binary.ts';
+import { archiveFiles } from '../server/src/release.ts';
+import { buildConfig, packSources, parseArgs } from './build-binary.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
 const opts = { version: '0.7.0-rc.1', commit: 'abc1234', outfile: '/tmp/out/telinha' };

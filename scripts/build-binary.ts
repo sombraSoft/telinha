@@ -19,8 +19,8 @@ import solidPlugin from '@opentui/solid/bun-plugin';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { writeTarGz, writeZip, type Entry } from '../server/src/archive.ts';
-import { SUMS, archiveContents, archiveType, assetName, caddyAssetName, caddyExeName, exeName, formatSums } from '../server/src/release.ts';
+import { writeArchive, type Entry } from '../server/src/archive.ts';
+import { SUMS, archiveContents, archiveFiles, assetName, caddyAssetName, caddyExeName, exeName, formatSums } from '../server/src/release.ts';
 import { TARGETS, hostTarget, type Target } from '../server/src/version.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -137,18 +137,6 @@ export function packSources(t: Target, from: string, tray?: string): { exe: stri
   const inArchive = archiveContents(t).tray;
   return inArchive ? { exe, tray: tray ?? join(from, 'tray', inArchive) } : { exe };
 }
-
-/** A target's archive contents (name inside, mode, file on disk); only Windows zips carry the tray. */
-export function archiveFiles(t: Target, files: { exe: string; tray?: string; license: string }): { path: string; mode: number; source: string }[] {
-  const names = archiveContents(t);
-  const out = [{ path: names.exe, mode: 0o755, source: files.exe }];
-  if (names.tray && files.tray) out.push({ path: names.tray, mode: 0o755, source: files.tray });
-  out.push({ path: names.license, mode: 0o644, source: files.license });
-  return out;
-}
-
-/** The archive bytes, zip or tar.gz as the target's asset name says. */
-export const writeArchive = (t: Target, entries: Entry[]): Uint8Array => (archiveType(t) === 'zip' ? writeZip(entries) : writeTarGz(entries));
 
 function shortCommit(): string {
   const r = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'], { cwd: ROOT, stderr: 'ignore' });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { basename, join } from 'node:path';
-import { writeArchive } from '../../scripts/build-binary.ts';
+import { writeArchive } from '../src/archive.ts';
 import type { Entry } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
 import { assetName, parseSums } from '../src/release.ts';

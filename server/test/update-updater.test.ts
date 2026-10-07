@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { basename } from 'node:path';
-import { writeArchive } from '../../scripts/build-binary.ts';
+import { writeArchive } from '../src/archive.ts';
 import { sha256 } from '../src/bins.ts';
 import { TRAY_EXE, assetName, exeName, parseSums } from '../src/release.ts';
 import { PendingError, type GitHubReleases, type UpdateFs } from '../src/update/types.ts';

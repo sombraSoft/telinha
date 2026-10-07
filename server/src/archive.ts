@@ -4,6 +4,7 @@
 import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { deflateRawSync, gunzipSync, gzipSync, inflateRawSync } from 'node:zlib';
+import { archiveType } from './release.ts';
 
 export interface Entry { path: string; mode: number; data: Uint8Array }
 
@@ -322,3 +323,7 @@ export async function extractTo(entries: Entry[], dir: string, pick?: (path: str
   }
   return written;
 }
+
+/** A target's release archive, zip or tar.gz as its asset name says. */
+export const writeArchive = (t: Parameters<typeof archiveType>[0], entries: Entry[]): Uint8Array =>
+  (archiveType(t) === 'zip' ? writeZip(entries) : writeTarGz(entries));
