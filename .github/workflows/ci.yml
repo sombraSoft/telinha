@@ -571,7 +571,7 @@ jobs:
           MISE_GITHUB_TOKEN: ${{ github.token }}
         run: |
           mise lock
-          git diff --exit-code -- mise.lock || { echo '::error file=mise.lock::mise.lock is stale: run `mise lock` and commit it'; exit 1; }
+          git diff --exit-code -- mise.lock || { echo '::error file=mise.lock::mise.lock is stale: run mise lock and commit the result'; exit 1; }
       # Structure and every asset hash present; a stale hash fails the image job.
       - name: versions.json
         run: bun scripts/versions.ts check
