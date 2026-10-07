@@ -3,8 +3,8 @@
 // the manager itself starts.
 import { posix, win32 } from 'node:path';
 import { createLogger } from '../log.ts';
+import { exeName } from '../release.ts';
 import { runLoop as defaultRunLoop } from '../service/runloop.ts';
-import { exeName } from '../update/swap.ts';
 import {
   NotElevatedError, ServiceInstallError, serviceManager as defaultServiceManager,
   type InstallResult, type ServiceFs, type ServiceManager, type SpawnFn,

@@ -4,7 +4,7 @@ import { loadConfig } from '../src/config.ts';
 import { createHandler, type Deps, type Fetch } from '../src/http.ts';
 import type { Locale } from '../src/i18n.ts';
 import { devIsMember } from '../src/roles.ts';
-import { openRegistry } from '../src/rooms.ts';
+import type { Rooms } from '../src/rooms.ts';
 import { staticFromEntries, type StaticFiles } from '../src/static.ts';
 
 export const PROD_ENV = {
@@ -40,9 +40,10 @@ export interface Setup {
   members?: string[];
   fetch?: Fetch;
   isMember?: Deps['isMember'];
-  /** Rooms opened by the slash command before the test; default: the names the tests use. */
+  /** Open rooms (admitted with 'ok', others 'unknown'); default: the names the tests use. */
   rooms?: string[];
-  ensureRoom?: (room: string) => Promise<void>;
+  /** Overrides the fake Room module's answer. */
+  admit?: Rooms['admit'];
   /** The bot's member directory; unset = not ready yet. */
   directory?: Deps['members'];
   upgrade?: Deps['upgrade'];
@@ -62,20 +63,19 @@ export function setup(o: Setup = {}) {
   const config = loadConfig({ ...(o.env ?? PROD_ENV), ...(o.command ? { COMMAND_NAME: o.command } : {}) });
   const logs: unknown[][] = [];
   const members = new Set(o.members ?? ['1']);
-  const registry = openRegistry(':memory:');
-  for (const room of o.rooms ?? ['bafo-kiru', 'lamofu-tibare']) {
-    registry.create({ room, guildId: '100', channelId: '300', locale: 'en', openerId: '1', openerName: 'Zé', what: null, createdAt: NOW - 1000 });
-  }
-  const ensured: string[] = [];
-  const deleted: string[] = [];
+  const open = o.rooms ?? ['bafo-kiru', 'lamofu-tibare'];
+  /** Every admit the handler asked for: [room code, member]. */
+  const admitted: Parameters<Rooms['admit']>[] = [];
   const handler = createHandler({
     config,
     isMember: o.isMember ?? (config.dev ? devIsMember(config.dev.id) : async (id) => members.has(id)),
     files: o.files ?? staticFromEntries(ENTRIES, { command: config.commandName }),
-    registry,
     rooms: {
-      ensureRoom: o.ensureRoom ?? (async (room) => void ensured.push(room)),
-      deleteRoom: async (room) => void deleted.push(room),
+      admit: async (room, member) => {
+        admitted.push([room, member]);
+        return o.admit ? o.admit(room, member) : open.includes(room) ? 'ok' : 'unknown';
+      },
+      openRooms: () => open,
     },
     group: (l: Locale) => (l === 'pt-BR' ? 'Galera' : 'Crew'),
     discordReady: () => true,
@@ -106,7 +106,7 @@ export function setup(o: Setup = {}) {
     `telinha=${encodeURIComponent(sign(config.cookieSecret, { id: '1', name: 'Zé', avatar: 'abc', exp: NOW + 60_000, ...s }))}`;
   /** GET as the default member (id 1). */
   const member = (path: string, headers: Record<string, string> = {}) => get(path, { cookie: sessionCookie(), ...headers });
-  return { config, handler, call, get, member, logs, sessionCookie, registry, ensured, deleted };
+  return { config, handler, call, get, member, logs, sessionCookie, admitted };
 }
 
 export function jwtPayload(token: string): Record<string, any> {

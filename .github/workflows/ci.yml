@@ -606,14 +606,30 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # The linters at the versions mise.toml pins (mise.lock has their URLs and
-      # checksums), the same binaries `mise install` gives a dev machine. bun
-      # runs the versions.json check below.
+      # mise only, no tools yet: a --locked install of a tool mise.lock lacks
+      # would fail before the freshness check below can say why.
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.3
-          install_args: bun jactionlint shellcheck editorconfig-checker
+          install: false
+          install_args: bun github:jdx/jactionlint shellcheck editorconfig-checker
           cache_save: ${{ github.event_name == 'push' }}
+      # mise lock keeps every locked version and rewrites only what mise.toml
+      # no longer matches, so a diff means mise.lock was not refreshed with it.
+      # The token lifts the anonymous GitHub API limit for the release lookups.
+      - name: mise.lock
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mise lock
+          git diff --exit-code -- mise.lock || { echo '::error file=mise.lock::mise.lock is stale: run mise lock and commit the result'; exit 1; }
+      # The linters at the versions mise.toml pins (mise.lock has their URLs and
+      # checksums), the same binaries `mise install` gives a dev machine. bun
+      # runs the versions.json check below.
+      - name: install tools
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: mise install --locked bun github:jdx/jactionlint shellcheck editorconfig-checker
       # Listed explicitly: telinha-update has no extension, and a missing file
       # should fail the job rather than be silently skipped.
       - name: shellcheck
@@ -647,15 +663,6 @@ jobs:
       # check is off and why.
       - name: editorconfig
         run: editorconfig-checker
-      # mise lock keeps every locked version and rewrites only what mise.toml
-      # no longer matches, so a diff means mise.lock was not refreshed with it.
-      # The token lifts the anonymous GitHub API limit for the release lookups.
-      - name: mise.lock
-        env:
-          MISE_GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          mise lock
-          git diff --exit-code -- mise.lock || { echo '::error file=mise.lock::mise.lock is stale: run mise lock and commit the result'; exit 1; }
       # Structure and every asset hash present; a stale hash fails the image job.
       - name: versions.json
         run: bun scripts/versions.ts check
@@ -701,10 +708,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # bun too: mise install runs mise.toml's postinstall hook, which is a bun
+      # script (a no-op in CI).
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.3
-          install_args: gitleaks
+          install_args: bun gitleaks
           cache_save: ${{ github.event_name == 'push' }}
       # A push whose previous tip is unknown here (zeros, or rewritten away)
       # scans the whole history rather than guess a range. Findings print

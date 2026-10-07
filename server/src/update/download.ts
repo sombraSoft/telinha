@@ -7,17 +7,11 @@
 import { basename, join } from 'node:path';
 import { readTarGz, readZip, type Entry } from '../archive.ts';
 import { sha256 } from '../bins.ts';
+import { TRAY_NEW, archiveContents, archiveType, assetName, newExeName } from '../release.ts';
 import type { Target } from '../version.ts';
-import { assetName } from './github.ts';
 import { FailedError, PendingError, errorMessage, type GitHubReleases, type UpdateFs } from './types.ts';
 
 export const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
-
-export const newExeName = (target: Target): string => (target.startsWith('windows') ? 'telinha.new.exe' : 'telinha.new');
-const exeInArchive = (target: Target) => (target.startsWith('windows') ? 'telinha.exe' : 'telinha');
-/** Where a Windows archive's tray lands; swap.stage() installs it only over an installed tray. */
-export const trayNewExeName = (_target: Target): string => 'telinha-tray.new.exe';
-const TRAY_IN_ARCHIVE = 'telinha-tray.exe';
 
 export interface Downloaded {
   /** bin/telinha.new[.exe]. */
@@ -69,9 +63,9 @@ function findExecutable(entries: Entry[], name: string): Entry {
 }
 
 /** Optional (older releases have no tray), but two of them is a bad archive. */
-function findTray(entries: Entry[]): Entry | null {
-  const hits = named(entries, TRAY_IN_ARCHIVE);
-  if (hits.length > 1) throw new FailedError(`archive has ${hits.length} entries named ${TRAY_IN_ARCHIVE}`);
+function findTray(entries: Entry[], name: string): Entry | null {
+  const hits = named(entries, name);
+  if (hits.length > 1) throw new FailedError(`archive has ${hits.length} entries named ${name}`);
   return hits[0] ?? null;
 }
 
@@ -99,17 +93,18 @@ export async function downloadRelease(o: DownloadOptions): Promise<Downloaded> {
     if (actual !== expected) throw new FailedError(`sha256 mismatch for ${name}: expected ${expected}, got ${actual}`);
     let entries: Entry[];
     try {
-      entries = name.endsWith('.zip') ? readZip(data) : readTarGz(data);
+      entries = archiveType(o.target) === 'zip' ? readZip(data) : readTarGz(data);
     } catch (e) {
       throw new FailedError(`bad archive ${name}: ${errorMessage(e)}`);
     }
-    const exe = findExecutable(entries, exeInArchive(o.target));
+    const inArchive = archiveContents(o.target);
+    const exe = findExecutable(entries, inArchive.exe);
     // Linux archives never carry the tray: do not even look.
-    const windows = o.target.startsWith('windows');
-    const trayEntry = windows ? findTray(entries) : null;
+    const trayEntry = inArchive.tray ? findTray(entries, inArchive.tray) : null;
     await o.fs.writeBytes(output, exe.data, 0o755);
-    if (!windows) return { exe: output, tray: null };
-    const tray = join(o.bin, trayNewExeName(o.target));
+    if (!inArchive.tray) return { exe: output, tray: null };
+    // swap.stage() installs it only over an installed tray.
+    const tray = join(o.bin, TRAY_NEW);
     if (!trayEntry) {
       // A stale one from an interrupted run must not be installed with a release that has no tray.
       await o.fs.rm(tray);

@@ -1,13 +1,13 @@
 // `bun run bins`: downloads the child binaries into a directory. Used by dev/E2E
-// and the Docker build (which copies server/src/bins.ts, archive.ts, version.ts,
-// releasetag.ts and versions.json next to this file, so nothing else of server/
-// is needed). caddy is Telinha's own build, taken from a release: --release
-// picks which one, the latest by default.
+// and the Docker build (which copies server/src/bins.ts, archive.ts,
+// footprint.ts, version.ts, release.ts and versions.json next to this file,
+// so nothing else of server/ is needed). caddy is Telinha's own build, taken
+// from a release: --release picks which one, the latest by default.
 import { join } from 'node:path';
-import { ROOT, TOOLS, caddyRelease, ensureBinaries, hostArch, hostOs, type Arch, type Os, type Tool } from '../server/src/bins.ts';
-import { latestReleaseTag } from '../server/src/releasetag.ts';
+import { HELPERS, ROOT, caddyRelease, ensureBinaries, hostArch, hostOs, type Arch, type Helper, type Os } from '../server/src/bins.ts';
+import { latestReleaseTag } from '../server/src/release.ts';
 
-const USAGE = `usage: bun scripts/bins.ts [--os linux|windows] [--arch amd64|arm64] [--out DIR] [--release vX.Y.Z] [${TOOLS.join(' ')}]
+const USAGE = `usage: bun scripts/bins.ts [--os linux|windows] [--arch amd64|arm64] [--out DIR] [--release vX.Y.Z] [${HELPERS.join(' ')}]
   --release  the Telinha release whose caddy to fetch (default: the latest one; only read when caddy is asked for)`;
 
 function parseArgs(argv: string[]) {
@@ -15,7 +15,7 @@ function parseArgs(argv: string[]) {
   let arch: Arch | undefined;
   let outDir = process.env.BIN_DIR || join(ROOT, '.cache', 'telinha', 'bin');
   let release: string | undefined;
-  const names: Tool[] = [];
+  const names: Helper[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     const value = () => {
@@ -35,8 +35,8 @@ function parseArgs(argv: string[]) {
       outDir = value();
     } else if (a === '--release') {
       release = value();
-    } else if ((TOOLS as readonly string[]).includes(a)) {
-      names.push(a as Tool);
+    } else if ((HELPERS as readonly string[]).includes(a)) {
+      names.push(a as Helper);
     } else {
       throw new Error(`unknown argument ${a}\n${USAGE}`);
     }
@@ -48,13 +48,13 @@ function parseArgs(argv: string[]) {
   } catch (e) {
     throw new Error(`${e instanceof Error ? e.message : e}; pass --os and --arch`);
   }
-  return { os, arch, outDir, release, names: names.length ? names : [...TOOLS], explicit: names.length > 0 };
+  return { os, arch, outDir, release, names: names.length ? names : [...HELPERS], explicit: names.length > 0 };
 }
 
 if (import.meta.main) {
   try {
     const { names, explicit, release: given, ...o } = parseArgs(process.argv.slice(2));
-    // The pinned tools first: caddy depends on a release that has its asset,
+    // The pinned helpers first: caddy depends on a release that has its asset,
     // and its failure must not cost the others.
     const pinned = names.filter((n) => n !== 'caddy');
     if (pinned.length) {

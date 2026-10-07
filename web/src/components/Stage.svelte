@@ -1,13 +1,13 @@
 <script lang="ts">
   import { t } from '../lib/i18n/i18n.svelte';
-  import type { RoomController } from '../lib/room.svelte';
+  import type { RoomSession } from '../lib/room.svelte';
   import { canShareScreen } from '../lib/share';
   import Tile from './Tile.svelte';
   import mascot from '../assets/telinha.webp';
 
-  let { rc }: { rc: RoomController } = $props();
+  let { rc }: { rc: RoomSession } = $props();
 
-  const streamers = $derived(rc.streamers);
+  const tiles = $derived(rc.tiles);
   const focusMode = $derived(!!rc.focusId);
   const hint = $derived(t('empty.hint').split('{share}'));
   // Phones get no Share button, so no hint pointing at one either.
@@ -15,7 +15,7 @@
 </script>
 
 <section class="stage">
-  {#if rc.connected && streamers.length === 0}
+  {#if rc.connected && tiles.length === 0}
     <div class="empty" data-testid="empty-state">
       <img class="mascot" src={mascot} alt="" width="480" height="490" draggable="false" />
       <p class="title">{t('empty.title')}</p>
@@ -29,12 +29,12 @@
 
   <!-- One keyed list in a single container: tiles never move in the DOM
        (moving a <video> pauses it), focus only changes the CSS layout. -->
-  {#if streamers.length}
-    <div class="tiles" class:focus-mode={focusMode} class:single={!focusMode && streamers.length === 1}>
-      {#each streamers as p (p.identity)}
+  {#if tiles.length}
+    <div class="tiles" class:focus-mode={focusMode} class:single={!focusMode && tiles.length === 1}>
+      {#each tiles as p (p.identity)}
         <Tile
-          peer={p}
-          viewers={rc.peers.filter((v) => v.identity !== p.identity && v.watching.includes(p.identity))}
+          participant={p}
+          watchers={rc.participants.filter((v) => v.identity !== p.identity && v.watching.includes(p.identity))}
           focused={rc.focusId === p.identity}
           strip={focusMode && rc.focusId !== p.identity}
           stats={rc.stats[p.identity]}

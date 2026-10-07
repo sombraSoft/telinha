@@ -24,8 +24,9 @@ go = "1.25.14"
 # jactionlint is the maintained actionlint fork the mise registry points to:
 # upstream actionlint has stopped releasing and does not know newer workflow
 # keys such as cache-mode. It runs shellcheck on run: blocks when shellcheck is
-# on PATH, so the two belong together.
-jactionlint = "1.8.2"
+# on PATH, so the two belong together. Named by its GitHub repo because
+# Renovate's mise manager does not know the registry's jactionlint short name.
+"github:jdx/jactionlint" = "1.8.2"
 shellcheck = "0.11.0"
 gitleaks = "8.30.1"
 editorconfig-checker = "4.0.2"

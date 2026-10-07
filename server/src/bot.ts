@@ -12,8 +12,7 @@ import { uniqueRoomCode } from './codes.ts';
 import type { Config } from './config.ts';
 import { dicts, resolveLocale, t, type Locale } from './i18n.ts';
 import { memberData, type Directory } from './members.ts';
-import type { RoomService } from './livekit.ts';
-import type { Registry, RoomRecord } from './rooms.ts';
+import type { RoomRecord, Rooms } from './rooms.ts';
 
 export function buildCommand(name: string) {
   return new SlashCommandBuilder()
@@ -69,14 +68,12 @@ export function commandDenied(
 }
 
 export interface CommandDeps {
-  registry: Registry;
-  rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>;
+  rooms: Pick<Rooms, 'open'>;
   /** The open card with nobody in it yet. */
   render: (rec: RoomRecord) => Card;
   /** Sends the interaction reply; returns where the public card landed. */
   reply: (p: CommandPayload) => Promise<{ channelId: string; messageId: string } | null>;
   newRoom: () => string;
-  now: () => number;
   group: (l: Locale) => string;
   log: (...a: unknown[]) => void;
 }
@@ -88,21 +85,19 @@ export async function handleCommand(i: CommandInput, d: CommandDeps): Promise<vo
     return;
   }
   const room = d.newRoom();
-  const rec = d.registry.create({
-    room, guildId: i.guildId, channelId: i.channelId, locale: resolveLocale(i.guildLocale),
-    openerId: i.userId, openerName: i.who, what: i.what, createdAt: d.now(),
-  });
   try {
-    await d.rooms.ensureRoom(room);
-    const posted = await d.reply(d.render(rec));
-    if (!posted) throw new Error('no message in the interaction response');
-    d.registry.setMessage(room, posted.channelId, posted.messageId);
+    // A failed open leaves no room behind (rooms.ts): only the caller hears of it.
+    await d.rooms.open({
+      room, guildId: i.guildId, channelId: i.channelId, locale: resolveLocale(i.guildLocale),
+      openerId: i.userId, openerName: i.who, what: i.what,
+    }, async (rec) => {
+      const posted = await d.reply(d.render(rec));
+      if (!posted) throw new Error('no message in the interaction response');
+      return posted;
+    });
     d.log(i.command, i.userId, room);
   } catch (e) {
-    // A room without its card would be a link nobody can see the state of.
     d.log(`${i.command} failed`, room, (e as Error).message);
-    d.registry.close(room, d.now());
-    await d.rooms.deleteRoom(room).catch(() => {});
     await d.reply(ephemeral(t(resolveLocale(i.locale), 'openFailed')));
   }
 }
@@ -118,7 +113,7 @@ export function editCard(rest: REST) {
 
 export function startBot(o: {
   config: Config; rest: REST; group: (l: Locale) => string; log: (...a: unknown[]) => void;
-  registry: Registry; rooms: Pick<RoomService, 'ensureRoom' | 'deleteRoom'>; render: (rec: RoomRecord) => Card;
+  rooms: Pick<Rooms, 'open' | 'get'>; render: (rec: RoomRecord) => Card;
   directory: Directory;
 }): Client {
   const { config: c, rest, group, log, directory } = o;
@@ -231,7 +226,6 @@ export function startBot(o: {
         who: member ?? i.user.globalName ?? i.user.username,
         what: i.options.getString('what'),
       }, {
-        registry: o.registry,
         rooms: o.rooms,
         render: o.render,
         async reply(p) {
@@ -244,8 +238,7 @@ export function startBot(o: {
           const m = res.resource?.message;
           return m ? { channelId: m.channelId, messageId: m.id } : null;
         },
-        newRoom: () => uniqueRoomCode((code) => o.registry.get(code) !== null, randomBytes),
-        now: Date.now,
+        newRoom: () => uniqueRoomCode((code) => o.rooms.get(code) !== null, randomBytes),
         group,
         log,
       });
