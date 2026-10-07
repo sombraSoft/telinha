@@ -547,7 +547,7 @@ them; the native updater and `telinha-update` ignore them unless pinned
 
 The `main` ruleset requires two checks. `required` is a job in `ci.yml` that
 passes only when the jobs it `needs` pass: `test (ubuntu-24.04)`,
-`test (windows-2025)`, `lint` (shellcheck of `deploy/install-docker.sh`,
+`test (windows-2025)` (which also runs the tray's MSTest suite), `lint` (shellcheck of `deploy/install-docker.sh`,
 `deploy/install.sh`, `deploy/telinha-update` and `scripts/smoke.sh`, a
 PowerShell parse and pinned PSScriptAnalyzer run of `deploy/install.ps1`,
 actionlint, `bun scripts/versions.ts check`), `gitleaks` and `image` (builds
