@@ -205,7 +205,7 @@ Quando você der pull.
 
 ```
 git pull
-bun install --frozen-lockfile
+mise install
 bun run build
 ```
 
@@ -217,7 +217,9 @@ comando que baixa os programas.
 ### Voltar atrás
 
 Faça checkout da tag da versão anterior (`git checkout v0.6.0`), depois
-instale, compile e reinicie como acima.
+instale, compile e reinicie como acima. As tags até a v0.7.0 não têm
+`mise.toml`: nelas rode `bun install --frozen-lockfile` no lugar do
+`mise install`.
 
 ### Comandos
 
