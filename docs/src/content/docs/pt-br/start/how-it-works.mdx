@@ -57,7 +57,7 @@ atualização da Telinha traz junto o Caddy que combina com ela.
 
 Todas as páginas ficam atrás do login do Discord. Depois do login, a Telinha
 confere se a pessoa tem o cargo que você escolheu (ou deixa entrar todo mundo
-do servidor, se foi essa a escolha) e guarda a sessão por `SESSION_DAYS`
+do servidor do Discord, se foi essa a escolha) e guarda a sessão por `SESSION_DAYS`
 dias. Só alguns caminhos respondem sem login: `/healthz`, os arquivos
 estáticos da página, o próprio login em `/auth/` e o link de uso único do
 teste pelo celular do `telinha doctor`.
@@ -94,8 +94,8 @@ encaminhadas no roteador (ou liberadas na VPS).
 navegador recebe a URL `wss://` do projeto no Cloud junto com o token da sala
 e manda a sinalização e a mídia direto para o LiveKit Cloud; a Telinha só
 conversa com a API de salas do projeto por HTTPS, para criar as salas, saber
-quem está nelas e apagar quando fecham. Nenhuma porta de mídia, nenhum relay
-em `/livekit`. Serve para uma linha atrás de CGNAT ou onde nada pode ser
+quem está nelas e apagar quando fecham. Nenhuma porta de mídia, nenhum proxy de
+sinalização em `/livekit`. Serve para uma linha atrás de CGNAT ou onde nada pode ser
 encaminhado, dentro dos limites mensais do plano gratuito. Veja
 [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/).
 
@@ -124,7 +124,7 @@ browser --> caddy :443 (TLS; :80 redirects)           child of telinha
                     /doctor*      --> phone test (one-time link)
                     /auth/*       --> OAuth login, /auth/members (no gate)
                     everything    --> gate: Discord login + role
-                      /livekit/rtc* --> LiveKit 127.0.0.1:7880   (signaling relay, WebSocket)
+                      /livekit/rtc* --> LiveKit 127.0.0.1:7880   (signaling proxy, WebSocket)
                       /r/<code>     --> room page
                       /             --> redirect to /r/
 
@@ -174,7 +174,7 @@ LiveKit (`MEDIA=self`; com o Cloud não há o que reiniciar). As salas abertas
 dão uma piscada: a página se reconecta sozinha, e
 quem estava compartilhando precisa compartilhar de novo.
 
-Num servidor com IP público fixo, defina `LIVEKIT_NODE_IP`; isso desliga essa
+Numa máquina com IP público fixo, defina `LIVEKIT_NODE_IP`; isso desliga essa
 verificação. Com DuckDNS, a Telinha também mantém o seu `<name>.duckdns.org`
 apontando para o IP atual. Veja
 [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/).
@@ -216,7 +216,7 @@ uma máquina Linux em casa ou uma VPS. Builds nativos:
 | `linux-x64` | Linux com glibc em qualquer CPU x86-64 |
 | `linux-arm64` | Linux com glibc em ARM 64 bits, como um Raspberry Pi 4 ou 5 com sistema 64 bits |
 
-Os builds x64 não precisam de AVX2, então servidores caseiros antigos com
+Os builds x64 não precisam de AVX2, então PCs caseiros antigos com
 Celeron ou Atom funcionam. Os builds Linux precisam de glibc: no Alpine e em
 outros sistemas com musl, o instalador muda para a instalação com Docker. Um
 userland 32 bits (um Raspberry Pi OS 32 bits, por exemplo) também não roda o

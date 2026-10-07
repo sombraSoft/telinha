@@ -68,7 +68,7 @@ Dentro dela (`TELINHA_HOME`, ou `--home DIR` em qualquer comando, aponta para ou
 | `bin/livekit-server`, `caddy`, `cloudflared` (`.exe` no Windows) e `<tool>.version` | Os binários auxiliares de que esta configuração precisa, conferidos por sha256 quando baixados (pelo setup, ou num início que não os encontra ou os encontra numa versão fixada mais antiga); o `PATH` é consultado depois do `bin/`. O `caddy` é o build do Caddy da própria Telinha (com o módulo DNS do DuckDNS e o layer4), baixado da versão da Telinha e conferido com o `SHA256SUMS` dela |
 | `config/telinha.env` | A configuração, só do dono: Linux, instalação de usuário, modo 0600; Linux, instalação como root, `root:telinha` 0640 numa `config/` `root:telinha` 0750 (o serviço lê pelo grupo); no Windows uma ACL só com você, SYSTEM e Administradores |
 | `data/telinha.sqlite` | O registro das salas. Se ele se perder, só os links das salas abertas naquele momento deixam de funcionar |
-| `data/run/` | O `livekit.yaml` e o `Caddyfile` gerados (reescritos antes de cada início: edite o `telinha.env`, nunca estes) e o estado da execução: `children.json`, `public-ip`, `telinha.pid` (um `run` por pasta), `service.pid`, `control.token`, `update.json`, `upnp.json` e, no Windows, `tray.json` (escrito pelo ícone da bandeja enquanto ele roda) |
+| `data/run/` | O `livekit.yaml` e o `Caddyfile` gerados (reescritos antes de cada início: edite o `telinha.env`, nunca estes) e o estado da execução: `children.json`, `public-ip`, `telinha.pid` (um `run` por pasta da Telinha), `service.pid`, `control.token`, `update.json`, `upnp.json` e, no Windows, `tray.json` (escrito pelo ícone da bandeja enquanto ele roda) |
 | `data/caddy/` | Os certificados e a conta ACME do Caddy (modo direto) |
 | `logs/telinha.log` (`.1` a `.5`) | O log do serviço no Windows, rotacionado a cada 10 MB (no Linux o log vai para o journal) |
 | `logs/telinha-tray.log` | Windows: o log do próprio ícone da bandeja |
@@ -86,7 +86,7 @@ Instalação nativa: remova o serviço e depois apague a pasta da Telinha.
 telinha service uninstall --firewall
 ```
 
-No Windows, rode em um terminal de administrador; lá ele também fecha o ícone da bandeja e desliga o *Iniciar com o Windows* dele. O `uninstall` mantém os arquivos, então apague a pasta você mesmo depois (veja a tabela acima). Uma instalação Linux como root também tem `/usr/local/lib/telinha` e `/usr/local/bin/telinha`.
+No Windows, rode em um terminal de administrador; lá ele também fecha o ícone da bandeja e desliga o *Iniciar com o Windows* dele. O `uninstall` mantém os arquivos, então apague a pasta da Telinha você mesmo depois (veja a tabela acima). Uma instalação Linux como root também tem `/usr/local/lib/telinha` e `/usr/local/bin/telinha`.
 
 Docker:
 

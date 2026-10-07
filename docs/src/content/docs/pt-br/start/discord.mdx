@@ -13,7 +13,7 @@ entrarem. O setup (`telinha setup`) faz quase tudo pela API do Discord e
 espera enquanto você faz os poucos cliques que ele não consegue fazer. Você
 também pode fazer tudo antes de rodar o setup.
 
-Você precisa de uma conta do Discord e, no servidor onde a Telinha vai
+Você precisa de uma conta do Discord e, no servidor do Discord onde a Telinha vai
 ficar, da permissão **Gerenciar servidor** (*Manage Server*), para adicionar
 o bot.
 
@@ -136,19 +136,19 @@ adicione o redirect novo.
 
 ## Convide o bot
 
-Quando o bot ainda não está em nenhum servidor, ou não está no que você
+Quando o bot ainda não está em nenhum servidor do Discord, ou não está no que você
 quer (*Outro servidor (adicionar o bot)*), o setup mostra um link de
 convite e oferece abrir no navegador:
 
 <Steps>
 
-1. Abra o link e escolha o seu servidor (você precisa de **Gerenciar
+1. Abra o link e escolha o seu servidor do Discord (você precisa de **Gerenciar
    servidor** lá).
 
 2. Confira as permissões e clique em **Autorizar** (*Authorize*).
 
 3. De volta ao setup, escolha *Adicionei o bot: verificar de novo*. Ele
-   lista os servidores de novo.
+   lista os servidores do Discord de novo.
 
 </Steps>
 
@@ -163,12 +163,12 @@ canal do comando. Se um canal for privado ou tiver permissões próprias, dê
 essas duas ao cargo do bot lá. Sem elas, o card fica como foi publicado (o
 log diz `card not editable`), e todo o resto funciona.
 
-## Servidor, cargo, canais e nomes
+## Servidor do Discord, cargo, canais e nomes
 
 O setup escolhe tudo a partir de listas; ninguém copia ID:
 
-- **Servidor** (`GUILD_ID`): um dos servidores em que o bot está. Uma
-  Telinha atende um servidor.
+- **Servidor do Discord** (`GUILD_ID`): um dos servidores do Discord em que o bot está. Uma
+  Telinha atende um servidor do Discord.
 - **Cargo** (`ROLE_ID`): quem tem esse cargo pode entrar nas salas. A
   última opção, "Todo mundo do servidor (@everyone)", deixa entrar todos os
   membros. Cargos gerenciados por uma integração, como o cargo do próprio
@@ -177,9 +177,10 @@ O setup escolhe tudo a partir de listas; ninguém copia ID:
   categoria. O comando de barra só funciona neles. Escolha pelo menos um.
 - **Nome do comando** (`COMMAND_NAME`, padrão `telinha`): letras
   minúsculas, dígitos, `-` ou `_`, de 1 a 32 caracteres. Duas Telinhas no
-  mesmo servidor precisam de nomes diferentes.
+  mesmo servidor do Discord precisam de nomes diferentes.
 - **Nome do grupo** (`GROUP_NAME`): aparece nas páginas e nas respostas do
-  bot. Vazio quer dizer o nome do servidor.
+  bot. Vazio quer dizer o nome do cargo acima, ou o nome do servidor do
+  Discord quando esse cargo é o @everyone.
 
 Para mudar qualquer um deles depois, rode o `telinha setup` de novo: cada
 pergunta começa no valor atual, e os segredos oferecem manter o atual.
@@ -192,8 +193,8 @@ pergunta começa no valor atual, e os segredos oferecem manter o atual.
 | Liga as duas intents privilegiadas | Só se o Discord recusar: liga na página **Bot** |
 | Confere o segredo do cliente com o Discord | Redefine o segredo e cola |
 | Mostra o redirect do login e espera até ele ser salvo | Adiciona o redirect e clica em **Salvar alterações** |
-| Mostra o link de convite e pode abrir o navegador | Escolhe o servidor e autoriza o bot |
-| Lista servidores, cargos e canais | Escolhe |
+| Mostra o link de convite e pode abrir o navegador | Escolhe o servidor do Discord e autoriza o bot |
+| Lista servidores do Discord, cargos e canais | Escolhe |
 | Valida o nome do comando | Escolhe os nomes do comando e do grupo |
 
 ## Rodando sem perguntas
@@ -203,7 +204,7 @@ faz as mesmas verificações sem perguntar: tira o ID do cliente do token,
 liga as intents, confere o segredo do cliente e verifica se o bot está no
 `--guild` (mostrando o link de convite quando não está) e se o cargo e os
 canais existem. Ali, um redirect faltando é só um aviso; o doctor confere de
-novo. Para liberar todo mundo do servidor, passe o próprio ID do servidor em
+novo. Para liberar todo mundo do servidor do Discord, passe o próprio ID do servidor do Discord em
 `--role`.
 
 Segredos nunca vão na linha de comando. `--discord-token` e
@@ -248,7 +249,7 @@ que ela espera e os que o aplicativo tem.
 O token foi redefinido ou copiado errado. Redefina na página **Bot** e rode
 o `telinha setup` de novo. A verificação `discord-token` pega isso.
 
-### O bot não está em nenhum servidor
+### O bot não está em nenhum servidor do Discord
 
 O bot nunca foi convidado, ou foi removido. A verificação `discord-guild` do
 `telinha doctor` mostra o link de convite para o seu `GUILD_ID`; abra e

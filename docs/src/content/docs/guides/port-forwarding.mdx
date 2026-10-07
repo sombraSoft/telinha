@@ -49,7 +49,7 @@ of a rule.
 Two ports are never forwarded. `LISTEN` (`127.0.0.1:8081`) is Telinha's own
 listener, reached by Caddy, `cloudflared` or your proxy on the same machine.
 `LIVEKIT_PORT` (7880) is LiveKit's signaling and API port: browsers reach
-LiveKit's signaling through Telinha's gated relay at `/livekit` on
+LiveKit's signaling through Telinha's gated signaling proxy at `/livekit` on
 `PUBLIC_URL`, so that port stays on loopback.
 
 ## TCP and UDP
@@ -88,7 +88,7 @@ Find the current address first:
 ipconfig
 ```
 
-The `IPv4 Address` of the adapter that has a `Default Gateway`. The gateway is
+The `IPv4 Address` of the adapter that has a `Default Gateway`. The `Default Gateway` is
 the router's address, where its admin page lives.
 
   </TabItem>
@@ -115,7 +115,7 @@ Then make it stay, one of two ways:
   automatic settings.
 - **Static LAN IP**. Set the address by hand in the machine's network
   settings: pick one outside the range the router's DHCP hands out, in the
-  same network, with the router as gateway and DNS. Easy to get wrong, and the
+  same network, with the router's address in the gateway and DNS fields. Easy to get wrong, and the
   reservation does the same job.
 
 ## Let Telinha ask the router (UPnP, NAT-PMP, PCP)
@@ -158,7 +158,7 @@ Every router does this the same way; only the menu names change.
 
 <Steps>
 
-1. Open the router's admin page in a browser: the gateway address from
+1. Open the router's admin page in a browser: the router's address from
    [above](#give-the-machine-a-fixed-address), with the login printed on the
    label under the device.
 

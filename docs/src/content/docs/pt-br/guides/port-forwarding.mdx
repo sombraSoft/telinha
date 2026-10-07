@@ -10,7 +10,7 @@ import { CardGrid, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/com
 É o roteador que decide qual máquina da sua rede recebe uma conexão que chega
 da internet. Sem uma regra para a porta, ele descarta a conexão. O
 encaminhamento de portas (o famoso "abrir portas") é essa regra: "o que chegar
-na porta X vai para esta máquina". Um servidor em casa precisa disso; uma VPS
+na porta X vai para esta máquina". Uma máquina em casa precisa disso; uma VPS
 não tem roteador, só um firewall na nuvem para liberar.
 
 A Telinha consegue pedir as regras ao roteador sozinha (UPnP) e, quando o
@@ -49,7 +49,7 @@ número dos dois lados da regra.
 Duas portas nunca são encaminhadas. O `LISTEN` (`127.0.0.1:8081`) é a porta da
 própria Telinha, que o Caddy, o `cloudflared` ou o seu proxy acessam na mesma
 máquina. O `LIVEKIT_PORT` (7880) é a porta de sinalização e API do LiveKit: o
-navegador chega na sinalização do LiveKit pelo relay protegido da Telinha em
+navegador chega na sinalização do LiveKit pelo proxy de sinalização protegido da Telinha em
 `/livekit` no `PUBLIC_URL`, então essa porta fica só no loopback.
 
 ## TCP e UDP
@@ -90,7 +90,7 @@ ipconfig
 ```
 
 O `Endereço IPv4` (`IPv4 Address`) do adaptador que tem um
-`Gateway Padrão` (`Default Gateway`). O gateway é o endereço do roteador, onde fica a
+`Gateway Padrão` (`Default Gateway`). O `Gateway Padrão` é o endereço do roteador, onde fica a
 página de administração dele.
 
   </TabItem>
@@ -117,7 +117,7 @@ Depois faça esse endereço ficar fixo, de um destes dois jeitos:
   máquina continua com a rede no automático.
 - **IP fixo na rede local**. Configure o endereço na mão nas configurações de
   rede da máquina: escolha um fora da faixa que o DHCP do roteador distribui,
-  na mesma rede, com o roteador como gateway e DNS. É fácil errar, e a reserva
+  na mesma rede, com o endereço do roteador nos campos de gateway e DNS. É fácil errar, e a reserva
   de DHCP resolve a mesma coisa.
 
 ## Deixe a Telinha pedir ao roteador (UPnP, NAT-PMP, PCP)
@@ -161,8 +161,8 @@ Todo roteador faz isso do mesmo jeito; só os nomes dos menus mudam.
 
 <Steps>
 
-1. Abra a página de administração do roteador no navegador: o endereço do
-   gateway [lá de cima](#fixe-o-ip-do-computador), com o login que está na
+1. Abra a página de administração do roteador no navegador: o endereço dele
+   [lá de cima](#fixe-o-ip-do-computador), com o login que está na
    etiqueta embaixo do aparelho.
 
 2. Ache o menu de encaminhamento. O menu costuma ficar nas configurações

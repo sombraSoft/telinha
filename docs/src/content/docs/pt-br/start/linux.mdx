@@ -1,5 +1,5 @@
 ---
-title: Servidor Linux em casa
+title: Linux em casa
 description: Instale a Telinha numa máquina Linux em casa, como root ou com o seu usuário, e rode ela como serviço do systemd.
 sidebar:
   order: 4
@@ -45,7 +45,7 @@ As duas usam a mesma linha; o `sudo` faz a diferença.
 
 | | Como root | Com o seu usuário |
 | --- | --- | --- |
-| Pasta da instalação | `/opt/telinha` | `~/.local/share/telinha` (respeita o `$XDG_DATA_HOME`) |
+| Pasta da Telinha | `/opt/telinha` | `~/.local/share/telinha` (respeita o `$XDG_DATA_HOME`) |
 | Serviço | Unidade do sistema `/etc/systemd/system/telinha.service`, rodando com um usuário de sistema `telinha` | Unidade do usuário `~/.config/systemd/user/telinha.service` |
 | Continua rodando depois do logout | Sim | Só com o lingering (o setup liga) |
 | Comandos | `sudo telinha ...` | `telinha ...` |
@@ -92,14 +92,14 @@ originais conferidos contra um sha256 fixo, o `caddy` da mesma versão da
 Telinha conferido com o `SHA256SUMS` dela. Para pular a
 pergunta, ponha `-s -- --native` depois do `sh` (`--no-setup` instala sem abrir
 o setup), ou defina `TELINHA_INSTALL=native`. `TELINHA_VERSION` instala
-uma tag específica e `TELINHA_HOME` usa outra pasta.
+uma tag específica e `TELINHA_HOME` usa outra pasta da Telinha.
 
 ## Rode o setup
 
 O setup ocupa o terminal com telas próprias: os passos na lateral esquerda
 (Onde, Endereço, Discord, Portas, Atualizações, Revisão, Instalação), a
 pergunta atual num cartão à direita e, ao lado ou embaixo, uma dica que explica
-a escolha. Servidores, cargos e canais aparecem em listas, então você nunca
+a escolha. Servidores do Discord, cargos e canais aparecem em listas, então você nunca
 copia id na mão. Na primeira vez ele começa pelo idioma, português do Brasil ou
 inglês, e todas as telas trocam na hora. Por SSH funciona igual, a partir de 80
 colunas por 24 linhas.
@@ -141,7 +141,7 @@ teclas. Numa máquina Linux em casa, o caminho é este:
 
 3. **Discord.** Cole o token do bot: a Telinha confere ele com o Discord na
    hora e lê o seu app a partir dele. Depois o segredo do cliente (também
-   conferido), o servidor (uma lista dos que o bot já está; *Outro servidor*
+   conferido), o servidor do Discord (uma lista dos que o bot já está; *Outro servidor*
    mostra um link de convite e confere de novo quando você adicionar o bot), o
    cargo que pode entrar, os canais (Espaço marca um, `a` marca todos) e o
    nome do comando. O nome do grupo é opcional. Quando o app ainda não tem o
@@ -177,7 +177,7 @@ teclas. Numa máquina Linux em casa, o caminho é este:
    `telinha.env`, os programas auxiliares (com uma barra para cada download), o
    serviço, o roteador e firewall, o início, o certificado HTTPS (com um
    endereço do DuckDNS) e as verificações finais. O arquivo vai para
-   `config/telinha.env` na pasta da instalação: do root e legível pelo serviço
+   `config/telinha.env` na pasta da Telinha: do root e legível pelo serviço
    numa instalação como root, com modo 0600 numa instalação de usuário. A linha
    do serviço instala e inicia a unidade do systemd; com o seu usuário ela
    também liga o lingering, para a Telinha continuar rodando depois do logout
@@ -335,6 +335,6 @@ segredos podem ser mantidos (Enter mantém) e o serviço reinicia com o arquivo 
 `telinha.env` na mão também funciona, seguido de `telinha service restart`.
 
 **Para remover**: `telinha service uninstall` tira a unidade e mantém os
-arquivos; depois apague a pasta da instalação.
+arquivos; depois apague a pasta da Telinha.
 
 [Rodando como serviço](/telinha/pt-br/guides/service/) tem os detalhes.

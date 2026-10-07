@@ -1,5 +1,5 @@
 ---
-title: Linux server at home
+title: Linux at home
 description: Install Telinha on a Linux box at home, as root or as your user, and run it as a systemd service.
 sidebar:
   order: 4
@@ -44,7 +44,7 @@ the same one-liner; `sudo` makes the difference.
 
 | | As root | As your user |
 | --- | --- | --- |
-| Home folder | `/opt/telinha` | `~/.local/share/telinha` (`$XDG_DATA_HOME` respected) |
+| Telinha folder | `/opt/telinha` | `~/.local/share/telinha` (`$XDG_DATA_HOME` respected) |
 | Service | System unit `/etc/systemd/system/telinha.service`, running as a `telinha` system user | User unit `~/.config/systemd/user/telinha.service` |
 | Keeps running after you log out | Yes | Only with lingering (the setup turns it on) |
 | Commands | `sudo telinha ...` | `telinha ...` |
@@ -90,14 +90,14 @@ checked against a pinned sha256, `caddy` from the same Telinha release checked
 against its `SHA256SUMS`. To skip the
 question, add `-s -- --native` after `sh` (`--no-setup` installs without
 starting the setup), or set `TELINHA_INSTALL=native`. `TELINHA_VERSION`
-installs a given release tag and `TELINHA_HOME` another home folder.
+installs a given release tag and `TELINHA_HOME` another Telinha folder.
 
 ## Run the setup
 
 Setup fills the terminal with its own screens: the steps down the left (Where,
 Address, Discord, Ports, Updates, Review, Install), the current question as a
 card on the right and, beside or under it, a hint that explains the choice.
-Servers, roles and channels come from lists, so you never copy an id by hand.
+Discord servers, roles and channels come from lists, so you never copy an id by hand.
 A first run starts with the language, English or Brazilian Portuguese, and
 every screen switches at once. Over SSH it works the same, from 80 columns by
 24 rows.
@@ -139,7 +139,7 @@ home it goes like this:
 
 3. **Discord.** Paste the bot token: Telinha checks it with Discord right
    away and reads your app from it. Then the client secret (also checked), the
-   server (a list of the ones the bot is in; *Another server* shows an invite
+   Discord server (a list of the ones the bot is in; *Another server* shows an invite
    link and checks again once you added the bot), the role that may enter, the
    channels (Space marks one, `a` marks all) and the command name. A group
    name is optional. When the app does not have the login redirect yet, a card
@@ -173,7 +173,7 @@ home it goes like this:
    switched on), the DuckDNS address if you picked one, `telinha.env`, the
    helper programs (with a bar for each download), the service, the router and
    firewall, the start, the HTTPS certificate (with a DuckDNS address) and the
-   final checks. The file goes to `config/telinha.env` in the home folder:
+   final checks. The file goes to `config/telinha.env` in the Telinha folder:
    owned by root and readable by the service in a root install, mode 0600 in a
    user install. The service row installs and starts the systemd unit; as your
    user it also turns lingering on, so Telinha keeps running after you log out
@@ -325,6 +325,6 @@ the service restarts with the new file. Editing `telinha.env` by hand works
 too, followed by `telinha service restart`.
 
 **Removing it**: `telinha service uninstall` removes the unit and keeps the
-files; then delete the home folder.
+files; then delete the Telinha folder.
 
 [Running as a service](/telinha/guides/service/) has the details.

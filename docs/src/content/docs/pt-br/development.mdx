@@ -38,7 +38,7 @@ bun run docs:build
 
 | Script | O que faz |
 | --- | --- |
-| `bun run dev` | Vite com recarga automática mais o servidor Bun, que roda o LiveKit; abra `http://localhost:5173/r/` |
+| `bun run dev` | Vite com recarga automática mais a Telinha no Bun, que roda o LiveKit; abra `http://localhost:5173/r/` |
 | `bun run typecheck` | `tsc` e `svelte-check` em todos os pacotes, incluindo `docs/scripts` |
 | `bun run test` | `bun test` no servidor, na página web e na documentação |
 | `bun run build` | Compila a página da sala em `web/dist` |
@@ -53,9 +53,9 @@ bun run docs:build
 
 ### O servidor de desenvolvimento
 
-O `bun run dev` baixa o `livekit-server` (fixado no `versions.json`, com sha256 verificado) na primeira execução e inicia o servidor com `TELINHA_HOME=.cache/telinha`, `INGRESS=external`, `MEDIA=self`, `LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` e `AUTO_UPDATE=off`. O servidor supervisiona o LiveKit exatamente como em produção. O Vite repassa `/auth` e `/livekit` (WebSocket incluído) para o servidor em `127.0.0.1:8081`, então o navegador passa pela porta de entrada e pelo repasse de sinalização de verdade.
+O `bun run dev` baixa o `livekit-server` (fixado no `versions.json`, com sha256 verificado) na primeira execução e inicia a Telinha com `TELINHA_HOME=.cache/telinha`, `INGRESS=external`, `MEDIA=self`, `LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` e `AUTO_UPDATE=off`. A Telinha supervisiona o LiveKit exatamente como em produção. O Vite repassa `/auth` e `/livekit` (WebSocket incluído) para a Telinha em `127.0.0.1:8081`, então o navegador passa pela porta de entrada e pelo proxy de sinalização de verdade.
 
-O servidor roda com `DEV_USER` definido (padrão `1:Dev`, ou seja `<id>:<nome>`), um login falso que dispensa o Discord e o bot. Ele é recusado a menos que `PUBLIC_URL` seja `http://localhost` ou `http://127.0.0.1`, `LISTEN` seja um endereço de loopback e `INGRESS` seja `external`, e nesse modo toda requisição cujo `Host` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 421. Use `DEV_LOCALE=en` ou `pt-BR` para forçar o idioma. Não há comando de barra em desenvolvimento, então qualquer código de sala válido (`/r/lamo-futi`, `/r/bada-kodi`: duas ou três sílabas de consoante e vogal de cada lado do hífen) abre uma sala no primeiro uso. `CLOSE_EMPTY_SECONDS=30 bun run dev` mostra uma sala fechando.
+A Telinha roda com `DEV_USER` definido (padrão `1:Dev`, ou seja `<id>:<nome>`), um login falso que dispensa o Discord e o bot. Ele é recusado a menos que `PUBLIC_URL` seja `http://localhost` ou `http://127.0.0.1`, `LISTEN` seja um endereço de loopback e `INGRESS` seja `external`, e nesse modo toda requisição cujo `Host` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 421. Use `DEV_LOCALE=en` ou `pt-BR` para forçar o idioma. Não há comando de barra em desenvolvimento, então qualquer código de sala válido (`/r/lamo-futi`, `/r/bada-kodi`: duas ou três sílabas de consoante e vogal de cada lado do hífen) abre uma sala no primeiro uso. `CLOSE_EMPTY_SECONDS=30 bun run dev` mostra uma sala fechando.
 
 ### Telas do terminal
 
@@ -117,7 +117,7 @@ O `release.yml` chama o `.github/workflows/docs.yml` depois de publicar uma vers
 
 <FileTree>
 
-- server/ Servidor em TypeScript para Bun: os comandos, a configuração, o supervisor, a porta de entrada, o bot e o registro de salas
+- server/ Programa em TypeScript para Bun: os comandos, a configuração, o supervisor, a porta de entrada, o bot e o registro de salas
 - web/ Página da sala em Svelte 5 e a página do doctor, compiladas com Vite em `web/dist`
 - docs/ Este site (Starlight, inglês e português), seu gerador e seus testes
 - deploy/ Os instaladores, os arquivos do host Docker e o `telinha-update`

@@ -142,9 +142,9 @@ sslip.io, one DNS record and `TURN=on` with your own domain.
 ### Your own domain
 
 Create an A record for a name you own pointing at the public IPv4 of the
-server. In plain steps: in the DNS settings of the company you bought the
+VPS. In plain steps: in the DNS settings of the company you bought the
 domain from, add a record of type `A`, name `telinha` (giving
-`telinha.yourdomain.com`), value the server's public IP (the setup and
+`telinha.yourdomain.com`), value the VPS's public IP (the setup and
 `telinha doctor` show it). Changes can take a few minutes to reach everyone.
 Then:
 
@@ -153,7 +153,7 @@ PUBLIC_URL=https://telinha.example.com
 INGRESS=direct
 ```
 
-Caddy gets the certificate by itself once TCP 80 and 443 reach the server.
+Caddy gets the certificate by itself once TCP 80 and 443 reach the VPS.
 `ACME_EMAIL` optionally gives Let's Encrypt an address for expiry notices.
 The setup and `telinha doctor` (the `dns` check) compare the record with the
 public IP and tell you when they differ.
@@ -170,7 +170,7 @@ DUCKDNS_DOMAIN=my-group
 DUCKDNS_TOKEN='...'
 ```
 
-Telinha keeps the record pointed at the server as described in
+Telinha keeps the record pointed at the VPS as described in
 [DuckDNS on port 8443](#duckdns-on-port-8443). With `LIVEKIT_NODE_IP` set it
 sends that IP instead of looking one up.
 
@@ -197,7 +197,7 @@ for sslip.io recently. Your own domain or DuckDNS is more reliable.
 `LISTEN` to an address it can reach and keep that port closed to the
 internet). The proxy must:
 
-- pass WebSocket upgrades, at least for the signaling relay at `/livekit/rtc`;
+- pass WebSocket upgrades, at least for the signaling proxy at `/livekit/rtc`;
 - set `X-Forwarded-For` (every mainstream proxy does by default): Telinha uses
   the forwarding headers to tell a public `/healthz` request from a local one,
   and to keep its control endpoint local.

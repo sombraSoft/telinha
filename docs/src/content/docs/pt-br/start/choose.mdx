@@ -15,12 +15,12 @@ definitivo.
 <Steps>
 
 1. [Onde ela vai rodar?](#onde-ela-vai-rodar) Um computador em casa (um PC
-   com Windows, uma máquina Linux, ou Docker num deles) ou um servidor alugado
+   com Windows, uma máquina Linux, ou Docker num deles) ou uma máquina alugada
    (VPS).
 
 2. [Qual endereço?](#qual-endereço) Em casa: você tem um domínio na
    Cloudflare? Numa VPS: um domínio seu, um nome grátis ou um feito a partir
-   do IP do servidor.
+   do IP da VPS.
 
 3. [A internet consegue chegar na sua rede?](#a-internet-consegue-chegar-na-sua-rede)
    Se a sua linha está atrás de CGNAT, uma instalação em casa precisa do
@@ -41,13 +41,13 @@ sua internet:
 <CardGrid>
   <LinkCard title="PC com Windows" description="O PC que você já tem. Não precisa de administrador para instalar; um aviso do UAC configura o serviço." href="/telinha/pt-br/start/windows/" />
   <LinkCard title="Linux em casa" description="Um mini PC, um Raspberry Pi 4 ou 5 com sistema 64 bits ou qualquer máquina Linux 64 bits com glibc." href="/telinha/pt-br/start/linux/" />
-  <LinkCard title="Docker" description="Um NAS ou servidor que já roda Docker, ou um sistema com musl, como o Alpine. Um contêiner traz tudo." href="/telinha/pt-br/start/docker/" />
+  <LinkCard title="Docker" description="Um NAS ou outra máquina que já roda Docker, ou um sistema com musl, como o Alpine. Um contêiner traz tudo." href="/telinha/pt-br/start/docker/" />
 </CardGrid>
 
 **Um servidor alugado (VPS)**, que tem IP público próprio:
 
 <CardGrid>
-  <LinkCard title="VPS" description="Um servidor alugado com IP público próprio. Nenhum roteador para configurar; funciona quando a sua linha de casa não dá." href="/telinha/pt-br/start/vps/" />
+  <LinkCard title="VPS" description="Uma máquina alugada com IP público próprio. Nenhum roteador para configurar; funciona quando a sua linha de casa não dá." href="/telinha/pt-br/start/vps/" />
 </CardGrid>
 
 No Linux, a instalação nativa e a com Docker fazem o mesmo trabalho. A
@@ -97,7 +97,7 @@ porta de mídia é necessária.
 Algumas redes (empresas, escolas, algumas operadoras de celular) só deixam o
 navegador chegar na porta 443, o que barra as portas de mídia. Numa VPS com o
 endereço na 443 (domínio próprio, DuckDNS ou sslip.io), a Telinha pode
-retransmitir o vídeo para essas pessoas pelo
+retransmitir o vídeo para essas pessoas pelo próprio TURN: veja
 [TURN sobre TLS na porta 443](/telinha/pt-br/guides/turn/).
 
 ## A internet consegue chegar na sua rede?
@@ -124,7 +124,7 @@ roteador na frente do seu, onde as portas também precisam ser encaminhadas.
 <CardGrid>
   <LinkCard title="CGNAT e NAT duplo" description="Como diferenciar os dois e o que pedir para a operadora." href="/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo" />
   <LinkCard title="LiveKit Cloud" description="Deixe a Telinha em casa e o LiveKit Cloud leva o vídeo: nenhuma porta de mídia para abrir." href="/telinha/pt-br/guides/livekit-cloud/" />
-  <LinkCard title="VPS" description="Rode a Telinha num servidor alugado." href="/telinha/pt-br/start/vps/" />
+  <LinkCard title="VPS" description="Rode a Telinha numa máquina alugada." href="/telinha/pt-br/start/vps/" />
 </CardGrid>
 
 ## Compare as instalações

@@ -133,7 +133,7 @@ Open this on your phone with Wi-Fi OFF (mobile data):
 Mobile data matters: on your own Wi-Fi the phone is inside your network and
 proves nothing about the router. No Discord login is needed. The link works
 once and only within 10 minutes, and the cookie it leaves (15 minutes) opens
-nothing but the test page and the LiveKit relay, for a private room of its
+nothing but the test page and the signaling proxy, for a private room of its
 own (with `MEDIA=cloud` the page connects to the Cloud project directly). The page runs the test; the phone and the terminal both show the result,
 and the rows join the checklist as a *Phone test* group; a failed one carries its fix.
 
@@ -298,7 +298,7 @@ or firewalld (`listeners` prints the commands).
 
 ### "Telinha is already running"
 
-Only one `telinha run` per home directory. A second one (a console run while
+Only one `telinha run` per Telinha folder. A second one (a console run while
 the service is up, a second double-click) leaves the first alone and exits 1:
 
 ```
@@ -307,7 +307,7 @@ Telinha is already running (pid 1234). Use: telinha service status | telinha ser
 
 To run in a console, stop the service first; otherwise use the running one.
 
-### The Windows service does not start
+### The service does not start on Windows
 
 `service` warns when the service is not installed, not running or not set to
 start at boot. Then:

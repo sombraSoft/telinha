@@ -22,7 +22,7 @@ A tarefa:
 
 - inicia junto com o computador, com ou sem alguém logado;
 - roda com a sua conta, sem guardar senha;
-- roda **sem elevação**: o servidor exposto à internet e os programas
+- roda **sem elevação**: o processo da Telinha exposto à internet e os programas
   auxiliares recebem um token de usuário comum. Nada precisa de administrador
   enquanto roda: as regras de firewall são criadas na instalação e as
   atualizações gravam dentro da pasta da Telinha.
@@ -175,4 +175,4 @@ services:
 ```
 
 Para instalar: [Docker](/telinha/pt-br/start/docker/). Para manter em dia:
-[Atualizações](/telinha/pt-br/guides/updates/#servidor-com-docker).
+[Atualizações](/telinha/pt-br/guides/updates/#máquina-com-docker).

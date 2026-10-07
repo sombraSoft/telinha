@@ -5,8 +5,8 @@ sidebar:
   order: 8
 ---
 
-Por padrão a Telinha roda o LiveKit ela mesma (`MEDIA=self`): o servidor de
-mídia que recebe a tela compartilhada e envia para cada pessoa assistindo é um
+Por padrão a Telinha roda o LiveKit ela mesma (`MEDIA=self`): o SFU
+que recebe a tela compartilhada e envia para cada pessoa assistindo é um
 processo filho da Telinha na mesma máquina, e as duas portas de mídia dele
 precisam chegar nessa máquina vindas da internet. Com `MEDIA=cloud` um projeto
 do [LiveKit Cloud](https://livekit.io/cloud) faz esse trabalho no lugar dele. A
@@ -129,7 +129,7 @@ barra final colados são descartados.
   casa), o Firewall do Windows não ganha regras do LiveKit (o passo do serviço
   do setup, ou o `telinha service install --firewall`, reescreve as regras), e
   o doctor não lista porta de mídia para encaminhar.
-- **Nenhum relay em `/livekit`.** A página da sala recebe a URL do projeto no
+- **Nenhum proxy de sinalização em `/livekit`.** A página da sala recebe a URL do projeto no
   Cloud junto com o token e se conecta direto no LiveKit Cloud, para a
   sinalização e para a mídia.
 - **As salas funcionam igual.** A Telinha cria cada sala pela API de salas do

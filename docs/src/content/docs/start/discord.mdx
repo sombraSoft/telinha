@@ -13,7 +13,7 @@ setup (`telinha setup`) does most of the work through Discord's API
 and waits while you do the few clicks it cannot. You can also do them all
 before you run it.
 
-You need a Discord account and, in the server where Telinha will live, the
+You need a Discord account and, in the Discord server where Telinha will live, the
 **Manage Server** permission (to add the bot).
 
 ## Create the application
@@ -122,18 +122,18 @@ exactly, port included. If you change `PUBLIC_URL`, add the new redirect.
 
 ## Invite the bot
 
-When the bot is in no server yet, or not in the one you want (*Another
+When the bot is in no Discord server yet, or not in the one you want (*Another
 server (add the bot)*), the setup shows an invite link and offers to open it
 in your browser:
 
 <Steps>
 
-1. Open the link and pick your server (you need **Manage Server** there).
+1. Open the link and pick your Discord server (you need **Manage Server** there).
 
 2. Review the permissions and click **Authorize**.
 
 3. Back in the setup, choose *I added the bot: check again*. It lists the
-   servers again.
+   Discord servers again.
 
 </Steps>
 
@@ -148,22 +148,23 @@ a channel is private or overrides permissions, give the bot's role those
 two there. Without them the card stays as first posted (the log says
 `card not editable`), and everything else works.
 
-## Server, role, channels and names
+## Discord server, role, channels and names
 
 The setup picks everything from lists; nobody copies ids:
 
-- **Server** (`GUILD_ID`): one of the servers the bot is in. One Telinha
-  serves one server.
+- **Discord server** (`GUILD_ID`): one of the Discord servers the bot is in. One Telinha
+  serves one Discord server.
 - **Role** (`ROLE_ID`): members with this role may enter the rooms. The last
   entry, "Everyone in the server (@everyone)", lets every member in. Roles
   managed by an integration, such as a bot's own role, are not listed.
 - **Channels** (`CHANNEL_IDS`): text or announcement channels, grouped by
   category. The slash command works only in these. Pick at least one.
 - **Command name** (`COMMAND_NAME`, default `telinha`): lowercase letters,
-  digits, `-` or `_`, 1 to 32 characters. Two Telinhas in the same server
+  digits, `-` or `_`, 1 to 32 characters. Two Telinhas in the same Discord server
   need different names.
 - **Group name** (`GROUP_NAME`): shown on the pages and in the bot's
-  replies. Empty means the server's name.
+  replies. Empty means the name of the role above, or the Discord server's
+  name when that role is @everyone.
 
 To change any of these later, run `telinha setup` again: every question
 starts at the current value and secrets offer to keep the current one.
@@ -176,8 +177,8 @@ starts at the current value and secrets offer to keep the current one.
 | Switches on the two privileged intents | Only if Discord refuses: switch them on the **Bot** page |
 | Checks the client secret with Discord | Reset the secret, paste it |
 | Shows the login redirect and waits until it is saved | Add the redirect and click **Save Changes** |
-| Prints the invite link and can open the browser | Pick the server and authorize the bot |
-| Lists servers, roles and channels | Pick them |
+| Prints the invite link and can open the browser | Pick the Discord server and authorize the bot |
+| Lists Discord servers, roles and channels | Pick them |
 | Validates the command name | Choose the command and group names |
 
 ## Non-interactive setup
@@ -187,7 +188,7 @@ the same checks without asking: it reads the client id from the token,
 switches the intents on, checks the client secret, and checks that the bot
 is in `--guild` (printing the invite link when it is not) and that the role
 and channels exist. A missing redirect is only a warning there; doctor
-checks it again. For everyone in the server, pass the server's own id as
+checks it again. For everyone in the Discord server, pass the Discord server's own id as
 `--role`.
 
 Secrets never go on the command line. `--discord-token` and
@@ -232,7 +233,7 @@ and the ones the application has.
 The token was reset, or copied wrong. Reset it on the **Bot** page and run
 `telinha setup` again. The `discord-token` check catches this.
 
-### The bot is in no server
+### The bot is in no Discord server
 
 The bot was never invited, or was removed. The `discord-guild` check of
 `telinha doctor` prints the invite link for your `GUILD_ID`; open it and

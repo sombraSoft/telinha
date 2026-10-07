@@ -158,7 +158,7 @@ sistemas com que uma Telinha configurada fala para isso, cada um com a chave do
 **Quando você roda um comando.** O `telinha setup`, o `telinha doctor`, o
 `telinha update`, os instaladores e o menu do ícone na bandeja fazem algumas
 dessas mesmas chamadas quando você usa eles: a API do Discord (para conferir o
-token, as intents, o servidor, o cargo, os canais e o redirect do login), as
+token, as intents, o servidor do Discord, o cargo, os canais e o redirect do login), as
 consultas do IP público, o registro DNS do endereço em 1.1.1.1 e 8.8.8.8, um
 acesso à sua própria `PUBLIC_URL` (o certificado e o `/healthz`), uma conferência do token do
 DuckDNS, o teste do roteador e as versões no GitHub. O teste pelo celular do

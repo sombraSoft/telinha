@@ -20,7 +20,7 @@ rules; to redo it, run `telinha setup` again. The task:
 
 - starts at boot, whether or not anyone is logged on;
 - runs as your account without storing a password;
-- runs **unelevated**: the internet-facing server and its helpers get a plain
+- runs **unelevated**: the internet-facing Telinha process and its helpers get a plain
   user token. Nothing at runtime needs administrator rights: the firewall
   rules are made at install time and updates write inside the Telinha folder.
 

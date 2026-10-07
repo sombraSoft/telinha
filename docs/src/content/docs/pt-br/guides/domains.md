@@ -142,10 +142,10 @@ DuckDNS e sslip.io, e com domínio próprio basta um registro DNS e `TURN=on`.
 
 ### Seu próprio domínio
 
-Crie um registro A num nome que é seu, apontando para o IPv4 público do
-servidor. Passo a passo: nas configurações de DNS da empresa onde você comprou
+Crie um registro A num nome que é seu, apontando para o IPv4 público da
+VPS. Passo a passo: nas configurações de DNS da empresa onde você comprou
 o domínio, adicione um registro do tipo `A`, nome `telinha` (o que dá
-`telinha.seudominio.com.br`), valor o IP público do servidor (o setup e o
+`telinha.seudominio.com.br`), valor o IP público da VPS (o setup e o
 `telinha doctor` mostram qual é). A mudança pode levar alguns minutos para
 chegar a todo mundo. Depois:
 
@@ -154,8 +154,8 @@ PUBLIC_URL=https://telinha.example.com
 INGRESS=direct
 ```
 
-O Caddy pega o certificado sozinho assim que as portas TCP 80 e 443 chegam no
-servidor. O `ACME_EMAIL` é opcional e dá ao Let's Encrypt um e-mail para avisos
+O Caddy pega o certificado sozinho assim que as portas TCP 80 e 443 chegam na
+VPS. O `ACME_EMAIL` é opcional e dá ao Let's Encrypt um e-mail para avisos
 de vencimento. O setup e o `telinha doctor` (a verificação `dns`)
 comparam o registro com o IP público e avisam quando eles não batem.
 
@@ -171,7 +171,7 @@ DUCKDNS_DOMAIN=my-group
 DUCKDNS_TOKEN='...'
 ```
 
-A Telinha mantém o registro apontando para o servidor como descrito em
+A Telinha mantém o registro apontando para a VPS como descrito em
 [DuckDNS na porta 8443](#duckdns-na-porta-8443). Com `LIVEKIT_NODE_IP`
 definido, ela manda esse IP em vez de consultar.
 
@@ -199,7 +199,7 @@ mais confiável.
 `LISTEN` um endereço que ele alcance e deixe essa porta fechada para a
 internet). O proxy precisa:
 
-- repassar o upgrade de WebSocket, pelo menos para o relay de sinalização em
+- repassar o upgrade de WebSocket, pelo menos para o proxy de sinalização em
   `/livekit/rtc`;
 - definir o `X-Forwarded-For` (todo proxy conhecido já faz isso por padrão): a
   Telinha usa os cabeçalhos de encaminhamento para separar um pedido público

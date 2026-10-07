@@ -49,9 +49,9 @@ Run `telinha setup` again: every question starts at the current value, Enter kee
 
 ## Where is my data?
 
-Everything lives in the home directory:
+Everything lives in the Telinha folder:
 
-| Platform | Home |
+| Platform | Telinha folder |
 | --- | --- |
 | Windows | `%LOCALAPPDATA%\Telinha` |
 | Linux, as root | `/opt/telinha` |
@@ -68,25 +68,25 @@ Inside it (`TELINHA_HOME`, or `--home DIR` on any command, points at another one
 | `bin/livekit-server`, `caddy`, `cloudflared` (`.exe` on Windows) and `<tool>.version` | The helper binaries this configuration needs, sha256-checked when downloaded (by setup, or at a start that finds them missing or at an older pinned version); `PATH` is tried after `bin/`. `caddy` is Telinha's own Caddy build (with the DuckDNS DNS module and layer4), fetched from the Telinha release and checked against its `SHA256SUMS` |
 | `config/telinha.env` | The configuration, owner-only: Linux user install mode 0600; Linux root install `root:telinha` 0640 in a `root:telinha` 0750 `config/` (the service reads it through its group); on Windows an ACL with only you, SYSTEM and Administrators |
 | `data/telinha.sqlite` | The room registry. If it is lost, only the links of rooms open at that moment stop working |
-| `data/run/` | The rendered `livekit.yaml` and `Caddyfile` (rewritten before every start: edit `telinha.env`, never these) and run state: `children.json`, `public-ip`, `telinha.pid` (one `run` per home), `service.pid`, `control.token`, `update.json`, `upnp.json`, and on Windows `tray.json` (written by the tray icon while it runs) |
+| `data/run/` | The rendered `livekit.yaml` and `Caddyfile` (rewritten before every start: edit `telinha.env`, never these) and run state: `children.json`, `public-ip`, `telinha.pid` (one `run` per Telinha folder), `service.pid`, `control.token`, `update.json`, `upnp.json`, and on Windows `tray.json` (written by the tray icon while it runs) |
 | `data/caddy/` | Caddy's certificates and ACME account (direct mode) |
-| `logs/telinha.log` (`.1` to `.5`) | The Windows service log, rotated at 10 MB (Linux logs to the journal) |
+| `logs/telinha.log` (`.1` to `.5`) | The service's log on Windows, rotated at 10 MB (Linux logs to the journal) |
 | `logs/telinha-tray.log` | Windows: the tray icon's own log |
 | `service/telinha-task.xml`, `install-result.json` | Windows: the registered task, and what the elevated install did |
 
 ## Is it safe to expose?
 
-Every page is behind the Discord login and the role check. Telinha itself relays the LiveKit signaling and forwards only `/livekit/rtc`, so LiveKit's own API is never reachable from outside (with `MEDIA=cloud` browsers talk to LiveKit Cloud directly, with a room token that lasts 10 minutes). Secrets never go on a command line (setup refuses `--discord-token` and friends and reads them from the environment or a file), and `telinha.env` is readable by its owner only (plus the service's group on a Linux root install). The helper binaries are pinned by sha256, and every release carries `SHA256SUMS` plus a build provenance attestation you can check by hand; both cover Telinha's own Caddy build too, see [Updates](/telinha/guides/updates/).
+Every page is behind the Discord login and the role check. Telinha itself proxies the LiveKit signaling and forwards only `/livekit/rtc`, so LiveKit's own API is never reachable from outside (with `MEDIA=cloud` browsers talk to LiveKit Cloud directly, with a room token that lasts 10 minutes). Secrets never go on a command line (setup refuses `--discord-token` and friends and reads them from the environment or a file), and `telinha.env` is readable by its owner only (plus the service's group on a Linux root install). The helper binaries are pinned by sha256, and every release carries `SHA256SUMS` plus a build provenance attestation you can check by hand; both cover Telinha's own Caddy build too, see [Updates](/telinha/guides/updates/).
 
 ## How do I remove it?
 
-Native install: remove the service, then delete the home directory.
+Native install: remove the service, then delete the Telinha folder.
 
 ```
 telinha service uninstall --firewall
 ```
 
-Run it from an administrator terminal on Windows; there it also closes the tray icon and turns its *Start with Windows* off. `uninstall` keeps the files, so delete the home directory yourself afterwards (see the table above). A Linux root install also has `/usr/local/lib/telinha` and `/usr/local/bin/telinha`.
+Run it from an administrator terminal on Windows; there it also closes the tray icon and turns its *Start with Windows* off. `uninstall` keeps the files, so delete the Telinha folder yourself afterwards (see the table above). A Linux root install also has `/usr/local/lib/telinha` and `/usr/local/bin/telinha`.
 
 Docker:
 
