@@ -1,6 +1,6 @@
 # Checks every PR (including Release PRs opened by the release app and
-# Renovate PRs). Job names are the required checks in branch protection, so
-# keep them stable.
+# Renovate PRs). The ruleset requires only the `required` job below, so which
+# jobs gate a merge is decided here, in a PR, and jobs can be renamed freely.
 name: ci
 
 on:
@@ -589,3 +589,15 @@ jobs:
           push: false
       - name: caddy.exe
         run: test -s dist-caddy/caddy.exe
+
+  # The one check the ruleset requires: it passes when every job in `needs`
+  # passed (or was skipped), so adding, renaming or dropping a gating job is a
+  # change to this list, not to the ruleset.
+  required:
+    if: always()
+    needs: [test, lint, gitleaks, image]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: every gating job passed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

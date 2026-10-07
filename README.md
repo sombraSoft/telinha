@@ -545,9 +545,11 @@ marks hyphenated tags as GitHub pre-releases, and the image gets only the
 them; the native updater and `telinha-update` ignore them unless pinned
 (`UPDATE_PIN`, `telinha-update pin`).
 
-Required checks on `main`: `test (ubuntu-24.04)`, `test (windows-2025)`,
-`lint` (shellcheck of `deploy/install-docker.sh`, `deploy/install.sh`,
-`deploy/telinha-update` and `scripts/smoke.sh`, a PowerShell parse and
+The `main` ruleset requires one check, `required`, a job in `ci.yml` that
+passes only when the jobs it `needs` pass: `test (ubuntu-24.04)`,
+`test (windows-2025)`, `lint` (shellcheck of `deploy/install-docker.sh`,
+`deploy/install.sh`, `deploy/telinha-update` and `scripts/smoke.sh`, a
+PowerShell parse and
 PSScriptAnalyzer run of `deploy/install.ps1`, actionlint,
 `bun scripts/versions.ts check`), `gitleaks`, `image` (builds both
 architectures, smoke-tests amd64). Four jobs also run on every PR but are not
