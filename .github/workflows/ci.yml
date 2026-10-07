@@ -55,6 +55,10 @@ jobs:
               - 'scripts/**'
               - 'e2e/**'
               - versions.json
+              # scripts/toolchain.test.ts holds the Bun and Go pins in these to
+              # mise.toml, so a Renovate group PR that reached only them still runs it.
+              - Dockerfile
+              - '.github/workflows/**'
             e2e:
               - 'server/**'
               - 'web/**'
