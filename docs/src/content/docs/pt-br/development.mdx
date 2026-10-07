@@ -5,15 +5,15 @@ description: Compile, teste e altere a Telinha e este site de documentação a p
 
 import { FileTree } from '@astrojs/starlight/components';
 
-Você só precisa do [Bun](https://bun.sh) 1.4.2 (sem Node). Funciona no Windows e no Linux.
+Você só precisa do [mise](https://mise.jdx.dev/getting-started.html), ativado no seu shell. Funciona no Windows e no Linux. O `mise install` instala as versões que o `mise.toml` fixa (Bun, Go e os linters que o CI roda) e depois as dependências com `bun install`; rode de novo depois de cada pull.
 
 ## Rodar a partir de um clone
 
-Use um clone para desenvolver, ou numa plataforma sem versão pronta. Rodando do código-fonte não há instalação de serviço nem atualização automática: atualize com `git pull`, `bun install`, `bun run build` e reinicie.
+Use um clone para desenvolver, ou numa plataforma sem versão pronta. Rodando do código-fonte não há instalação de serviço nem atualização automática: atualize com `git pull`, `mise install`, `bun run build` e reinicie.
 
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
-bun install --frozen-lockfile && bun run build
+mise install && bun run build
 bun server/src/index.ts setup    # same setup; downloads the helper binaries into <home>/bin
 bun server/src/index.ts          # run in this console
 ```
@@ -21,7 +21,7 @@ bun server/src/index.ts          # run in this console
 ## Scripts
 
 ```
-bun install --frozen-lockfile
+mise install
 bun run dev
 bun run typecheck
 bun run test
@@ -45,7 +45,7 @@ bun run docs:build
 | `bun run e2e` | Playwright; rode `bun run build` antes e instale um Chromium com `bunx playwright install chromium` |
 | `bun run image` | Compila `telinha:dev` com docker ou podman (o Caddy é compilado num estágio Go do `Dockerfile`) e roda o teste de fumaça, que também confere a versão e os módulos do Caddy e faz o Caddy validar o `Caddyfile` do DuckDNS |
 | `bun run bins` | Baixa os três binários auxiliares para este computador em `.cache/telinha/bin`: `livekit-server` e `cloudflared` dos projetos originais, `caddy` da versão mais nova da Telinha (`bun scripts/bins.ts --release vX.Y.Z caddy` pega o de outra versão). Uma versão sem o arquivo do `caddy` dá um aviso, não uma falha, quando o caddy não foi pedido pelo nome; nesse caso compile ele com `bun run caddy` |
-| `bun run caddy` | Compila o Caddy da Telinha (o Caddy original mais os módulos do `versions.json`) com o xcaddy em `.cache/telinha/bin` (ou `BIN_DIR`, ou `--out DIR`), junto do que o `bun run bins` baixa; precisa do Go no `PATH`. Na plataforma do próprio computador ele também confere a versão e os módulos |
+| `bun run caddy` | Compila o Caddy da Telinha (o Caddy original mais os módulos do `versions.json`) com o xcaddy em `.cache/telinha/bin` (ou `BIN_DIR`, ou `--out DIR`), junto do que o `bun run bins` baixa; usa o Go que o mise instala. Na plataforma do próprio computador ele também confere a versão e os módulos |
 | `bun run versions check` | Valida o `versions.json` (`refresh` recalcula os hashes do livekit e do cloudflared) |
 | `bun run compile --smoke` | Compila os binários nativos deste sistema em `dist-bin/` (rode `bun run build` antes) |
 | `bun run docs:dev` | Serve este site em `http://localhost:4321/telinha/` |
@@ -128,6 +128,8 @@ O `release.yml` chama o `.github/workflows/docs.yml` depois de publicar uma vers
 - .signpath/ A configuração de artefatos que a assinatura de código da release usa
 - Dockerfile Build da imagem em vários estágios e várias arquiteturas, com um estágio Go que compila o Caddy
 - versions.json Versões fixadas de `livekit-server` e `cloudflared` com seus hashes, e a receita de build do `caddy`: versão, xcaddy, módulos
+- mise.toml As ferramentas de desenvolvimento e do CI: Bun, Go e os linters, nas versões que todas as outras cópias seguem
+- mise.lock Os downloads exatos e os checksums dessas ferramentas
 - package.json Workspaces e os scripts acima
 - bun.lock
 - bunfig.toml
