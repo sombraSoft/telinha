@@ -1,0 +1,15 @@
+# Git hooks. `mise install` installs them (scripts/setup-dev.ts runs `lefthook
+# install`); the tools come from the mise shims at the versions mise.toml pins.
+# Skip them for one command with LEFTHOOK=0.
+pre-commit:
+  jobs:
+    # Formats and safe-fixes the staged files and stages the result; fails on
+    # what it cannot fix. Unknown and ignored files are skipped.
+    - name: biome
+      run: biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  jobs:
+    - name: conventional commit
+      run: bun scripts/commit-msg.ts {1}
