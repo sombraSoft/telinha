@@ -107,7 +107,7 @@
       "automerge": false
     },
     {
-      "description": "Bun is one version everywhere: mise.toml, packageManager, every @types/bun (pinned exactly, since a range lets bun.lock run ahead of the runtime), the Dockerfile's oven/bun image and setup-bun's bun-version. scripts/toolchain.test.ts fails while they differ, so they move in one PR, which waits for the last registry to publish",
+      "description": "Bun is one version everywhere: mise.toml, packageManager, every @types/bun (pinned exactly, since a range lets bun.lock run ahead of the runtime), and the Dockerfile's oven/bun image. scripts/toolchain.test.ts fails while they differ, so they move in one PR, which waits for the last registry to publish",
       "matchDepNames": ["bun", "oven/bun", "@types/bun"],
       "groupName": "bun"
     },

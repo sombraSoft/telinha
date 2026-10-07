@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 // mise.toml is where a Bun or Go bump starts, and every other copy must follow
@@ -33,8 +33,8 @@ function dockerImages(image: string): Record<string, string> {
 
 // Expects every copy to equal the mise.toml version. Comparing records rather
 // than one value at a time makes a failure print every copy that drifted.
-function expectAll(copies: Record<string, string>, version: string, { allowNone = false } = {}) {
-  if (!allowNone) expect(Object.keys(copies)).not.toBeEmpty();
+function expectAll(copies: Record<string, string>, version: string) {
+  expect(Object.keys(copies)).not.toBeEmpty();
   expect(copies).toEqual(Object.fromEntries(Object.keys(copies).map((k) => [k, version])));
 }
 
@@ -80,21 +80,6 @@ describe('every Bun copy equals mise.toml', () => {
     expectAll(copies, bun);
   });
 
-  test('bun-version in the workflows', () => {
-    // setup-bun's pins, while workflows still use it. With none left the test
-    // has nothing to check, which is the goal once mise installs Bun in CI.
-    const copies: Record<string, string> = {};
-    const dir = join(ROOT, '.github', 'workflows');
-    for (const file of readdirSync(dir).filter((f) => /\.ya?ml$/.test(f))) {
-      readFileSync(join(dir, file), 'utf8')
-        .split('\n')
-        .forEach((line, i) => {
-          const m = /^\s*bun-version:\s*['"]?([^'"\s#]+)/.exec(line);
-          if (m) copies[`${file}:${i + 1}`] = m[1]!;
-        });
-    }
-    expectAll(copies, bun, { allowNone: true });
-  });
 });
 
 describe('every Go copy equals mise.toml', () => {
