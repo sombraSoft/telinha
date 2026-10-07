@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "group:allNonMajor"],
+  "extends": ["config:recommended", "group:allNonMajor", "helpers:pinGitHubActionDigests", "docker:pinDigests"],
   "timezone": "America/Sao_Paulo",
   "schedule": ["* 0-3 * * 1"],
   "dependencyDashboard": true,
@@ -52,6 +52,13 @@
       "depNameTemplate": "cloudflare/cloudflared"
     },
     {
+      "description": "The Debian image that ci.yml's arm64 smoke runs under QEMU, pinned to a digest in a `docker run` line, which no built-in manager reads; bookworm-slim is not a version, so only its digest moves",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["docker run [^\\n]* (?<depName>debian):(?<currentValue>[\\w.-]+)@(?<currentDigest>sha256:[a-f0-9]{64}) "],
+      "datasourceTemplate": "docker"
+    },
+    {
       "description": "PSScriptAnalyzer that the lint job installs to check install.ps1 (ci.yml), looked up on the PowerShell Gallery",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
@@ -63,9 +70,30 @@
   "packageRules": [
     {
       "description": "Non-major updates merge themselves once the required checks pass",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
       "automerge": true,
       "automergeType": "pr"
+    },
+    {
+      "description": "Every update waits until its release is 3 days old, so a broken or hijacked release has time to be pulled before it lands. With internalChecksFilter strict (Renovate's default, set here so it stays), Renovate creates no branch or PR for a younger release and lists it under Pending Status Checks on the Dependency Dashboard; once the age passes it opens the PR right away (prCreation stays immediate: not-pending would wait on checks that a PR-less branch never gets, since CI runs on pull requests), and non-major PRs automerge when the required checks pass",
+      "matchPackageNames": ["*"],
+      "minimumReleaseAge": "3 days",
+      "internalChecksFilter": "strict"
+    },
+    {
+      "description": "Pinning a digest keeps the release already in use, so it does not wait for the release age",
+      "matchUpdateTypes": ["pinDigest"],
+      "minimumReleaseAge": null
+    },
+    {
+      "description": "Biome bumps change which code the lint and format checks accept, so they are reviewed by hand wherever Biome is pinned (package.json or mise.toml)",
+      "matchPackageNames": ["@biomejs/biome", "biomejs/biome"],
+      "automerge": false
+    },
+    {
+      "description": "Our own image in deploy/compose.yml follows TELINHA_VERSION, which telinha-update writes, so Renovate neither pins nor bumps it. Today the variable in its tag already makes Renovate skip the line, and this rule keeps it out if the tag is ever written literally",
+      "matchPackageNames": ["ghcr.io/sombrasoft/telinha"],
+      "enabled": false
     },
     {
       "description": "LiveKit (client, server SDK, SFU) must move together and be tested by hand: own group, never automerged",

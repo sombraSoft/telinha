@@ -9,7 +9,7 @@
 
 # The one Bun image every Bun stage uses, so Renovate and the version checks
 # see a single line.
-ARG BUN_IMAGE=oven/bun:1.4.2-alpine
+ARG BUN_IMAGE=oven/bun:1.4.2-alpine@sha256:d888c0ae6c86d7866ff10c5aafdd9077b36aee6455b33dd270fb93c0dd5cef6f
 
 FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS build
 WORKDIR /app
@@ -64,7 +64,7 @@ FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS bun-tool
 # without ports 80/443) and layer4, built from versions.json by scripts/caddy-build.ts.
 # Go cross-compiles, so this runs on the build platform; CADDY_OS/CADDY_ARCH
 # default to the target and release.yml overrides them for the Windows assets.
-FROM --platform=$BUILDPLATFORM golang:1.25.14-alpine AS caddy-build
+FROM --platform=$BUILDPLATFORM golang:1.25.14-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS caddy-build
 ARG TARGETOS TARGETARCH
 ARG CADDY_OS=$TARGETOS
 ARG CADDY_ARCH=$TARGETARCH
