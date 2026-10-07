@@ -1,6 +1,7 @@
 // Environment -> typed config. Pure (env passed in) so the guards are unit tested.
 import { fileURLToPath } from 'node:url';
 import { embeddedWebDir } from './embedded.ts';
+import { footprintOf, type ExposedKey, type FootprintInput } from './footprint.ts';
 import { resolveLocale, type Locale } from './i18n.ts';
 import type { Mapping } from './nat/index.ts';
 import { resolvePaths, type Paths } from './paths.ts';
@@ -267,20 +268,6 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
       || (!why && hosting === 'vps' && turnAutoHost(publicHost));
     if (on) turn = { host: `turn.${publicHost}`, port: turnPort };
   }
-  // One flat rule, TCP/UDP not told apart: nobody needs UDP 7882 to equal a TCP port.
-  // Cloud binds neither LiveKit's port nor the media ports here.
-  const ports: [string, number][] = media === 'self'
-    ? [['MEDIA_TCP_PORT', mediaTcpPort], ['MEDIA_UDP_PORT', mediaUdpPort], ['LIVEKIT_PORT', livekitPort], ['LISTEN', port]]
-    : [['LISTEN', port]];
-  if (ingress === 'direct') {
-    ports.push(['HTTPS_PORT', httpsPort]);
-    if (httpPort !== 0) ports.push(['HTTP_PORT', httpPort]);
-  }
-  if (turn) ports.push(['TURN_PORT', turn.port]);
-  for (const [i, [a, n]] of ports.entries()) {
-    const clash = ports.slice(i + 1).find(([, m]) => m === n);
-    if (clash) throw new Error(`ports collide: ${a}=${n}, ${clash[0]}=${n}`);
-  }
 
   const commandName = get('COMMAND_NAME', 'telinha');
   if (!COMMAND_RE.test(commandName) || commandName !== commandName.toLocaleLowerCase()) {
@@ -289,7 +276,15 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   const livekitNodeIp = opt('LIVEKIT_NODE_IP');
   if (livekitNodeIp && !IPV4_RE.test(livekitNodeIp)) throw new Error(`bad LIVEKIT_NODE_IP ${livekitNodeIp} (want an IPv4 address)`);
   // Upper bound: setTimeout's 2^31 ms limit (a longer delay fires at once).
-  const ipWatchSeconds = int('IP_WATCH_SECONDS', '300', 0, 2_147_483);
+  const ipWatchSecondsRaw = int('IP_WATCH_SECONDS', '300', 0, 2_147_483);
+  // A static IP never changes, so there is nothing to watch.
+  const ipWatchSeconds = livekitNodeIp ? 0 : ipWatchSecondsRaw;
+  // One flat rule, TCP/UDP not told apart: nobody needs UDP 7882 to equal a TCP port.
+  const { ports } = footprintOf({ media, ingress, turn, port, livekitPort, mediaTcpPort, mediaUdpPort, httpsPort, httpPort, ipWatchSeconds, livekitNodeIp });
+  for (const [i, { key: a, port: n }] of ports.entries()) {
+    const clash = ports.slice(i + 1).find((p) => p.port === n);
+    if (clash) throw new Error(`ports collide: ${a}=${n}, ${clash.key}=${n}`);
+  }
   let livekitUrl: string;
   let livekitApiUrl: string;
   let livekitCloudHost: string | undefined;
@@ -403,8 +398,7 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     mediaTcpPort,
     mediaUdpPort,
     livekitNodeIp,
-    // A static IP never changes, so there is nothing to watch.
-    ipWatchSeconds: livekitNodeIp ? 0 : ipWatchSeconds,
+    ipWatchSeconds,
     turnSetting,
     turnPort,
     turn,
@@ -419,25 +413,22 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   };
 }
 
+const MAPPING_NAMES: Record<ExposedKey, string> = {
+  MEDIA_TCP_PORT: 'telinha media (tcp)', MEDIA_UDP_PORT: 'telinha media (udp)', HTTPS_PORT: 'telinha https', HTTP_PORT: 'telinha http',
+};
+
 /**
- * What UPNP=auto asks the router to forward: the media ports, plus in direct
- * mode Caddy's HTTPS listener (PUBLIC_URL's port -> HTTPS_PORT) when that port
- * is a high one. Never 80 or 443: home connections block them anyway, and
- * whoever opened them by hand forwards them by hand.
+ * What UPNP=auto asks the router to forward: the footprint's exposures, but of
+ * Caddy's only the HTTPS listener (PUBLIC_URL's port -> HTTPS_PORT) on a high
+ * port. Never 80 or 443: home connections block them anyway, and whoever
+ * opened them by hand forwards them by hand.
  */
-export function upnpMappings(c: Pick<Config, 'media' | 'ingress' | 'publicUrl' | 'mediaTcpPort' | 'mediaUdpPort' | 'httpsPort'>): Mapping[] {
+export function upnpMappings(c: FootprintInput): Mapping[] {
   const out: Mapping[] = [];
-  if (c.media === 'self') {
-    out.push(
-      { protocol: 'tcp', externalPort: c.mediaTcpPort, internalPort: c.mediaTcpPort, description: 'telinha media (tcp)' },
-      { protocol: 'udp', externalPort: c.mediaUdpPort, internalPort: c.mediaUdpPort, description: 'telinha media (udp)' },
-    );
-  }
-  if (c.ingress === 'direct') {
-    const external = Number(new URL(c.publicUrl).port || 443);
-    if (external !== 443 && external !== 80) {
-      out.push({ protocol: 'tcp', externalPort: external, internalPort: c.httpsPort, description: 'telinha https' });
-    }
+  for (const e of footprintOf(c).exposures) {
+    const external = e.externalPort ?? e.port;
+    if (e.helper === 'caddy' && (external === 443 || external === 80)) continue;
+    out.push({ protocol: e.protocol, externalPort: external, internalPort: e.port, description: MAPPING_NAMES[e.key] });
   }
   return out;
 }

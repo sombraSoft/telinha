@@ -23,6 +23,7 @@ import { createDuckDns, startDdnsLoop, type Ddns } from './ddns.ts';
 import { createDoctorRoutes } from './doctor/routes.ts';
 import { createDoctorStore } from './doctor/session.ts';
 import { loadEnvFile, mergeEnv } from './envfile.ts';
+import { footprintOf } from './footprint.ts';
 import { createHandler } from './http.ts';
 import { t, type Locale } from './i18n.ts';
 import { createIpWatch, type IpWatch } from './ipwatch.ts';
@@ -249,11 +250,12 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   // With nothing to map (LiveKit Cloud behind a tunnel) the mapper only drops what a previous run left.
   if (config.upnp) mapper = createPortMapper({ mappings: upnpMappings(config), statePath: join(paths.run, 'upnp.json'), log });
 
+  const footprint = footprintOf(config);
   // LiveKit picks the public IP once at start; a residential IP change needs a
   // restart. Cloud has no local LiveKit but still wants the mappings and DuckDNS renewed.
   let ipWatch: IpWatch | null = null;
-  if (config.ipWatchSeconds > 0 && !config.livekitNodeIp) {
-    const self = config.media === 'self';
+  if (footprint.ipWatch) {
+    const self = footprint.helpers.some((h) => h.name === 'livekit');
     ipWatch = createIpWatch({
       fetch, intervalMs: config.ipWatchSeconds * 1000, log,
       labels: self
@@ -345,7 +347,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   });
 
   // Cloud: browsers reach LiveKit Cloud directly, so /livekit/* stays a 404.
-  const proxy = config.media === 'self' ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
+  const proxy = footprint.relay ? createLivekitProxy({ apiUrl: config.livekitApiUrl, log }) : undefined;
   // Bun.serve wants a handler even when nothing ever upgrades.
   const noSockets: WebSocketHandler<ProxyData> = { message() {} };
   const handler = createHandler({
