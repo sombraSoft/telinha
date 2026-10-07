@@ -28,7 +28,7 @@ import { createHandler } from './http.ts';
 import { t, type Locale } from './i18n.ts';
 import { createIpWatch, type IpWatch } from './ipwatch.ts';
 import { createLifecycle } from './lifecycle.ts';
-import { roomService } from './livekit.ts';
+import { roomService, type RoomService } from './livekit.ts';
 import { acquireLock, AlreadyRunningError, type Lock } from './lock.ts';
 import { createLogger } from './log.ts';
 import { createDirectory } from './members.ts';
@@ -56,6 +56,17 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export interface RunOptions {
   /** Started by double-click (a console of its own, no arguments): wait for Enter before exiting on an error, or the window vanishes. */
   pauseOnError: boolean;
+}
+
+/** The Room module for this config; dev has no slash command, so admit opens a room for any code. */
+export function roomModuleFor(config: Pick<Config, 'dataDir' | 'closeEmptySeconds' | 'dev'>, livekit: RoomService, log: (...a: unknown[]) => void): Rooms {
+  return createRooms({
+    path: join(config.dataDir, 'telinha.sqlite'),
+    livekit,
+    closeEmptySeconds: config.closeEmptySeconds,
+    devAutoOpen: Boolean(config.dev),
+    log,
+  });
 }
 
 /** telinha.env (+ the environment over it) -> Config, logging where it came from and every warning. */
@@ -185,13 +196,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
       if (r.changed.length) log(`binaries updated: ${r.changed.join(', ')}`);
     }
     files = loadStatic(config.webDir, { command: config.commandName });
-    roomModule = createRooms({
-      path: join(config.dataDir, 'telinha.sqlite'),
-      livekit,
-      closeEmptySeconds: config.closeEmptySeconds,
-      devAutoOpen: Boolean(config.dev),
-      log,
-    });
+    roomModule = roomModuleFor(config, livekit, log);
     supervisor = createSupervisor({
       specs: childSpecs(config, paths),
       log,
@@ -231,7 +236,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   const group = (l: Locale) => config.groupName ?? guildName() ?? t(l, 'members');
   const render = (rec: Parameters<typeof renderCard>[0], live: Parameters<typeof renderCard>[1] = { streamers: [], viewers: [] }) =>
     renderCard(rec, live, { publicUrl: config.publicUrl, group: group(rec.locale) });
-  // Dev rooms have no Discord message; the lifecycle still opens and closes them.
+  // Dev rooms have no Discord message; rooms.ts still opens and closes them.
   let editMessage = async (_c: string, _m: string, _card: Card) => {};
 
   if (config.dev) {

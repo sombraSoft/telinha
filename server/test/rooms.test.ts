@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { TrackSource } from 'livekit-server-sdk';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { loadConfig } from '../src/config.ts';
 import type { LiveParticipant, RoomService, RoomTimeouts } from '../src/livekit.ts';
 import { createRooms, type NewRoom, type RoomRecord } from '../src/rooms.ts';
+import { roomModuleFor } from '../src/run.ts';
+import { DEV_ENV, PROD_ENV } from './helpers.ts';
 
 const T0 = 1_700_000_000_000;
 const MIN = 60_000;
@@ -65,6 +71,16 @@ function setup(o: { devAutoOpen?: boolean; path?: string } = {}) {
   };
 }
 
+/** f gets telinha.sqlite in a fresh directory (and the directory), removed afterwards. */
+async function inTempDir(f: (file: string, dir: string) => Promise<void>) {
+  const dir = mkdtempSync(join(tmpdir(), 'telinha-rooms-'));
+  try {
+    await f(join(dir, 'telinha.sqlite'), dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 describe('open', () => {
   test('registers the room, creates it in LiveKit, posts its card and stores where it landed', async () => {
     const s = setup();
@@ -113,6 +129,20 @@ describe('open', () => {
     await expect(s.rooms.open(NEW, CARD)).rejects.toThrow();
     expect(s.calls).toEqual(['ensure lamo-futi']);
     expect(s.rooms.get(NEW.room)!.closedAt).toBeNull();
+  });
+
+  test('openRooms: oldest first (by opening time, then code), closed ones left out', async () => {
+    const s = setup();
+    await s.rooms.open({ ...NEW, room: 'tuge-dosa' }, CARD);
+    s.at(1000);
+    await s.rooms.open({ ...NEW, room: 'lamo-futi' }, CARD);
+    await s.rooms.open({ ...NEW, room: 'kobe-rafa' }, CARD);
+    s.at(2000);
+    await s.rooms.open({ ...NEW, room: 'bafo-kiru' }, CARD);
+    expect(s.rooms.openRooms()).toEqual(['tuge-dosa', 'kobe-rafa', 'lamo-futi', 'bafo-kiru']);
+    s.at(5 * MIN);
+    await s.rooms.observe('tuge-dosa');
+    expect(s.rooms.openRooms()).toEqual(['kobe-rafa', 'lamo-futi', 'bafo-kiru']);
   });
 });
 
@@ -354,18 +384,6 @@ describe('cards', () => {
 });
 
 describe('the SQLite file', () => {
-  const inTempDir = async (f: (file: string) => Promise<void>) => {
-    const { mkdtempSync, rmSync } = await import('node:fs');
-    const { tmpdir } = await import('node:os');
-    const { join } = await import('node:path');
-    const dir = mkdtempSync(join(tmpdir(), 'telinha-rooms-'));
-    try {
-      await f(join(dir, 'telinha.sqlite'));
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  };
-
   test('rooms survive a restart on the same file', () => inTempDir(async (file) => {
     const a = setup({ path: file });
     await a.rooms.open(NEW, CARD);
@@ -394,5 +412,21 @@ describe('the SQLite file', () => {
     expect(await s.rooms.admit(NEW.room, MEMBER)).toBe('ok');
     expect(s.rooms.get(NEW.room)!.lastTokenAt).toBe(T0);
     s.rooms.closeDb();
+  }));
+});
+
+describe('run.ts wiring', () => {
+  const livekit: RoomService = { ensureRoom: async () => {}, listParticipants: async () => [], deleteRoom: async () => {} };
+  const quiet = () => {};
+
+  test('DEV_USER: admit opens an unknown code; production: unknown', () => inTempDir(async (_file, dir) => {
+    const dev = roomModuleFor({ ...loadConfig(DEV_ENV), dataDir: dir }, livekit, quiet);
+    expect(await dev.admit('debu-gamo', MEMBER)).toBe('ok');
+    expect(dev.openRooms()).toEqual(['debu-gamo']);
+    dev.closeDb();
+    const prod = roomModuleFor({ ...loadConfig(PROD_ENV), dataDir: dir }, livekit, quiet);
+    expect(await prod.admit('tuge-dosa', MEMBER)).toBe('unknown');
+    expect(prod.openRooms()).toEqual(['debu-gamo']);
+    prod.closeDb();
   }));
 });
