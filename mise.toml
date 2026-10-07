@@ -1,0 +1,25 @@
+# The dev and CI toolchain. `mise install` installs it and then runs
+# scripts/setup-dev.ts, so one command sets up a fresh clone. The binaries
+# telinha ships (LiveKit, Caddy, cloudflared) stay pinned in versions.json.
+# Safe-mode `mise lock`, which Renovate runs to refresh mise.lock, needs 2026.7.12.
+min_version = "2026.7.12"
+
+[settings]
+# mise.lock pins each tool's exact version, download URL and checksum.
+lockfile = true
+# The platforms mise.lock covers, so a lock refreshed on any machine (or by
+# Renovate) records the same set.
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
+
+# The tray's .NET SDK is not here: global.json picks it. mise's dotnet install
+# fails its own check on Windows whenever a system .NET is on PATH.
+[tools]
+# Must equal every other bun pin: packageManager in package.json, the
+# Dockerfile's BUN_IMAGE ARG (the oven/bun tag), and setup-bun's bun-version in
+# the workflows until mise-action replaces it.
+bun = "1.4.2"
+# Must equal the Dockerfile's golang image, which builds Caddy.
+go = "1.25.14"
+
+[hooks]
+postinstall = "bun scripts/setup-dev.ts"

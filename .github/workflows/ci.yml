@@ -1,6 +1,6 @@
 # Checks every PR (including Release PRs opened by the release app and
-# Renovate PRs). Job names are the required checks in branch protection, so
-# keep them stable.
+# Renovate PRs). The ruleset requires only the `required` job below, so which
+# jobs gate a merge is decided here, in a PR, and jobs can be renamed freely.
 name: ci
 
 on:
@@ -17,12 +17,80 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Which areas a PR touches, so jobs that cannot be affected are skipped (a
+  # skipped job counts as passed in `required`). Shared config and lockfiles
+  # count as every area, and pushes to main always run everything.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      test: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.test == 'true' }}
+      e2e: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.e2e == 'true' }}
+      binaries: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.binaries == 'true' }}
+      docs: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.docs == 'true' }}
+      image: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.image == 'true' }}
+      caddy: ${{ github.event_name == 'push' || steps.f.outputs.all == 'true' || steps.f.outputs.caddy == 'true' }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        if: github.event_name == 'pull_request'
+        id: f
+        with:
+          filters: |
+            all:
+              - .github/workflows/ci.yml
+              - package.json
+              - '*/package.json'
+              - bun.lock
+              - bunfig.toml
+              - tsconfig.json
+              - mise.toml
+              - mise.lock
+              - global.json
+            test:
+              - 'server/**'
+              - 'web/**'
+              - 'docs/**'
+              - 'scripts/**'
+              - 'e2e/**'
+              - versions.json
+            e2e:
+              - 'server/**'
+              - 'web/**'
+              - 'e2e/**'
+              - playwright.config.ts
+              - versions.json
+            binaries:
+              - 'server/**'
+              - 'web/**'
+              - 'tray/**'
+              - 'scripts/**'
+              - versions.json
+            docs:
+              - 'docs/**'
+              - 'server/**'
+            image:
+              - Dockerfile
+              - .dockerignore
+              - 'server/**'
+              - 'web/**'
+              - 'deploy/**'
+              - 'scripts/**'
+              - versions.json
+            caddy:
+              - Dockerfile
+              - versions.json
+              - scripts/caddy-build.ts
+
   test:
+    needs: changes
+    if: needs.changes.outputs.test == 'true'
     name: test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -39,7 +107,9 @@ jobs:
   # Browser tests against the real stack (LiveKit --dev + server + built page).
   # Not a required check yet.
   e2e:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -70,14 +140,16 @@ jobs:
   # Native binaries. Windows targets build on Windows: Bun writes the version
   # resource (ProductName etc.) only there. Not a required check yet.
   binaries:
+    needs: changes
+    if: needs.changes.outputs.binaries == 'true'
     name: binaries (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: linux
-          - os: windows-latest
+          - os: windows-2025
             target: windows
             # The Windows zips carry the tray icon, built below.
             args: --tray tray/bin/Release/net48/telinha-tray.exe
@@ -442,7 +514,7 @@ jobs:
           }
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -457,7 +529,9 @@ jobs:
           deploy/telinha-update
           scripts/smoke.sh
       # The runner's pwsh parses it; Write-Host is how the bootstrap talks to
-      # the person running it.
+      # the person running it. PSScriptAnalyzer is pinned here (Renovate bumps
+      # it) and loaded at that exact version over whatever the image ships; a
+      # failed install fails the job.
       - name: install.ps1
         shell: pwsh
         run: |
@@ -465,10 +539,9 @@ jobs:
           $errs = $null
           $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errs)
           if ($errs) { $errs; exit 1 }
-          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
-            try { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop }
-            catch { Write-Warning "PSScriptAnalyzer not installable, parse check only: $_"; exit 0 }
-          }
+          $psa = Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser -PassThru -ErrorAction Stop
+          $loaded = Import-Module PSScriptAnalyzer -RequiredVersion $psa.Version -PassThru -ErrorAction Stop
+          Write-Host "PSScriptAnalyzer $($loaded.Version)"
           $issues = Invoke-ScriptAnalyzer -Path $path -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
           if ($issues) { $issues | Format-Table -AutoSize | Out-String -Width 200; exit 1 }
       # The image bundles shellcheck, so run: blocks are checked too.
@@ -484,7 +557,9 @@ jobs:
         run: bun scripts/versions.ts check
 
   docs:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -497,7 +572,7 @@ jobs:
       - run: bun run docs:build
 
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       # The action lists the PR's commits to scan only those.
@@ -518,7 +593,9 @@ jobs:
   # smoke test checks its version and modules and validates the DNS-01 and TURN
   # (layer4, PROXY v2) Caddyfiles.
   image:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -571,8 +648,10 @@ jobs:
   # Windows-only Go build break in a module bump shows up before release (the
   # image job covers linux). Not a required check.
   caddy:
+    needs: changes
+    if: needs.changes.outputs.caddy == 'true'
     name: caddy (windows-x64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -589,3 +668,16 @@ jobs:
           push: false
       - name: caddy.exe
         run: test -s dist-caddy/caddy.exe
+
+  # The one check the ruleset requires: it passes when every job in `needs`
+  # passed (or was skipped), so adding, renaming or dropping a gating job is a
+  # change to this list, not to the ruleset. `changes` is in it because its
+  # failure would skip the jobs it gates.
+  required:
+    if: always()
+    needs: [changes, test, lint, gitleaks, image]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: every gating job passed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

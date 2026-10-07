@@ -493,9 +493,9 @@ members' presences are cached.
    `release-please-config.json`). A draft has no tag and is never `latest`, so
    `releases/latest/download/*`, the installers and both updaters never see a
    release without its assets. Every later job checks out the release commit.
-4. `binaries` (`ubuntu-latest`) runs `bun scripts/build-binary.ts --target
+4. `binaries` (`ubuntu-24.04`) runs `bun scripts/build-binary.ts --target
    linux --version X.Y.Z --smoke` for `linux-x64` and `linux-arm64`.
-   `binaries-windows` (`windows-latest`, where Bun writes the Windows version
+   `binaries-windows` (`windows-2025`, where Bun writes the Windows version
    resource) runs the tray's tests, builds `telinha-tray.exe` with
    `-p:Version=X.Y.Z`, compiles `windows-x64` and `windows-arm64` with
    `--smoke --no-pack`, and uploads the three exes as one artifact. Then
@@ -511,7 +511,7 @@ members' presences are cached.
    [Code signing](https://sombrasoft.github.io/telinha/guides/code-signing/)
    for the policy. In parallel `caddy` (matrix:
    `linux-x64`, `linux-arm64`, `windows-x64`, `windows-arm64`, all on
-   `ubuntu-latest`, since Go cross-compiles) builds our Caddy through the
+   `ubuntu-24.04`, since Go cross-compiles) builds our Caddy through the
    Dockerfile's `caddy-export` target and packs it as `caddy-<target>.tar.gz`
    or `.zip`, and `image` builds `linux/amd64` and `linux/arm64` and pushes
    `ghcr.io/sombrasoft/telinha` tagged `X.Y.Z`, `X.Y` and `latest`, with a
@@ -545,16 +545,20 @@ marks hyphenated tags as GitHub pre-releases, and the image gets only the
 them; the native updater and `telinha-update` ignore them unless pinned
 (`UPDATE_PIN`, `telinha-update pin`).
 
-Required checks on `main`: `test (ubuntu-latest)`, `test (windows-latest)`,
-`lint` (shellcheck of `deploy/install-docker.sh`, `deploy/install.sh`,
-`deploy/telinha-update` and `scripts/smoke.sh`, a PowerShell parse and
-PSScriptAnalyzer run of `deploy/install.ps1`, actionlint,
-`bun scripts/versions.ts check`), `gitleaks`, `image` (builds both
-architectures, smoke-tests amd64). Four jobs also run on every PR but are not
+The `main` ruleset requires two checks. `required` is a job in `ci.yml` that
+passes only when the jobs it `needs` pass: `test (ubuntu-24.04)`,
+`test (windows-2025)`, `lint` (shellcheck of `deploy/install-docker.sh`,
+`deploy/install.sh`, `deploy/telinha-update` and `scripts/smoke.sh`, a
+PowerShell parse and pinned PSScriptAnalyzer run of `deploy/install.ps1`,
+actionlint, `bun scripts/versions.ts check`), `gitleaks` and `image` (builds
+both architectures, smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the
+PR title is a Conventional Commit with one of the types `feat`, `fix`, `docs`,
+`refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; it runs again
+when the title is edited. Four jobs also run on every PR but are not
 required yet: `docs` (builds the docs site, link validator included), `e2e`
 (Playwright on ubuntu), `caddy (windows-x64)` (the Windows Caddy through the
-same Dockerfile stage the release uses) and `binaries (ubuntu-latest)` /
-`binaries (windows-latest)`, which compile the native targets and smoke-test
+same Dockerfile stage the release uses) and `binaries (ubuntu-24.04)` /
+`binaries (windows-2025)`, which compile the native targets and smoke-test
 them: `--version`, then a real `run` in `DEV_USER` mode until `/healthz`
 reports LiveKit up (the binary downloads `livekit-server` itself), the gate and
 `/doctor` answers, a graceful stop; the terminal UI smoke of each binary
@@ -576,6 +580,12 @@ exactly `telinha.exe`, `telinha-tray.exe` and `LICENSE`, a tray smoke test
 `telinha tray stop`), and an Authenticode check that signs copies of
 `telinha.exe` and `telinha-tray.exe` with a throwaway self-signed certificate
 and runs them, so a signature never breaks either.
+
+On a PR, the `changes` job skips the jobs a change cannot affect (`ci.yml`
+lists which paths each job builds): a Dockerfile-only PR runs `image`,
+`caddy`, `lint` and `gitleaks`. A change to shared config (`ci.yml`, any
+`package.json`, `bun.lock`, `bunfig.toml`, `tsconfig.json`, `mise.toml`,
+`mise.lock`, `global.json`) runs everything, and so does every push to `main`.
 
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
 Dockerfile (its `golang` and bun images included), `deploy/compose.yml`,
