@@ -49,6 +49,15 @@ describe('ts', () => {
     for (const k of ['needsInput', 'yesNo', 'answerYesNo', 'pickAtLeast', 'selectHint', 'multiHint', 'keepCurrent']) expect(Object.keys(dicts.en)).not.toContain(k);
     for (const k of ['welcome', 'hostingQ', 'cfDomainQ', 'reviewQ', 'sysctlQ', 'autoUpdateQ']) expect(Object.keys(setupStrings.en)).not.toContain(k);
   });
+
+  test('setup help names the media flags, the Cloud secret only through env or file', () => {
+    expect(Object.keys(dicts['pt-BR']).sort()).toEqual(Object.keys(dicts.en).sort());
+    for (const l of ['en', 'pt-BR'] as const) {
+      const help = ts(l, 'helpSetup');
+      for (const flag of ['--media self|cloud', '--cloud-url', '--livekit-key', 'LIVEKIT_API_SECRET', '--livekit-secret-file', '--turn auto|on|off', '443']) expect(help).toContain(flag);
+      expect(help).not.toMatch(/--livekit-secret(?!-file)/);
+    }
+  });
 });
 
 describe('setup strings', () => {

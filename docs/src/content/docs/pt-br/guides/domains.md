@@ -44,10 +44,13 @@ o host do `PUBLIC_URL` e repassa tudo para o `LISTEN`. No modo `tunnel`, o
 `cloudflared` leva as páginas e nenhum Caddy roda. No modo `external`, o seu
 proxy faz os dois papéis.
 
-O vídeo não passa por nenhum desses caminhos. O navegador manda a mídia direto
-para o LiveKit pela TCP `MEDIA_TCP_PORT` (7881) e pela UDP `MEDIA_UDP_PORT`
-(7882). Essas duas portas precisam chegar na máquina em qualquer modo, até com
-túnel: veja [Quais portas](/telinha/pt-br/guides/port-forwarding/#quais-portas).
+O vídeo não passa por nenhum desses caminhos. Com `MEDIA=self` (o padrão) o
+navegador manda a mídia direto para o LiveKit pela TCP `MEDIA_TCP_PORT` (7881)
+e pela UDP `MEDIA_UDP_PORT` (7882). Essas duas portas precisam chegar na
+máquina em qualquer modo, até com túnel: veja
+[Quais portas](/telinha/pt-br/guides/port-forwarding/#quais-portas). Com
+`MEDIA=cloud` o vídeo passa pelo [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/)
+e nenhuma porta de mídia precisa chegar na máquina.
 
 ## Em casa
 
@@ -71,7 +74,8 @@ TUNNEL_TOKEN='...'
 
 As portas de mídia continuam precisando de encaminhamento: o túnel não leva
 WebRTC. Se você escolheu o túnel porque nada da internet chega na sua rede,
-leia antes [CGNAT e NAT duplo](#cgnat-e-nat-duplo).
+leia antes [CGNAT e NAT duplo](#cgnat-e-nat-duplo): com `MEDIA=cloud` o túnel
+leva as páginas e o LiveKit Cloud leva o vídeo.
 
 ### DuckDNS na porta 8443
 
@@ -131,6 +135,10 @@ Uma VPS tem IP público próprio e nada na frente dela além do firewall do
 provedor, então com as três primeiras opções abaixo o Caddy pega o certificado
 do jeito de sempre, pelas portas 80 e 443, que você abre nesse firewall. O
 [Cloudflare Tunnel](#cloudflare-tunnel) funciona numa VPS igualzinho a em casa.
+Com as três primeiras opções na 443, a Telinha também pode servir
+[TURN sobre TLS na porta 443](/telinha/pt-br/guides/turn/) em `turn.<host>`,
+para quem assiste de uma rede que só deixa a 443 passar: liga sozinho com
+DuckDNS e sslip.io, e com domínio próprio basta um registro DNS e `TURN=on`.
 
 ### Seu próprio domínio
 
@@ -247,10 +255,15 @@ muitas vezes o modem da operadora. Encaminhe as portas nele também, ou coloque
 um dos dois em modo bridge.
 
 Um Cloudflare Tunnel faz as páginas passarem pelo CGNAT, mas as portas de
-mídia não. As saídas:
+mídia não; o LiveKit Cloud pode levar a mídia no lugar delas. As saídas:
 
 - Pedir à operadora um IPv4 público. Muitas vezes é de graça; peça um "IP
   público" ou para "tirar do CGNAT".
+- Deixar a máquina onde está e pôr `MEDIA=cloud`: um projeto do
+  [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/) leva o vídeo e não
+  precisa de porta aberta, e um Cloudflare Tunnel leva as páginas. O plano
+  gratuito Build permite 5.000 participante-minutos e 50 GB de download por
+  mês, com até 100 participantes conectados ao mesmo tempo, como teto rígido.
 - Rodar a Telinha numa [VPS](/telinha/pt-br/start/vps/) pequena, que tem IP
   público e nenhum roteador.
 
@@ -261,7 +274,8 @@ para os navegadores. Numa internet residencial a vigia de IP mantém isso
 certo: ela pergunta o IP público para `https://1.1.1.1/cdn-cgi/trace` (e
 depois para `https://api.ipify.org`) a cada `IP_WATCH_SECONDS` (300; `0`
 desliga) e, quando o IP muda, renova os mapeamentos no roteador, avisa o
-DuckDNS e reinicia o LiveKit:
+DuckDNS e reinicia o LiveKit (com `MEDIA=cloud` não há LiveKit local para
+reiniciar, e a linha termina em `nothing to restart`):
 
 ```
 public IP 203.0.113.9 -> 198.51.100.7, restarting livekit

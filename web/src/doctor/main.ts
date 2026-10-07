@@ -1,19 +1,22 @@
 // The phone test page (/doctor), opened from the one-time link `telinha doctor`
 // shows. Runs from outside the network (mobile data): HTTPS, LiveKit signaling
 // through telinha's /livekit relay, publishing a tiny canvas track, which path
-// ICE picked, then TCP forced; posts the result for the terminal. No login: the
+// ICE picked, then TCP forced, then TURN over TLS when the server offers it;
+// posts the result for the terminal. No login: the
 // link's cookie opens only these routes and the relay.
 import { Room, RoomEvent, Track, type LocalTrackPublication } from 'livekit-client';
 import '../styles/themes.css';
 import '../styles/base.css';
-import { hints, messageOf, selectedPath, tcpFromForced, udpFromInitial, type Path, type Report, type StepResult } from './analyze';
+import {
+  hints, messageOf, selectedPath, tcpFromForced, turnFromForced, udpFromInitial, type Media, type Path, type Report, type StepResult,
+} from './analyze';
 import { pickLocale, tr, type Key } from './strings';
 
 const L = pickLocale(navigator.language);
 const s = (key: Key, params?: Record<string, string | number>) => tr(L, key, params);
 
 type Status = 'wait' | 'run' | 'ok' | 'warn' | 'fail' | 'skip';
-type StepId = 'https' | 'signaling' | 'publish' | 'initial' | 'udp' | 'tcp' | 'report';
+type StepId = 'https' | 'signaling' | 'publish' | 'initial' | 'udp' | 'tcp' | 'turn' | 'report';
 const ICON: Record<Status, string> = { wait: '○', run: '…', ok: '✓', warn: '!', fail: '✗', skip: '–' };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -51,18 +54,22 @@ app.append(main);
 
 const rows = new Map<StepId, { icon: HTMLElement; label: HTMLElement; detail: HTMLElement; li: HTMLElement }>();
 const LABELS: Record<StepId, Key> = {
-  https: 'stepHttps', signaling: 'stepSignaling', publish: 'stepPublish', initial: 'stepInitial', udp: 'stepUdp', tcp: 'stepTcp', report: 'stepReport',
+  https: 'stepHttps', signaling: 'stepSignaling', publish: 'stepPublish', initial: 'stepInitial', udp: 'stepUdp', tcp: 'stepTcp', turn: 'stepTurn',
+  report: 'stepReport',
 };
-for (const id of Object.keys(LABELS) as StepId[]) {
+
+function addRow(id: StepId, before?: HTMLElement) {
   const li = el('li', 'step');
   const icon = el('span', 'icon');
   const label = el('span', 'label', s(LABELS[id], { port: '…' }));
   const detail = el('span', 'detail');
   li.append(icon, label, detail);
-  list.append(li);
+  list.insertBefore(li, before ?? null);
   rows.set(id, { icon, label, detail, li });
   mark(id, 'wait');
 }
+// The TURN row only exists once the token says the server offers it.
+for (const id of Object.keys(LABELS) as StepId[]) if (id !== 'turn') addRow(id);
 
 function mark(id: StepId, status: Status, detail?: string) {
   const r = rows.get(id)!;
@@ -113,8 +120,11 @@ function canvasTrack(): { track: MediaStreamTrack; stop: () => void } {
   return { track, stop: () => (clearInterval(timer), track.stop()) };
 }
 
-/** force-tcp makes the SFU re-offer TCP candidates only and the client reconnect. */
-function forceTcp(room: Room): Promise<boolean> {
+/**
+ * force-tcp makes the SFU re-offer TCP candidates only, force-tls the TURN/TLS
+ * relay only; either way the client reconnects.
+ */
+function forceScenario(room: Room, scenario: 'force-tcp' | 'force-tls'): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     const done = (ok: boolean) => {
@@ -128,7 +138,7 @@ function forceTcp(room: Room): Promise<boolean> {
     const onDown = () => done(false);
     const timer = setTimeout(() => done(false), 15_000);
     room.on(RoomEvent.Reconnected, onUp).on(RoomEvent.Disconnected, onDown);
-    room.simulateScenario('force-tcp').catch(() => done(false));
+    room.simulateScenario(scenario).catch(() => done(false));
   });
 }
 
@@ -141,11 +151,14 @@ async function runTest(): Promise<void> {
     tcp: { ok: false, error: 'not run' },
     udp: { ok: false, error: 'not run' },
     publish: { ok: false, error: 'not run' },
+    turn: null,
     client: { ua: navigator.userAgent },
     startedAt,
     finishedAt: startedAt,
   };
   let ports: { tcp: number; udp: number } | null = null;
+  let media: Media = 'self';
+  let turnHost: string | null = null;
 
   // 1. HTTPS
   mark('https', 'run');
@@ -173,10 +186,20 @@ async function runTest(): Promise<void> {
       return;
     }
     if (!r.ok) throw new Error(`token: HTTP ${r.status}`);
-    const tok = (await r.json()) as { url: string; token: string; ports?: { tcp: number; udp: number } };
+    const tok = (await r.json()) as {
+      url: string;
+      token: string;
+      media?: Media;
+      ports?: { tcp: number; udp: number } | null;
+      turn?: { host: string } | null;
+    };
     ports = tok.ports ?? null;
-    rows.get('udp')!.label.textContent = s('stepUdp', { port: ports?.udp ?? '?' });
-    rows.get('tcp')!.label.textContent = s('stepTcp', { port: ports?.tcp ?? '?' });
+    media = tok.media === 'cloud' ? 'cloud' : 'self';
+    turnHost = tok.turn?.host ?? null;
+    // No ports means LiveKit Cloud: nothing on this side to name.
+    rows.get('udp')!.label.textContent = ports ? s('stepUdp', { port: ports.udp }) : s('stepUdpCloud');
+    rows.get('tcp')!.label.textContent = ports ? s('stepTcp', { port: ports.tcp }) : s('stepTcpCloud');
+    if (turnHost) addRow('turn', rows.get('report')!.li);
     room = new Room({ adaptiveStream: false, dynacast: false });
     await withTimeout(room.connect(tok.url, tok.token), 20_000, 'connect');
     report.signaling = { ok: true };
@@ -220,7 +243,7 @@ async function runTest(): Promise<void> {
     if (initial?.protocol === 'tcp') {
       report.tcp = { ok: true, ...(initial.rttMs !== null ? { rttMs: initial.rttMs } : {}) };
     } else if (pub) {
-      const reconnected = await forceTcp(room);
+      const reconnected = await forceScenario(room, 'force-tcp');
       await sleep(2000);
       // A full reconnect republishes the track: look it up again.
       const again = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
@@ -230,18 +253,35 @@ async function runTest(): Promise<void> {
       report.tcp = { ok: false, error: 'nothing published' };
     }
     mark('tcp', report.tcp.ok ? 'ok' : report.tcp.error?.startsWith('could not force') ? 'warn' : 'fail', stepText(report.tcp));
+
+    // 6. TURN over TLS: only a fallback for networks that allow nothing but 443, so a failure is a warning
+    if (turnHost) {
+      mark('turn', 'run');
+      if (pub) {
+        const reconnected = await forceScenario(room, 'force-tls');
+        await sleep(2000);
+        const again = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+        const path = reconnected ? await readPath(again, 8000) : null;
+        report.turn = turnFromForced(path, reconnected);
+      } else {
+        report.turn = { ok: false, error: 'nothing published' };
+      }
+      mark('turn', report.turn.ok ? 'ok' : 'warn', stepText(report.turn));
+    }
     canvas.stop();
   } else {
     for (const id of ['publish', 'initial', 'udp', 'tcp'] as const) mark(id, 'skip');
+    // Not run, so no TURN verdict: the signaling hint already says what is wrong.
+    if (turnHost) mark('turn', 'skip');
     report.tcp = { ok: false, error: 'no connection' };
     report.udp = { ok: false, error: 'no connection' };
     report.publish = { ok: false, error: 'no connection' };
   }
 
-  // 6. Report
+  // 7. Report
   mark('report', 'run');
   report.finishedAt = Date.now();
-  const hintText = hints(report, ports).map((h) => s(h.key, h.params));
+  const hintText = hints(report, ports, media, turnHost).map((h) => s(h.key, h.params));
   try {
     const r = await withTimeout(
       fetch('/doctor/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) }),

@@ -41,10 +41,10 @@ export const t = defineStrings({
 
   // binaries, service
   binsTitle: 'Programs',
-  binsChecking: 'Downloading LiveKit, Caddy / cloudflared...',
+  binsChecking: 'Downloading {tools}...',
   binsOk: 'Programs ready in {dir}',
   binsFailed: 'Download failed: {error}. telinha run tries again at start.',
-  binsByService: 'The service downloads LiveKit, Caddy / cloudflared itself, as its own user, when it starts.',
+  binsByService: 'The service downloads {tools} itself, as its own user, when it starts.',
   serviceTitle: 'Service',
   serviceNeedsBinary: 'Running from source: no service is installed (the native binary installs one).',
   serviceUnsupported: 'No service manager on this system; start Telinha with telinha run.',
@@ -78,7 +78,9 @@ export const t = defineStrings({
   routerVpsUfw: 'ufw is installed; if it is active: {cmd}',
   routerVpsFirewalld: 'firewalld is installed; if it is running: {cmd}',
   upnpWillMap: 'Telinha asks the router for {ports} while it runs (telinha doctor shows the result).',
-  cgnat: 'The router\'s external IP is a carrier-grade NAT address (100.64.0.0/10): nothing from the internet\ncan reach this network. Ask the ISP for a public IP, or run Telinha on a VPS.',
+  cgnat: 'The router\'s external IP is a carrier-grade NAT address (100.64.0.0/10): nothing from the internet\ncan reach this network. Run setup again and choose LiveKit Cloud (MEDIA=cloud) for the video, ask the ISP\nfor a public IP, or run Telinha on a VPS.',
+  cgnatCloud: 'The router\'s external IP is a carrier-grade NAT address (100.64.0.0/10): LiveKit Cloud carries the\nvideo, but the HTTPS port still cannot reach this network. A Cloudflare Tunnel needs no open port.',
+  routerNoMedia: 'LiveKit Cloud carries the video: no media ports to open here.',
   doubleNat: 'The router\'s external IP is private: there is a second router in front of it (double NAT).\nForward the ports on that one too, or put this router in bridge mode.',
 
   // start, doctor, next
@@ -132,10 +134,10 @@ export const t = defineStrings({
   aclFailed: 'Não deu pra restringir o acesso ao arquivo: {error}',
 
   binsTitle: 'Programas',
-  binsChecking: 'Baixando LiveKit, Caddy / cloudflared...',
+  binsChecking: 'Baixando {tools}...',
   binsOk: 'Programas prontos em {dir}',
   binsFailed: 'O download falhou: {error}. O telinha run tenta de novo ao iniciar.',
-  binsByService: 'O serviço baixa o LiveKit, o Caddy / cloudflared sozinho, com o usuário dele, quando inicia.',
+  binsByService: 'O serviço baixa {tools} sozinho, com o usuário dele, quando inicia.',
   serviceTitle: 'Serviço',
   serviceNeedsBinary: 'Rodando do código-fonte: nenhum serviço é instalado (o binário nativo instala um).',
   serviceUnsupported: 'Sem gerenciador de serviço neste sistema; inicie a Telinha com telinha run.',
@@ -168,7 +170,9 @@ export const t = defineStrings({
   routerVpsUfw: 'O ufw está instalado; se estiver ativo: {cmd}',
   routerVpsFirewalld: 'O firewalld está instalado; se estiver rodando: {cmd}',
   upnpWillMap: 'A Telinha pede {ports} pro roteador enquanto roda (o telinha doctor mostra o resultado).',
-  cgnat: 'O IP externo do roteador é de CGNAT da operadora (100.64.0.0/10): nada da internet chega\nnesta rede. Peça um IP público pra operadora, ou rode a Telinha numa VPS.',
+  cgnat: 'O IP externo do roteador é de CGNAT da operadora (100.64.0.0/10): nada da internet chega\nnesta rede. Rode o setup de novo e escolha o LiveKit Cloud (MEDIA=cloud) pro vídeo, peça um IP\npúblico pra operadora, ou rode a Telinha numa VPS.',
+  cgnatCloud: 'O IP externo do roteador é de CGNAT da operadora (100.64.0.0/10): o LiveKit Cloud leva o vídeo,\nmas a porta HTTPS ainda não chega nesta rede. Um Cloudflare Tunnel não precisa de porta aberta.',
+  routerNoMedia: 'O LiveKit Cloud leva o vídeo: nenhuma porta de mídia pra abrir aqui.',
   doubleNat: 'O IP externo do roteador é privado: tem um segundo roteador na frente (NAT duplo).\nRedirecione as portas nele também, ou coloque este roteador em modo bridge.',
 
   startTitle: 'Início',

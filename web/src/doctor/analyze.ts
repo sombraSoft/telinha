@@ -15,6 +15,8 @@ export type Path = {
   rttMs: number | null;
   /** Went through a TURN relay. */
   relay: boolean;
+  /** How the browser reaches the relay ('udp' | 'tcp' | 'tls'); null when not given (Firefox). */
+  relayProtocol: string | null;
 };
 
 /** The candidate pair in use, or null while ICE has not picked one. */
@@ -42,6 +44,7 @@ export function selectedPath(report: StatsLike): Path | null {
     candidateIp: (remote?.address ?? remote?.ip ?? null) as string | null,
     rttMs: rtt,
     relay: [local, remote].some((c) => c?.candidateType === 'relay'),
+    relayProtocol: typeof local?.relayProtocol === 'string' ? local.relayProtocol.toLowerCase() : null,
   };
 }
 
@@ -55,6 +58,8 @@ export type Report = {
   tcp: StepResult;
   udp: StepResult;
   publish: { ok: boolean; error?: string };
+  /** null when the server offers no TURN over TLS. */
+  turn: StepResult | null;
   client: { ua: string };
   startedAt: number;
   finishedAt: number;
@@ -80,18 +85,49 @@ export function tcpFromForced(path: Path | null, reconnected: boolean, error?: s
   return { ok: true, ...(path.rttMs !== null ? { rttMs: path.rttMs } : {}) };
 }
 
-export type HintKey = 'hintSignaling' | 'hintBoth' | 'hintUdp' | 'hintTcp' | 'hintHttp' | 'hintAllGood';
+/**
+ * The TURN step after force-tls. The relay must carry it, and over TLS: a
+ * browser that relays over UDP or TCP instead did not prove port 443 works.
+ * A missing relayProtocol (Firefox) is taken as TLS, the only relay offered.
+ */
+export function turnFromForced(path: Path | null, reconnected: boolean): StepResult {
+  if (!reconnected) return { ok: false, error: 'did not reconnect through TURN' };
+  if (!path) return { ok: false, error: 'no media path' };
+  if (!path.relay) return { ok: false, error: 'not relayed' };
+  if (path.relayProtocol !== null && path.relayProtocol !== 'tls') return { ok: false, error: `relayed over ${path.relayProtocol}, not TLS` };
+  return { ok: true, ...(path.rttMs !== null ? { rttMs: path.rttMs } : {}) };
+}
+
+export type Media = 'self' | 'cloud';
+export type HintKey =
+  | 'hintSignaling' | 'hintBoth' | 'hintUdp' | 'hintTcp' | 'hintHttp' | 'hintAllGood'
+  | 'hintCloudSignaling' | 'hintCloudBoth' | 'hintCloudUdp' | 'hintCloudTcp' | 'hintTurn';
 export type Hint = { key: HintKey; params: Record<string, string | number> };
 
 /** Plain-language explanation of a finished report, most important first. */
-export function hints(r: Pick<Report, 'https' | 'signaling' | 'tcp' | 'udp'>, ports: { tcp: number; udp: number } | null): Hint[] {
+export function hints(
+  r: Pick<Report, 'https' | 'signaling' | 'tcp' | 'udp'> & { turn?: StepResult | null },
+  ports: { tcp: number; udp: number } | null,
+  media: Media = 'self',
+  turnHost: string | null = null,
+): Hint[] {
   const params = { tcp: ports?.tcp ?? '?', udp: ports?.udp ?? '?' };
-  if (!r.https.ok) return [{ key: 'hintHttp', params }];
-  if (!r.signaling.ok) return [{ key: 'hintSignaling', params }];
-  if (!r.tcp.ok && !r.udp.ok) return [{ key: 'hintBoth', params }];
-  if (!r.udp.ok) return [{ key: 'hintUdp', params }];
-  if (!r.tcp.ok) return [{ key: 'hintTcp', params }];
-  return [{ key: 'hintAllGood', params }];
+  const main = mainHint(r, media);
+  const out: Hint[] = [{ key: main, params }];
+  if (r.turn && !r.turn.ok) out.push({ key: 'hintTurn', params: { turnHost: turnHost ?? 'turn.<host>' } });
+  return out;
+}
+
+function mainHint(r: Pick<Report, 'https' | 'signaling' | 'tcp' | 'udp'>, media: Media): HintKey {
+  // With LiveKit Cloud there is no port to open here: a media failure is the phone's network.
+  const cloud = media === 'cloud';
+  if (!r.https.ok) return 'hintHttp';
+  // The page itself came from PUBLIC_URL: in cloud mode signaling goes straight to Cloud.
+  if (!r.signaling.ok) return cloud ? 'hintCloudSignaling' : 'hintSignaling';
+  if (!r.tcp.ok && !r.udp.ok) return cloud ? 'hintCloudBoth' : 'hintBoth';
+  if (!r.udp.ok) return cloud ? 'hintCloudUdp' : 'hintUdp';
+  if (!r.tcp.ok) return cloud ? 'hintCloudTcp' : 'hintTcp';
+  return 'hintAllGood';
 }
 
 export const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 300);

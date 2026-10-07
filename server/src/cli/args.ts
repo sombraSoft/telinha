@@ -52,6 +52,7 @@ export const SECRET_FLAGS: Readonly<Record<string, string>> = {
   'client-secret': 'DISCORD_CLIENT_SECRET',
   'tunnel-token': 'TUNNEL_TOKEN',
   'duckdns-token': 'DUCKDNS_TOKEN',
+  'livekit-secret': 'LIVEKIT_API_SECRET',
 };
 
 export function secretRejections(locale: Locale = 'en'): Record<string, string> {

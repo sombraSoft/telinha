@@ -42,10 +42,13 @@ In `direct` mode the bundled Caddy gets a Let's Encrypt certificate for the
 `cloudflared` carries the pages and no Caddy runs. In `external` mode your
 proxy does both jobs.
 
-The video takes none of these paths. Browsers send media straight to LiveKit
-on TCP `MEDIA_TCP_PORT` (7881) and UDP `MEDIA_UDP_PORT` (7882), so those two
-ports must reach the machine in every mode, a tunnel included: see
-[Which ports](/telinha/guides/port-forwarding/#which-ports).
+The video takes none of these paths. With `MEDIA=self` (the default)
+browsers send media straight to LiveKit on TCP `MEDIA_TCP_PORT` (7881) and UDP
+`MEDIA_UDP_PORT` (7882), so those two ports must reach the machine in every
+mode, a tunnel included: see
+[Which ports](/telinha/guides/port-forwarding/#which-ports). With
+`MEDIA=cloud` the video goes through [LiveKit Cloud](/telinha/guides/livekit-cloud/)
+instead and no media port has to reach the machine.
 
 ## At home
 
@@ -70,7 +73,8 @@ TUNNEL_TOKEN='...'
 
 The media ports still need forwarding: a tunnel does not carry WebRTC. If the
 reason you chose a tunnel is that nothing at all reaches your network, read
-[CGNAT and double NAT](#cgnat-and-double-nat) first.
+[CGNAT and double NAT](#cgnat-and-double-nat) first: with `MEDIA=cloud` the
+tunnel carries the pages and LiveKit Cloud the video.
 
 ### DuckDNS on port 8443
 
@@ -130,6 +134,10 @@ A VPS has its own public IP and nothing in front of it but the provider's
 firewall, so with the first three options below Caddy gets the certificate
 the usual way, over ports 80 and 443, which you open in that firewall. The
 [Cloudflare Tunnel](#cloudflare-tunnel) works on a VPS exactly as at home.
+With the first three options on 443, Telinha can also serve
+[TURN over TLS on port 443](/telinha/guides/turn/) on `turn.<host>`, for
+viewers on networks that only let 443 through: on by itself with DuckDNS and
+sslip.io, one DNS record and `TURN=on` with your own domain.
 
 ### Your own domain
 
@@ -242,11 +250,16 @@ A WAN address in a private range (`10.x`, `172.16.x` to `172.31.x`,
 often the ISP's modem. Forward the ports on that one too, or put one of the
 two in bridge mode.
 
-A Cloudflare Tunnel gets the pages through CGNAT, but not the media ports. The
-options:
+A Cloudflare Tunnel gets the pages through CGNAT, but not the media ports;
+LiveKit Cloud can carry the media instead. The options:
 
 - Ask the ISP for a public IPv4. It is often a free opt-out of CGNAT; ask for
   a "public IP" or for "removing CGNAT".
+- Keep the host where it is and set `MEDIA=cloud`: a
+  [LiveKit Cloud](/telinha/guides/livekit-cloud/) project carries the video
+  and needs no open port, and a Cloudflare Tunnel carries the pages. The free
+  Build plan allows 5,000 participant-minutes and 50 GB downstream a month,
+  with up to 100 participants connected at once, as a hard cap.
 - Run Telinha on a small [VPS](/telinha/start/vps/), which has a public IP
   and no router.
 
@@ -256,7 +269,9 @@ LiveKit learns its public IP once, at start (STUN), and hands it to browsers.
 On a residential line the IP watch keeps that right: it asks
 `https://1.1.1.1/cdn-cgi/trace` (then `https://api.ipify.org`) for the public
 IP every `IP_WATCH_SECONDS` (300; `0` turns it off), and when the IP changes it
-renews the router mappings, nudges DuckDNS and restarts LiveKit:
+renews the router mappings, nudges DuckDNS and restarts LiveKit (with
+`MEDIA=cloud` there is no local LiveKit to restart, and the line ends in
+`nothing to restart`):
 
 ```
 public IP 203.0.113.9 -> 198.51.100.7, restarting livekit

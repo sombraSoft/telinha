@@ -149,11 +149,12 @@ describe('a fresh home install', () => {
   test('question by question to the Review: the file of a home DuckDNS setup', async () => {
     const { s, ddns } = make();
     expect(s.screen()).toBe('question');
-    expect(s.current()).toMatchObject({ id: 'hosting', title: 'Where will Telinha run?', kind: 'select', initial: 'home', badge: 'Where · Step 1 of 6' });
+    expect(s.current()).toMatchObject({ id: 'hosting', title: 'Where will Telinha run?', kind: 'select', initial: 'home', badge: 'Where · Step 1 of 7' });
     expect(s.current().hint).toEqual(['This machine: Debian GNU/Linux 12 (bookworm), x64, public IP 203.0.113.9.', 'Router: Fritz!Box (UPnP IGD v2, 192.168.0.1).']);
     await homeDuck(s);
     expect(ddns).toEqual(['my-group 203.0.113.9']);
     await discord(s);
+    await answer(s, 'media', 'self');
     await answer(s, 'mediaPorts', 'keep');
     expect(s.current().id).toBe('upnp');
     expect(s.current().hint).toContain(`  TCP 8443 → 192.168.0.10`);
@@ -169,6 +170,7 @@ describe('a fresh home install', () => {
       ['where', 'done', true, 'A computer at home'],
       ['address', 'done', true, 'DuckDNS :8443'],
       ['discord', 'done', true, '/telinha · Gurizada'],
+      ['media', 'done', true, 'this computer'],
       ['ports', 'done', true, 'TCP 7881, 8443\nUDP 7882'],
       ['review', 'current', true, ''],
       ['install', 'pending', false, ''],
@@ -190,6 +192,7 @@ describe('a fresh home install', () => {
     const { s } = make();
     await homeDuck(s);
     await discord(s);
+    await answer(s, 'media', 'self');
     await answer(s, 'mediaPorts', 'keep');
     await answer(s, 'upnp', 'auto');
     const rows = s.reviewRows();
@@ -207,6 +210,7 @@ describe('a fresh home install', () => {
       ['', 'Where does the command work?', '#geral', 'plain'],
       ['', 'Command name', 'telinha', 'plain'],
       ['', 'Group name', 'Gurizada', 'plain'],
+      ['Video', 'Video', 'This computer', 'plain'],
       ['Ports', 'Media ports', 'Keep TCP 7881 and UDP 7882', 'plain'],
       ['', 'Ask the router?', 'Yes, ask the router', 'plain'],
     ]);
@@ -290,7 +294,7 @@ describe('navigation', () => {
     await answer(s, 'homeCf', 'yes');
     expect(s.notice()).toBeNull();
     expect(s.steps().map((x) => [x.id, x.state, x.jumpable])).toEqual([
-      ['where', 'done', true], ['address', 'current', true], ['discord', 'pending', false], ['ports', 'pending', false], ['review', 'pending', false], ['install', 'pending', false],
+      ['where', 'done', true], ['address', 'current', true], ['discord', 'pending', false], ['media', 'pending', false], ['ports', 'pending', false], ['review', 'pending', false], ['install', 'pending', false],
     ]);
     expect(s.jump('where')).toBe(true);
     expect(s.current().id).toBe('hosting');
@@ -320,7 +324,7 @@ describe('navigation', () => {
     expect(s.current()).toMatchObject({ id: 'lang', initial: 'en' });
     await answer(s, 'lang', 'pt-BR');
     expect(s.locale).toBe('pt-BR');
-    expect(s.current()).toMatchObject({ id: 'hosting', title: 'Onde a Telinha vai rodar?', badge: 'Onde · Passo 1 de 6' });
+    expect(s.current()).toMatchObject({ id: 'hosting', title: 'Onde a Telinha vai rodar?', badge: 'Onde · Passo 1 de 7' });
     expect(s.values().LOCALE).toBe('pt-BR');
     s.setLocale('en');
     expect(s.current().title).toBe('Where will Telinha run?');
@@ -635,6 +639,8 @@ describe('hidden answers and apply options', () => {
     await answer(s, 'hosting', 'vps');
     await answer(s, 'vpsAddress', 'sslip');
     await discord(s);
+    await answer(s, 'media', 'self');
+    await answer(s, 'turn', 'on');
     await answer(s, 'mediaPorts', 'keep');
     const v = s.current();
     expect(v.id).toBe('sysctl');
@@ -645,7 +651,7 @@ describe('hidden answers and apply options', () => {
     expect(s.screen()).toBe('review');
     expect(s.applyOptions()).toEqual({ sysctl: 'manual', canRotateCookie: false, tray: null });
     expect(s.values().AUTO_UPDATE).toBe('off');
-    expect(s.steps().map((x) => x.summary)).toEqual(['Rented server (VPS)', 'sslip.io', '/telinha · Gurizada', 'TCP 7881, 443, 80\nUDP 7882', 'manual', '', '']);
+    expect(s.steps().map((x) => x.summary)).toEqual(['Rented server (VPS)', 'sslip.io', '/telinha · Gurizada', 'this computer, 443 too', 'TCP 7881, 443, 80\nUDP 7882', 'manual', '', '']);
   });
 
   test('Windows: the tray step after the updates, its sidebar summary and the apply option', async () => {
@@ -653,15 +659,17 @@ describe('hidden answers and apply options', () => {
     await answer(s, 'hosting', 'vps');
     await answer(s, 'vpsAddress', 'sslip');
     await discord(s);
+    await answer(s, 'media', 'self');
+    await answer(s, 'turn', 'on');
     await answer(s, 'mediaPorts', 'keep');
     await answer(s, 'autoUpdate', 'on');
-    expect(s.current()).toMatchObject({ id: 'tray', step: 'tray', initial: 'yes', badge: 'Tray icon · Step 6 of 8' });
+    expect(s.current()).toMatchObject({ id: 'tray', step: 'tray', initial: 'yes', badge: 'Tray icon · Step 7 of 9' });
     await answer(s, 'tray', 'yes');
     expect(s.current()).toMatchObject({ id: 'trayAutostart', initial: 'no' });
     await answer(s, 'trayAutostart', 'yes');
     expect(s.screen()).toBe('review');
     expect(s.applyOptions().tray).toEqual({ install: true, autostart: true });
-    expect(s.steps().map((x) => x.summary)[5]).toBe('icon, at sign-in');
+    expect(s.steps().map((x) => x.summary)[6]).toBe('icon, at sign-in');
     const rows = s.reviewRows();
     const at = rows.findIndex((r) => r.step === 'Tray icon');
     expect(rows.slice(at).map((r) => [r.label, r.value])).toEqual([
@@ -671,7 +679,7 @@ describe('hidden answers and apply options', () => {
     await answer(s, 'tray', 'no');
     expect(s.screen()).toBe('review');
     expect(s.applyOptions().tray).toEqual({ install: false, autostart: false });
-    expect(s.steps().map((x) => x.summary)[5]).toBe('no icon');
+    expect(s.steps().map((x) => x.summary)[6]).toBe('no icon');
   });
 
   test('Windows re-run: the tray questions start from what the PC has', () => {
@@ -679,11 +687,39 @@ describe('hidden answers and apply options', () => {
     expect(s.applyOptions().tray).toEqual({ install: false, autostart: false });
   });
 
+  test('TURN with an own domain: yes checks turn.<host> first; a missing record stays, or is kept with a note', async () => {
+    const vpsDomain = async (s: SetupSession) => {
+      await answer(s, 'hosting', 'vps');
+      await answer(s, 'vpsAddress', 'domain');
+      await answer(s, 'domain', 't.example.com');
+      await discord(s);
+      await answer(s, 'media', 'self');
+    };
+    const good = make({ host: VPS });
+    await vpsDomain(good.s);
+    await answer(good.s, 'turn', 'on');
+    expect(good.s.current().id).toBe('mediaPorts');
+    expect(good.s.values().TURN).toBe('on');
+
+    const { s } = make({ host: VPS, dns: [] });
+    await vpsDomain(s);
+    expect(s.current().hint.at(-1)).toBe('First add a DNS record: turn.t.example.com → 203.0.113.9 (A record, DNS only). Yes then checks that it resolves.');
+    expect(await s.submit('on')).toBe('stayed');
+    expect(s.current().actions.map((a) => a.label)).toEqual(['I added it: check again', 'Keep it on anyway']);
+    await s.action('keep');
+    await settle();
+    expect(s.current().id).toBe('mediaPorts');
+    expect(s.values().TURN).toBe('on');
+    expect(s.reviewNotes().join('\n')).toContain('turn.t.example.com does not resolve to this server yet');
+  });
+
   test('custom media ports are checked against the HTTPS port and written', async () => {
     const { s } = make({ host: VPS });
     await answer(s, 'hosting', 'vps');
     await answer(s, 'vpsAddress', 'sslip');
     await discord(s);
+    await answer(s, 'media', 'self');
+    await answer(s, 'turn', 'on');
     await answer(s, 'mediaPorts', 'change');
     expect(s.current()).toMatchObject({ id: 'mediaTcp', defaultText: '7881' });
     expect(await s.submit('443')).toBe('stayed');

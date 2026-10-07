@@ -165,6 +165,7 @@ const LINT_ALLOW_ENV = new Set([
   'TELINHA_DIR', 'TELINHA_DIGEST', 'MAX_DEFER_HOURS', 'VERIFY_ATTESTATION', 'ALLOW_UNVERIFIED', // telinha-update
   'LIVEKIT_KEYS', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', // what the children get
   'TELINHA_THEME', 'NO_COLOR', // the terminal screens' colours
+  'LIVEKIT_URL', // the LiveKit Cloud dashboard's name for the project URL
   'LOCALAPPDATA', 'GH_TOKEN', 'GITHUB_TOKEN', 'CAP_NET_BIND_SERVICE', 'SHA256SUMS', 'LC_ALL', 'LC_MESSAGES', 'NODE_ENV',
 ]);
 const ENV_LIKE = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/;

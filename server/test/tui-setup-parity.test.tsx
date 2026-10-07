@@ -99,6 +99,10 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
       keys: async (r) => {
         await vpsDomain(r);
         await discordKeys(r);
+        await at(r, 'media');
+        await press(r.s, 'enter');
+        await at(r, 'turn');
+        await press(r.s, 'enter');
         await at(r, 'mediaPorts');
         await press(r.s, '2');
         await at(r, 'mediaTcp');
@@ -108,7 +112,7 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
         await typeText(r.s, '50001');
         await press(r.s, 'enter');
       },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--media-tcp', '50000', '--media-udp', '50001', ...DISCORD_FLAGS],
+      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--media-tcp', '50000', '--media-udp', '50001', '--turn', 'on', ...DISCORD_FLAGS],
       env: SECRETS,
     });
     expect(f.screens).toBe(f.plain);
@@ -139,7 +143,7 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
         await typeText(r.s, `${CHANNEL},${CHANNEL2}`);
         await press(r.s, 'enter');
       },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, ...DISCORD_FLAGS.map((x) => (x === CHANNEL ? `${CHANNEL},${CHANNEL2}` : x))],
+      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, '--turn', 'on', ...DISCORD_FLAGS.map((x) => (x === CHANNEL ? `${CHANNEL},${CHANNEL2}` : x))],
       env: SECRETS,
     });
     expect(f.screens).toBe(f.plain);
@@ -152,7 +156,7 @@ describe('setup screens (keys) and --non-interactive write the same telinha.env'
         await vpsDomain(r);
         await discordKeys(r);
       },
-      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, ...DISCORD_FLAGS],
+      flags: ['--host', 'vps', '--public-url', 'https://t.example.com', '--client-id', APP, '--turn', 'on', ...DISCORD_FLAGS],
       env: SECRETS,
     });
     expect(f.screens).toBe(f.plain);

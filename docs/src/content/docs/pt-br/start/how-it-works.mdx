@@ -12,7 +12,8 @@ Discord. Alguém digita `/telinha` num canal permitido, o bot responde com um
 card e o link de uma sala em `/r/<code>`, e todo mundo que tem o cargo certo
 entra com a conta do Discord e assiste. O vídeo passa pelo
 [LiveKit](https://livekit.io), um servidor de mídia (um SFU) que roda ao lado
-da Telinha, na mesma máquina.
+da Telinha, na mesma máquina, ou, com `MEDIA=cloud`, por um projeto do
+[LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/).
 
 ## Um único programa
 
@@ -23,7 +24,7 @@ filhos:
 
 | Processo filho | Quando | O que faz |
 | --- | --- | --- |
-| `livekit-server` | sempre | Recebe a tela compartilhada e envia para cada pessoa assistindo |
+| `livekit-server` | `MEDIA=self` (o padrão) | Recebe a tela compartilhada e envia para cada pessoa assistindo; com o TURN ligado também retransmite para quem está numa rede que só libera a 443 |
 | `caddy` | `INGRESS=direct` | Obtém um certificado do Let's Encrypt para o seu endereço (pela API do DuckDNS em casa, pelas portas 80/443 numa VPS) e cuida do HTTPS |
 | `cloudflared` | `INGRESS=tunnel` | Leva o tráfego web da Cloudflare até a Telinha, sem abrir portas web de entrada |
 
@@ -43,7 +44,9 @@ A imagem Docker já traz os três.
 
 O `caddy` que a Telinha roda não é o download original: é o Caddy original
 mais dois módulos, o provedor de DNS do DuckDNS (`caddy-dns/duckdns`, que pega
-um certificado em casa sem as portas 80 e 443) e o layer4 (`caddy-l4`),
+um certificado em casa sem as portas 80 e 443) e o layer4 (`caddy-l4`, que
+deixa o listener da 443 entregar as conexões de `turn.<host>` ao TURN do
+LiveKit, veja [TURN sobre TLS na porta 443](/telinha/pt-br/guides/turn/)),
 compilado com o xcaddy a partir das versões fixadas no `versions.json`. Cada
 versão traz esse build para cada plataforma junto com os binários da Telinha,
 e a imagem Docker compila ele dentro dela. O programa nativo baixa o Caddy da
@@ -86,6 +89,23 @@ em qualquer modo. Um Cloudflare Tunnel leva páginas web e WebSockets, mas não
 a mídia do WebRTC; então, mesmo com túnel, as portas de mídia são
 encaminhadas no roteador (ou liberadas na VPS).
 
+**LiveKit Cloud.** Com `MEDIA=cloud` nenhum LiveKit roda na máquina. O
+navegador recebe a URL `wss://` do projeto no Cloud junto com o token da sala
+e manda a sinalização e a mídia direto para o LiveKit Cloud; a Telinha só
+conversa com a API de salas do projeto por HTTPS, para criar as salas, saber
+quem está nelas e apagar quando fecham. Nenhuma porta de mídia, nenhum relay
+em `/livekit`. Serve para uma linha atrás de CGNAT ou onde nada pode ser
+encaminhado, dentro dos limites mensais do plano gratuito. Veja
+[LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/).
+
+**TURN sobre TLS numa VPS.** Algumas redes só deixam o navegador chegar na
+porta 443, então as portas de mídia nunca passam. Numa VPS no modo direct na
+443, o listener da 443 do Caddy reconhece as conexões para `turn.<host>` pelo
+nome (SNI), decifra com o certificado dele para esse nome e entrega ao
+servidor TURN do LiveKit na mesma máquina, que retransmite o vídeo para o SFU.
+Para a rede, parece um site HTTPS qualquer. Veja
+[TURN sobre TLS na porta 443](/telinha/pt-br/guides/turn/).
+
 ## Diagramas
 
 ### Direto
@@ -108,6 +128,7 @@ browser --> caddy :443 (TLS; :80 redirects)           child of telinha
                       /             --> redirect to /r/
 
 media: browser <--> LiveKit   TCP 7881 / UDP 7882 (opened in the provider's firewall)
+turn:  browser --> caddy :443 (SNI turn.<host>) --> LiveKit TURN 127.0.0.1:5349 --> SFU   (TURN on)
 ```
 
 Em casa com DuckDNS ele escuta numa porta alta que o endereço leva, e o
@@ -148,7 +169,8 @@ quando. O LiveKit descobre o IP público uma vez, ao iniciar, então a Telinha
 fica de olho: a cada `IP_WATCH_SECONDS` (cinco minutos, por padrão) ela
 pergunta qual IP a internet enxerga. Quando o IP muda, ela renova os
 mapeamentos no roteador, atualiza o DuckDNS, se você usa, e reinicia o
-LiveKit. As salas abertas dão uma piscada: a página se reconecta sozinha, e
+LiveKit (`MEDIA=self`; com o Cloud não há o que reiniciar). As salas abertas
+dão uma piscada: a página se reconecta sozinha, e
 quem estava compartilhando precisa compartilhar de novo.
 
 Num servidor com IP público fixo, defina `LIVEKIT_NODE_IP`; isso desliga essa
@@ -203,9 +225,10 @@ sistema 64 bits. A imagem Docker é `linux/amd64` e `linux/arm64`. O macOS não
 
 ### Rede
 
-- **Um IPv4 público que chegue até a máquina.** Em casa, isso quer dizer um
-  roteador onde você consiga fazer encaminhamento de portas e uma linha sem
-  CGNAT; uma VPS já tem um. Veja
+- **Um IPv4 público que chegue até a máquina**, para o `MEDIA=self`. Em
+  casa, isso quer dizer um roteador onde você consiga fazer encaminhamento de
+  portas e uma linha sem CGNAT; uma VPS já tem um. Com `MEDIA=cloud` só as
+  páginas precisam de uma entrada, e um Cloudflare Tunnel resolve. Veja
   [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo).
 - **Um endereço HTTPS**: em casa, um domínio na Cloudflare (Cloudflare
   Tunnel) ou um nome grátis do DuckDNS na porta 8443; numa VPS, um domínio
@@ -215,13 +238,13 @@ sistema 64 bits. A imagem Docker é `linux/amd64` e `linux/arm64`. O macOS não
 
 | Porta (padrão) | Protocolo | Quando |
 | --- | --- | --- |
-| `MEDIA_TCP_PORT` (7881) | TCP | sempre |
-| `MEDIA_UDP_PORT` (7882) | UDP | sempre |
+| `MEDIA_TCP_PORT` (7881) | TCP | `MEDIA=self` |
+| `MEDIA_UDP_PORT` (7882) | UDP | `MEDIA=self` |
 | `HTTPS_PORT` | TCP | `INGRESS=direct`: 443 numa VPS, 8443 em casa (a porta do `PUBLIC_URL`) |
 | `HTTP_PORT` (80) | TCP | `INGRESS=direct` só numa VPS (`0` em casa) |
 
-`LISTEN` (8081) e `LIVEKIT_PORT` (7880) só escutam em loopback e nunca são
-encaminhadas. Mais em [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/#quais-portas).
+`LISTEN` (8081) e `LIVEKIT_PORT` (7880) só escutam em loopback e, como a
+`TURN_PORT` (5349) com o TURN ligado, nunca são encaminhadas. Mais em [Encaminhamento de portas](/telinha/pt-br/guides/port-forwarding/#quais-portas).
 
 ### Discord
 

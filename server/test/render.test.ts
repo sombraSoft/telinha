@@ -10,6 +10,8 @@ const PROD_ENV = {
 };
 const DUCK_TOKEN = 'S3CR3T-duckdns-token'; // gitleaks:allow
 const HOME = { PUBLIC_URL: 'https://my-group.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns', DUCKDNS_TOKEN: DUCK_TOKEN };
+// TURN=on on an own domain: the VPS has added the turn.<host> record.
+const TURN_ON = { HOSTING: 'vps', TURN: 'on' };
 const caddy = (env: Record<string, string> = {}) => renderCaddyfile(loadConfig({ ...PROD_ENV, ...env }));
 const livekit = (env: Record<string, string> = {}) => renderLivekitYaml(loadConfig({ ...PROD_ENV, ...env }));
 
@@ -197,6 +199,125 @@ tela.example.com {
 `);
   });
 
+  test('TURN on: layer4 takes turn.<host> on 443, a second site gets its certificate', () => {
+    expect(caddy(TURN_ON)).toBe(`# Rendered by telinha from telinha.env; do not edit.
+{
+	admin off
+	http_port 80
+	https_port 443
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				@turn tls sni turn.tela.example.com
+				route @turn {
+					tls {
+						connection_policy {
+							alpn stun.turn
+						}
+					}
+					proxy 127.0.0.1:5349 {
+						proxy_protocol v2
+					}
+				}
+			}
+			tls
+		}
+	}
+}
+
+tela.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8081
+}
+
+turn.tela.example.com {
+	respond 404
+}
+`);
+  });
+
+  test('TURN on with HTTP_PORT=0 and a custom TURN_PORT', () => {
+    expect(caddy({ ...TURN_ON, HTTP_PORT: '0', TURN_PORT: '15349' })).toBe(`# Rendered by telinha from telinha.env; do not edit.
+{
+	admin off
+	auto_https disable_redirects
+	https_port 443
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				@turn tls sni turn.tela.example.com
+				route @turn {
+					tls {
+						connection_policy {
+							alpn stun.turn
+						}
+					}
+					proxy 127.0.0.1:15349 {
+						proxy_protocol v2
+					}
+				}
+			}
+			tls
+		}
+	}
+}
+
+tela.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8081
+}
+
+turn.tela.example.com {
+	respond 404
+}
+`);
+  });
+
+  test('TURN on with ACME_EMAIL', () => {
+    expect(caddy({ ...TURN_ON, ACME_EMAIL: 'ops@example.com' })).toBe(`# Rendered by telinha from telinha.env; do not edit.
+{
+	admin off
+	http_port 80
+	https_port 443
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				@turn tls sni turn.tela.example.com
+				route @turn {
+					tls {
+						connection_policy {
+							alpn stun.turn
+						}
+					}
+					proxy 127.0.0.1:5349 {
+						proxy_protocol v2
+					}
+				}
+			}
+			tls
+		}
+	}
+	email ops@example.com
+}
+
+tela.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8081
+}
+
+turn.tela.example.com {
+	respond 404
+}
+`);
+  });
+
+  test('TURN=auto on a DuckDNS VPS turns the block on, TURN=off leaves the file as before', () => {
+    const duck = { PUBLIC_URL: 'https://g.duckdns.org', HOSTING: 'vps' };
+    expect(caddy(duck)).toContain('@turn tls sni turn.g.duckdns.org');
+    expect(caddy(duck)).toContain('turn.g.duckdns.org {\n\trespond 404\n}\n');
+    expect(caddy({ ...duck, TURN: 'off' })).not.toContain('turn');
+  });
+
   test('upstreamHost', () => {
     expect(upstreamHost('0.0.0.0')).toBe('127.0.0.1');
     expect(upstreamHost('::')).toBe('127.0.0.1');
@@ -249,8 +370,54 @@ room:
     expect(out).not.toContain('use_external_ip');
   });
 
+  test('TURN on: plain TCP behind Caddy, PROXY header required', () => {
+    const out = livekit(TURN_ON);
+    expect(out).toBe(`# Rendered by telinha from telinha.env; do not edit.
+port: 7880
+bind_addresses:
+  - 127.0.0.1
+logging:
+  level: info
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: true
+room:
+  auto_create: false
+  empty_timeout: 420
+  departure_timeout: 20
+turn:
+  enabled: true
+  domain: turn.tela.example.com
+  tls_port: 5349
+  external_tls: true
+  proxy_protocol: true
+`);
+    // The relay sockets share TURN's bind_addresses: loopback would break relaying.
+    expect(out.split('turn:')[1]).not.toContain('bind_addresses');
+    expect(out).not.toMatch(/^\s+udp_port: (?!7882)/m);
+  });
+
+  test('TURN off: no turn block', () => {
+    expect(livekit({ ...TURN_ON, TURN: 'off' })).not.toContain('turn:');
+  });
+
   test('keys never go in the file', () => {
     expect(livekit()).not.toContain('lksecret');
     expect(livekit()).not.toContain('devkey');
+  });
+});
+
+describe('PROXY protocol contract', () => {
+  // LiveKit closes TURN connections without the header, so both sides flip together.
+  test('both files from one TURN config agree', () => {
+    const c = loadConfig({ ...PROD_ENV, ...TURN_ON, TURN_PORT: '6000' });
+    const yaml = renderLivekitYaml(c);
+    const caddyfile = renderCaddyfile(c);
+    expect(yaml).toContain('  proxy_protocol: true\n');
+    expect(yaml).toContain('  tls_port: 6000\n');
+    expect(caddyfile).toContain('\t\t\t\t\tproxy 127.0.0.1:6000 {\n\t\t\t\t\t\tproxy_protocol v2\n\t\t\t\t\t}\n');
+    expect(yaml).toContain(`  domain: ${c.turn!.host}\n`);
+    expect(caddyfile).toContain(`@turn tls sni ${c.turn!.host}\n`);
   });
 });

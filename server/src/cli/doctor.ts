@@ -1,13 +1,13 @@
 // `telinha doctor [--json] [--no-phone] [--local]`: runs the checks, then (with
 // the service running) the phone test: a one-time link and QR code the user
 // opens on mobile data, which measures the HTTPS, LiveKit signaling, TCP and
-// UDP media paths from outside the network. Exit 1 when anything failed.
-// On a terminal it is an interactive checklist (loaded on demand, so plain
-// runs and the docs generator never load the UI); otherwise, and with --json,
-// a plain table.
+// UDP media paths (and TURN over TLS when it is on) from outside the network.
+// Exit 1 when anything failed. On a terminal it is an interactive checklist
+// (loaded on demand, so plain runs and the docs generator never load the UI);
+// otherwise, and with --json, a plain table.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig, type Config } from '../config.ts';
+import { loadConfig, type Config, type Media } from '../config.ts';
 import { CHECKS, checkTitle, runChecks } from '../doctor/checks.ts';
 import { renderQr } from '../doctor/qr.ts';
 import type { Check, CheckContext, CheckResult, CheckStatus, NatProberLike, ServiceStatusFn, TrayStateLike, UpdateStateLike } from '../doctor/types.ts';
@@ -119,32 +119,46 @@ export async function buildCheckContext(ctx: CliContext, o: { local: boolean; co
   };
 }
 
-/** Plain-language hints for a phone report (doctorStrings keys with their params). */
-export function phoneHints(r: DoctorReport, ports: { tcp: number; udp: number }, publicIp?: string | null): { key: StrKey; params: Record<string, string | number> }[] {
-  const p = { tcp: ports.tcp, udp: ports.udp };
-  if (!r.signaling.ok) return [{ key: 'hintSignaling', params: p }];
-  const out: { key: StrKey; params: Record<string, string | number> }[] = [];
-  if (!r.tcp.ok && !r.udp.ok) out.push({ key: 'hintBoth', params: p });
-  else if (!r.udp.ok) out.push({ key: 'hintUdp', params: p });
-  else if (!r.tcp.ok) out.push({ key: 'hintTcp', params: p });
+export type PhoneHint = { key: StrKey; params: Record<string, string | number> };
+
+/**
+ * Plain-language hints for a phone report (keys of this file's dictionary with their params).
+ * ports is null with LiveKit Cloud: its ports are not the user's to open.
+ */
+export function phoneHints(
+  r: DoctorReport, ports: { tcp: number; udp: number } | null, publicIp?: string | null, media: Media = 'self',
+  turnHost?: string | null,
+): PhoneHint[] {
+  const p: Record<string, number> = ports ? { tcp: ports.tcp, udp: ports.udp } : {};
+  const cloud = media === 'cloud';
+  // In cloud mode the page already loaded from PUBLIC_URL: signaling goes straight to Cloud.
+  if (!r.signaling.ok) return [{ key: cloud ? 'hintCloudSignaling' : 'hintSignaling', params: p }];
+  const out: PhoneHint[] = [];
+  if (!r.tcp.ok && !r.udp.ok) out.push({ key: cloud ? 'hintCloudBoth' : 'hintBoth', params: p });
+  else if (!r.udp.ok) out.push({ key: cloud ? 'hintCloudUdp' : 'hintUdp', params: p });
+  else if (!r.tcp.ok) out.push({ key: cloud ? 'hintCloudTcp' : 'hintTcp', params: p });
+  // In cloud mode the candidate is Cloud's address, never this network's.
   const ip = r.initial?.candidateIp;
-  if (ip && publicIp && ip !== publicIp && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) out.push({ key: 'hintIp', params: { ip, publicIp } });
+  if (!cloud && ip && publicIp && ip !== publicIp && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) out.push({ key: 'hintIp', params: { ip, publicIp } });
+  if (r.turn && !r.turn.ok) out.push({ key: 'hintTurn', params: { turnHost: turnHost ?? 'turn.<host>' } });
   return out;
 }
 
 export interface PhoneRow {
-  id: 'https' | 'signaling' | 'publish' | 'initial' | 'udp' | 'tcp';
+  id: 'https' | 'signaling' | 'publish' | 'initial' | 'udp' | 'tcp' | 'turn';
   ok: boolean;
   label: string;
   value: string;
 }
 
-export function mediaPorts(config: Config | null): { tcp: number; udp: number } {
+/** The media ports the phone tested; null with LiveKit Cloud, whose ports are not the user's to open. */
+export function mediaPorts(config: Config | null): { tcp: number; udp: number } | null {
+  if (config?.media === 'cloud') return null;
   return { tcp: config?.mediaTcpPort ?? 7881, udp: config?.mediaUdpPort ?? 7882 };
 }
 
 /** The phone report as labelled rows, in the order both renderers show them. */
-export function phoneRows(r: DoctorReport, ports: { tcp: number; udp: number }, s: (key: StrKey, params?: Record<string, string | number>) => string): PhoneRow[] {
+export function phoneRows(r: DoctorReport, ports: { tcp: number; udp: number } | null, s: (key: StrKey, params?: Record<string, string | number>) => string): PhoneRow[] {
   const ok = (v: boolean, rtt?: number) => (v ? (rtt !== undefined ? s('worksRtt', { ms: rtt }) : s('works')) : s('failed'));
   const why = (v: { ok: boolean; error?: string }) => (!v.ok && v.error ? `: ${v.error}` : '');
   return [
@@ -155,14 +169,16 @@ export function phoneRows(r: DoctorReport, ports: { tcp: number; udp: number }, 
       id: 'initial', ok: !!r.initial, label: s('rowInitial'),
       value: r.initial ? s('initialPath', { protocol: r.initial.protocol.toUpperCase(), ip: r.initial.candidateIp ?? '?', ms: r.initial.rttMs ?? '?' }) : s('initialNone'),
     },
-    { id: 'udp', ok: r.udp.ok, label: s('rowUdp', { port: ports.udp }), value: `${ok(r.udp.ok, r.udp.rttMs)}${why(r.udp)}` },
-    { id: 'tcp', ok: r.tcp.ok, label: s('rowTcp', { port: ports.tcp }), value: `${ok(r.tcp.ok, r.tcp.rttMs)}${why(r.tcp)}` },
+    { id: 'udp', ok: r.udp.ok, label: ports ? s('rowUdp', { port: ports.udp }) : s('rowUdpCloud'), value: `${ok(r.udp.ok, r.udp.rttMs)}${why(r.udp)}` },
+    { id: 'tcp', ok: r.tcp.ok, label: ports ? s('rowTcp', { port: ports.tcp }) : s('rowTcpCloud'), value: `${ok(r.tcp.ok, r.tcp.rttMs)}${why(r.tcp)}` },
+    ...(r.turn ? [{ id: 'turn' as const, ok: r.turn.ok, label: s('rowTurn'), value: `${ok(r.turn.ok, r.turn.rttMs)}${why(r.turn)}` }] : []),
   ];
 }
 
 export function phoneStatus(r: DoctorReport): CheckStatus {
   if (!r.signaling.ok || !r.https.ok || (!r.tcp.ok && !r.udp.ok)) return 'fail';
-  if (!r.tcp.ok || !r.udp.ok || !r.publish.ok) return 'warn';
+  // TURN is the fallback for strict networks: its failure alone never fails the run.
+  if (!r.tcp.ok || !r.udp.ok || !r.publish.ok || (r.turn && !r.turn.ok)) return 'warn';
   return 'ok';
 }
 
@@ -302,15 +318,17 @@ async function phoneTest(o: {
     return { status: skipped ? 'skip' : 'warn' };
   }
   const r = state.report;
+  const media = o.config?.media ?? 'self';
   const ports = mediaPorts(o.config);
   const rows = phoneRows(r, ports, s);
   const w = Math.max(...rows.map((row) => row.label.length));
   for (const row of rows) {
     term.line(`${row.ok ? term.style.green('✓') : term.style.red('✗')} ${row.label.padEnd(w)}  ${row.value}`);
   }
-  const hints = phoneHints(r, ports, o.config?.livekitNodeIp ?? null);
+  const hints = phoneHints(r, ports, o.config?.livekitNodeIp ?? null, media, o.config?.turn?.host);
   const status = phoneStatus(r);
   if (!hints.length && status === 'ok') term.ok(s('phoneAllGood'));
-  for (const h of hints) (status === 'fail' ? term.fail : term.warn)(s(h.key, h.params));
+  // A TURN failure stays a warning even next to a failed media path.
+  for (const h of hints) (status === 'fail' && h.key !== 'hintTurn' ? term.fail : term.warn)(s(h.key, h.params));
   return { status, report: r };
 }

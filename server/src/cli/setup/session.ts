@@ -66,7 +66,7 @@ export interface Notice { kind: 'locked' | 'presetErrors' | 'info'; text: string
 interface Slot { state: LookupState; actions: ActionId[]; running?: Text }
 
 const STEP_LABEL: Record<StepId, QKey> = {
-  where: 'stepWhere', address: 'stepAddress', discord: 'stepDiscord', ports: 'stepPorts', updates: 'stepUpdates', tray: 'stepTray', review: 'stepReview', install: 'stepInstall',
+  where: 'stepWhere', address: 'stepAddress', discord: 'stepDiscord', media: 'stepMedia', ports: 'stepPorts', updates: 'stepUpdates', tray: 'stepTray', review: 'stepReview', install: 'stepInstall',
 };
 const ACTION_LABEL: Record<ActionId, QKey> = { retry: 'actionRetry', keep: 'actionKeep', quit: 'actionQuit', open: 'actionOpen', check: 'actionCheck' };
 const str = (v: string | string[] | undefined): string => (typeof v === 'string' ? v : '');
@@ -357,6 +357,16 @@ export class SetupSession {
       this.#emit();
       return;
     }
+    if (id === 'keep' && cur === 'turn') {
+      // The record is not there yet: TURN stays on, the doctor's turn check says when it works.
+      const p = this.#pending;
+      if (!p || p.id !== cur) return;
+      this.#notes.set(cur, txt('turnKept', { host: `turn.${str(eff.domain)}` }));
+      this.#slots.delete(cur);
+      this.#accept(cur, p.value);
+      this.#emit();
+      return;
+    }
     if (id === 'keep') {
       // DuckDNS refused the token: keep it anyway (the running service retries), noted for the Review.
       const p = this.#pending;
@@ -538,6 +548,14 @@ export class SetupSession {
       return this.#run(id, v, txt('dnsChecking', { host: s }), async () => {
         const state = await checkDns(this.#deps, s, env.host?.publicIp ?? null);
         return { state, actions: [], apply: () => (state.state === 'warn' ? this.#notes.set(id, state.note) : this.#notes.delete(id)) };
+      });
+    }
+    if (id === 'turn' && s === 'on' && addressChoice(eff) === 'domain') {
+      // turn.<host> must resolve to this server before Caddy can get its certificate.
+      const host = `turn.${str(eff.domain)}`;
+      return this.#run(id, v, txt('turnChecking', { host }), async () => {
+        const state = await checkDns(this.#deps, host, env.host?.publicIp ?? null);
+        return { state, actions: state.state === 'warn' ? ['retry', 'keep'] : [], stay: state.state === 'warn', apply: () => this.#notes.delete(id) };
       });
     }
     if ((id === 'mediaTcp' || id === 'mediaUdp') && !env.docker) {
@@ -744,6 +762,8 @@ export class SetupSession {
   #actionLabel(qid: QuestionId, a: ActionId): string {
     if (qid === 'duckToken' && a === 'retry') return this.#t(txt('actionTypeAgain'));
     if (qid === 'guild' && a === 'check') return this.#t(txt('actionAdded'));
+    if (qid === 'turn' && a === 'retry') return this.#t(txt('actionTurnCheck'));
+    if (qid === 'turn' && a === 'keep') return this.#t(txt('actionTurnKeep'));
     return this.#t(txt(ACTION_LABEL[a]));
   }
 
@@ -796,6 +816,10 @@ export class SetupSession {
         const name = guildName(a, env);
         return `/${str(a.command) || 'telinha'}${name ? ` · ${name}` : ''}`;
       }
+      case 'media':
+        if (a.media === 'cloud') return this.#t(txt('sumMediaCloud'));
+        if (a.media !== 'self') return '';
+        return this.#t(txt(a.turn === 'on' ? 'sumTurn' : 'sumMediaSelf'));
       case 'ports': {
         if (!a.mediaPorts) return '';
         // Grouped by protocol, one group per line ("TCP 7881, 8443" / "UDP 7882"): the sidebar joins them when they fit.

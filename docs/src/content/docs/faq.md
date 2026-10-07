@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: Answers to common questions about costs, domains, CGNAT, data, safety, removal and what is planned.
+description: Answers to common questions about costs, domains, CGNAT, strict networks, data, safety and removal.
 ---
 
 ## Is it free?
@@ -13,7 +13,7 @@ Go Live is blocked in Brazil. Telinha gives the group the same thing on a machin
 
 ## How many people can watch?
 
-There is no fixed limit in Telinha. The sharer uploads one stream to LiveKit and LiveKit sends a copy to each viewer, so what matters is the upload speed of the machine that runs Telinha. On a home line, the upload speed is the number to look at; on a VPS it is the plan's bandwidth.
+There is no fixed limit in Telinha. The sharer uploads one stream to LiveKit and LiveKit sends a copy to each viewer, so what matters is the upload speed of the machine that runs Telinha. On a home line, the upload speed is the number to look at; on a VPS it is the plan's bandwidth. With `MEDIA=cloud` LiveKit Cloud does the sending, and its free plan's monthly limits are what count (see [LiveKit Cloud](/telinha/guides/livekit-cloud/#the-free-plan)).
 
 ## Does it work on phones?
 
@@ -33,7 +33,11 @@ Because Telinha runs at home with a DuckDNS address. Home internet connections u
 
 ## Can I run it behind CGNAT?
 
-Not at home. With CGNAT your provider shares one public IPv4 between customers and nothing from the internet reaches your network, so port forwarding and UPnP cannot help. Ask the provider for a public IPv4 (often a free opt-out), or run Telinha on a small VPS. A Cloudflare Tunnel gets the pages through, but the media ports still need to be reachable. `telinha doctor` detects it with the `cgnat` check. A LiveKit Cloud mode for hosts that cannot open ports is planned. Details: [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
+Yes, with two pieces. With CGNAT your provider shares one public IPv4 between customers and nothing from the internet reaches your network, so port forwarding and UPnP cannot help. The pages need a Cloudflare Tunnel (a domain on Cloudflare) or a VPS. The video needs either a public IPv4 (ask the provider; often a free opt-out) or `MEDIA=cloud`: [LiveKit Cloud](/telinha/guides/livekit-cloud/) carries the media and needs no open port, and its free Build plan allows 5,000 participant-minutes and 50 GB downstream a month, with up to 100 participants connected at once. Or run the whole thing on a small VPS. `telinha doctor` detects CGNAT with the `cgnat` check. Details: [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
+
+## Can people on a strict network (only port 443) watch?
+
+Some networks (offices, schools, some mobile carriers) only let browsers reach port 443, which blocks the media ports. On a VPS on port 443, Telinha serves [TURN over TLS on port 443](/telinha/guides/turn/): the browser falls back to relaying the video through `turn.<host>:443`, which looks like any HTTPS site to the network. It is on by itself with a DuckDNS or sslip.io name; with your own domain it takes one DNS record and `TURN=on`. At home Telinha serves no TURN (home connections do not let port 443 in), but a [LiveKit Cloud](/telinha/guides/livekit-cloud/) project brings LiveKit's own TURN servers, wherever Telinha runs.
 
 ## Can two deployments share a Discord server?
 
@@ -72,7 +76,7 @@ Inside it (`TELINHA_HOME`, or `--home DIR` on any command, points at another one
 
 ## Is it safe to expose?
 
-Every page is behind the Discord login and the role check. Telinha itself relays the LiveKit signaling and forwards only `/livekit/rtc`, so LiveKit's own API is never reachable from outside. Secrets never go on a command line (setup refuses `--discord-token` and friends and reads them from the environment or a file), and `telinha.env` is readable by its owner only (plus the service's group on a Linux root install). The helper binaries are pinned by sha256, and every release carries `SHA256SUMS` plus a build provenance attestation you can check by hand; both cover Telinha's own Caddy build too, see [Updates](/telinha/guides/updates/).
+Every page is behind the Discord login and the role check. Telinha itself relays the LiveKit signaling and forwards only `/livekit/rtc`, so LiveKit's own API is never reachable from outside (with `MEDIA=cloud` browsers talk to LiveKit Cloud directly, with a room token that lasts 10 minutes). Secrets never go on a command line (setup refuses `--discord-token` and friends and reads them from the environment or a file), and `telinha.env` is readable by its owner only (plus the service's group on a Linux root install). The helper binaries are pinned by sha256, and every release carries `SHA256SUMS` plus a build provenance attestation you can check by hand; both cover Telinha's own Caddy build too, see [Updates](/telinha/guides/updates/).
 
 ## How do I remove it?
 
@@ -94,9 +98,3 @@ sudo rm -rf /opt/telinha
 ```
 
 `down -v` also removes the `telinha-data` volume (the room registry and certificates).
-
-## What is planned?
-
-- Media: LiveKit Cloud (`MEDIA=cloud`) for hosts that cannot open ports, and TURN over TLS on 443 (the layer4 module it needs is already in Telinha's Caddy build).
-
-None of these has a date.

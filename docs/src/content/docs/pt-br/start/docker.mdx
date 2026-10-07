@@ -27,8 +27,10 @@ opcional, o `telinha-update`, mantém tudo na versão estável mais nova.
   [Endereço, HTTPS e modos de entrada](/telinha/pt-br/guides/domains/)
   compara as opções.
 - Em casa, acesso à página de administração do roteador, a não ser que ele faça
-  UPnP, e uma linha que não esteja atrás de CGNAT: veja
-  [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo). Sem
+  UPnP, e uma linha que não esteja atrás de CGNAT, a não ser que o LiveKit
+  Cloud leve o vídeo (`MEDIA=cloud`, com um Cloudflare Tunnel para as páginas):
+  veja [CGNAT e NAT duplo](/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo) e
+  [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/). Sem
   acesso e sem UPnP, por exemplo com um roteador da operadora travado ou a rede
   compartilhada de um prédio? Aí a máquina não consegue abrir as portas
   sozinha: peça à operadora ou a quem cuida da rede para encaminhar, ou use uma
@@ -131,16 +133,24 @@ Ctrl+R mostra ou esconde) e Ctrl+C sai.
    Portal do Desenvolvedor.
    [Aplicativo do Discord](/telinha/pt-br/start/discord/) mostra cada tela.
 
-4. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
+4. **Vídeo.** *Por onde passa o vídeo?* Mantenha *Este computador*. O
+   *LiveKit Cloud* é para uma conexão que nada da internet consegue alcançar
+   (CGNAT, que o setup detecta e aí já escolhe o Cloud para você): ele pede a
+   URL, a chave de API e o segredo do projeto, e não há portas de mídia para
+   abrir; veja [LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/). Numa
+   VPS com o endereço na 443 ele também oferece passar o vídeo pela porta 443
+   para redes rígidas ([TURN sobre TLS](/telinha/pt-br/guides/turn/)).
+
+5. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
    que outro programa do host já use alguma. Em casa ele pergunta depois se a
    Telinha pode abrir as portas no roteador por UPnP (funciona de dentro do
    contêiner, graças à rede do host).
 
-5. **Revisão.** Todas as respostas numa tela só, agrupadas por passo; escolha
+6. **Revisão.** Todas as respostas numa tela só, agrupadas por passo; escolha
    *Aplicar* para gravar `/opt/telinha/config/telinha.env` (modo 600), ou volte
    para mudar algo. Nada é gravado antes disso.
 
-6. **Instalação.** No Docker a lista é curta: o app do Discord é conferido (com
+7. **Instalação.** No Docker a lista é curta: o app do Discord é conferido (com
    os intents ligados), o endereço do DuckDNS é atualizado se você escolheu um,
    e o arquivo é gravado. Sem programas para baixar, sem serviço, sem firewall,
    sem olhar o roteador. Se uma tarefa falha a tela oferece *Tentar de novo*,

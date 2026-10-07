@@ -64,6 +64,7 @@ export function childSpecs(
   };
   const specs: ChildSpec[] = [];
 
+  // Cloud: the SFU is remote, only the ingress child (if any) runs here.
   if (config.media === 'self') {
     const file = join(paths.run, 'livekit.yaml');
     specs.push({
@@ -75,7 +76,10 @@ export function childSpecs(
         // Runs after our own previous livekit exited, so a listener here is someone
         // else's (an old tela stack, an orphan, a second telinha): it would answer
         // the ready probe while ours fails to bind, and telinha would use the wrong SFU.
-        for (const [key, port] of [['LIVEKIT_PORT', config.livekitPort], ['MEDIA_TCP_PORT', config.mediaTcpPort]] as const) {
+        // A taken TURN_PORT means a second TURN would answer Caddy's forwarded streams.
+        const probes: [string, number][] = [['LIVEKIT_PORT', config.livekitPort], ['MEDIA_TCP_PORT', config.mediaTcpPort]];
+        if (config.turn) probes.push(['TURN_PORT', config.turn.port]);
+        for (const [key, port] of probes) {
           if (await inUse(port)) throw new Error(`port ${port} (${key}) already in use (another LiveKit?)`);
         }
         await mkdir(paths.run, { recursive: true });

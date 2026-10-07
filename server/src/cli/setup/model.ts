@@ -3,7 +3,7 @@
 // "the previous visible question" and answers on a branch the user left stay
 // stored for when they come back. Shared by the setup screens and the
 // non-interactive run (resolve.ts turns answers into telinha.env values).
-import { IPV4_RE } from '../../config.ts';
+import { IPV4_RE, turnAutoHost, turnIneligibility, type Ingress } from '../../config.ts';
 import { firewallCommands } from '../../doctor/checks.ts';
 import { isCgnatIpv4, isPrivateIpv4 } from '../../netinfo.ts';
 import type { Locale } from '../strings.ts';
@@ -20,25 +20,26 @@ import type { TrayChoice } from './tray.ts';
 
 export type { AddressChoice };
 
-export type StepId = 'where' | 'address' | 'discord' | 'ports' | 'updates' | 'tray' | 'review' | 'install';
+export type StepId = 'where' | 'address' | 'discord' | 'media' | 'ports' | 'updates' | 'tray' | 'review' | 'install';
 export type QuestionId =
   | 'lang' | 'hosting'
   | 'homeCf' | 'homeAdvanced' | 'advancedAddress' | 'vpsAddress'
   | 'domain' | 'duckName' | 'duckToken' | 'httpsPort' | 'nodeIp' | 'tunnelToken' | 'tunnelHost' | 'externalUrl'
   | 'discordToken' | 'clientId' | 'clientSecret' | 'redirect' | 'guild' | 'role' | 'channels' | 'command' | 'group'
+  | 'media' | 'cloudUrl' | 'cloudKey' | 'cloudSecret' | 'turn'
   | 'mediaPorts' | 'mediaTcp' | 'mediaUdp' | 'sysctl' | 'upnp'
   | 'autoUpdate'
   | 'tray' | 'trayAutostart';
-/** Never asked on screen: filled from flags or kept from the file. */
-export type HiddenId = 'publicUrl' | 'httpPort' | 'httpsPortDirect' | 'pinnedIp';
+/** Never asked on screen: filled from flags or kept from the file. turnSetting: TURN as the flags left it. */
+export type HiddenId = 'publicUrl' | 'httpPort' | 'httpsPortDirect' | 'pinnedIp' | 'turnSetting';
 export type AnswerId = QuestionId | HiddenId;
 /**
  * Answers resolveValues always reads, whether or not they are in flowIds: the hidden ids
  * plus clientId, which is a visible question only offline; online it is filled by the
  * discordApp lookup (session) or by --client-id / the file (answersFromFlags, defaultAnswers).
  */
-export const ALWAYS_COUNTED: readonly AnswerId[] = ['publicUrl', 'httpPort', 'httpsPortDirect', 'pinnedIp', 'clientId'];
-export const HIDDEN_IDS: readonly HiddenId[] = ['publicUrl', 'httpPort', 'httpsPortDirect', 'pinnedIp'];
+export const ALWAYS_COUNTED: readonly AnswerId[] = ['publicUrl', 'httpPort', 'httpsPortDirect', 'pinnedIp', 'turnSetting', 'clientId'];
+export const HIDDEN_IDS: readonly HiddenId[] = ['publicUrl', 'httpPort', 'httpsPortDirect', 'pinnedIp', 'turnSetting'];
 /** select/text/secret: string; multi (channels): string[]. Absent = unanswered. */
 export type Answers = Partial<Record<AnswerId, string | string[]>>;
 export type QuestionKind = 'select' | 'multi' | 'text' | 'secret';
@@ -182,10 +183,41 @@ export function mediaPorts(a: Answers, env: Pick<ModelEnv, 'file'>): { tcp: stri
   return { tcp: env.file.MEDIA_TCP_PORT || '7881', udp: env.file.MEDIA_UDP_PORT || '7882' };
 }
 
-/** What publicPorts()/hostPorts() need: the address and the media ports. */
+/** What publicPorts()/hostPorts() need: the address and the media (no media ports with LiveKit Cloud). */
 export function portsValues(a: Answers, env: Pick<ModelEnv, 'file' | 'host'>): Values {
   const { tcp, udp } = mediaPorts(a, env);
-  return { ...addressValues(a, env), MEDIA_TCP_PORT: tcp, MEDIA_UDP_PORT: udp };
+  return { ...addressValues(a, env), HOSTING: str(a.hosting), MEDIA: a.media === 'cloud' ? 'cloud' : '', MEDIA_TCP_PORT: tcp, MEDIA_UDP_PORT: udp };
+}
+
+/** Why TURN over TLS on 443 cannot run with these values (loadConfig's rule), or null when it can. */
+export function turnBlocked(v: Values): string | null {
+  let publicHost: string;
+  try {
+    publicHost = new URL(v.PUBLIC_URL ?? '').hostname;
+  } catch {
+    return 'no address yet';
+  }
+  return turnIneligibility({
+    media: v.MEDIA === 'cloud' ? 'cloud' : 'self',
+    ingress: (v.INGRESS || 'direct') as Ingress,
+    hosting: v.HOSTING === 'home' || v.HOSTING === 'vps' ? v.HOSTING : null,
+    httpsPort: Number(v.HTTPS_PORT || '443'),
+    publicUrl: v.PUBLIC_URL!,
+    publicHost,
+  });
+}
+
+/** TURN=auto already means on for these values (a DuckDNS or sslip.io name on a VPS). */
+export const turnAuto = (v: Values): boolean => !turnBlocked(v) && turnAutoHost(hostOf(v.PUBLIC_URL));
+
+/** The LiveKit Cloud project URL as loadConfig keeps it (wss://host), or null when it is not one. */
+export function cloudUrl(v: string): string | null {
+  try {
+    const u = new URL(v.trim());
+    return (u.protocol === 'wss:' || u.protocol === 'https:') && u.hostname ? `wss://${u.host}` : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Direct-mode ports below 1024 (a Linux user needs the sysctl for them). */
@@ -203,7 +235,7 @@ export function redirectUri(a: Answers, env: Pick<ModelEnv, 'host'>): string {
 
 /** Secret questions and the telinha.env key each one fills. */
 export const SECRET_ANSWERS: Partial<Record<QuestionId, string>> = {
-  discordToken: 'DISCORD_TOKEN', clientSecret: 'DISCORD_CLIENT_SECRET', tunnelToken: 'TUNNEL_TOKEN', duckToken: 'DUCKDNS_TOKEN',
+  discordToken: 'DISCORD_TOKEN', clientSecret: 'DISCORD_CLIENT_SECRET', tunnelToken: 'TUNNEL_TOKEN', duckToken: 'DUCKDNS_TOKEN', cloudSecret: 'LIVEKIT_API_SECRET',
 };
 
 function hostLines(env: ModelEnv): Text[] {
@@ -229,7 +261,8 @@ function upnpHint(a: Answers, env: ModelEnv): Text[] {
     const router = routerLabel(nat);
     out.push(raw(''), router ? txt('hostRouter', { router }) : txt('routerNone'));
     const ext = nat.externalIp;
-    if (ext && isCgnatIpv4(ext)) out.push(txt('cgnat'));
+    // LiveKit Cloud takes the media ports off the router; the HTTPS port still needs it.
+    if (ext && isCgnatIpv4(ext)) out.push(txt(isCloud(a) ? 'cgnatCloud' : 'cgnat'));
     else if (ext && isPrivateIpv4(ext)) out.push(txt('doubleNat'));
   }
   return out;
@@ -269,6 +302,11 @@ const sameGuild = (a: Answers, env: ModelEnv) => !env.file.GUILD_ID || a.guild =
 
 const select = (value: string, label: Text, more: Omit<OptionDef, 'value' | 'label'> = {}): OptionDef => ({ value, label, ...more });
 const isHome = (a: Answers) => a.hosting === 'home';
+const isCloud = (a: Answers) => a.media === 'cloud';
+/** At home behind carrier-grade NAT nothing reaches this machine: LiveKit Cloud is the way out for the video. */
+const behindCgnat = (a: Answers, env: ModelEnv) => isHome(a) && isCgnatIpv4(env.host?.nat?.externalIp ?? '');
+/** The file's LiveKit Cloud answers (a self file's generated pair is not a Cloud project's). */
+const cloudFile = (env: ModelEnv, key: string) => (env.file.MEDIA === 'cloud' && env.file[key]) || undefined;
 /** The tray icon exists for the native Windows binary only. */
 export const trayHere = (env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>): boolean => env.platform === 'win32' && env.compiled && !env.docker;
 /** An earlier setup decided about the icon: its file (or the kept copy) is there. */
@@ -533,9 +571,66 @@ export const QUESTIONS: readonly QuestionDef[] = [
     default: (_a, env) => env.file.GROUP_NAME ?? '',
   },
 
+  // --- media
+  {
+    id: 'media', step: 'media', kind: 'select', visible: () => true,
+    title: txt('mediaChoiceTitle'), question: txt('mediaChoiceQ'),
+    hint: (a, env) => [txt('mediaChoiceHelp'), ...(behindCgnat(a, env) ? [raw(''), txt('mediaCgnat')] : [])],
+    options: () => [
+      select('self', txt('mediaSelf'), { desc: txt('mediaSelfDesc'), preview: txt('mediaSelfPreview') }),
+      select('cloud', txt('mediaCloud'), { desc: txt('mediaCloudDesc'), preview: txt('mediaCloudPreview') }),
+    ],
+    default: (a, env) => (env.file.MEDIA === 'cloud' || behindCgnat(a, env) ? 'cloud' : 'self'),
+    // Behind CGNAT a self file is asked again: its media ports never worked.
+    fromFile: (a, env) => !!env.file.PUBLIC_URL && (env.file.MEDIA === 'cloud' || !behindCgnat(a, env)),
+  },
+  {
+    id: 'cloudUrl', step: 'media', kind: 'text', visible: isCloud,
+    title: txt('cloudUrlTitle'), question: txt('cloudUrlQ'), placeholder: raw('wss://my-project.livekit.cloud'),
+    hint: () => [txt('cloudUrlHelp'), raw(''), txt('cloudAutoCreate')],
+    default: (_a, env) => cloudFile(env, 'LIVEKIT_CLOUD_URL'),
+    validate: (v) => (cloudUrl(str(v)) ? null : txt('cloudUrlBad')),
+    normalize: (v) => cloudUrl(v) ?? v,
+  },
+  {
+    id: 'cloudKey', step: 'media', kind: 'text', visible: isCloud,
+    title: txt('cloudKeyTitle'), question: txt('cloudKeyQ'), placeholder: raw('APIxxxxxxxxxxxx'),
+    hint: () => [txt('cloudKeyHelp')],
+    default: (_a, env) => cloudFile(env, 'LIVEKIT_API_KEY'),
+    validate: (v) => (/^\S+$/.test(str(v)) ? null : txt('required')),
+    normalize: (v) => v.trim(),
+  },
+  {
+    id: 'cloudSecret', step: 'media', kind: 'secret', visible: isCloud,
+    title: txt('cloudSecretTitle'), question: txt('cloudSecretQ'),
+    hint: () => [txt('cloudKeyHelp'), raw(''), txt('cloudAutoCreate')],
+    default: (_a, env) => cloudFile(env, 'LIVEKIT_API_SECRET'),
+  },
+  {
+    id: 'turn', step: 'media', kind: 'select',
+    // A VPS in direct mode on 443 with a name, and LiveKit on this machine: loadConfig's own rule.
+    visible: (a, env) => !isCloud(a) && !turnBlocked(portsValues(a, env)),
+    title: txt('turnTitle'), question: txt('turnQ'),
+    hint: (a, env) => {
+      const host = hostOf(addressValues(a, env).PUBLIC_URL);
+      // An own domain needs the record first; DuckDNS and sslip.io names resolve by themselves.
+      const dns = addressChoice(a) === 'domain'
+        ? (env.host?.publicIp ? txt('turnDnsHint', { host: `turn.${host}`, ip: env.host.publicIp }) : txt('turnDnsHintNoIp', { host: `turn.${host}` }))
+        : txt('turnAutoHint', { host: `turn.${host}` });
+      return [txt('turnHelp'), raw(''), dns];
+    },
+    options: () => [select('on', txt('turnOn'), { desc: txt('turnOnDesc') }), select('off', txt('turnOff'), { desc: txt('turnOffDesc') })],
+    // A fresh install says yes; a re-run says what the file does (auto is off where the name needs a record).
+    default: (a, env) => {
+      if (env.file.TURN === 'on' || env.file.TURN === 'off') return env.file.TURN;
+      return env.file.PUBLIC_URL && !turnAuto(portsValues(a, env)) ? 'off' : 'on';
+    },
+    fromFile: (_a, env) => !!env.file.PUBLIC_URL,
+  },
+
   // --- ports
   {
-    id: 'mediaPorts', step: 'ports', kind: 'select', visible: () => true,
+    id: 'mediaPorts', step: 'ports', kind: 'select', visible: (a) => !isCloud(a),
     title: txt('mediaTitle'), question: txt('mediaQ'),
     hint: mediaHint,
     options: (_a, env) => {
@@ -546,7 +641,7 @@ export const QUESTIONS: readonly QuestionDef[] = [
     default: () => 'keep',
   },
   {
-    id: 'mediaTcp', step: 'ports', kind: 'text', visible: (a) => a.mediaPorts === 'change',
+    id: 'mediaTcp', step: 'ports', kind: 'text', visible: (a) => !isCloud(a) && a.mediaPorts === 'change',
     title: txt('mediaTcpTitle'), question: txt('mediaTcpQ'), placeholder: raw('7881'),
     hint: mediaHint,
     default: (_a, env) => env.file.MEDIA_TCP_PORT || '7881',
@@ -554,7 +649,7 @@ export const QUESTIONS: readonly QuestionDef[] = [
     lookup: 'ports',
   },
   {
-    id: 'mediaUdp', step: 'ports', kind: 'text', visible: (a) => a.mediaPorts === 'change',
+    id: 'mediaUdp', step: 'ports', kind: 'text', visible: (a) => !isCloud(a) && a.mediaPorts === 'change',
     title: txt('mediaUdpTitle'), question: txt('mediaUdpQ'), placeholder: raw('7882'),
     hint: mediaHint,
     default: (_a, env) => env.file.MEDIA_UDP_PORT || '7882',
@@ -576,7 +671,8 @@ export const QUESTIONS: readonly QuestionDef[] = [
     fromFile: () => false,
   },
   {
-    id: 'upnp', step: 'ports', kind: 'select', visible: isHome,
+    // Asked when something must reach this machine (LiveKit Cloud behind a tunnel needs nothing).
+    id: 'upnp', step: 'ports', kind: 'select', visible: (a, env) => isHome(a) && publicPorts(portsValues(a, env)).length > 0,
     title: txt('upnpTitle'), question: txt('upnpQ'),
     hint: upnpHint,
     options: () => [select('auto', txt('upnpAuto'), { desc: txt('upnpAutoDesc') }), select('off', txt('upnpOff'), { desc: txt('upnpOffDesc') })],
@@ -653,7 +749,7 @@ export const kindOf = (q: QuestionDef, env: Pick<ModelEnv, 'offline'>): Question
 export function stepsFor(env: Pick<ModelEnv, 'compiled' | 'docker'> & Partial<Pick<ModelEnv, 'platform'>>): StepId[] {
   const native = env.compiled && !env.docker;
   return [
-    'where', 'address', 'discord', 'ports',
+    'where', 'address', 'discord', 'media', 'ports',
     ...(native ? (['updates'] as const) : []),
     ...(native && env.platform === 'win32' ? (['tray'] as const) : []),
     'review', 'install',

@@ -23,8 +23,8 @@ definitivo.
    do IP do servidor.
 
 3. [A internet consegue chegar na sua rede?](#a-internet-consegue-chegar-na-sua-rede)
-   Se a sua linha está atrás de CGNAT, uma instalação em casa não funciona e
-   uma VPS funciona.
+   Se a sua linha está atrás de CGNAT, uma instalação em casa precisa do
+   LiveKit Cloud para o vídeo, ou você roda a Telinha numa VPS.
 
 </Steps>
 
@@ -90,6 +90,15 @@ certificado por elas.
 Em qualquer caso, as duas portas de mídia, TCP 7881 e UDP 7882, precisam
 chegar à máquina: nenhum túnel leva a mídia do WebRTC. Veja
 [Como funciona](/telinha/pt-br/start/how-it-works/#a-mídia-vai-direto-para-o-livekit).
+A única exceção é o `MEDIA=cloud`, em que o
+[LiveKit Cloud](/telinha/pt-br/guides/livekit-cloud/) leva o vídeo e nenhuma
+porta de mídia é necessária.
+
+Algumas redes (empresas, escolas, algumas operadoras de celular) só deixam o
+navegador chegar na porta 443, o que barra as portas de mídia. Numa VPS com o
+endereço na 443 (domínio próprio, DuckDNS ou sslip.io), a Telinha pode
+retransmitir o vídeo para essas pessoas pelo
+[TURN sobre TLS na porta 443](/telinha/pt-br/guides/turn/).
 
 ## A internet consegue chegar na sua rede?
 
@@ -105,15 +114,16 @@ CGNAT?" Com a Telinha instalada, o
 `telinha doctor` faz o mesmo teste para você (a verificação `cgnat`, que
 precisa de um roteador que responda a UPnP, NAT-PMP ou PCP), e o setup
 avisa. Atrás de CGNAT, um Cloudflare Tunnel ainda faz as páginas chegarem,
-mas não a mídia; então peça um IPv4 público para a operadora (muitas vezes
-sem custo; às vezes chamam de "tirar do CGNAT") ou rode a Telinha numa VPS.
-Já um endereço WAN privado quer dizer NAT duplo: um segundo roteador na
-frente do seu, onde as portas também precisam ser encaminhadas. Um modo com
-LiveKit Cloud, para quem não consegue abrir porta nenhuma, está planejado,
-ainda sem data.
+mas não a mídia. Para o vídeo, peça um IPv4 público para a operadora (muitas
+vezes sem custo; às vezes chamam de "tirar do CGNAT"), ou ponha
+`MEDIA=cloud`: um projeto do LiveKit Cloud leva a mídia e não precisa de
+porta aberta, dentro dos limites mensais do plano gratuito dele. Ou rode a
+Telinha numa VPS. Já um endereço WAN privado quer dizer NAT duplo: um segundo
+roteador na frente do seu, onde as portas também precisam ser encaminhadas.
 
 <CardGrid>
   <LinkCard title="CGNAT e NAT duplo" description="Como diferenciar os dois e o que pedir para a operadora." href="/telinha/pt-br/guides/domains/#cgnat-e-nat-duplo" />
+  <LinkCard title="LiveKit Cloud" description="Deixe a Telinha em casa e o LiveKit Cloud leva o vídeo: nenhuma porta de mídia para abrir." href="/telinha/pt-br/guides/livekit-cloud/" />
   <LinkCard title="VPS" description="Rode a Telinha num servidor alugado." href="/telinha/pt-br/start/vps/" />
 </CardGrid>
 

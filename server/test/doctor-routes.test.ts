@@ -20,8 +20,8 @@ const REPORT: DoctorReport = {
 
 const DOCTOR_HTML = '<!doctype html><html><head><title>Telinha doctor</title></head><body></body></html>';
 
-function setup(o: { pageBuilt?: boolean; ensureRoom?: (room: string) => Promise<void> } = {}) {
-  const config = loadConfig(PROD_ENV);
+function setup(o: { pageBuilt?: boolean; ensureRoom?: (room: string) => Promise<void>; env?: Record<string, string> } = {}) {
+  const config = loadConfig({ ...PROD_ENV, ...o.env });
   const store = createDoctorStore({ cookieSecret: config.cookieSecret, now: () => NOW });
   const entries: [string, Uint8Array][] = [...ENTRIES];
   if (o.pageBuilt !== false) entries.push(['doctor.html', new TextEncoder().encode(DOCTOR_HTML)]);
@@ -145,9 +145,11 @@ describe('doctor routes', () => {
     const r = (await call('/doctor/api/token', post(s.cookie)))!;
     expect(r.status).toBe(200);
     expect(r.headers.get('cache-control')).toBe('no-store');
-    const body = (await r.json()) as { url: string; token: string; ports: { tcp: number; udp: number } };
+    const body = (await r.json()) as { url: string; token: string; media: string; ports: { tcp: number; udp: number }; turn: unknown };
     expect(body.url).toBe(config.livekitUrl);
+    expect(body.media).toBe('self');
     expect(body.ports).toEqual({ tcp: config.mediaTcpPort, udp: config.mediaUdpPort });
+    expect(body.turn).toBeNull();
     const room = `doctor-${s.id}`;
     expect(ensured).toEqual([room]);
     const jwt = jwtPayload(body.token);
@@ -161,6 +163,21 @@ describe('doctor routes', () => {
     expect(jwt.video.hidden).toBeUndefined();
     const again = (await call('/doctor/api/token', post(s.cookie)))!;
     expect(again.status).toBe(429);
+  });
+
+  test('token: LiveKit Cloud gets the Cloud URL and no ports to name', async () => {
+    const { call, opened } = setup({ env: { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc.livekit.cloud' } });
+    const s = await opened();
+    const body = (await (await call('/doctor/api/token', post(s.cookie)))!.json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['media', 'ports', 'token', 'turn', 'url']);
+    expect(body).toMatchObject({ url: 'wss://proj-abc.livekit.cloud', media: 'cloud', ports: null, turn: null });
+  });
+
+  test('token: with TURN on, the page learns the TURN host to test', async () => {
+    const { call, opened } = setup({ env: { HOSTING: 'vps', TURN: 'on' } });
+    const s = await opened();
+    const body = (await (await call('/doctor/api/token', post(s.cookie)))!.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ media: 'self', ports: { tcp: 7881, udp: 7882 }, turn: { host: 'turn.telinha.example.com' } });
   });
 
   test('token: LiveKit down is a 503 and does not use up the grant', async () => {
@@ -184,6 +201,15 @@ describe('doctor routes', () => {
     expect((await call('/doctor/api/report', post(s.cookie, REPORT)))!.status).toBe(409);
   });
 
+  test('report: a TURN step is stored and logged', async () => {
+    const { store, call, opened, logs } = setup();
+    const s = await opened();
+    const turn = { ok: false, error: 'not relayed' };
+    expect((await call('/doctor/api/report', post(s.cookie, { ...REPORT, turn })))!.status).toBe(204);
+    expect(store.state(s.id).report?.turn).toEqual(turn);
+    expect(logs.flat().join(' ')).toContain('turn=false');
+  });
+
   test('report: size cap and validation', async () => {
     const { call, opened } = setup();
     const s = await opened();
@@ -205,6 +231,17 @@ describe('doctor routes', () => {
 describe('parseReport', () => {
   test('accepts a full report and keeps only known fields', () => {
     expect(parseReport({ ...REPORT, evil: 1, client: { ua: 'a', ip: '1.2.3.4', x: 1 } })).toEqual({ ...REPORT, client: { ua: 'a' } });
+  });
+
+  test('turn: absent or null means no TURN step; a step is kept with its rtt and error', () => {
+    expect(parseReport(REPORT)).not.toHaveProperty('turn');
+    expect(parseReport({ ...REPORT, turn: null })).toEqual(REPORT);
+    expect(parseReport({ ...REPORT, turn: { ok: true, rttMs: 91.6, x: 1 } })?.turn).toEqual({ ok: true, rttMs: 92 });
+    expect(parseReport({ ...REPORT, turn: { ok: false, error: 'relayed over udp, not TLS' } })?.turn).toEqual({ ok: false, error: 'relayed over udp, not TLS' });
+  });
+
+  test('turn: a malformed step rejects the report', () => {
+    for (const turn of [{}, { ok: 'yes' }, 'ok', true, []]) expect(parseReport({ ...REPORT, turn })).toBeNull();
   });
 
   test('initial may be null; a bad candidate ip becomes null', () => {

@@ -97,6 +97,8 @@ export interface NetLike {
   resolveA(host: string): Promise<string[]>;
   tlsInfo(host: string, port: number): Promise<{ validTo: number; issuer: string; subjectAltNames: string[]; authorized: boolean; error?: string }>;
   tcpOpen(host: string, port: number, timeoutMs?: number): Promise<boolean>;
+  /** RoomService.ListRooms on a remote LiveKit: proves the URL and the key/secret in one call. Defaults to the SDK. */
+  livekitListRooms?(apiUrl: string, key: string, secret: string): Promise<{ rooms: number }>;
 }
 
 /** Host access the checks need; defaults read the real machine. */

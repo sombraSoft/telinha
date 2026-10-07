@@ -11,7 +11,9 @@ Telinha is a screen share you host for your Discord group. Someone types
 `/telinha` in an allowed channel, the bot answers with a card and a link to a
 room at `/r/<code>`, and everyone with the right role logs in with Discord and
 watches. The video goes through [LiveKit](https://livekit.io), a media server
-(an SFU) that runs next to Telinha on the same machine.
+(an SFU) that runs next to Telinha on the same machine, or, with
+`MEDIA=cloud`, through a [LiveKit Cloud](/telinha/guides/livekit-cloud/)
+project.
 
 ## One program
 
@@ -21,7 +23,7 @@ into `data/run/` and starts them as its own children:
 
 | Child | When | What it does |
 | --- | --- | --- |
-| `livekit-server` | always | Receives the shared screen and sends it to every viewer |
+| `livekit-server` | `MEDIA=self` (the default) | Receives the shared screen and sends it to every viewer; with TURN on it also relays for viewers on 443-only networks |
 | `caddy` | `INGRESS=direct` | Gets a Let's Encrypt certificate for your address (through DuckDNS's API at home, over ports 80/443 on a VPS) and terminates HTTPS |
 | `cloudflared` | `INGRESS=tunnel` | Carries the web traffic from Cloudflare to Telinha, with no inbound web ports |
 
@@ -41,8 +43,9 @@ version. The Docker image carries all three.
 
 The `caddy` Telinha runs is not the upstream download: it is upstream Caddy
 plus two modules, the DuckDNS DNS provider (`caddy-dns/duckdns`, which gets a
-home certificate without ports 80 and 443) and layer4 (`caddy-l4`), built
-with xcaddy from the versions pinned in `versions.json`. Every release ships
+home certificate without ports 80 and 443) and layer4 (`caddy-l4`, which lets
+the 443 listener hand `turn.<host>` connections to LiveKit's TURN, see
+[TURN over TLS on port 443](/telinha/guides/turn/)), built with xcaddy from the versions pinned in `versions.json`. Every release ships
 it for each platform next to the Telinha binaries, and the Docker image builds
 it into itself. The native program fetches the Caddy of its own release and
 checks it against that release's `SHA256SUMS`, so a Telinha update brings
@@ -84,6 +87,22 @@ every mode. A Cloudflare Tunnel carries web pages and WebSockets, but not
 WebRTC media, so even behind a tunnel the media ports are forwarded on the
 router (or opened on a VPS).
 
+**LiveKit Cloud.** With `MEDIA=cloud` no LiveKit runs on the machine. The
+browser gets the Cloud project's `wss://` URL with its room token and sends
+both signaling and media straight to LiveKit Cloud; Telinha only talks to the
+project's room API over HTTPS, to create rooms, follow who is in them and
+delete them on close. No media port, no `/livekit` relay. It suits a line
+behind CGNAT or one where nothing can be forwarded, within the free plan's
+monthly limits. See [LiveKit Cloud](/telinha/guides/livekit-cloud/).
+
+**TURN over TLS on a VPS.** Some networks only let browsers reach port 443,
+so the media ports never get through. On a VPS in direct mode on 443, Caddy's
+443 listener recognizes connections for `turn.<host>` by name (SNI), decrypts
+them with its own certificate for that name and hands them to LiveKit's TURN
+server on the same machine, which relays the video to the SFU. To the network
+it looks like any HTTPS site. See
+[TURN over TLS on port 443](/telinha/guides/turn/).
+
 ## Diagrams
 
 ### Direct
@@ -106,6 +125,7 @@ browser --> caddy :443 (TLS; :80 redirects)           child of telinha
                       /             --> redirect to /r/
 
 media: browser <--> LiveKit   TCP 7881 / UDP 7882 (opened in the provider's firewall)
+turn:  browser --> caddy :443 (SNI turn.<host>) --> LiveKit TURN 127.0.0.1:5349 --> SFU   (TURN on)
 ```
 
 At home with DuckDNS it listens on a high port that the address carries, and
@@ -144,8 +164,9 @@ Most home connections get a new public IP now and then. LiveKit learns the
 public IP once at start, so Telinha watches it: every `IP_WATCH_SECONDS`
 (five minutes by default) it asks what the internet sees. When the IP
 changes it renews the router mappings, updates DuckDNS if you use it, and
-restarts LiveKit. Open rooms blip: the page reconnects by itself, and
-whoever was sharing has to share again.
+restarts LiveKit (`MEDIA=self`; with Cloud there is nothing to restart). Open
+rooms blip: the page reconnects by itself, and whoever was sharing has to
+share again.
 
 On a server with a fixed public IP, set `LIVEKIT_NODE_IP` instead; that
 turns the watch off. With DuckDNS, Telinha also keeps your
@@ -198,9 +219,11 @@ and points to the Docker install or a 64-bit OS. The Docker image is
 
 ### Network
 
-- **A public IPv4 that reaches the machine.** At home that means a router
-  you can forward ports on and a line without CGNAT; a VPS has one already.
-  See [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
+- **A public IPv4 that reaches the machine**, for `MEDIA=self`. At home that
+  means a router you can forward ports on and a line without CGNAT; a VPS has
+  one already. With `MEDIA=cloud` only the pages need a way in, which a
+  Cloudflare Tunnel provides. See
+  [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
 - **An HTTPS address**: at home a domain on Cloudflare (Cloudflare Tunnel) or
   a free DuckDNS name on port 8443; on a VPS your own domain, DuckDNS or
   sslip.io.
@@ -209,13 +232,13 @@ and points to the Docker install or a 64-bit OS. The Docker image is
 
 | Port (default) | Protocol | When |
 | --- | --- | --- |
-| `MEDIA_TCP_PORT` (7881) | TCP | always |
-| `MEDIA_UDP_PORT` (7882) | UDP | always |
+| `MEDIA_TCP_PORT` (7881) | TCP | `MEDIA=self` |
+| `MEDIA_UDP_PORT` (7882) | UDP | `MEDIA=self` |
 | `HTTPS_PORT` | TCP | `INGRESS=direct`: 443 on a VPS, 8443 at home (the port in `PUBLIC_URL`) |
 | `HTTP_PORT` (80) | TCP | `INGRESS=direct` on a VPS only (`0` at home) |
 
-`LISTEN` (8081) and `LIVEKIT_PORT` (7880) are loopback only and never
-forwarded. More in [Port forwarding](/telinha/guides/port-forwarding/#which-ports).
+`LISTEN` (8081) and `LIVEKIT_PORT` (7880) are loopback only and, like
+`TURN_PORT` (5349) with TURN on, never forwarded. More in [Port forwarding](/telinha/guides/port-forwarding/#which-ports).
 
 ### Discord
 

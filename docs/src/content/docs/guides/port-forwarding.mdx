@@ -21,8 +21,8 @@ does not let it, you add them by hand. Either way, check the result with
 
 | Port (default) | When | What for |
 | --- | --- | --- |
-| TCP `MEDIA_TCP_PORT` (7881) | always | WebRTC media over TCP, for networks that block UDP |
-| UDP `MEDIA_UDP_PORT` (7882) | always | WebRTC media over UDP, the normal path |
+| TCP `MEDIA_TCP_PORT` (7881) | `MEDIA=self` only | WebRTC media over TCP, for networks that block UDP |
+| UDP `MEDIA_UDP_PORT` (7882) | `MEDIA=self` only | WebRTC media over UDP, the normal path |
 | TCP `HTTPS_PORT` (8443 at home, 443 on a VPS) | `INGRESS=direct` | Caddy, HTTPS; the port in `PUBLIC_URL` |
 | TCP `HTTP_PORT` (80) | `INGRESS=direct` on a VPS (`0` at home) | Let's Encrypt's HTTP challenge, the redirect to HTTPS |
 
@@ -38,8 +38,11 @@ So, by [ingress mode](/telinha/guides/domains/):
 At home Telinha never relies on 80 or 443: home connections usually do not
 let them in.
 
-The media ports are needed in every mode because browsers send video straight
-to LiveKit; a Cloudflare Tunnel carries the pages, not WebRTC. If you changed
+With `MEDIA=self` (the default) the media ports are needed in every mode
+because browsers send video straight to LiveKit; a Cloudflare Tunnel carries
+the pages, not WebRTC. With `MEDIA=cloud` drop TCP 7881 and UDP 7882 from the
+table: the video goes through [LiveKit Cloud](/telinha/guides/livekit-cloud/),
+and a tunnel then needs no forwarded port at all. If you changed
 a port in `telinha.env`, forward your value. Use the same number on both sides
 of a rule.
 
@@ -182,7 +185,8 @@ With the defaults, a DuckDNS address and the machine at `192.168.0.10`:
 | telinha-media-udp | UDP | 7882 | 192.168.0.10 | 7882 |
 | telinha-https | TCP | 8443 | 192.168.0.10 | 8443 |
 
-With a Cloudflare Tunnel, only the first two.
+With a Cloudflare Tunnel, only the first two; with `MEDIA=cloud`, only the
+last one (and none with a tunnel).
 
 `telinha doctor` tells you what is missing. The `gateway` check warns when no
 router answers UPnP and lists the ports to forward by hand; the `mappings`
@@ -211,7 +215,10 @@ own public IPv4, or is it behind CGNAT?"
 
 `telinha doctor` does this for you when the router speaks UPnP, NAT-PMP or
 PCP: the `cgnat` check fails on CGNAT and warns on double NAT. What to do in
-each case: [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat).
+each case: [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat);
+to keep the machine where it is, the video can go through
+[LiveKit Cloud](/telinha/guides/livekit-cloud/) with a tunnel carrying the
+pages.
 
 ## Firewalls
 
@@ -222,9 +229,9 @@ decides whether to let it in.
   <TabItem label="Windows">
 
 `telinha service install --firewall` (which the setup's administrator step
-runs) first removes every inbound rule bound to `livekit-server.exe` or
-`caddy.exe` in `bin\`, then adds inbound allow rules for all network profiles,
-each bound to its program. The removal matters: if you ran Telinha in a
+runs) first removes every Telinha rule below and every inbound rule bound to
+`livekit-server.exe` or `caddy.exe` in `bin\`, then adds inbound allow rules
+for all network profiles, each bound to its program. The removal matters: if you ran Telinha in a
 console before and dismissed the Windows Security Alert, Windows left Block
 rules for those programs, and Block wins over Allow.
 
@@ -235,16 +242,20 @@ rules for those programs, and Block wins over Allow.
 | `Telinha HTTPS` (direct) | `caddy.exe` | TCP `HTTPS_PORT` |
 | `Telinha HTTP` (direct, `HTTP_PORT` not 0, so not in the home setups) | `caddy.exe` | TCP `HTTP_PORT` |
 
-After changing a port, run the setup again (or the install command from an
-administrator terminal). `telinha service uninstall --firewall` removes the
-rules.
+The two LiveKit rules exist only with `MEDIA=self`. The rules are rewritten
+by `telinha setup` (its service step, unless `--no-service`) or by
+`telinha service install --firewall` from an administrator terminal, so after
+changing a port or `MEDIA` run one of those; a switch made with
+`--no-service` keeps the old rules until one of them runs.
+`telinha service uninstall --firewall` removes the rules.
 
   </TabItem>
   <TabItem label="Linux">
 
 Telinha adds no firewall rules on Linux. With ufw or firewalld active, open
 the ports yourself. At home with the defaults and a DuckDNS address (drop
-`8443/tcp` with a tunnel):
+`8443/tcp` with a tunnel, and `7881/tcp` and `7882/udp` with `MEDIA=cloud`,
+also on a VPS):
 
 ```
 sudo ufw allow 8443/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp

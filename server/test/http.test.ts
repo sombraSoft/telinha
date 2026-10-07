@@ -277,6 +277,16 @@ describe('/auth/token', () => {
     const body = (await (await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() })).json()) as { url: string };
     expect(body.url).toBe('ws://localhost:7880');
   });
+
+  test('MEDIA=cloud, no proxy: the token names the Cloud URL and /livekit/* is a 404 even with a session', async () => {
+    const s = setup({ env: { ...PROD_ENV, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj.livekit.cloud' } });
+    const r = await s.member('/auth/token?room=bafo-kiru');
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { url: string }).url).toBe('wss://proj.livekit.cloud');
+    expect(s.ensured).toEqual(['bafo-kiru']);
+    expect((await s.member('/livekit/rtc')).status).toBe(404);
+    expect((await s.member('/livekit/rtc', { upgrade: 'websocket' })).status).toBe(404);
+  });
 });
 
 describe('/auth/members', () => {

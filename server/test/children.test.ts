@@ -14,6 +14,9 @@ const SECRETS = {
 };
 // The home default: a DuckDNS name on 8443 with the certificate over DNS-01.
 const DNS01 = { PUBLIC_URL: 'https://g.duckdns.org:8443', HTTPS_PORT: '8443', HTTP_PORT: '0', ACME_DNS: 'duckdns' };
+const CLOUD = { MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj.livekit.cloud' };
+// TURN=auto turns on for a DuckDNS VPS in direct mode on 443.
+const TURN = { PUBLIC_URL: 'https://g.duckdns.org', HOSTING: 'vps' };
 const tmp = mkdtempSync(join(tmpdir(), 'telinha-children-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -73,13 +76,26 @@ describe('childSpecs', () => {
     expect(specsFor('external').specs.map((s) => s.name)).toEqual(['livekit']);
   });
 
+  test('cloud: no livekit, only the ingress child', () => {
+    expect(specsFor('direct', CLOUD).specs.map((s) => s.name)).toEqual(['caddy']);
+    expect(specsFor('tunnel', CLOUD).specs.map((s) => s.name)).toEqual(['cloudflared']);
+    expect(specsFor('external', CLOUD).specs).toEqual([]);
+  });
+
+  test('cloud direct: caddy renders its Caddyfile, no livekit.yaml', async () => {
+    const { paths, specs } = specsFor('direct', CLOUD);
+    for (const s of specs) await s.prepare?.();
+    expect(existsSync(join(paths.run, 'Caddyfile'))).toBe(true);
+    expect(existsSync(join(paths.run, 'livekit.yaml'))).toBe(false);
+  });
+
   test('livekit gets its keys as LIVEKIT_KEYS env', () => {
     const lk = specsFor('direct').specs[0]!;
     expect(lk.env).toEqual({ LIVEKIT_KEYS: `devkey: ${SECRETS.LIVEKIT_API_SECRET}` });
   });
 
   test('no cmd element of any spec contains any secret', () => {
-    for (const [mode, extra] of [['direct', {}], ['direct', DNS01], ['tunnel', {}], ['external', {}]] as const) {
+    for (const [mode, extra] of [['direct', {}], ['direct', DNS01], ['tunnel', {}], ['external', {}], ['direct', CLOUD], ['tunnel', CLOUD]] as const) {
       for (const spec of specsFor(mode, extra).specs) {
         for (const arg of spec.cmd) {
           for (const secret of Object.values(SECRETS)) expect(arg).not.toContain(secret);
@@ -122,6 +138,24 @@ describe('childSpecs', () => {
       const key = taken === 7880 ? 'LIVEKIT_PORT' : 'MEDIA_TCP_PORT';
       await expect(lk!.prepare!()).rejects.toThrow(`port ${taken} (${key}) already in use (another LiveKit?)`);
     }
+  });
+
+  test('with TURN on, livekit also refuses a taken TURN_PORT', async () => {
+    const { config, paths } = setup('direct', TURN);
+    expect(config.turn).toEqual({ host: 'turn.g.duckdns.org', port: 5349 });
+    const probed: number[] = [];
+    const [lk] = childSpecs(config, paths, fake, async (p) => { probed.push(p); return p === 5349; });
+    await expect(lk!.prepare!()).rejects.toThrow('port 5349 (TURN_PORT) already in use (another LiveKit?)');
+    expect(probed).toEqual([7880, 7881, 5349]);
+  });
+
+  test('with TURN off, TURN_PORT is not probed', async () => {
+    const { config, paths } = setup('direct');
+    expect(config.turn).toBeNull();
+    const probed: number[] = [];
+    const [lk] = childSpecs(config, paths, fake, async (p) => { probed.push(p); return false; });
+    await lk!.prepare!();
+    expect(probed).toEqual([7880, 7881]);
   });
 
   test('portInUse: true for a listener, false for a free port', async () => {

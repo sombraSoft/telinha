@@ -7,7 +7,7 @@ import type { Config } from './config.ts';
 const HEADER = '# Rendered by telinha from telinha.env; do not edit.';
 
 export function renderLivekitYaml(
-  c: Pick<Config, 'livekitPort' | 'mediaTcpPort' | 'mediaUdpPort' | 'livekitNodeIp' | 'closeEmptySeconds'>,
+  c: Pick<Config, 'livekitPort' | 'mediaTcpPort' | 'mediaUdpPort' | 'livekitNodeIp' | 'closeEmptySeconds' | 'turn'>,
 ): string {
   return [
     HEADER,
@@ -27,6 +27,22 @@ export function renderLivekitYaml(
     // Mirrors roomService.ensureRoom's emptyTimeout so one setting moves both.
     `  empty_timeout: ${c.closeEmptySeconds + 120}`,
     '  departure_timeout: 20',
+    ...(c.turn
+      ? [
+        // Caddy terminates TLS on 443 for this name and forwards plain TCP here
+        // with a PROXY header, so TURN echoes the browser's address, not
+        // loopback (browsers drop an allocation that reflects 127.0.0.1).
+        // LiveKit advertises turns:<domain>:443 by itself. No udp_port (no
+        // TURN/UDP), and bind_addresses stays LiveKit's default because the
+        // relay sockets share it; the trusted proxy CIDRs default to loopback.
+        'turn:',
+        '  enabled: true',
+        `  domain: ${c.turn.host}`,
+        `  tls_port: ${c.turn.port}`,
+        '  external_tls: true',
+        '  proxy_protocol: true',
+      ]
+      : []),
     '',
   ].join('\n');
 }
@@ -38,13 +54,41 @@ export function upstreamHost(listenHost: string): string {
 }
 
 export function renderCaddyfile(
-  c: Pick<Config, 'publicHost' | 'httpPort' | 'httpsPort' | 'acmeEmail' | 'acmeDns' | 'host' | 'port'>,
+  c: Pick<Config, 'publicHost' | 'httpPort' | 'httpsPort' | 'acmeEmail' | 'acmeDns' | 'host' | 'port' | 'turn'>,
 ): string {
   const global = [
     '\tadmin off',
     // 0 = no redirect listener; Caddy keeps its default http_port 80 for ACME then.
     c.httpPort === 0 ? '\tauto_https disable_redirects' : `\thttp_port ${c.httpPort}`,
     `\thttps_port ${c.httpsPort}`,
+    // The layer4 wrapper sees every connection on 443 before TLS: turn.<host>
+    // is decrypted with Caddy's certificate and sent on to LiveKit's TURN with
+    // a PROXY v2 header (LiveKit requires it, see renderLivekitYaml); the rest
+    // falls through to the tls wrapper and the sites. TURN implies HTTPS_PORT 443.
+    ...(c.turn
+      ? [
+        `\tservers :${c.httpsPort} {`,
+        '\t\tlistener_wrappers {',
+        '\t\t\tlayer4 {',
+        `\t\t\t\t@turn tls sni ${c.turn.host}`,
+        '\t\t\t\troute @turn {',
+        // Caddy's default ALPN list (h2, http/1.1) refuses a client that offers
+        // RFC 7443's stun.turn; one that offers none still gets through.
+        '\t\t\t\t\ttls {',
+        '\t\t\t\t\t\tconnection_policy {',
+        '\t\t\t\t\t\t\talpn stun.turn',
+        '\t\t\t\t\t\t}',
+        '\t\t\t\t\t}',
+        `\t\t\t\t\tproxy 127.0.0.1:${c.turn.port} {`,
+        '\t\t\t\t\t\tproxy_protocol v2',
+        '\t\t\t\t\t}',
+        '\t\t\t\t}',
+        '\t\t\t}',
+        '\t\t\ttls',
+        '\t\t}',
+        '\t}',
+      ]
+      : []),
     // An explicit issuer ignores the global email, so DNS-01 sets it in its own block.
     ...(c.acmeEmail && !c.acmeDns ? [`\temail ${c.acmeEmail}`] : []),
   ];
@@ -78,5 +122,8 @@ export function renderCaddyfile(
     `\treverse_proxy ${upstreamHost(c.host)}:${c.port}`,
     '}',
     '',
+    // Only so Caddy manages the TURN name's certificate: its connections never
+    // reach the HTTP app (the layer4 wrapper takes them first).
+    ...(c.turn ? [`${c.turn.host} {`, '\trespond 404', '}', ''] : []),
   ].join('\n');
 }

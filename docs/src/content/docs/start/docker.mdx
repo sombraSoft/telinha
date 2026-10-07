@@ -26,8 +26,10 @@ stable release.
   or sslip.io. [Address, HTTPS and ingress modes](/telinha/guides/domains/)
   compares them.
 - At home, access to your router's admin page unless it does UPnP, and a line
-  that is not behind CGNAT: see
-  [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat). No
+  that is not behind CGNAT, unless LiveKit Cloud carries the video
+  (`MEDIA=cloud`, with a Cloudflare Tunnel for the pages): see
+  [CGNAT and double NAT](/telinha/guides/domains/#cgnat-and-double-nat) and
+  [LiveKit Cloud](/telinha/guides/livekit-cloud/). No
   access and no UPnP, for example a locked ISP router or a shared building
   network? Then the machine cannot open the ports itself: ask the ISP or
   whoever runs the network to forward them, or use a [VPS](/telinha/start/vps/).
@@ -127,16 +129,24 @@ secrets show as dots (paste, Ctrl+R shows or hides them) and Ctrl+C quits.
    OAuth2 → Redirects, the one thing you do by hand on the Developer Portal.
    [Discord app](/telinha/start/discord/) walks through every screen.
 
-4. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
+4. **Video.** *Where does the video go through?* Keep *This computer*.
+   *LiveKit Cloud* is for a connection that nothing from the internet can
+   reach (CGNAT, which the setup detects and then picks Cloud for you): it
+   asks the project's URL, API key and secret, and there are no media ports to
+   open; see [LiveKit Cloud](/telinha/guides/livekit-cloud/). On a VPS with
+   the address on 443 it also offers to serve video through port 443 for
+   strict networks ([TURN over TLS](/telinha/guides/turn/)).
+
+5. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
    something else on the host uses them. At home it then asks whether Telinha
    may open the ports on the router through UPnP (it works from the container,
    thanks to host networking).
 
-5. **Review.** Every answer on one screen, grouped by step; choose *Apply* to
+6. **Review.** Every answer on one screen, grouped by step; choose *Apply* to
    write `/opt/telinha/config/telinha.env` (mode 600), or go back to change
    something. Nothing is written before that.
 
-6. **Install.** Docker's list is short: the Discord app is checked (and its
+7. **Install.** Docker's list is short: the Discord app is checked (and its
    intents switched on), the DuckDNS address is updated if you picked one, and
    the file is written. No programs to download, no service, no firewall, no
    router probe. If a task fails the screen offers *Retry*, *Skip* or *Back to

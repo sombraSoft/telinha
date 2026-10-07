@@ -7,7 +7,7 @@ import { inferHosting, SSLIP_RE, type HostInfo, type Hosting } from './host.ts';
 import { SNOWFLAKE_RE, validCommand } from './discord.ts';
 import { currentChoice, DEFAULT_HOME_HTTPS_PORT, extractTunnelToken, homeChoice, parseDuckDomain, parseHost, takenPort, validTunnelToken } from './domain.ts';
 import {
-  addressChoice, addressValues, ALWAYS_COUNTED, directLow, fileHosting, flowIds, mediaPorts, QUESTIONS, trayHere, txt,
+  addressChoice, addressValues, ALWAYS_COUNTED, cloudUrl, directLow, fileHosting, flowIds, mediaPorts, QUESTIONS, trayHere, turnAuto, turnBlocked, txt,
   type AddressChoice, type AnswerId, type Answers, type ModelEnv, type QuestionId, type Text,
 } from './model.ts';
 import { q } from './qstrings.ts';
@@ -33,10 +33,29 @@ export function resolveValues(a: Answers, env: ModelEnv, base: ResolveBase): Val
   Object.assign(v, addressValues(c, { host: env.host ?? base.host }));
   // A VPS has no router to ask: no "forward the ports by hand" at every start.
   v.UPNP = c.hosting === 'home' ? str(c.upnp) : 'off';
-  const { tcp, udp } = mediaPorts(c, { file: base.file });
+  const cloud = c.media === 'cloud';
   // Defaults stay commented in the file.
-  v.MEDIA_TCP_PORT = tcp === '7881' ? '' : tcp;
-  v.MEDIA_UDP_PORT = udp === '7882' ? '' : udp;
+  v.MEDIA = cloud ? 'cloud' : '';
+  if (cloud) {
+    v.LIVEKIT_CLOUD_URL = str(c.cloudUrl);
+    v.LIVEKIT_API_KEY = str(c.cloudKey);
+    v.LIVEKIT_API_SECRET = str(c.cloudSecret);
+    // Nothing binds the media ports here.
+    v.MEDIA_TCP_PORT = v.MEDIA_UDP_PORT = '';
+  } else {
+    v.LIVEKIT_CLOUD_URL = '';
+    // The Cloud pair goes so the install makes a local one.
+    if (base.file.MEDIA === 'cloud') v.LIVEKIT_API_KEY = v.LIVEKIT_API_SECRET = '';
+    const { tcp, udp } = mediaPorts(c, { file: base.file });
+    v.MEDIA_TCP_PORT = tcp === '7881' ? '' : tcp;
+    v.MEDIA_UDP_PORT = udp === '7882' ? '' : udp;
+  }
+  // TURN as the flags left it; else the question (auto where auto already means on); else what still fits.
+  if (c.turnSetting !== undefined) v.TURN = str(c.turnSetting);
+  else if (c.turn === 'on') v.TURN = turnAuto(v) ? '' : 'on';
+  // Off where auto is off already stays as the file had it.
+  else if (c.turn === 'off') v.TURN = turnAuto(v) || base.file.TURN === 'off' ? 'off' : '';
+  else v.TURN = base.file.TURN === 'off' && !cloud ? 'off' : '';
   const set = (key: string, id: AnswerId) => {
     const x = c[id];
     if (x !== undefined) v[key] = Array.isArray(x) ? x.join(',') : x;
@@ -114,6 +133,7 @@ export interface SetupFlagValues {
   'client-id'?: string; guild?: string; role?: string; channels?: string; command?: string; group?: string;
   upnp?: string; 'auto-update'?: string; lang?: string;
   'no-discord-check'?: boolean; 'no-tray'?: boolean; 'tray-autostart'?: boolean;
+  media?: string; 'cloud-url'?: string; 'livekit-key'?: string; turn?: string;
 }
 
 /**
@@ -126,10 +146,27 @@ export function trayFromFlags(flags: SetupFlagValues, env: Pick<ModelEnv, 'platf
   return { install: true, autostart: flags['tray-autostart'] ? true : null };
 }
 
-type SecretKey = 'DISCORD_TOKEN' | 'DISCORD_CLIENT_SECRET' | 'TUNNEL_TOKEN' | 'DUCKDNS_TOKEN';
+type SecretKey = 'DISCORD_TOKEN' | 'DISCORD_CLIENT_SECRET' | 'TUNNEL_TOKEN' | 'DUCKDNS_TOKEN' | 'LIVEKIT_API_SECRET';
 const SECRETS: readonly [SecretKey, string][] = [
   ['DISCORD_TOKEN', 'discord-token-file'], ['DISCORD_CLIENT_SECRET', 'client-secret-file'], ['TUNNEL_TOKEN', 'tunnel-token-file'], ['DUCKDNS_TOKEN', 'duckdns-token-file'],
+  ['LIVEKIT_API_SECRET', 'livekit-secret-file'],
 ];
+
+/**
+ * A TURN=on (left from a VPS file) that the new host, mode, port or address
+ * cannot serve goes back to the default, as a switch to cloud does: loadConfig
+ * would refuse it and leave a re-run no way out but editing the file. Only
+ * without --turn, so an explicit `--turn on` still gets the error.
+ */
+function dropImpossibleTurn(values: Values): void {
+  if (values.TURN !== 'on') return;
+  try {
+    new URL(values.PUBLIC_URL ?? '');
+  } catch {
+    return; // loadConfig reports the address itself
+  }
+  if (turnBlocked(values)) values.TURN = '';
+}
 
 export interface FlagOptions {
   /** Read by the caller with readSecretSource: the environment's value wins, then the -file flag. */
@@ -214,6 +251,10 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   set('GROUP_NAME', flags.group);
   set('UPNP', oneOf('upnp', flags.upnp, ['auto', 'off']));
   set('AUTO_UPDATE', oneOf('auto-update', flags['auto-update'], ['on', 'off']));
+  set('MEDIA', oneOf('media', flags.media, ['self', 'cloud']));
+  set('LIVEKIT_CLOUD_URL', flags['cloud-url']);
+  set('LIVEKIT_API_KEY', flags['livekit-key']);
+  set('TURN', oneOf('turn', flags.turn, ['auto', 'on', 'off']));
   if (flags.lang) values.LOCALE = o.locale;
   if (flags['duckdns-domain'] !== undefined) {
     const d = parseDuckDomain(flags['duckdns-domain']);
@@ -311,10 +352,30 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
     else if (hosting) values.UPNP = values.UPNP || 'auto';
   }
 
+  const media = values.MEDIA || 'self';
+  if (media === 'cloud') {
+    // The file's generated pair is not the Cloud project's.
+    if (before.MEDIA !== 'cloud') {
+      if (flags['livekit-key'] === undefined && !o.env?.LIVEKIT_API_KEY) values.LIVEKIT_API_KEY = '';
+      if (!o.secrets.LIVEKIT_API_SECRET) values.LIVEKIT_API_SECRET = '';
+    }
+    // Nothing binds the media ports; a TURN left from self would be refused.
+    values.MEDIA_TCP_PORT = values.MEDIA_UDP_PORT = '';
+    if (flags.turn === undefined) values.TURN = '';
+  } else {
+    values.LIVEKIT_CLOUD_URL = '';
+    // The Cloud pair goes so the install makes a local one.
+    if (before.MEDIA === 'cloud') values.LIVEKIT_API_KEY = values.LIVEKIT_API_SECRET = '';
+  }
+  // Defaults stay commented in the file.
+  values.MEDIA = media === 'cloud' ? 'cloud' : '';
+  if (values.TURN === 'auto') values.TURN = '';
+
   // Keys the chosen mode does not use go away (a re-run may switch modes).
   if (ingress !== 'tunnel') values.TUNNEL_TOKEN = '';
   if (ingress !== 'direct') values.DDNS_PROVIDER = values.DUCKDNS_DOMAIN = values.DUCKDNS_TOKEN = values.HTTP_PORT = values.HTTPS_PORT = values.ACME_DNS = '';
   if (values.ACME_DNS !== 'duckdns') values.ACME_DNS = '';
+  if (flags.turn === undefined) dropImpossibleTurn(values);
   if (values.COMMAND_NAME && !validCommand(values.COMMAND_NAME)) err(txt('commandBad'), 'command');
   if (values.TUNNEL_TOKEN && !validTunnelToken(values.TUNNEL_TOKEN)) err(txt('tunnelTokenBad'), 'TUNNEL_TOKEN');
   for (const [key, flag] of [['DISCORD_CLIENT_ID', 'client-id'], ['GUILD_ID', 'guild'], ['ROLE_ID', 'role']] as const) {
@@ -339,6 +400,11 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   if (ingress === 'tunnel') need('TUNNEL_TOKEN', secret('TUNNEL_TOKEN'));
   // The same token serves the DNS record and the certificate.
   if (values.DDNS_PROVIDER === 'duckdns' || values.ACME_DNS === 'duckdns') need('DUCKDNS_TOKEN', secret('DUCKDNS_TOKEN'));
+  if (media === 'cloud') {
+    need('LIVEKIT_CLOUD_URL', '--cloud-url');
+    need('LIVEKIT_API_KEY', '--livekit-key');
+    need('LIVEKIT_API_SECRET', secret('LIVEKIT_API_SECRET'));
+  }
   return { values, errors, missing, hosting };
 }
 
@@ -390,10 +456,20 @@ function answersOf(values: Values, hosting: Hosting, env: ModelEnv): Answers {
   if (values.CHANNEL_IDS) a.channels = values.CHANNEL_IDS.split(',');
   put('command', values.COMMAND_NAME);
   if (values.GROUP_NAME !== undefined) a.group = values.GROUP_NAME;
-  const tcp = values.MEDIA_TCP_PORT || '7881';
-  const udp = values.MEDIA_UDP_PORT || '7882';
-  const changed = tcp !== (env.file.MEDIA_TCP_PORT || '7881') || udp !== (env.file.MEDIA_UDP_PORT || '7882');
-  Object.assign(a, changed ? { mediaPorts: 'change', mediaTcp: tcp, mediaUdp: udp } : { mediaPorts: 'keep' });
+  if (values.MEDIA === 'cloud') {
+    a.media = 'cloud';
+    put('cloudUrl', values.LIVEKIT_CLOUD_URL);
+    put('cloudKey', values.LIVEKIT_API_KEY);
+    put('cloudSecret', values.LIVEKIT_API_SECRET);
+  } else {
+    a.media = 'self';
+    const tcp = values.MEDIA_TCP_PORT || '7881';
+    const udp = values.MEDIA_UDP_PORT || '7882';
+    const changed = tcp !== (env.file.MEDIA_TCP_PORT || '7881') || udp !== (env.file.MEDIA_UDP_PORT || '7882');
+    Object.assign(a, changed ? { mediaPorts: 'change', mediaTcp: tcp, mediaUdp: udp } : { mediaPorts: 'keep' });
+  }
+  // TURN exactly as the flag rules left it (an explicit on stays on, and is refused where it cannot run).
+  a.turnSetting = values.TURN ?? '';
   return a;
 }
 
@@ -437,6 +513,12 @@ function presetOf(flags: SetupFlagValues, o: FlagOptions, blamed: Set<string>): 
     if (ok('media-tcp')) a.mediaTcp = flags['media-tcp'];
     if (ok('media-udp')) a.mediaUdp = flags['media-udp'];
   }
+  if (ok('media')) put('media', flags.media);
+  if (ok('cloud-url')) put('cloudUrl', cloudUrl(flags['cloud-url']!) ?? flags['cloud-url']!.trim());
+  if (ok('livekit-key')) put('cloudKey', flags['livekit-key']!.trim());
+  put('cloudSecret', o.secrets.LIVEKIT_API_SECRET);
+  // auto is no answer: the question's own default stands.
+  if (ok('turn') && flags.turn !== 'auto') put('turn', flags.turn);
   if (ok('upnp')) put('upnp', flags.upnp);
   if (ok('auto-update')) put('autoUpdate', flags['auto-update']);
   if (flags['no-tray']) a.tray = 'no';

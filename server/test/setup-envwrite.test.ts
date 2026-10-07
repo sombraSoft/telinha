@@ -84,6 +84,27 @@ describe('renderEnvFile', () => {
     expect(text).toContain('\n#ACME_DNS=none\n');
     expect(text).not.toContain('Other settings');
   });
+
+  test('MEDIA=cloud, LIVEKIT_CLOUD_URL and TURN land in the media section and load', () => {
+    const text = renderEnvFile({ ...VALUES, MEDIA: 'cloud', LIVEKIT_CLOUD_URL: 'wss://proj-abc123.livekit.cloud', TURN: 'off' }, null);
+    const media = text.slice(text.indexOf('# --- Media'), text.indexOf('# --- Rooms'));
+    expect(media).toContain('\nMEDIA=cloud\n');
+    expect(media).toContain('\nLIVEKIT_CLOUD_URL=wss://proj-abc123.livekit.cloud\n');
+    expect(media).toContain('\nTURN=off\n');
+    expect(text).not.toContain('Other settings');
+    const config = loadConfig({ ...parseEnvFile(text).vars, TELINHA_HOME: '/srv/telinha' });
+    expect([config.media, config.livekitUrl, config.turnSetting]).toEqual(['cloud', 'wss://proj-abc123.livekit.cloud', 'off']);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('MEDIA, LIVEKIT_CLOUD_URL and TURN are managed: a re-run back to self drops them', () => {
+    const previous = 'MEDIA=cloud\nLIVEKIT_CLOUD_URL=wss://proj-abc123.livekit.cloud\nTURN=on\n';
+    const text = renderEnvFile(VALUES, { vars: parseEnvFile(previous).vars, text: previous });
+    expect(text).toContain('\n#MEDIA=self\n');
+    expect(text).toContain('\n#LIVEKIT_CLOUD_URL=\n');
+    expect(text).toContain('\n#TURN=auto\n');
+    expect(text).not.toContain('Other settings');
+  });
 });
 
 type Entry = { uid: number; gid: number; mode: number; dir?: boolean; symlink?: boolean };

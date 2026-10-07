@@ -257,12 +257,12 @@ describe('runApply', () => {
     // Nothing installed, nothing running: start it by hand, a warning.
     expect(r.statuses('start')).toEqual(['pending', 'running', 'warn']);
     expect(r.lines('config')).toEqual(['ok Wrote /opt/telinha/config/telinha.env']);
-    expect(r.events.find((e) => e.id === 'binaries' && e.detail)?.detail).toBe('Downloading LiveKit, Caddy / cloudflared...');
+    expect(r.events.find((e) => e.id === 'binaries' && e.detail)?.detail).toBe('Downloading LiveKit, Caddy...');
     // The plain terminal got the very same lines, in order, as they came.
     expect(sink.out).toEqual([
       `ok Bot: Telinha Bot (app id ${APP})`,
       'ok Wrote /opt/telinha/config/telinha.env',
-      'spin Downloading LiveKit, Caddy / cloudflared...',
+      'spin Downloading LiveKit, Caddy...',
       'ok Programs ready in /opt/telinha/bin',
       'Running from source: no service is installed (the native binary installs one).',
       'Start it with: bun server/src/index.ts run',
@@ -415,7 +415,7 @@ describe('runApply', () => {
       { done: 2_000_000, total: 2_000_000, unit: 'bytes', label: 'livekit' },
       { done: 512, total: null, unit: 'bytes', label: 'caddy' },
     ]);
-    expect(r.events.filter((e) => e.id === 'binaries' && e.detail).map((e) => e.detail)).toEqual(['Downloading LiveKit, Caddy / cloudflared...', 'downloading livekit.tar.gz']);
+    expect(r.events.filter((e) => e.id === 'binaries' && e.detail).map((e) => e.detail)).toEqual(['Downloading LiveKit, Caddy...', 'downloading livekit.tar.gz']);
     expect(sink.progressCalls).toEqual([[0, 2_000_000, 'livekit'], [2_000_000, 2_000_000, 'livekit'], [512, null, 'caddy']]);
   });
 

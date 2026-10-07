@@ -111,6 +111,7 @@ export interface ControlStatus {
   update: UpdateStatus | null;
   /** Running under `telinha service run`. */
   supervised: boolean;
+  turn?: { host: string; port: number } | null;
 }
 
 /** What the phone test page measured. */
@@ -122,6 +123,8 @@ export interface DoctorReport {
   tcp: { ok: boolean; rttMs?: number; error?: string };
   udp: { ok: boolean; rttMs?: number; error?: string };
   publish: { ok: boolean; error?: string };
+  /** The forced TURN over TLS step; absent or null when the page had no such step. */
+  turn?: { ok: boolean; rttMs?: number; error?: string } | null;
   client: { ua: string; ip?: string };
   startedAt: number;
   finishedAt: number;
