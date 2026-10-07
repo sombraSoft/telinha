@@ -17,7 +17,11 @@ The same file runs on x64 and ARM PCs.
 
 ## Installing it
 
-`telinha setup` installs the icon on a native Windows install. It copies
+`telinha setup` installs the icon on a native Windows install. Its *Tray
+icon* step asks *Show a Telinha icon next to the clock?* (yes by default) and,
+after a yes, *Start the icon when you sign in to Windows?* (no by default; see
+[Start with Windows](#start-with-windows)). On a re-run both start from what
+the PC has now. The install then copies
 `telinha-tray.exe` from the downloaded zip into `%LOCALAPPDATA%\Telinha\bin`,
 next to `telinha.exe`, and starts it right after the service step, printing
 `Tray icon started (next to the clock).` Windows may put a new icon in the
@@ -107,9 +111,9 @@ Clicking a notification does nothing.
 
 Off by default: after a reboot the icon comes back only when this is on. Turn
 it on or off with the *Start with Windows* checkbox in the menu, with
-`telinha tray autostart on` (or `off`), or during the setup with
-`telinha setup --tray-autostart`. Running the setup again without the flag
-leaves the setting as it is. It is the `Telinha` value of your user's `Run`
+`telinha tray autostart on` (or `off`), or with the setup's second tray
+question (`--tray-autostart` without the setup screens). A setup without the
+screens and without the flag leaves the setting as it is. It is the `Telinha` value of your user's `Run`
 key in the registry, pointing at `bin\telinha-tray.exe`.
 
 ## Starting and stopping it by hand
@@ -148,14 +152,15 @@ icon notices its file changed and restarts itself on the new version. See
 
 ## Opting out
 
-`telinha setup --no-tray` turns *Start with Windows* off, closes the icon and
-renames `bin\telinha-tray.exe` to `bin\telinha-tray.dist.exe`, printing
-`Tray icon not installed (--no-tray).` That copy never runs; it is only kept
+Answering *No icon* in the setup (or `telinha setup --no-tray`) turns *Start
+with Windows* off, closes the icon and renames `bin\telinha-tray.exe` to
+`bin\telinha-tray.dist.exe`, printing `Tray icon not installed.` That copy never runs; it is only kept
 so the icon can come back without a download. Updates leave the icon out and
 keep the copy current, and so does the PowerShell installer when you run it
-again. A later `telinha setup` without `--no-tray` installs the icon again
-from that copy: the flag states the choice on each run, like
-`--no-service`. Without `bin\telinha-tray.exe` the `tray` check of
+again. A later setup that answers yes installs the icon again from that copy
+(the question then starts on *No icon*); without the setup screens the flag
+states the choice on each run, like `--no-service`, so a run without
+`--no-tray` installs it. Without `bin\telinha-tray.exe` the `tray` check of
 `telinha doctor` reads `Tray icon not installed.`, which is not a problem.
 
 ## Uninstalling

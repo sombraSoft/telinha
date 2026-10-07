@@ -5,7 +5,7 @@ import type { Locale } from '../src/cli/strings.ts';
 import { createDiscordSetup, inviteUrl } from '../src/cli/setup/discord.ts';
 import type { HostInfo } from '../src/cli/setup/host.ts';
 import type { LookupDeps } from '../src/cli/setup/lookups.ts';
-import type { Answers, QuestionId, Text } from '../src/cli/setup/model.ts';
+import type { Answers, QuestionId, Text, TrayState } from '../src/cli/setup/model.ts';
 import { SetupSession } from '../src/cli/setup/session.ts';
 import type { Values } from '../src/cli/setup/steps.ts';
 
@@ -74,6 +74,7 @@ interface Opts {
   file?: Values; host?: HostInfo | null; preset?: Answers; acceptDefaults?: boolean; rerun?: boolean; presetErrors?: Text[];
   offline?: boolean; compiled?: boolean; docker?: boolean; isRoot?: boolean; langFlag?: boolean; locale?: Locale;
   world?: World; duckOk?: boolean; dns?: string[]; unprivilegedPortStart?: number | null;
+  platform?: NodeJS.Platform; tray?: TrayState;
 }
 
 function make(o: Opts = {}) {
@@ -100,8 +101,9 @@ function make(o: Opts = {}) {
     openUrl: async (url) => void opened.push(url),
   };
   const env = {
-    platform: 'linux' as const, isRoot: o.isRoot ?? true, docker: !!o.docker, compiled: !!o.compiled, offline: !!o.offline, langFlag: o.langFlag ?? true,
+    platform: o.platform ?? 'linux', isRoot: o.isRoot ?? true, docker: !!o.docker, compiled: !!o.compiled, offline: !!o.offline, langFlag: o.langFlag ?? true,
     flags: { noService: false, noUpnp: false, noFirewall: false, noDoctor: false }, file, unprivilegedPortStart: o.unprivilegedPortStart ?? null,
+    ...(o.tray && { tray: o.tray }),
   };
   const s = new SetupSession({
     env, host, base: { file, host, locale: o.locale ?? 'en', langFlag: env.langFlag, docker: env.docker, compiled: env.compiled },
@@ -171,7 +173,7 @@ describe('a fresh home install', () => {
       ['review', 'current', true, ''],
       ['install', 'pending', false, ''],
     ]);
-    expect(s.applyOptions()).toEqual({ sysctl: null, canRotateCookie: false });
+    expect(s.applyOptions()).toEqual({ sysctl: null, canRotateCookie: false, tray: null });
   });
 
   test('the client id comes from the token (not asked online) and reaches the values', async () => {
@@ -641,9 +643,40 @@ describe('hidden answers and apply options', () => {
     expect(s.current().id).toBe('autoUpdate');
     await answer(s, 'autoUpdate', 'off');
     expect(s.screen()).toBe('review');
-    expect(s.applyOptions()).toEqual({ sysctl: 'manual', canRotateCookie: false });
+    expect(s.applyOptions()).toEqual({ sysctl: 'manual', canRotateCookie: false, tray: null });
     expect(s.values().AUTO_UPDATE).toBe('off');
     expect(s.steps().map((x) => x.summary)).toEqual(['Rented server (VPS)', 'sslip.io', '/telinha · Gurizada', 'TCP 7881, 443, 80\nUDP 7882', 'manual', '', '']);
+  });
+
+  test('Windows: the tray step after the updates, its sidebar summary and the apply option', async () => {
+    const { s } = make({ host: VPS, platform: 'win32', isRoot: false, compiled: true });
+    await answer(s, 'hosting', 'vps');
+    await answer(s, 'vpsAddress', 'sslip');
+    await discord(s);
+    await answer(s, 'mediaPorts', 'keep');
+    await answer(s, 'autoUpdate', 'on');
+    expect(s.current()).toMatchObject({ id: 'tray', step: 'tray', initial: 'yes', badge: 'Tray icon · Step 6 of 8' });
+    await answer(s, 'tray', 'yes');
+    expect(s.current()).toMatchObject({ id: 'trayAutostart', initial: 'no' });
+    await answer(s, 'trayAutostart', 'yes');
+    expect(s.screen()).toBe('review');
+    expect(s.applyOptions().tray).toEqual({ install: true, autostart: true });
+    expect(s.steps().map((x) => x.summary)[5]).toBe('icon, at sign-in');
+    const rows = s.reviewRows();
+    const at = rows.findIndex((r) => r.step === 'Tray icon');
+    expect(rows.slice(at).map((r) => [r.label, r.value])).toEqual([
+      ['Tray icon', 'Yes, show the icon'], ['Start with Windows', 'Yes, at every sign-in'],
+    ]);
+    s.jump('tray');
+    await answer(s, 'tray', 'no');
+    expect(s.screen()).toBe('review');
+    expect(s.applyOptions().tray).toEqual({ install: false, autostart: false });
+    expect(s.steps().map((x) => x.summary)[5]).toBe('no icon');
+  });
+
+  test('Windows re-run: the tray questions start from what the PC has', () => {
+    const { s } = make({ host: VPS, platform: 'win32', isRoot: false, compiled: true, file: VPS_FILE, rerun: true, tray: { installed: false, optedOut: true, autostart: false } });
+    expect(s.applyOptions().tray).toEqual({ install: false, autostart: false });
   });
 
   test('custom media ports are checked against the HTTPS port and written', async () => {

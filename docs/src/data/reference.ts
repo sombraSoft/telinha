@@ -672,8 +672,8 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
       'pt-BR': 'Só em instalações nativas no Windows: se o `telinha-tray.exe` está em `bin` (não instalado está ok), se ele roda e na mesma versão da Telinha, e uma entrada de *Iniciar com o Windows* apontando pra um arquivo que não existe. As linhas de detalhe dizem se ele inicia com o Windows e quem assinou (um build sem assinatura nunca é aviso).',
     },
     fixes: {
-      en: 'Not running: `telinha tray start`. A different version: `telinha tray stop`, then `telinha tray start`. A leftover autostart: `telinha tray autostart off`. To install it: `telinha setup` without `--no-tray`.',
-      'pt-BR': 'Parado: `telinha tray start`. Outra versão: `telinha tray stop`, depois `telinha tray start`. Um início automático que sobrou: `telinha tray autostart off`. Pra instalar: `telinha setup` sem `--no-tray`.',
+      en: 'Not running: `telinha tray start`. A different version: `telinha tray stop`, then `telinha tray start`. A leftover autostart: `telinha tray autostart off`. To install it: `telinha setup`, answering yes to the tray icon.',
+      'pt-BR': 'Parado: `telinha tray start`. Outra versão: `telinha tray stop`, depois `telinha tray start`. Um início automático que sobrou: `telinha tray autostart off`. Pra instalar: `telinha setup`, respondendo sim ao ícone.',
     },
   },
   gateway: {

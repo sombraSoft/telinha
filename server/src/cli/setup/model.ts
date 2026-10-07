@@ -16,17 +16,19 @@ import { guessHosting, routerLabel, SSLIP_RE, type HostInfo, type Hosting } from
 import type { LookupCache, LookupId } from './lookups.ts';
 import type { QKey } from './qstrings.ts';
 import { hostPorts, publicPorts, type Values } from './steps.ts';
+import type { TrayChoice } from './tray.ts';
 
 export type { AddressChoice };
 
-export type StepId = 'where' | 'address' | 'discord' | 'ports' | 'updates' | 'review' | 'install';
+export type StepId = 'where' | 'address' | 'discord' | 'ports' | 'updates' | 'tray' | 'review' | 'install';
 export type QuestionId =
   | 'lang' | 'hosting'
   | 'homeCf' | 'homeAdvanced' | 'advancedAddress' | 'vpsAddress'
   | 'domain' | 'duckName' | 'duckToken' | 'httpsPort' | 'nodeIp' | 'tunnelToken' | 'tunnelHost' | 'externalUrl'
   | 'discordToken' | 'clientId' | 'clientSecret' | 'redirect' | 'guild' | 'role' | 'channels' | 'command' | 'group'
   | 'mediaPorts' | 'mediaTcp' | 'mediaUdp' | 'sysctl' | 'upnp'
-  | 'autoUpdate';
+  | 'autoUpdate'
+  | 'tray' | 'trayAutostart';
 /** Never asked on screen: filled from flags or kept from the file. */
 export type HiddenId = 'publicUrl' | 'httpPort' | 'httpsPortDirect' | 'pinnedIp';
 export type AnswerId = QuestionId | HiddenId;
@@ -58,7 +60,12 @@ export interface ModelEnv {
   lookups: LookupCache;
   /** The language the screens show; the language question's default. */
   locale?: Locale;
+  /** Native Windows: the tray icon as this machine has it (read before the questions). */
+  tray?: TrayState;
 }
+
+/** installed: bin	elinha-tray.exe; optedOut: only the copy an earlier "no" kept; autostart: the sign-in Run value. */
+export interface TrayState { installed: boolean; optedOut: boolean; autostart: boolean }
 
 /** A localizable text: a key of qstrings.ts with params, or verbatim (names from Discord, URLs). */
 export type Text = { key: QKey; params?: Record<string, string | number> } | { raw: string };
@@ -264,6 +271,8 @@ const select = (value: string, label: Text, more: Omit<OptionDef, 'value' | 'lab
 const isHome = (a: Answers) => a.hosting === 'home';
 /** The tray icon exists for the native Windows binary only. */
 export const trayHere = (env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>): boolean => env.platform === 'win32' && env.compiled && !env.docker;
+/** An earlier setup decided about the icon: its file (or the kept copy) is there. */
+const trayKnown = (env: ModelEnv) => !!env.tray && (env.tray.installed || env.tray.optedOut);
 const choiceIs = (...c: AddressChoice[]) => (a: Answers) => c.includes(addressChoice(a)!);
 
 export const QUESTIONS: readonly QuestionDef[] = [
@@ -584,7 +593,32 @@ export const QUESTIONS: readonly QuestionDef[] = [
     options: () => [select('on', txt('updatesOn'), { desc: txt('updatesOnDesc') }), select('off', txt('updatesOff'), { desc: txt('updatesOffDesc') })],
     default: (_a, env) => (env.file.AUTO_UPDATE !== 'off' ? 'on' : 'off'),
   },
+
+  // --- tray
+  {
+    id: 'tray', step: 'tray', kind: 'select', visible: (_a, env) => trayHere(env),
+    title: txt('trayTitle'), question: txt('trayQ'),
+    hint: () => [txt('trayHelp')],
+    options: () => [select('yes', txt('trayYes'), { desc: txt('trayYesDesc') }), select('no', txt('trayNo'), { desc: txt('trayNoDesc') })],
+    default: (_a, env) => (env.tray?.optedOut && !env.tray.installed ? 'no' : 'yes'),
+    fromFile: (_a, env) => trayKnown(env),
+  },
+  {
+    id: 'trayAutostart', step: 'tray', kind: 'select', visible: (a, env) => trayHere(env) && a.tray === 'yes',
+    title: txt('trayAutoTitle'), question: txt('trayAutoQ'),
+    hint: () => [txt('trayAutoHelp')],
+    options: () => [select('no', txt('trayAutoNo'), { desc: txt('trayAutoNoDesc') }), select('yes', txt('trayAutoYes'), { desc: txt('trayAutoYesDesc') })],
+    default: (_a, env) => (env.tray?.autostart ? 'yes' : 'no'),
+    fromFile: (_a, env) => trayKnown(env),
+  },
 ];
+
+/** What the install does with the tray icon; null where there is none. */
+export function trayChoice(a: Answers, env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>): TrayChoice | null {
+  if (!trayHere(env)) return null;
+  const install = a.tray !== 'no';
+  return { install, autostart: install && a.trayAutostart === 'yes' };
+}
 
 function domainPreview(env: ModelEnv): Text {
   const ip = env.host?.publicIp;
@@ -615,9 +649,15 @@ export const catalogIndex = (id: QuestionId): number => INDEX.get(id) ?? -1;
 /** The kind shown: the Discord lists become typed ids offline. */
 export const kindOf = (q: QuestionDef, env: Pick<ModelEnv, 'offline'>): QuestionKind => (env.offline && q.offlineText ? 'text' : q.kind);
 
-/** 'updates' only for the native binary outside Docker (Docker has telinha-update). */
-export function stepsFor(env: Pick<ModelEnv, 'compiled' | 'docker'>): StepId[] {
-  return ['where', 'address', 'discord', 'ports', ...(env.compiled && !env.docker ? (['updates'] as const) : []), 'review', 'install'];
+/** 'updates' only for the native binary outside Docker (Docker has telinha-update); 'tray' only on Windows there. */
+export function stepsFor(env: Pick<ModelEnv, 'compiled' | 'docker'> & Partial<Pick<ModelEnv, 'platform'>>): StepId[] {
+  const native = env.compiled && !env.docker;
+  return [
+    'where', 'address', 'discord', 'ports',
+    ...(native ? (['updates'] as const) : []),
+    ...(native && env.platform === 'win32' ? (['tray'] as const) : []),
+    'review', 'install',
+  ];
 }
 
 /** Visible questions in catalog order. */

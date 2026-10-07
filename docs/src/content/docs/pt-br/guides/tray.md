@@ -17,17 +17,21 @@ instalar. O mesmo arquivo roda em PCs x64 e ARM.
 
 ## Instalando
 
-O `telinha setup` instala o ícone numa instalação nativa no Windows. Ele copia
+O `telinha setup` instala o ícone numa instalação nativa no Windows. O passo
+*Ícone* pergunta *Mostrar um ícone da Telinha ao lado do relógio?* (sim por
+padrão) e, depois de um sim, *Iniciar o ícone quando você entrar no Windows?*
+(não por padrão; veja [Iniciar com o Windows](#iniciar-com-o-windows)). Numa
+nova rodada as duas começam pelo que o PC tem agora. A instalação então copia
 o `telinha-tray.exe` do zip baixado para `%LOCALAPPDATA%\Telinha\bin`, ao lado
 do `telinha.exe`, e inicia ele logo depois da etapa do serviço, mostrando
 `Ícone na bandeja iniciado (ao lado do relógio).` O Windows pode esconder um
 ícone novo atrás da seta `^`; arraste ele para perto do relógio para deixar à
 vista.
 
-Rode o assistente num terminal normal, não em *Executar como administrador*.
+Rode o setup num terminal normal, não em *Executar como administrador*.
 O ícone nunca roda elevado: tudo que o menu dele roda rodaria elevado também, e
 um ícone elevado não poderia ser fechado de um terminal normal. Num terminal de
-administrador o assistente copia o arquivo mesmo assim, mas não inicia o ícone,
+administrador o setup copia o arquivo mesmo assim, mas não inicia o ícone,
 e mostra
 `Rodando como administrador: o ícone na bandeja não foi iniciado; rode telinha tray start num terminal normal.`
 Num PC com o UAC desligado, ou logado como o Administrador embutido, não existe
@@ -108,9 +112,9 @@ enquanto está lá. Clicar numa notificação não faz nada.
 
 Desligado por padrão: depois de reiniciar o PC, o ícone só volta com isso
 ligado. Ligue ou desligue pela caixa *Iniciar com o Windows* do menu, com
-`telinha tray autostart on` (ou `off`), ou no assistente com
-`telinha setup --tray-autostart`. Rodar o assistente de novo sem a opção deixa
-a configuração como está. É o valor `Telinha` da chave `Run` do seu usuário no
+`telinha tray autostart on` (ou `off`), ou na segunda pergunta do ícone no
+setup (`--tray-autostart` sem as telas do setup). Um setup sem as telas e sem
+a opção deixa a configuração como está. É o valor `Telinha` da chave `Run` do seu usuário no
 registro, apontando para `bin\telinha-tray.exe`.
 
 ## Iniciando e parando à mão
@@ -142,22 +146,24 @@ que pergunta ao GitHub.
 
 Os zips do Windows trazem o `telinha-tray.exe`. Quando a Telinha se atualiza,
 ela troca o arquivo do ícone do mesmo jeito que o `telinha.exe`, mas só quando
-o ícone está instalado (senão ela atualiza a cópia guardada para um assistente
+o ícone está instalado (senão ela atualiza a cópia guardada para um setup
 depois; veja abaixo), e uma volta de versão devolve o anterior também. O
 ícone rodando percebe que o arquivo mudou e reinicia sozinho na versão nova.
 Veja [Atualizações](/telinha/pt-br/guides/updates/#binário-nativo).
 
 ## Sem o ícone
 
-`telinha setup --no-tray` desliga o *Iniciar com o Windows*, fecha o ícone e
-renomeia o `bin\telinha-tray.exe` para `bin\telinha-tray.dist.exe`, mostrando
-`Ícone na bandeja não instalado (--no-tray).` Essa cópia nunca roda; ela só
+Responder *Sem ícone* no setup (ou `telinha setup --no-tray`) desliga o
+*Iniciar com o Windows*, fecha o ícone e renomeia o `bin\telinha-tray.exe`
+para `bin\telinha-tray.dist.exe`, mostrando `Ícone na bandeja não instalado.`
+Essa cópia nunca roda; ela só
 fica guardada para o ícone poder voltar sem download. As atualizações deixam o
 ícone de fora e mantêm a cópia em dia, e o instalador do PowerShell também,
-quando você roda ele de novo. Um `telinha setup` depois, sem `--no-tray`,
-instala o ícone de novo a partir dessa cópia: a opção diz a escolha a cada
-execução, como a `--no-service`. Sem o `bin\telinha-tray.exe`, a verificação
-`tray` do `telinha doctor` mostra `Ícone na bandeja não instalado.`, o que não
+quando você roda ele de novo. Um setup depois que responda sim instala o
+ícone de novo a partir dessa cópia (a pergunta então começa em *Sem ícone*);
+sem as telas do setup a opção diz a escolha a cada execução, como a
+`--no-service`, então uma execução sem `--no-tray` instala ele. Sem o
+`bin\telinha-tray.exe`, a verificação `tray` do `telinha doctor` mostra `Ícone na bandeja não instalado.`, o que não
 é problema.
 
 ## Desinstalando

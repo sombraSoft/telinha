@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import type { NatProbe } from '../src/nat/index.ts';
 import type { Locale } from '../src/cli/strings.ts';
 import type { HostInfo } from '../src/cli/setup/host.ts';
-import { flowIds, type Answers, type ModelEnv, type Text } from '../src/cli/setup/model.ts';
+import { flowIds, trayChoice, type Answers, type ModelEnv, type Text, type TrayState } from '../src/cli/setup/model.ts';
 import { q } from '../src/cli/setup/qstrings.ts';
-import { answersFromFlags, defaultAnswers, keepHidden, resolveValues, webAddress, type ResolveBase, type SetupFlagValues } from '../src/cli/setup/resolve.ts';
+import { answersFromFlags, defaultAnswers, keepHidden, resolveValues, trayFromFlags, webAddress, type ResolveBase, type SetupFlagValues } from '../src/cli/setup/resolve.ts';
+import type { TrayChoice } from '../src/cli/setup/tray.ts';
 import type { Values } from '../src/cli/setup/steps.ts';
 
 const APP = '111111111111111111';
@@ -288,6 +289,41 @@ describe('answersFromFlags: flags next to a terminal (lenient)', () => {
 
   test('--media-tcp / --media-udp change the ports', () => {
     expect(lenient({ 'media-tcp': '50000' }).answers).toEqual({ mediaPorts: 'change', mediaTcp: '50000' });
+  });
+});
+
+describe('the tray icon: flags and the setup screens agree', () => {
+  const win = (tray?: TrayState): ModelEnv => ({ ...modelEnv({ compiled: true }), platform: 'win32', isRoot: false, ...(tray && { tray }) });
+  // What the machine ends up with: the icon, and whether it starts at sign-in (null keeps the Run value as it was).
+  const outcome = (c: TrayChoice | null, was: TrayState | undefined) => c && { install: c.install, autostart: c.install && (c.autostart ?? !!was?.autostart) };
+  const screens = (flags: SetupFlagValues, env: ModelEnv) => {
+    const pre = answersFromFlags(flags, env, { secrets: {}, locale: 'en', lenient: true, advanced: false });
+    return trayChoice({ ...defaultAnswers(env), ...pre.answers }, env);
+  };
+
+  test('each flag set gives the same icon and sign-in value as its defaults on screen', () => {
+    const states: (TrayState | undefined)[] = [undefined, { installed: true, optedOut: false, autostart: false }, { installed: true, optedOut: false, autostart: true }];
+    const sets: SetupFlagValues[] = [{}, { 'no-tray': true }, { 'tray-autostart': true }, { 'no-tray': true, 'tray-autostart': true }];
+    for (const was of states) {
+      for (const flags of sets) {
+        const env = win(was);
+        expect(outcome(screens(flags, env), was)).toEqual(outcome(trayFromFlags(flags, env), was));
+      }
+    }
+  });
+
+  test('flags: --no-tray takes the sign-in value with it; without --tray-autostart it stays', () => {
+    expect(trayFromFlags({}, win())).toEqual({ install: true, autostart: null });
+    expect(trayFromFlags({ 'tray-autostart': true }, win())).toEqual({ install: true, autostart: true });
+    expect(trayFromFlags({ 'no-tray': true, 'tray-autostart': true }, win())).toEqual({ install: false, autostart: false });
+    expect(trayFromFlags({}, modelEnv({ compiled: true }))).toBeNull();
+    expect(trayFromFlags({}, { ...win(), docker: true })).toBeNull();
+  });
+
+  test('lenient: the flags become the defaults of the tray questions', () => {
+    const lenient = (flags: SetupFlagValues) => answersFromFlags(flags, win(), { secrets: {}, locale: 'en', lenient: true, advanced: false }).answers;
+    expect(lenient({ 'no-tray': true })).toEqual({ tray: 'no' });
+    expect(lenient({ 'tray-autostart': true })).toEqual({ tray: 'yes', trayAutostart: 'yes' });
   });
 });
 

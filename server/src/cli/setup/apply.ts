@@ -70,7 +70,7 @@ export const TASKS: Record<TaskId, { label: AKey; hint: AKey; backTo: QuestionId
   config: { label: 'taskConfig', hint: 'hintConfig', backTo: 'review' },
   binaries: { label: 'taskBinaries', hint: 'hintBinaries', backTo: 'review' },
   service: { label: 'taskService', hint: 'hintService', backTo: 'sysctl' },
-  tray: { label: 'taskTray', hint: 'hintTray', backTo: 'review' },
+  tray: { label: 'taskTray', hint: 'hintTray', backTo: 'tray' },
   router: { label: 'taskRouter', hint: 'hintRouter', backTo: 'upnp' },
   start: { label: 'taskStart', hint: 'hintStart', backTo: 'review' },
   cert: { label: 'taskCert', hint: 'hintCert', backTo: 'review' },

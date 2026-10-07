@@ -11,12 +11,13 @@ import {
   type LookupDeps, type LookupState,
 } from './lookups.ts';
 import {
-  addressChoice, answered, catalogIndex, flowIds, guildName, HIDDEN_IDS, kindOf, portsValues, question, QUESTIONS, redirectUri, SECRET_ANSWERS, stepsFor, txt,
+  addressChoice, answered, catalogIndex, flowIds, guildName, HIDDEN_IDS, kindOf, portsValues, question, QUESTIONS, redirectUri, SECRET_ANSWERS, stepsFor, trayChoice, txt,
   type AnswerId, type Answers, type ModelEnv, type QuestionId, type QuestionKind, type StepId, type Text,
 } from './model.ts';
 import { q, type QKey } from './qstrings.ts';
 import { defaultAnswers, keepHidden, resolveValues, type ResolveBase } from './resolve.ts';
 import { publicPorts, type Values } from './steps.ts';
+import type { TrayChoice } from './tray.ts';
 
 export interface SessionInit {
   env: Omit<ModelEnv, 'lookups' | 'host'>; host: HostInfo | null; base: ResolveBase;
@@ -65,7 +66,7 @@ export interface Notice { kind: 'locked' | 'presetErrors' | 'info'; text: string
 interface Slot { state: LookupState; actions: ActionId[]; running?: Text }
 
 const STEP_LABEL: Record<StepId, QKey> = {
-  where: 'stepWhere', address: 'stepAddress', discord: 'stepDiscord', ports: 'stepPorts', updates: 'stepUpdates', review: 'stepReview', install: 'stepInstall',
+  where: 'stepWhere', address: 'stepAddress', discord: 'stepDiscord', ports: 'stepPorts', updates: 'stepUpdates', tray: 'stepTray', review: 'stepReview', install: 'stepInstall',
 };
 const ACTION_LABEL: Record<ActionId, QKey> = { retry: 'actionRetry', keep: 'actionKeep', quit: 'actionQuit', open: 'actionOpen', check: 'actionCheck' };
 const str = (v: string | string[] | undefined): string => (typeof v === 'string' ? v : '');
@@ -161,10 +162,10 @@ export class SetupSession {
   }
 
   /** Apply options that are not telinha.env keys. */
-  applyOptions(): { sysctl: 'sudo' | 'manual' | null; canRotateCookie: boolean } {
+  applyOptions(): { sysctl: 'sudo' | 'manual' | null; canRotateCookie: boolean; tray: TrayChoice | null } {
     const eff = this.#effective();
     const sysctl = this.#navOf(eff).includes('sysctl') ? (eff.sysctl === 'manual' ? 'manual' : 'sudo') : null;
-    return { sysctl, canRotateCookie: !!this.#init.base.file.COOKIE_SECRET };
+    return { sysctl, canRotateCookie: !!this.#init.base.file.COOKIE_SECRET, tray: trayChoice(eff, this.#env) };
   }
 
   current(): QuestionView {
@@ -807,6 +808,10 @@ export class SetupSession {
       }
       case 'updates':
         return a.autoUpdate === 'on' ? this.#t(txt('sumOn')) : a.autoUpdate === 'off' ? this.#t(txt('sumOff')) : '';
+      case 'tray':
+        if (a.tray === 'no') return this.#t(txt('sumTrayOff'));
+        if (a.tray !== 'yes') return '';
+        return this.#t(txt(a.trayAutostart === 'yes' ? 'sumTrayAuto' : 'sumTrayOn'));
       default:
         return '';
     }

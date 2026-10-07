@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { NatProbe } from '../src/nat/index.ts';
 import type { HostInfo } from '../src/cli/setup/host.ts';
 import {
-  addressChoice, addressValues, ALWAYS_COUNTED, answered, flowIds, kindOf, lowPorts, question, QUESTIONS, redirectUri, stepsFor,
+  addressChoice, addressValues, ALWAYS_COUNTED, answered, flowIds, kindOf, lowPorts, question, QUESTIONS, redirectUri, stepsFor, trayChoice,
   type Answers, type ModelEnv, type QuestionId,
 } from '../src/cli/setup/model.ts';
 import { q } from '../src/cli/setup/qstrings.ts';
@@ -31,8 +31,8 @@ describe('the catalog', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.slice(0, 2)).toEqual(['lang', 'hosting']);
     const steps = QUESTIONS.map((x) => x.step);
-    // Steps never interleave: Where, Address, Discord, Ports, Updates.
-    expect([...new Set(steps)]).toEqual(['where', 'address', 'discord', 'ports', 'updates']);
+    // Steps never interleave: Where, Address, Discord, Ports, Updates, Tray icon.
+    expect([...new Set(steps)]).toEqual(['where', 'address', 'discord', 'ports', 'updates', 'tray']);
     for (const id of ids) expect(question(id).id).toBe(id);
     expect(() => question('nope' as QuestionId)).toThrow();
   });
@@ -151,6 +151,46 @@ describe('steps', () => {
     expect(flowOf({}, envOf({ compiled: true }))).toContain('autoUpdate');
     expect(flowOf({}, envOf({ compiled: true, docker: true }))).not.toContain('autoUpdate');
     expect(flowOf({}, envOf({ compiled: false }))).not.toContain('autoUpdate');
+  });
+
+  test('Tray icon only for the native Windows binary outside Docker', () => {
+    expect(stepsFor({ compiled: true, docker: false, platform: 'win32' })).toEqual(['where', 'address', 'discord', 'ports', 'updates', 'tray', 'review', 'install']);
+    expect(stepsFor({ compiled: true, docker: false, platform: 'linux' })).not.toContain('tray');
+    expect(stepsFor({ compiled: false, docker: false, platform: 'win32' })).not.toContain('tray');
+    expect(stepsFor({ compiled: true, docker: true, platform: 'win32' })).not.toContain('tray');
+  });
+});
+
+describe('the tray icon', () => {
+  const win = (o: Partial<ModelEnv> = {}) => envOf({ platform: 'win32', compiled: true, isRoot: false, ...o });
+
+  test('asked on native Windows only; sign-in only after a yes', () => {
+    expect(flowOf({}, win())).toContain('tray');
+    expect(flowOf({ tray: 'yes' }, win())).toContain('trayAutostart');
+    expect(flowOf({ tray: 'no' }, win())).not.toContain('trayAutostart');
+    expect(flowOf({}, win({ docker: true }))).not.toContain('tray');
+    expect(flowOf({}, win({ compiled: false }))).not.toContain('tray');
+    expect(flowOf({}, envOf({ compiled: true }))).not.toContain('tray');
+  });
+
+  test('defaults: the icon, not at sign-in; a re-run starts from what the machine has', () => {
+    expect(question('tray').default({}, win())).toBe('yes');
+    expect(question('trayAutostart').default({}, win())).toBe('no');
+    expect(question('tray').fromFile!({}, win())).toBe(false);
+    const optedOut = win({ tray: { installed: false, optedOut: true, autostart: false } });
+    expect(question('tray').default({}, optedOut)).toBe('no');
+    expect(question('tray').fromFile!({}, optedOut)).toBe(true);
+    const auto = win({ tray: { installed: true, optedOut: false, autostart: true } });
+    expect(question('tray').default({}, auto)).toBe('yes');
+    expect(question('trayAutostart').default({}, auto)).toBe('yes');
+  });
+
+  test('trayChoice: what the install does', () => {
+    expect(trayChoice({ tray: 'yes', trayAutostart: 'yes' }, win())).toEqual({ install: true, autostart: true });
+    expect(trayChoice({ tray: 'yes', trayAutostart: 'no' }, win())).toEqual({ install: true, autostart: false });
+    // No icon takes its sign-in value with it, whatever was answered before.
+    expect(trayChoice({ tray: 'no', trayAutostart: 'yes' }, win())).toEqual({ install: false, autostart: false });
+    expect(trayChoice({ tray: 'yes' }, envOf({ compiled: true }))).toBeNull();
   });
 });
 

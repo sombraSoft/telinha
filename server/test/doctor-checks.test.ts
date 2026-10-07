@@ -552,10 +552,10 @@ describe('tray', () => {
     const r = await one('tray', o({ ...reg(null) }));
     expect(r.status).toBe('ok');
     expect(r.summary).toBe('Tray icon not installed.');
-    expect(r.detail).toEqual(['Install it: telinha setup (without --no-tray)']);
+    expect(r.detail).toEqual(['Install it: telinha setup, answering yes to the tray icon']);
     const pt = await one('tray', o({ ...reg(null) }, { locale: 'pt-BR' }));
     expect(pt.summary).toBe('Ícone na bandeja não instalado.');
-    expect(pt.detail).toEqual(['Pra instalar: telinha setup (sem --no-tray)']);
+    expect(pt.detail).toEqual(['Pra instalar: telinha setup, respondendo sim ao ícone']);
   });
 
   test('not installed but the Run key still points at it: warn', async () => {

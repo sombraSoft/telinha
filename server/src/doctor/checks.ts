@@ -185,7 +185,7 @@ const en = {
 
   traySkip: 'The tray icon exists on native Windows installs only.',
   trayNotInstalled: 'Tray icon not installed.',
-  trayNotInstalledDetail: 'Install it: telinha setup (without --no-tray)',
+  trayNotInstalledDetail: 'Install it: telinha setup, answering yes to the tray icon',
   trayStaleRun: 'Start with Windows points at a missing telinha-tray.exe.',
   trayStaleRunFix: 'telinha tray autostart off',
   trayOk: 'Tray icon running ({version}).',
@@ -393,7 +393,7 @@ const ptBR: Dict = {
 
   traySkip: 'O ícone na bandeja só existe em instalações nativas no Windows.',
   trayNotInstalled: 'Ícone na bandeja não instalado.',
-  trayNotInstalledDetail: 'Pra instalar: telinha setup (sem --no-tray)',
+  trayNotInstalledDetail: 'Pra instalar: telinha setup, respondendo sim ao ícone',
   trayStaleRun: 'O início com o Windows aponta pra um telinha-tray.exe que não existe.',
   trayStaleRunFix: 'telinha tray autostart off',
   trayOk: 'Ícone na bandeja rodando ({version}).',

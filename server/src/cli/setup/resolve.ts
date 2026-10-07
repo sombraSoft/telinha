@@ -439,6 +439,8 @@ function presetOf(flags: SetupFlagValues, o: FlagOptions, blamed: Set<string>): 
   }
   if (ok('upnp')) put('upnp', flags.upnp);
   if (ok('auto-update')) put('autoUpdate', flags['auto-update']);
+  if (flags['no-tray']) a.tray = 'no';
+  else if (flags['tray-autostart']) Object.assign(a, { tray: 'yes', trayAutostart: 'yes' });
   if (ok('command')) put('command', flags.command!.trim());
   if (flags.group !== undefined) a.group = flags.group.trim();
   if (ok('client-id')) put('clientId', flags['client-id']!.trim());

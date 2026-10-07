@@ -54,7 +54,7 @@ Windows diz menos sobre ele:
   confira o nome do arquivo e depois em *Executar assim mesmo*. (O instalador
   de PowerShell baixa o zip ele mesmo e confere o sha256, então essa tela não
   aparece por ali.)
-- O pedido de administrador (UAC) do assistente mostra
+- O pedido de administrador (UAC) do setup mostra
   *Editor: Desconhecido*. *Mostrar mais detalhes* mostra o caminho: deve ser o
   `telinha.exe` em `%LOCALAPPDATA%\Telinha\bin`.
 
