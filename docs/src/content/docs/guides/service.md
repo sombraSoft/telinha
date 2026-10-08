@@ -20,11 +20,11 @@ rules; to redo it, run `telinha setup` again. The task:
 
 - starts at boot, whether or not anyone is logged on;
 - runs as your account without storing a password;
-- runs **unelevated**: the internet-facing server and its helpers get a plain
+- runs **unelevated**: the internet-facing Telinha process and its helpers get a plain
   user token. Nothing at runtime needs administrator rights: the firewall
   rules are made at install time and updates write inside the Telinha folder.
 
-The task runs `telinha.exe service run --home "<home>"`, a small loop that
+The task runs `telinha.exe service run --home "<telinha-folder>"`, a small loop that
 starts `telinha run`, starts it again at once after an update and with a
 growing pause after a crash (1 s, doubling up to 60 s), rolls back an update
 that fails to start, and writes the log to `logs\telinha.log` in the Telinha
@@ -169,4 +169,4 @@ services:
 ```
 
 Setting it up: [Docker](/telinha/start/docker/). Keeping it current:
-[Updates](/telinha/guides/updates/#docker-host).
+[Updates](/telinha/guides/updates/#machine-with-docker).

@@ -1,6 +1,6 @@
 ---
 title: Updates
-description: How the native binary, a Docker host and a source checkout get new Telinha releases, how to pin a version, roll back, or turn updates off.
+description: How the native binary, a machine with Docker and a source checkout get new Telinha releases, how to pin a version, roll back, or turn updates off.
 sidebar:
   order: 4
 ---
@@ -10,7 +10,7 @@ How Telinha updates depends on how you installed it:
 | Install | Updates through | Default |
 | --- | --- | --- |
 | Native binary (Windows, Linux) | Telinha itself (`AUTO_UPDATE`) | on |
-| Docker host | `telinha-update`, a systemd timer | off until you enable the timer |
+| Machine with Docker | `telinha-update`, a systemd timer | off until you enable the timer |
 | A clone of the repository | `git pull` | by hand |
 
 `AUTO_UPDATE=on` anywhere but the native binary is a warning and is ignored.
@@ -89,7 +89,7 @@ Add `UPDATE_PIN=v0.7.0` to `telinha.env` and restart Telinha
 `AUTO_UPDATE=off` stops the periodic check. `telinha update` still works when
 you run it.
 
-## Docker host
+## Machine with Docker
 
 ### How it decides
 
@@ -131,7 +131,7 @@ when a release's notes mention a compose change.
 When the new version never turns healthy, `telinha-update` goes back to the
 previous one (`.env` still names it and its image is still there) and records
 the tag in `/opt/telinha/failed`, which `telinha-update status` shows. The
-timer skips that tag until a newer release comes out, so the host does not
+timer skips that tag until a newer release comes out, so the machine does not
 bounce between versions every 5 minutes; `--now`, `pin` and `unpin` try it
 again. A first deploy has nothing to go back to: fix `telinha.env`, then run
 `telinha-update --now`.

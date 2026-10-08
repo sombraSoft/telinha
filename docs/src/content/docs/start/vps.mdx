@@ -1,6 +1,6 @@
 ---
 title: VPS
-description: Run Telinha on a rented Linux server with its own public IP, with or without a domain.
+description: Run Telinha on a rented Linux machine with its own public IP, with or without a domain.
 sidebar:
   order: 5
 ---
@@ -9,7 +9,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 A VPS has its own public IPv4, so there is no router to configure and CGNAT
 does not matter. You open the ports in the provider's firewall instead. Without
-a domain, sslip.io gives the server an HTTPS name made from its IP.
+a domain, sslip.io gives the VPS an HTTPS name made from its IP.
 
 ## Before you start
 
@@ -17,7 +17,7 @@ a domain, sslip.io gives the server an HTTPS name made from its IP.
   distributions with systemd work too), x64 or arm64, with a public IPv4 and a login as
   root or as a user with `sudo`. If you prefer containers, the
   [Docker](/telinha/start/docker/) page works on a VPS too.
-- A small plan is enough to start: the server forwards the video without
+- A small plan is enough to start: LiveKit forwards the video without
   re-encoding it, so the network matters more than CPU or RAM. Check the
   plan's monthly transfer allowance, because every viewer receives the full
   stream: see [How many people can watch?](/telinha/faq/#how-many-people-can-watch).
@@ -61,7 +61,7 @@ closed in both firewalls.
 provider's panel (security group, security list or firewall rules), from
 any source address.
 
-**The server's own firewall.** Telinha adds no firewall rules on Linux. If ufw
+**The VPS's own firewall.** Telinha adds no firewall rules on Linux. If ufw
 or firewalld is active, open the same ports there; with the default ports:
 
 ```sh
@@ -78,7 +78,7 @@ next connection is locked out.
 Some provider images (Oracle Cloud's Ubuntu images, for example) block ports
 with plain iptables rules while ufw stays inactive. If
 `sudo iptables -L INPUT -n` lists a `REJECT` rule, follow the provider's guide
-to open the ports on the server too.
+to open the ports on the VPS too.
 :::
 
 There is no router on a VPS, so the setup turns UPnP off (`UPNP=off`).
@@ -91,17 +91,17 @@ user, can bind ports 80 and 443, and keeps running when you log out.
 
 <Steps>
 
-1. Connect to the server. The provider's panel shows its IP address and the
+1. Connect to the VPS. The provider's panel shows its IP address and the
    user to log in as (often `root` or `ubuntu`), with a password or an SSH
    key. On Windows 10 or 11 open PowerShell, on macOS or Linux open Terminal,
    and type:
 
    ```sh
-   ssh <user>@<server IP>
+   ssh <user>@<VPS IP>
    ```
 
-   The first time it asks whether to trust the server's fingerprint: answer
-   `yes`. Then run, on the server:
+   The first time it asks whether to trust the VPS's fingerprint: answer
+   `yes`. Then run, on the VPS:
 
    ```sh
    curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh
@@ -119,7 +119,7 @@ user, can bind ports 80 and 443, and keeps running when you log out.
 </Steps>
 
 The program lands in `/usr/local/lib/telinha/telinha`, run by the
-`/usr/local/bin/telinha` command; the home folder is `/opt/telinha`, and the
+`/usr/local/bin/telinha` command; the Telinha folder is `/opt/telinha`, and the
 setup copies the program into `/opt/telinha/bin/` for the service, which
 updates that copy itself. The script downloads nothing else: `livekit-server`
 and `caddy` or `cloudflared` come later, `livekit-server` and `cloudflared`
@@ -133,7 +133,7 @@ without starting the setup). `TELINHA_VERSION` installs a given release tag.
 Setup fills the terminal with its own screens: the steps down the left (Where,
 Address, Discord, Ports, Updates, Review, Install), the current question as a
 card on the right and, beside or under it, a hint that explains the choice.
-Servers, roles and channels come from lists, so you never copy an id by hand.
+Discord servers, roles and channels come from lists, so you never copy an id by hand.
 A first run starts with the language, English or Brazilian Portuguese, and
 every screen switches at once. Over SSH it works the same, from 80 columns by
 24 rows.
@@ -153,14 +153,14 @@ like this:
 
 <Steps>
 
-1. **Where.** Choose *A rented server (VPS)* for *Where will Telinha run?*
+1. **Where.** Choose *A rented machine (VPS)* for *Where will Telinha run?*
    There is no router question after this one.
 
 2. **Address.** It asks *How will people reach Telinha?*: your own domain
    (its A record is compared with the public IP), DuckDNS, sslip.io, a
    Cloudflare Tunnel or your own reverse proxy. With the first three Telinha
    gets the HTTPS certificate over 80 and 443, which you opened above. With
-   sslip.io it takes the server's public IPv4 (and asks for it when it cannot
+   sslip.io it takes the VPS's public IPv4 (and asks for it when it cannot
    see it) and writes both the address and the IP LiveKit announces:
 
    ```ini
@@ -170,7 +170,7 @@ like this:
 
 3. **Discord.** Paste the bot token: Telinha checks it with Discord right
    away and reads your app from it. Then the client secret (also checked), the
-   server (a list of the ones the bot is in; *Another server* shows an invite
+   Discord server (a list of the ones the bot is in; *Another Discord server* shows an invite
    link and checks again once you added the bot), the role that may enter, the
    channels (Space marks one, `a` marks all) and the command name. A group
    name is optional. When the app does not have the login redirect yet, a card
@@ -188,7 +188,7 @@ like this:
    at the VPS; yes checks that it resolves.
 
 5. **Ports.** TCP 7881 and UDP 7882 carry the video. Keep them unless
-   something else on the server uses them. The hint lists the ports the
+   something else on the VPS uses them. The hint lists the ports the
    provider's firewall must let in, with the ufw and firewalld commands.
 
 6. **Updates.** Say yes: new stable releases then install themselves when no
@@ -199,7 +199,7 @@ like this:
    with PgUp and PgDn when the list is long. Choose *Apply* (or *Apply with a
    new cookie secret*, offered on a re-run, which logs everyone out of the
    pages), *Back to the questions* or *Quit without writing*. Nothing has
-   changed on this server until you apply.
+   changed on this VPS until you apply.
 
 8. **Install.** A live list: the Discord app (checked, and its intents
    switched on), the DuckDNS address if you picked one, `telinha.env`

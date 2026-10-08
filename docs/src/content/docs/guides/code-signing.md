@@ -90,7 +90,7 @@ releases as they are, and Telinha's `caddy.exe` build is not signed.
 This program will not transfer any information to other networked systems
 unless specifically requested by the user.
 
-Telinha is a server: hosting screen-sharing rooms for your Discord server is
+Telinha is a self-hosted web app: hosting screen-sharing rooms for your Discord server is
 what you ask it to do. These are all the systems a configured Telinha talks
 to for that, each with the `telinha.env` key that governs it.
 
@@ -147,7 +147,7 @@ to for that, each with the `telinha.env` key that governs it.
 **When you run a command.** `telinha setup`, `telinha doctor`,
 `telinha update`, the installers and the tray icon's menu make some of the
 same calls when you use them: the Discord API (to check the token, the
-intents, the server, the role, the channels and the login redirect), the
+intents, the Discord server, the role, the channels and the login redirect), the
 public-IP lookups, the address's DNS record at 1.1.1.1 and 8.8.8.8, a request
 to your own `PUBLIC_URL` (its certificate and `/healthz`), a DuckDNS token check, the router probe
 and GitHub releases. The doctor's phone test is a page your phone opens on

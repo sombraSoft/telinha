@@ -10,10 +10,10 @@ connections.
 Why: Discord Go Live is blocked in Brazil.
 
 One process does everything. Telinha reads one `telinha.env`, renders
-`livekit.yaml` (and in direct mode a small Caddyfile) into its data dir, starts
+`livekit.yaml` (and in direct mode a small Caddyfile) into its Telinha folder, starts
 and supervises `livekit-server` (or, with `MEDIA=cloud`, uses a LiveKit Cloud
 project instead), plus `caddy` or `cloudflared` depending on the ingress mode,
-gates every page behind the Discord login, relays the LiveKit signaling
+gates every page behind the Discord login, proxies the LiveKit signaling
 WebSocket at `/livekit/*` itself, serves TURN over TLS on port 443 on a VPS,
 restarts LiveKit when the public IP changes, asks the router to forward its ports (UPnP / NAT-PMP / PCP) and keeps
 a DuckDNS name current. It runs as a native program on Windows and Linux (one
@@ -51,7 +51,7 @@ check its sha256 against the release's `SHA256SUMS` and start `telinha setup`.
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
 mise install && bun run build    # the toolchain mise.toml pins, then bun install and the git hooks
-bun server/src/index.ts setup    # same setup screens; downloads the helper binaries into <home>/bin
+bun server/src/index.ts setup    # same setup screens; downloads the helper binaries into <telinha-folder>/bin
 bun server/src/index.ts          # run in this console
 ```
 
@@ -71,7 +71,7 @@ off). They work from 80x24; a wider terminal puts the hint beside the card.
 `Updates` (native installs only), `Review` and `Install`, with a check on the
 ones answered. The right side is one question at a time, as a card with a hint
 under or beside it that explains the choice (what a Cloudflare Tunnel is, why
-DuckDNS uses a high port, where to find a token). Servers, roles and channels
+DuckDNS uses a high port, where to find a token). Discord servers, roles and channels
 are picked from lists read from Discord with the bot token, so no id is typed;
 the bot token, the client secret and the DuckDNS token are checked as you go.
 
@@ -142,7 +142,7 @@ browser --> caddy :443 (TLS; :80 redirects)           child of telinha
                     /doctor*      --> phone test (one-time link)
                     /auth/*       --> OAuth login, /auth/members (no gate)
                     everything    --> gate: Discord login + role
-                      /livekit/rtc* --> LiveKit 127.0.0.1:7880   (signaling relay, WebSocket)
+                      /livekit/rtc* --> LiveKit 127.0.0.1:7880   (signaling proxy, WebSocket)
                       /r/<code>     --> room page
                       /             --> redirect to /r/
 
@@ -204,8 +204,8 @@ The supervised children write their output into telinha's log as
 restarted with backoff (1 s doubling up to 60 s, reset after a minute of
 uptime) and never given up on. If LiveKit does not answer within 30 s at start,
 telinha stops the other children and exits 1. Only signaling goes through the
-relay (a few KB/s per client); media flows directly between the browser and
-LiveKit on the media ports. The relay forwards only `/livekit/rtc` and
+signaling proxy (a few KB/s per client); media flows directly between the browser and
+LiveKit on the media ports. The signaling proxy forwards only `/livekit/rtc` and
 `/livekit/rtc/*`; anything else under `/livekit/` (notably LiveKit's Twirp
 API) is a 404.
 
@@ -213,9 +213,9 @@ API) is a 404.
 one URL):
 
 ```
-browser --> (caddy | cloudflared | your proxy) --> telinha LISTEN --> (same routes, no /livekit relay: 404)
+browser --> (caddy | cloudflared | your proxy) --> telinha LISTEN --> (same routes, no /livekit signaling proxy: 404)
 browser <--> LiveKit Cloud   wss://<project>.livekit.cloud, signaling and media (URL handed out with the token)
-telinha --> LiveKit Cloud    https://<project>.livekit.cloud, RoomService (create, list participants, delete)
+telinha --> LiveKit Cloud    https://<project>.livekit.cloud, LiveKit room API (create, list participants, delete)
 ```
 
 No `livekit-server` child, no media ports, no UPnP media mappings, no Windows
@@ -241,7 +241,7 @@ those are served without a login (hashed build output, no data).
 
 | Path | What |
 | --- | --- |
-| `server/` | Bun TypeScript server, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` plain output (colours, spinner, tables, links; no prompts), `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` the entry (flags, the file, the machine, the screens or the plain run) and `setup/` what it runs: `model.ts` the questions as data, `resolve.ts` answers to `telinha.env` values and flags to answers, `lookups.ts` the read-only Discord, DNS and port lookups, `state.ts` the navigation state, `apply.ts` the install tasks with their retry/skip/back decisions, `steps.ts` their side effects, `ui.ts` the contract the screens implement, `qstrings.ts` and `apply-strings.ts` the texts, plus `discord.ts`, `domain.ts`, `host.ts` and `envwrite.ts`; `doctor.ts` and `doctor-strings.ts`, `update.ts`, `service.ts`, `tray.ts` the `tray` command; `setup/tray.ts` the install's tray task), `tui/` the OpenTUI + Solid screens of setup and doctor (`runtime.tsx` the renderer and terminal safety, `theme.ts`, `keys.ts`, `ui/` the widgets, `setup/` and `doctor/` the screens, `load.ts`, `smoke.tsx`; loaded only on a terminal, through a dynamic import, so `run` never pulls it in), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` home dirs and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile (with the TURN `layer4` listener-wrapper block), `lock.ts` one run per home, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall, the `service run` loop and `tray.ts` (the tray's file, Run value, launch and stop), `update/` release lookup, download, swap, rollback, `proxy.ts` `/livekit/*` relay, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and RoomService calls, `codes.ts` room codes, `rooms.ts` the Room module (open, admit, observe; owns the SQLite registry and the LiveKit rooms), `lifecycle.ts` card pacing, flushing and retries, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
+| `server/` | Bun TypeScript program, run directly in dev and Docker, compiled for the native binary. `index.ts` entry, `cli/` the commands (`main.ts` dispatch, `args.ts`, `term.ts` plain output (colours, spinner, tables, links; no prompts), `strings.ts` EN/pt-BR, `control.ts` control-endpoint client, `setup.ts` the entry (flags, the file, the machine, the screens or the plain run) and `setup/` what it runs: `model.ts` the questions as data, `resolve.ts` answers to `telinha.env` values and flags to answers, `lookups.ts` the read-only Discord, DNS and port lookups, `state.ts` the navigation state, `apply.ts` the install tasks with their retry/skip/back decisions, `steps.ts` their side effects, `ui.ts` the contract the screens implement, `qstrings.ts` and `apply-strings.ts` the texts, plus `discord.ts`, `domain.ts`, `host.ts` and `envwrite.ts`; `doctor.ts` and `doctor-strings.ts`, `update.ts`, `service.ts`, `tray.ts` the `tray` command; `setup/tray.ts` the install's tray task), `tui/` the OpenTUI + Solid screens of setup and doctor (`runtime.tsx` the renderer and terminal safety, `theme.ts`, `keys.ts`, `ui/` the widgets, `setup/` and `doctor/` the screens, `load.ts`, `smoke.tsx`; loaded only on a terminal, through a dynamic import, so `run` never pulls it in), `run.ts` the service start-up and shutdown, `config.ts` env parsing and validation, `envfile.ts` `telinha.env` parser, `paths.ts` Telinha folder paths and binary lookup, `bins.ts` helper-binary download (sha256-pinned), `archive.ts` tar.gz/zip, `version.ts`, `embedded.ts` the page inside the binary, `supervisor.ts` child processes, `children.ts` which children a mode needs, `render.ts` `livekit.yaml` and Caddyfile (with the TURN `layer4` listener-wrapper block), `lock.ts` one run per Telinha folder, `log.ts` logger with rotation, `control.ts` the control endpoint, `ipwatch.ts` public IP watch, `netinfo.ts` IP/DNS/TLS probes, `ddns.ts` DuckDNS, `nat/` UPnP IGD, NAT-PMP, PCP and the port mapper, `doctor/` checks, phone-test sessions, routes and QR, `service/` Task Scheduler, systemd, Windows Firewall, the `service run` loop and `tray.ts` (the tray's file, Run value, launch and stop), `update/` release lookup, download, swap, rollback, `proxy.ts` the `/livekit/*` signaling proxy, `http.ts` gate and routes, `auth.ts` sessions/OAuth, `roles.ts` role check, `livekit.ts` tokens and LiveKit room API calls, `codes.ts` room codes, `rooms.ts` the Room module (open, admit, observe; owns the SQLite registry and the LiveKit rooms), `lifecycle.ts` card pacing, flushing and retries, `card.ts` the status card, `members.ts` the member directory, `static.ts` page serving, `pages.ts` HTML pages, `bot.ts` Discord bot, `i18n.ts` strings, tests in `test/` |
 | `web/` | Svelte 5 + TypeScript room page on plain Vite (`src/App.svelte`, `components/`, `lib/`, `styles/`), served under `/r/`, plus the doctor page (`doctor.html`, `src/doctor/`, plain TypeScript); `bun run build` writes `web/dist` |
 | `versions.json` | Pinned `livekit-server` and `cloudflared` versions with the sha256 of every asset (linux amd64/arm64, windows amd64/arm64; cloudflared has no windows arm64 build, the amd64 one is used), and the `caddy` build recipe: Caddy `version`, `xcaddy` and `modules` (no hashes: each release's `SHA256SUMS` pins its Caddy) |
 | `mise.toml`, `mise.lock` | The dev and CI toolchain: Bun, Go and the linters, with each tool's download and checksum for every platform in the lock. `mise install` installs it, then runs `scripts/setup-dev.ts` (`bun install`). `scripts/toolchain.test.ts` holds every other Bun and Go copy (`packageManager`, each `@types/bun`, the `Dockerfile` images) to these versions |
@@ -270,7 +270,7 @@ your shell. Works on Windows and Linux. `mise install` installs the versions
 
 ```
 mise install               # the toolchain mise.toml pins, then bun install and the git hooks (lefthook.yml; LEFTHOOK=0 skips them)
-bun run dev                # http://localhost:5173/r/ (Vite HMR + Bun server, which runs LiveKit)
+bun run dev                # http://localhost:5173/r/ (Vite HMR + Telinha on Bun, which runs LiveKit)
 bun run typecheck          # tsc and svelte-check in every workspace
 bun run lint               # Biome: formatting, lint rules and import order (bun run format fixes what it can)
 bun run test               # bun test: server, web, docs and scripts unit tests (the screens render in a test terminal)
@@ -290,16 +290,16 @@ bun run docs:build         # docs/dist; the link validator fails the build on a 
 ```
 
 `bun run dev` downloads `livekit-server` (pinned in `versions.json`,
-sha256-verified) into `.cache/telinha/bin` on first run and starts the server
+sha256-verified) into `.cache/telinha/bin` on first run and starts Telinha
 with `TELINHA_HOME=.cache/telinha`, `INGRESS=external`, `MEDIA=self`,
-`LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` and `AUTO_UPDATE=off`, so the server
+`LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` and `AUTO_UPDATE=off`, so Telinha
 supervises LiveKit exactly as in production and LiveKit advertises loopback
 instead of a STUN-discovered public IP (it may still list the host's own IPv6
 addresses). Vite proxies `/auth` and `/livekit` (WebSocket included) to the
-server on `127.0.0.1:8081`, so the browser goes through the real gate and
-signaling relay.
+Telinha on `127.0.0.1:8081`, so the browser goes through the real gate and
+signaling proxy.
 
-The server runs with `DEV_USER` set (default `1:Dev`, i.e. `<id>:<name>`), a
+Telinha runs with `DEV_USER` set (default `1:Dev`, i.e. `<id>:<name>`), a
 fake login that skips Discord and the bot. It is refused unless `PUBLIC_URL`
 is `http://localhost` or `http://127.0.0.1`, `LISTEN` is a loopback address and
 `INGRESS` is `external` (the default when `DEV_USER` is set), and in that mode
@@ -336,7 +336,7 @@ are one Renovate group, `opentui`, updated by hand: OpenTUI is 0.x, so a minor c
 break, and the terminal smokes are not part of the required checks.
 
 `bun run dev` always runs the bundled LiveKit. To run against LiveKit Cloud
-from a clone, start the server itself (`bun server/src/index.ts`) with a
+from a clone, start Telinha itself (`bun server/src/index.ts`) with a
 `telinha.env` that adds `MEDIA=cloud` and the project's three keys,
 `LIVEKIT_CLOUD_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`; no
 `livekit-server` is downloaded or started. With `DEV_USER` set,
@@ -376,11 +376,11 @@ Windows needs only the .NET SDK (no Visual Studio, no targeting pack). Run the
 tests before the versioned build: `dotnet test` rebuilds the exe without
 `-p:Version`. `-p:Version=X.Y.Z[-rc.N]` makes `ProductVersion` (and
 `telinha-tray --version`) the release version and `FileVersion` `X.Y.Z.0`.
-The tray only reads the home (`data\run\service.pid`, `control.token`,
+The tray only reads the Telinha folder (`data\run\service.pid`, `control.token`,
 `telinha.env`) and talks to the control endpoint and `telinha.exe`; it writes
 `data\run\tray.json` and `logs\telinha-tray.log`. It refuses to run elevated,
 so try a build with `telinha tray start` from a normal terminal after copying
-it into `<home>\bin`.
+it into `<telinha-folder>\bin`.
 
 **Image.** `bun run image` picks docker, else podman (starting the podman
 machine if it is stopped). Caddy is compiled inside the build by the
@@ -422,8 +422,8 @@ A Telinha link does not live forever:
   gets a pronounceable code like `lamo-futi` (two words of two
   consonant-vowel syllables, about 25 bits; six syllables once codes start to
   collide), checked against the registry, and lives at
-  `<PUBLIC_URL>/r/lamo-futi`. The server records the room in
-  `DATA_DIR/telinha.sqlite`, creates it in LiveKit through the RoomService API
+  `<PUBLIC_URL>/r/lamo-futi`. Telinha records the room in
+  `DATA_DIR/telinha.sqlite`, creates it through the LiveKit room API
   and posts the card. The bundled LiveKit runs with `room.auto_create: false`,
   so an old token cannot bring a closed room back, and tokens last 10 minutes
   anyway (LiveKit refreshes them for connected participants). Telinha cannot
@@ -432,7 +432,7 @@ A Telinha link does not live forever:
   off in the project's settings, and a room recreated by a still-valid token
   is removed by its `emptyTimeout`. The code is not the
   secret: the login gate is.
-- Every `POLL_SECONDS` the server lists the participants of each open room.
+- Every `POLL_SECONDS` Telinha lists the participants of each open room.
   The slash command's message is a live card: who is streaming (with the
   quality the page reports, e.g. `1080p60 · H265`), who else is in the room
   while someone streams, and since when. It is edited only when it changes, at
@@ -442,7 +442,7 @@ A Telinha link does not live forever:
   stays as posted (logged once as "card not editable"), and everything else
   works.
 - A room closes for good after `CLOSE_EMPTY_SECONDS` with nobody in it, or
-  that long after the command when nobody ever joined. The server deletes the
+  that long after the command when nobody ever joined. Telinha deletes the
   LiveKit room and turns the card into a summary (how long it lasted, everyone
   who came) without the button.
 - The page needs a room from the command: `/r/` alone, or an unknown or closed
@@ -450,7 +450,7 @@ A Telinha link does not live forever:
   or 410).
 - `/` redirects to `/r/`.
 
-While a room is open the server keeps it in LiveKit, so a LiveKit restart (the
+While a room is open Telinha keeps it in LiveKit, so a LiveKit restart (the
 in-process IP watch, a crash, an update) only blips it: the page fetches a new
 token and rejoins once (a stream has to be shared again).
 
@@ -464,7 +464,7 @@ The page has four themes (Dark, Ash, Onyx, Light; "system" follows the OS) and
 two languages (pt-BR, en). Both are picked in the top bar and kept in
 `localStorage`. By default the language comes from the Discord locale of the
 logged-in user, and the bot answers in the invoker's locale (ephemeral) or the
-server locale (public post).
+Discord server's locale (public post).
 
 Streams use AV1 when the browser has a hardware encoder for it, else H.265
 (Chrome only offers it with one), else H.264, always with an H.264 backup for
@@ -484,7 +484,7 @@ Discord style: **Online** (online, idle, do not disturb) and **Offline**
 session and 403 without the role, checked by the handler itself since the gate
 lets `/auth/*` through. Until the bot has loaded the guild the list is empty.
 
-The bot fetches the guild's members once per gateway session and keeps the
+The bot fetches the guild's members once per gateway connection and keeps the
 directory current from member and presence events, so it needs the two
 privileged intents, Server Members and Presence (setup switches both on; see
 the [Discord app](https://sombrasoft.github.io/telinha/start/discord/) page).

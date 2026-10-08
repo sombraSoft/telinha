@@ -136,7 +136,7 @@ Abra isto no celular com o Wi-Fi DESLIGADO (dados móveis):
 Os dados móveis são o ponto: no seu próprio Wi-Fi o celular está dentro da sua
 rede e não prova nada sobre o roteador. Não precisa de login no Discord. O
 link funciona uma vez só e apenas por 10 minutos, e o cookie que ele deixa (15
-minutos) não abre nada além da página do teste e do relay do LiveKit, numa
+minutos) não abre nada além da página do teste e do proxy de sinalização, numa
 sala privada só dele (com `MEDIA=cloud` a página se conecta direto ao projeto
 no Cloud). A página faz o teste; o celular e o terminal mostram o
 resultado, e as linhas entram na lista como um grupo *Teste no celular*; uma que
@@ -321,7 +321,7 @@ A Telinha já está rodando (pid 1234). Use: telinha service status | telinha se
 Para rodar num console, pare o serviço antes; senão use o que já está
 rodando.
 
-### O serviço do Windows não inicia
+### O serviço não inicia no Windows
 
 A `service` avisa quando o serviço não está instalado, não está rodando ou não
 inicia junto com o computador. Então:

@@ -1,6 +1,6 @@
 ---
 title: Atualizações
-description: Como o binário nativo, um servidor com Docker e um clone do código recebem as versões novas da Telinha, e como fixar uma versão, voltar atrás ou desligar as atualizações.
+description: Como o binário nativo, uma máquina com Docker e um clone do código recebem as versões novas da Telinha, e como fixar uma versão, voltar atrás ou desligar as atualizações.
 sidebar:
   order: 4
 ---
@@ -10,7 +10,7 @@ O jeito como a Telinha se atualiza depende de como você instalou:
 | Instalação | Atualiza por | Padrão |
 | --- | --- | --- |
 | Binário nativo (Windows, Linux) | A própria Telinha (`AUTO_UPDATE`) | ligado |
-| Servidor com Docker | `telinha-update`, um timer do systemd | desligado até você ativar o timer |
+| Máquina com Docker | `telinha-update`, um timer do systemd | desligado até você ativar o timer |
 | Um clone do repositório | `git pull` | na mão |
 
 `AUTO_UPDATE=on` em qualquer lugar que não seja o binário nativo gera um aviso
@@ -95,7 +95,7 @@ estáveis.
 `AUTO_UPDATE=off` para a verificação periódica. O `telinha update` continua
 funcionando quando você roda.
 
-## Servidor com Docker
+## Máquina com Docker
 
 ### Como decide
 
@@ -139,7 +139,7 @@ faça isso quando as notas de uma versão falarem de mudança no compose.
 Quando a versão nova nunca fica saudável, o `telinha-update` volta para a
 anterior (o `.env` ainda aponta para ela e a imagem ainda está lá) e anota a
 tag em `/opt/telinha/failed`, que o `telinha-update status` mostra. O timer
-ignora essa tag até sair uma versão mais nova, para o servidor não ficar
+ignora essa tag até sair uma versão mais nova, para a máquina não ficar
 pulando entre versões a cada 5 minutos; `--now`, `pin` e `unpin` tentam de
 novo. Na primeira implantação não tem para onde voltar: arrume o
 `telinha.env` e rode `telinha-update --now`.

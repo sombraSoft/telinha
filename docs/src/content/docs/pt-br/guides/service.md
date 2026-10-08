@@ -22,12 +22,12 @@ A tarefa:
 
 - inicia junto com o computador, com ou sem alguém logado;
 - roda com a sua conta, sem guardar senha;
-- roda **sem elevação**: o servidor exposto à internet e os programas
+- roda **sem elevação**: o processo da Telinha exposto à internet e os programas
   auxiliares recebem um token de usuário comum. Nada precisa de administrador
   enquanto roda: as regras de firewall são criadas na instalação e as
   atualizações gravam dentro da pasta da Telinha.
 
-A tarefa roda `telinha.exe service run --home "<home>"`, um loop pequeno que
+A tarefa roda `telinha.exe service run --home "<telinha-folder>"`, um loop pequeno que
 inicia o `telinha run`, inicia de novo na hora depois de uma atualização e com
 uma pausa crescente depois de um travamento (1 s, dobrando até 60 s), volta
 uma atualização que não consegue iniciar e grava o log em `logs\telinha.log`
@@ -175,4 +175,4 @@ services:
 ```
 
 Para instalar: [Docker](/telinha/pt-br/start/docker/). Para manter em dia:
-[Atualizações](/telinha/pt-br/guides/updates/#servidor-com-docker).
+[Atualizações](/telinha/pt-br/guides/updates/#máquina-com-docker).

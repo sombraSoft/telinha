@@ -5,7 +5,7 @@ sidebar:
   order: 8
 ---
 
-By default Telinha runs LiveKit itself (`MEDIA=self`): the media server that
+By default Telinha runs LiveKit itself (`MEDIA=self`): the SFU that
 receives the shared screen and sends it to every viewer is a child of Telinha
 on the same machine, and its two media ports have to reach that machine from
 the internet. With `MEDIA=cloud` a [LiveKit Cloud](https://livekit.io/cloud)
@@ -123,7 +123,7 @@ or trailing slash is dropped.
   the Windows Firewall gets no LiveKit rules (the setup's service step, or
   `telinha service install --firewall`, rewrites them), and the doctor lists
   no media port to forward.
-- **No `/livekit` relay.** The room page receives the Cloud project's URL with
+- **No signaling proxy at `/livekit`.** The room page receives the Cloud project's URL with
   its token and connects to LiveKit Cloud directly, for signaling and media.
 - **Rooms behave the same.** Telinha creates each room through the project's
   room API, follows who is in it, and deletes it when it closes, which
@@ -164,7 +164,7 @@ They travel encrypted, but a company other than you handles them, under
 LiveKit's own terms and privacy policy. The room tokens Telinha signs also
 carry each person's Discord display name, user id and avatar, as they do with
 the bundled LiveKit, and the room names are the room codes. With `MEDIA=self`
-none of this reaches anyone else's server.
+none of this reaches anyone else's machine.
 
 ## Switching back
 

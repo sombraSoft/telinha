@@ -14,11 +14,11 @@ words, so nothing you decide here is final.
 <Steps>
 
 1. [Where will it run?](#where-will-it-run) A computer at home (a Windows
-   PC, a Linux box, or Docker on one of them) or a rented server (VPS).
+   PC, a Linux box, or Docker on one of them) or a rented machine (VPS).
 
 2. [Which address?](#which-address) At home: do you have a domain on
    Cloudflare? On a VPS: your own domain, a free name or one made from the
-   server's IP.
+   VPS's IP.
 
 3. [Can the internet reach your network?](#can-the-internet-reach-your-network)
    If your line is behind CGNAT, a home install needs LiveKit Cloud for the
@@ -32,18 +32,18 @@ The machine has to stay on while people watch. Anything that runs one of
 the [supported builds](/telinha/start/how-it-works/#machine-and-operating-system)
 works. The setup asks *Where will Telinha run?* and offers two answers.
 
-**A computer at home (a PC or a home server)**, behind your internet router:
+**A computer at home** (your PC or another machine at home), behind your internet router:
 
 <CardGrid>
   <LinkCard title="Windows PC" description="The PC you already have. No administrator needed to install; one UAC prompt sets up the service." href="/telinha/start/windows/" />
   <LinkCard title="Linux at home" description="A mini PC, a Raspberry Pi 4 or 5 with a 64-bit OS, or any 64-bit Linux box with glibc." href="/telinha/start/linux/" />
-  <LinkCard title="Docker" description="A NAS or server that already runs Docker, or a musl system such as Alpine. One container bundles everything." href="/telinha/start/docker/" />
+  <LinkCard title="Docker" description="A NAS or other machine that already runs Docker, or a musl system such as Alpine. One container bundles everything." href="/telinha/start/docker/" />
 </CardGrid>
 
-**A rented server (VPS)**, which has its own public IP:
+**A rented machine (VPS)**, which has its own public IP:
 
 <CardGrid>
-  <LinkCard title="VPS" description="A rented server with its own public IP. No router to configure; works when your home line cannot." href="/telinha/start/vps/" />
+  <LinkCard title="VPS" description="A rented machine with its own public IP. No router to configure; works when your home line cannot." href="/telinha/start/vps/" />
 </CardGrid>
 
 On Linux, native and Docker do the same job. Native is a single program
@@ -91,7 +91,8 @@ port is needed.
 Some networks (offices, schools, some mobile carriers) only let browsers reach
 port 443, which keeps the media ports out. On a VPS with the address on 443
 (your own domain, DuckDNS or sslip.io), Telinha can relay the video for those
-viewers through [TURN over TLS on port 443](/telinha/guides/turn/).
+viewers through its own TURN: see
+[TURN over TLS on port 443](/telinha/guides/turn/).
 
 ## Can the internet reach your network?
 
@@ -116,7 +117,7 @@ forwarded too.
 <CardGrid>
   <LinkCard title="CGNAT and double NAT" description="How to tell them apart and what to ask your ISP." href="/telinha/guides/domains/#cgnat-and-double-nat" />
   <LinkCard title="LiveKit Cloud" description="Keep Telinha at home and let LiveKit Cloud carry the video: no media port to open." href="/telinha/guides/livekit-cloud/" />
-  <LinkCard title="VPS" description="Run Telinha on a rented server instead." href="/telinha/start/vps/" />
+  <LinkCard title="VPS" description="Run Telinha on a rented machine instead." href="/telinha/start/vps/" />
 </CardGrid>
 
 ## Compare the setups

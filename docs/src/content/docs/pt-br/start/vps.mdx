@@ -1,6 +1,6 @@
 ---
 title: VPS
-description: Rode a Telinha num servidor Linux alugado com IP público próprio, com ou sem domínio.
+description: Rode a Telinha numa máquina Linux alugada com IP público próprio, com ou sem domínio.
 sidebar:
   order: 5
 ---
@@ -9,7 +9,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 Uma VPS tem IPv4 público próprio, então não há roteador para configurar e o
 CGNAT não atrapalha. No lugar disso, você libera as portas no firewall do
-provedor. Sem domínio, o sslip.io dá ao servidor um nome HTTPS feito a partir
+provedor. Sem domínio, o sslip.io dá à VPS um nome HTTPS feito a partir
 do IP.
 
 ## Antes de começar
@@ -19,7 +19,7 @@ do IP.
   público e um login como root ou como um usuário com `sudo`. Se você prefere
   contêineres, a página do [Docker](/telinha/pt-br/start/docker/) também serve
   para uma VPS.
-- Um plano pequeno dá conta para começar: o servidor repassa o vídeo sem
+- Um plano pequeno dá conta para começar: o LiveKit repassa o vídeo sem
   recodificar, então a rede pesa mais que CPU ou memória. Confira a franquia
   mensal de tráfego do plano, porque cada espectador recebe a transmissão
   inteira: veja
@@ -66,7 +66,7 @@ próprio LiveKit. Deixe as duas fechadas nos dois firewalls.
 no painel do provedor (security group, security list ou regras de firewall),
 vinda de qualquer endereço.
 
-**O firewall do próprio servidor.** A Telinha não cria regras de firewall no
+**O firewall da própria VPS.** A Telinha não cria regras de firewall no
 Linux. Se o ufw ou o firewalld estiver ativo, libere as mesmas portas nele; com
 as portas padrão:
 
@@ -84,7 +84,7 @@ próxima conexão fica trancada para fora.
 Algumas imagens de provedor (as do Ubuntu na Oracle Cloud, por exemplo)
 bloqueiam portas com regras do iptables puro, com o ufw desligado. Se
 `sudo iptables -L INPUT -n` mostrar uma regra `REJECT`, siga o guia do provedor
-para liberar as portas no servidor também.
+para liberar as portas na VPS também.
 :::
 
 Numa VPS não há roteador, então o setup desliga o UPnP (`UPNP=off`).
@@ -99,17 +99,17 @@ sai do SSH.
 
 <Steps>
 
-1. Conecte no servidor. O painel do provedor mostra o IP dele e o usuário
+1. Conecte na VPS. O painel do provedor mostra o IP dela e o usuário
    para entrar (muitas vezes `root` ou `ubuntu`), com uma senha ou uma chave
    SSH. No Windows 10 ou 11 abra o PowerShell, no macOS ou no Linux abra o
    Terminal, e digite:
 
    ```sh
-   ssh <usuário>@<IP do servidor>
+   ssh <usuário>@<IP da VPS>
    ```
 
    Na primeira vez ele pergunta se você confia na impressão digital
-   (fingerprint) do servidor: responda `yes`. Depois rode, no servidor:
+   (fingerprint) da VPS: responda `yes`. Depois rode, na VPS:
 
    ```sh
    curl -fsSL https://github.com/sombraSoft/telinha/releases/latest/download/install.sh | sudo sh
@@ -127,7 +127,7 @@ sai do SSH.
 </Steps>
 
 O programa vai para `/usr/local/lib/telinha/telinha`, chamado pelo comando
-`/usr/local/bin/telinha`; a pasta da instalação é `/opt/telinha`, e o setup
+`/usr/local/bin/telinha`; a pasta da Telinha é `/opt/telinha`, e o setup
 copia o programa para `/opt/telinha/bin/` para o serviço, que atualiza essa
 cópia sozinho. O script não baixa mais nada: o `livekit-server` e o `caddy` ou o
 `cloudflared` vêm depois, o `livekit-server` e o `cloudflared` dos projetos
@@ -141,7 +141,7 @@ o setup). `TELINHA_VERSION` instala uma tag específica.
 O setup ocupa o terminal com telas próprias: os passos na lateral esquerda
 (Onde, Endereço, Discord, Portas, Atualizações, Revisão, Instalação), a
 pergunta atual num cartão à direita e, ao lado ou embaixo, uma dica que explica
-a escolha. Servidores, cargos e canais aparecem em listas, então você nunca
+a escolha. Servidores do Discord, cargos e canais aparecem em listas, então você nunca
 copia id na mão. Na primeira vez ele começa pelo idioma, português do Brasil ou
 inglês, e todas as telas trocam na hora. Por SSH funciona igual, a partir de 80
 colunas por 24 linhas.
@@ -161,14 +161,14 @@ teclas. Numa VPS, o caminho é este:
 
 <Steps>
 
-1. **Onde.** Para *Onde a Telinha vai rodar?* escolha *Um servidor alugado
+1. **Onde.** Para *Onde a Telinha vai rodar?* escolha *Uma máquina alugada
    (VPS)*. Depois disso não tem pergunta sobre roteador.
 
 2. **Endereço.** Ele pergunta *Como o pessoal vai chegar na Telinha?*: um
    domínio seu (o registro A é comparado com o IP público), DuckDNS, sslip.io,
    um Cloudflare Tunnel ou o seu próprio proxy reverso. Nas três primeiras
    opções a Telinha pega o certificado HTTPS pela 80 e pela 443, que você já
-   liberou acima. Com o sslip.io ele usa o IPv4 público do servidor (e pergunta
+   liberou acima. Com o sslip.io ele usa o IPv4 público da VPS (e pergunta
    quando não consegue ver) e grava o endereço e o IP que o LiveKit anuncia:
 
    ```ini
@@ -178,7 +178,7 @@ teclas. Numa VPS, o caminho é este:
 
 3. **Discord.** Cole o token do bot: a Telinha confere ele com o Discord na
    hora e lê o seu app a partir dele. Depois o segredo do cliente (também
-   conferido), o servidor (uma lista dos que o bot já está; *Outro servidor*
+   conferido), o servidor do Discord (uma lista dos que o bot já está; *Outro servidor do Discord*
    mostra um link de convite e confere de novo quando você adicionar o bot), o
    cargo que pode entrar, os canais (Espaço marca um, `a` marca todos) e o
    nome do comando. O nome do grupo é opcional. Quando o app ainda não tem o
@@ -197,7 +197,7 @@ teclas. Numa VPS, o caminho é este:
    apontando para a VPS; o sim confere se ele resolve.
 
 5. **Portas.** TCP 7881 e UDP 7882 levam o vídeo. Mantenha essas, a não ser
-   que outro programa do servidor já use alguma. A dica lista as portas que o
+   que outro programa da VPS já use alguma. A dica lista as portas que o
    firewall do provedor precisa deixar entrar, com os comandos do ufw e do
    firewalld.
 
@@ -209,7 +209,7 @@ teclas. Numa VPS, o caminho é este:
    mantido ou gerado. Role com PgUp e PgDn quando a lista for longa. Escolha
    *Aplicar* (ou *Aplicar com um novo segredo de cookie*, oferecido numa nova
    rodada, que desconecta todo mundo das páginas), *Voltar pras perguntas* ou
-   *Sair sem gravar*. Nada mudou neste servidor até você aplicar.
+   *Sair sem gravar*. Nada mudou nesta VPS até você aplicar.
 
 8. **Instalação.** Uma lista ao vivo: o app do Discord (conferido, com os
    intents ligados), o endereço do DuckDNS se você escolheu um, o

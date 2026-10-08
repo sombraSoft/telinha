@@ -113,15 +113,18 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
     probe: (c) => c.commandName,
     default: 'telinha',
     notes: {
-      en: 'Slash command name: lowercase, 1-32 letters, digits, `-` or `_`. Two deployments in one server need different names.',
+      en: 'Slash command name: lowercase, 1-32 letters, digits, `-` or `_`. Two deployments in one Discord server need different names.',
       'pt-BR':
-        'Nome do comando de barra: minúsculas, 1-32 letras, dígitos, `-` ou `_`. Duas instalações no mesmo servidor precisam de nomes diferentes.',
+        'Nome do comando de barra: minúsculas, 1-32 letras, dígitos, `-` ou `_`. Duas instalações no mesmo servidor do Discord precisam de nomes diferentes.',
     },
   },
   GROUP_NAME: {
     section: 'discord',
     required: no,
-    default: { en: "the Discord server's name", 'pt-BR': 'o nome do servidor do Discord' },
+    default: {
+      en: "the role's name (`ROLE_ID`), or the Discord server's name when the role is @everyone",
+      'pt-BR': 'o nome do cargo (`ROLE_ID`), ou o do servidor do Discord quando o cargo é o @everyone',
+    },
     notes: {
       en: "Shown in the pages and in the command's replies.",
       'pt-BR': 'Aparece nas páginas e nas respostas do comando.',
@@ -383,9 +386,9 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
     required: no,
     default: { en: '`PUBLIC_URL` as `wss://` + `/livekit`', 'pt-BR': 'a `PUBLIC_URL` como `wss://` + `/livekit`' },
     notes: {
-      en: "`MEDIA=self` only: the signaling URL browsers use; Telinha relays it, so LiveKit's own API never faces the internet.",
+      en: "`MEDIA=self` only: the signaling URL browsers use; Telinha proxies it, so LiveKit's own API never faces the internet.",
       'pt-BR':
-        'Só `MEDIA=self`: a URL de sinalização que os navegadores usam; a Telinha faz o relay, então a API do LiveKit nunca fica exposta à internet.',
+        'Só `MEDIA=self`: a URL de sinalização que os navegadores usam; a Telinha repassa ela pelo proxy de sinalização, então a API do LiveKit nunca fica exposta à internet.',
     },
   },
   IP_WATCH_SECONDS: {
@@ -570,8 +573,8 @@ export const GLOBAL_FLAG_DOCS: Record<string, FlagDoc> = {
   },
   home: {
     value: 'DIR',
-    en: 'The install directory (same as `TELINHA_HOME`); every path follows it.',
-    'pt-BR': 'A pasta da instalação (o mesmo que `TELINHA_HOME`); todos os caminhos seguem ela.',
+    en: 'The Telinha folder (same as `TELINHA_HOME`); every path follows it.',
+    'pt-BR': 'A pasta da Telinha (o mesmo que `TELINHA_HOME`); todos os caminhos seguem ela.',
   },
   yes: {
     en: 'Setup only: every question that already has an answer (from a flag, the existing file or the machine) counts as answered, so the setup screens open on the first question with none, or on the Review when all have one. Nothing is written before you apply there.',
@@ -917,14 +920,20 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
     },
   },
   'discord-guild': {
-    looksAt: { en: 'The bot is in the server `GUILD_ID`.', 'pt-BR': 'O bot está no servidor `GUILD_ID`.' },
+    looksAt: {
+      en: 'The bot is in the Discord server `GUILD_ID`.',
+      'pt-BR': 'O bot está no servidor do Discord `GUILD_ID`.',
+    },
     fixes: {
       en: 'Open the invite link the check prints.',
       'pt-BR': 'Abra o link de convite que a verificação imprime.',
     },
   },
   'discord-role': {
-    looksAt: { en: '`ROLE_ID` is a role of that server.', 'pt-BR': 'O `ROLE_ID` é um cargo desse servidor.' },
+    looksAt: {
+      en: '`ROLE_ID` is a role of that Discord server.',
+      'pt-BR': 'O `ROLE_ID` é um cargo desse servidor do Discord.',
+    },
     fixes: {
       en: '`telinha setup` again: it lists the roles to pick from.',
       'pt-BR': '`telinha setup` de novo: ele lista os cargos para escolher.',
@@ -932,8 +941,8 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
   },
   'discord-channels': {
     looksAt: {
-      en: 'Every `CHANNEL_IDS` entry is a text or announcement channel of that server.',
-      'pt-BR': 'Cada entrada de `CHANNEL_IDS` é um canal de texto ou de anúncios desse servidor.',
+      en: 'Every `CHANNEL_IDS` entry is a text or announcement channel of that Discord server.',
+      'pt-BR': 'Cada entrada de `CHANNEL_IDS` é um canal de texto ou de anúncios desse servidor do Discord.',
     },
     fixes: {
       en: '`telinha setup` again: it lists the channels the bot can see.',

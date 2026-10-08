@@ -14,7 +14,7 @@ Use a clone for development, or on a platform without a release build. Run from 
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
 mise install && bun run build
-bun server/src/index.ts setup    # same setup; downloads the helper binaries into <home>/bin
+bun server/src/index.ts setup    # same setup; downloads the helper binaries into <telinha-folder>/bin
 bun server/src/index.ts          # run in this console
 ```
 
@@ -38,7 +38,7 @@ bun run docs:build
 
 | Script | What it does |
 | --- | --- |
-| `bun run dev` | Vite with hot reload plus the Bun server, which runs LiveKit; open `http://localhost:5173/r/` |
+| `bun run dev` | Vite with hot reload plus Telinha on Bun, which runs LiveKit; open `http://localhost:5173/r/` |
 | `bun run typecheck` | `tsc` and `svelte-check` over every package, including `docs/scripts` |
 | `bun run test` | `bun test` over the server, the web page and the docs |
 | `bun run build` | Builds the room page into `web/dist` |
@@ -53,9 +53,9 @@ bun run docs:build
 
 ### The dev server
 
-`bun run dev` downloads `livekit-server` (pinned in `versions.json`, sha256-verified) on first run and starts the server with `TELINHA_HOME=.cache/telinha`, `INGRESS=external`, `MEDIA=self`, `LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` and `AUTO_UPDATE=off`. The server supervises LiveKit exactly as in production. Vite proxies `/auth` and `/livekit` (WebSocket included) to the server on `127.0.0.1:8081`, so the browser goes through the real gate and signaling relay.
+`bun run dev` downloads `livekit-server` (pinned in `versions.json`, sha256-verified) on first run and starts Telinha with `TELINHA_HOME=.cache/telinha`, `INGRESS=external`, `MEDIA=self`, `LIVEKIT_NODE_IP=127.0.0.1`, `UPNP=off` and `AUTO_UPDATE=off`. Telinha supervises LiveKit exactly as in production. Vite proxies `/auth` and `/livekit` (WebSocket included) to Telinha on `127.0.0.1:8081`, so the browser goes through the real gate and signaling proxy.
 
-The server runs with `DEV_USER` set (default `1:Dev`, that is `<id>:<name>`), a fake login that skips Discord and the bot. It is refused unless `PUBLIC_URL` is `http://localhost` or `http://127.0.0.1`, `LISTEN` is a loopback address and `INGRESS` is `external`, and in that mode every request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` gets a 421. Set `DEV_LOCALE=en` or `pt-BR` to force the language. There is no slash command in dev, so any valid room code (`/r/lamo-futi`, `/r/bada-kodi`: two or three consonant-vowel syllables on each side of the dash) opens a room on first use. `CLOSE_EMPTY_SECONDS=30 bun run dev` shows a room closing.
+Telinha runs with `DEV_USER` set (default `1:Dev`, that is `<id>:<name>`), a fake login that skips Discord and the bot. It is refused unless `PUBLIC_URL` is `http://localhost` or `http://127.0.0.1`, `LISTEN` is a loopback address and `INGRESS` is `external`, and in that mode every request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` gets a 421. Set `DEV_LOCALE=en` or `pt-BR` to force the language. There is no slash command in dev, so any valid room code (`/r/lamo-futi`, `/r/bada-kodi`: two or three consonant-vowel syllables on each side of the dash) opens a room on first use. `CLOSE_EMPTY_SECONDS=30 bun run dev` shows a room closing.
 
 ### Terminal screens
 
@@ -94,7 +94,7 @@ bun run compile --tray tray/bin/Release/net48/telinha-tray.exe
 | `bun scripts/tray-icon.ts` | Draws `tray/telinha.ico` from the site's favicon shapes; the output is the same every run |
 | `bun run compile --tray …` | The native binaries, with the tray in the Windows zips |
 
-To try a build against a running Telinha, copy `telinha-tray.exe` into `<home>\bin` and start it with `telinha tray start` from a normal terminal; the tray refuses to run elevated.
+To try a build against a running Telinha, copy `telinha-tray.exe` into `<telinha-folder>\bin` and start it with `telinha tray start` from a normal terminal; the tray refuses to run elevated.
 
 ## This site
 
@@ -117,7 +117,7 @@ The site is [Starlight](https://starlight.astro.build) in the `docs/` workspace,
 
 <FileTree>
 
-- server/ Bun TypeScript server: the commands, config, supervisor, gate, bot and room registry
+- server/ Bun TypeScript program: the commands, config, supervisor, gate, bot and room registry
 - web/ Svelte 5 room page and the doctor page, built with Vite into `web/dist`
 - docs/ This site (Starlight, English and Portuguese) and its generator and tests
 - deploy/ The installers, the Docker host files and `telinha-update`
