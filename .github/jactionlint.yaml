@@ -1,7 +1,0 @@
-paths:
-  .github/workflows/release.yml:
-    ignore:
-      # The release app is identified by its App ID (secrets.RELEASE_APP_ID).
-      # Its replacement, client-id, takes the app's Client ID, which needs a new
-      # secret first; app-id keeps working until then.
-      - 'avoid using deprecated input "app-id" in action "actions/create-github-app-token@v3"'

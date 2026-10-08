@@ -692,7 +692,7 @@ jobs:
           $issues = Invoke-ScriptAnalyzer -Path $path -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
           if ($issues) { $issues | Format-Table -AutoSize | Out-String -Width 200; exit 1 }
       # jactionlint finds the shellcheck above on PATH and runs it on every
-      # run: block too. .github/jactionlint.yaml lists what it ignores.
+      # run: block too.
       - name: actionlint
         run: jactionlint -color
       # The Dockerfile, its RUN lines included (hadolint has shellcheck built
