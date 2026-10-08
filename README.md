@@ -333,7 +333,7 @@ you look at the screens in a terminal whose background the screens cannot read, 
 `TELINHA_SMOKE_TUI=1 bun server/src/index.ts --version` runs the terminal UI smoke from
 source. The OpenTUI packages and `solid-js` (which follows OpenTUI's exact peer pin)
 are one Renovate group, `opentui`, updated by hand: OpenTUI is 0.x, so a minor can
-break, and the terminal smokes are not part of the required checks.
+break, and the terminal smokes reach only the first setup screen.
 
 `bun run dev` always runs the bundled LiveKit. To run against LiveKit Cloud
 from a clone, start Telinha itself (`bun server/src/index.ts`) with a
@@ -372,7 +372,11 @@ binary never reads a `.env` or `bunfig.toml` from the directory it runs in.
 
 **Tray icon.** `tray/` is an SDK-style project targeting `net48` with the
 `Microsoft.NETFramework.ReferenceAssemblies` package, so `dotnet build` on
-Windows needs only the .NET SDK (no Visual Studio, no targeting pack). Run the
+Windows needs only the .NET SDK (no Visual Studio, no targeting pack). Both
+projects restore from the `packages.lock.json` beside them
+(`tray/Directory.Build.props`); a restore after a `PackageReference` change
+updates the lock file, which goes in the same commit, and with `CI=true` (every
+GitHub runner) the restore is locked and fails on a stale lock file. Run the
 tests before the versioned build: `dotnet test` rebuilds the exe without
 `-p:Version`. `-p:Version=X.Y.Z[-rc.N]` makes `ProductVersion` (and
 `telinha-tray --version`) the release version and `FileVersion` `X.Y.Z.0`.
@@ -562,14 +566,10 @@ actionlint fork; shellcheck on `run:` blocks too), hadolint of the
 editorconfig-checker, Biome (`biome ci`: formatting, lint rules, import
 order), a `mise.lock` freshness check and
 `bun scripts/versions.ts check`; the linters are the ones `mise.toml` pins), `gitleaks` (the commits a PR or push adds,
-with the gitleaks `mise.toml` pins) and `image` (builds both architectures,
-smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the
-PR title is a Conventional Commit with one of the types `feat`, `fix`, `docs`,
-`refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; it runs again
-when the title is edited. Four jobs also run on every PR but are not
-required yet: `docs` (builds the docs site, link validator included), `e2e`
-(Playwright on ubuntu), `caddy (windows-x64)` (the Windows Caddy through the
-same Dockerfile stage the release uses) and `binaries (ubuntu-24.04)` /
+with the gitleaks `mise.toml` pins), `image` (builds both architectures,
+smoke-tests amd64), `docs` (builds the docs site, link validator included),
+`e2e` (Playwright on ubuntu), `caddy (windows-x64)` (the Windows Caddy through
+the same Dockerfile stage the release uses) and `binaries (ubuntu-24.04)` /
 `binaries (windows-2025)`, which compile the native targets and smoke-test
 them: `--version`, then a real `run` in `DEV_USER` mode until `/healthz`
 reports LiveKit up (the binary downloads `livekit-server` itself), the gate and
@@ -591,7 +591,11 @@ exactly `telinha.exe`, `telinha-tray.exe` and `LICENSE`, a tray smoke test
 (started without elevation: `tray.json`, `telinha tray status`,
 `telinha tray stop`), and an Authenticode check that signs copies of
 `telinha.exe` and `telinha-tray.exe` with a throwaway self-signed certificate
-and runs them, so a signature never breaks either.
+and runs them, so a signature never breaks either. Renovate's automerge waits
+on `required`, so on all of these. `pr-title` (`pr-title.yml`) checks the
+PR title is a Conventional Commit with one of the types `feat`, `fix`, `docs`,
+`refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; it runs again
+when the title is edited.
 
 On a PR, the `changes` job skips the jobs a change cannot affect (`ci.yml`
 lists which paths each job builds): a Dockerfile-only PR runs `image`,
@@ -600,6 +604,7 @@ lists which paths each job builds): a Dockerfile-only PR runs `image`,
 `mise.lock`, `global.json`) runs everything, and so does every push to `main`.
 
 Renovate runs weekly (early Monday, America/Sao_Paulo) for Bun deps, the
+tray's NuGet packages (with their `packages.lock.json` files), the
 Dockerfile (its `golang` and bun images included), `deploy/compose.yml`,
 GitHub Actions and everything in `versions.json`: the two downloaded binaries,
 and Caddy, xcaddy and the Caddy modules of our build. Every action is pinned
@@ -623,9 +628,9 @@ git commit -am "fix(deps): refresh versions.json hashes" && git push
 
 Caddy (with xcaddy and the modules) and cloudflared bumps come as one `child-binaries` PR, LiveKit's in the
 `livekit` group, Astro and Starlight in the `docs-site` group (merged by hand:
-Starlight is 0.x and the `docs` job is not required), OpenTUI, its Solid binding
-and `solid-js` in the `opentui` group (merged by hand too: the terminal smokes are
-not required checks, so look at them before merging); all `versions.json` bumps are `fix` commits so they cut a
+Starlight is 0.x, and a minor can change the site while the `docs` build still
+passes), OpenTUI, its Solid binding and `solid-js` in the `opentui` group
+(merged by hand too: the terminal smokes reach only the first setup screen); all `versions.json` bumps are `fix` commits so they cut a
 release, and native installs download the new helper binaries on their next
 start.
 

@@ -135,18 +135,32 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
-      # The tray's MSTest suite runs here rather than in the binaries job so a
-      # tray break (or a NuGet bump that causes one) fails the required check.
+      # The tray's MSTest suite; the binaries job only builds the versioned exe.
       - if: runner.os == 'Windows'
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x
+      # NuGet's packages, keyed on the tray's lock files: restored here and
+      # saved by pushes to main only, as with Bun's. The restore is locked (CI
+      # is set, see tray/Directory.Build.props), so a lock file out of step
+      # with its csproj fails here.
+      - id: nuget-cache
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('tray/**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
       - name: tray tests
         if: runner.os == 'Windows'
         run: dotnet test tray/tests/telinha-tray.tests.csproj -c Release -nologo
+      - if: runner.os == 'Windows' && github.event_name == 'push' && steps.nuget-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ steps.nuget-cache.outputs.cache-primary-key }}
 
   # Browser tests against the real stack (LiveKit --dev + server + built page).
-  # Not a required check yet.
   e2e:
     needs: changes
     if: needs.changes.outputs.e2e == 'true'
@@ -214,7 +228,7 @@ jobs:
           retention-days: 7
 
   # Native binaries. Windows targets build on Windows: Bun writes the version
-  # resource (ProductName etc.) only there. Not a required check yet.
+  # resource (ProductName etc.) only there.
   binaries:
     needs: changes
     if: needs.changes.outputs.binaries == 'true'
@@ -299,6 +313,14 @@ jobs:
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x
+      # The test job's NuGet cache (it holds the tray's packages too); only
+      # that job saves it.
+      - if: runner.os == 'Windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('tray/**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
       # The test job runs the tray's tests; this is only the versioned build the
       # zips and the version resource check below need.
       - name: tray
@@ -828,7 +850,7 @@ jobs:
 
   # Windows Caddy through the same Dockerfile stage the release uses, so a
   # Windows-only Go build break in a module bump shows up before release (the
-  # image job covers linux). Not a required check.
+  # image job covers linux).
   caddy:
     needs: changes
     if: needs.changes.outputs.caddy == 'true'
@@ -858,11 +880,12 @@ jobs:
 
   # The one check the ruleset requires: it passes when every job in `needs`
   # passed (or was skipped), so adding, renaming or dropping a gating job is a
-  # change to this list, not to the ruleset. `changes` is in it because its
+  # change to this list, not to the ruleset. Every job above gates, so
+  # Renovate's automerge waits on all of them. `changes` is in it because its
   # failure would skip the jobs it gates.
   required:
     if: always()
-    needs: [changes, test, lint, gitleaks, image]
+    needs: [changes, test, e2e, binaries, lint, docs, gitleaks, image, caddy]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
