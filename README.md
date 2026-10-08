@@ -51,7 +51,7 @@ check its sha256 against the release's `SHA256SUMS` and start `telinha setup`.
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
 mise install && bun run build    # the toolchain mise.toml pins, then bun install and the git hooks
-bun server/src/index.ts setup    # same setup screens; downloads the helper binaries into <home>/bin
+bun server/src/index.ts setup    # same setup screens; downloads the helper binaries into <telinha-folder>/bin
 bun server/src/index.ts          # run in this console
 ```
 
@@ -380,7 +380,7 @@ The tray only reads the Telinha folder (`data\run\service.pid`, `control.token`,
 `telinha.env`) and talks to the control endpoint and `telinha.exe`; it writes
 `data\run\tray.json` and `logs\telinha-tray.log`. It refuses to run elevated,
 so try a build with `telinha tray start` from a normal terminal after copying
-it into `<home>\bin`.
+it into `<telinha-folder>\bin`.
 
 **Image.** `bun run image` picks docker, else podman (starting the podman
 machine if it is stopped). Caddy is compiled inside the build by the

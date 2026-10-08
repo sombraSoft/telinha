@@ -90,7 +90,7 @@ releases as they are, and Telinha's `caddy.exe` build is not signed.
 This program will not transfer any information to other networked systems
 unless specifically requested by the user.
 
-Telinha is a server: hosting screen-sharing rooms for your Discord server is
+Telinha is a self-hosted web app: hosting screen-sharing rooms for your Discord server is
 what you ask it to do. These are all the systems a configured Telinha talks
 to for that, each with the `telinha.env` key that governs it.
 

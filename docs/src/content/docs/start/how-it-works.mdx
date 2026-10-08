@@ -10,8 +10,9 @@ import PinnedVersions from '../../../components/PinnedVersions.astro';
 Telinha is a screen share you host for your Discord group. Someone types
 `/telinha` in an allowed channel, the bot answers with a card and a link to a
 room at `/r/<code>`, and everyone with the right role logs in with Discord and
-watches. The video goes through [LiveKit](https://livekit.io), a media server
-(an SFU) that runs next to Telinha on the same machine, or, with
+watches. The video goes through [LiveKit](https://livekit.io), an SFU
+that forwards each shared screen to every viewer and runs next to Telinha on
+the same machine, or, with
 `MEDIA=cloud`, through a [LiveKit Cloud](/telinha/guides/livekit-cloud/)
 project.
 

@@ -172,7 +172,7 @@ não é você, sob os termos e a política de privacidade do próprio LiveKit. O
 tokens de sala que a Telinha assina também levam o nome de exibição, o id de
 usuário e o avatar do Discord de cada pessoa, como já acontece com o LiveKit
 embutido, e os nomes das salas são os códigos das salas. Com `MEDIA=self` nada
-disso chega no servidor de mais ninguém.
+disso chega na máquina de mais ninguém.
 
 ## Voltar atrás
 

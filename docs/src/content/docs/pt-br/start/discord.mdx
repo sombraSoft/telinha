@@ -137,7 +137,7 @@ adicione o redirect novo.
 ## Convide o bot
 
 Quando o bot ainda não está em nenhum servidor do Discord, ou não está no que você
-quer (*Outro servidor (adicionar o bot)*), o setup mostra um link de
+quer (*Outro servidor do Discord (adicionar o bot)*), o setup mostra um link de
 convite e oferece abrir no navegador:
 
 <Steps>
@@ -170,7 +170,7 @@ O setup escolhe tudo a partir de listas; ninguém copia ID:
 - **Servidor do Discord** (`GUILD_ID`): um dos servidores do Discord em que o bot está. Uma
   Telinha atende um servidor do Discord.
 - **Cargo** (`ROLE_ID`): quem tem esse cargo pode entrar nas salas. A
-  última opção, "Todo mundo do servidor (@everyone)", deixa entrar todos os
+  última opção, "Todo mundo do servidor do Discord (@everyone)", deixa entrar todos os
   membros. Cargos gerenciados por uma integração, como o cargo do próprio
   bot, não aparecem.
 - **Canais** (`CHANNEL_IDS`): canais de texto ou de anúncios, agrupados por
@@ -204,7 +204,7 @@ faz as mesmas verificações sem perguntar: tira o ID do cliente do token,
 liga as intents, confere o segredo do cliente e verifica se o bot está no
 `--guild` (mostrando o link de convite quando não está) e se o cargo e os
 canais existem. Ali, um redirect faltando é só um aviso; o doctor confere de
-novo. Para liberar todo mundo do servidor do Discord, passe o próprio ID do servidor do Discord em
+novo. Para liberar todo mundo do servidor do Discord, passe o próprio ID dele em
 `--role`.
 
 Segredos nunca vão na linha de comando. `--discord-token` e

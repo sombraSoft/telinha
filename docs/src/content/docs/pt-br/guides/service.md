@@ -27,7 +27,7 @@ A tarefa:
   enquanto roda: as regras de firewall são criadas na instalação e as
   atualizações gravam dentro da pasta da Telinha.
 
-A tarefa roda `telinha.exe service run --home "<home>"`, um loop pequeno que
+A tarefa roda `telinha.exe service run --home "<telinha-folder>"`, um loop pequeno que
 inicia o `telinha run`, inicia de novo na hora depois de uma atualização e com
 uma pausa crescente depois de um travamento (1 s, dobrando até 60 s), volta
 uma atualização que não consegue iniciar e grava o log em `logs\telinha.log`

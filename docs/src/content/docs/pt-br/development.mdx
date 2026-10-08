@@ -14,7 +14,7 @@ Use um clone para desenvolver, ou numa plataforma sem versão pronta. Rodando do
 ```
 git clone https://github.com/sombraSoft/telinha && cd telinha
 mise install && bun run build
-bun server/src/index.ts setup    # same setup; downloads the helper binaries into <home>/bin
+bun server/src/index.ts setup    # same setup; downloads the helper binaries into <telinha-folder>/bin
 bun server/src/index.ts          # run in this console
 ```
 
@@ -94,7 +94,7 @@ bun run compile --tray tray/bin/Release/net48/telinha-tray.exe
 | `bun scripts/tray-icon.ts` | Desenha o `tray/telinha.ico` a partir das formas do favicon do site; a saída é a mesma a cada execução |
 | `bun run compile --tray …` | Os binários nativos, com o ícone nos zips do Windows |
 
-Para testar um build com uma Telinha rodando, copie o `telinha-tray.exe` para `<home>\bin` e inicie com `telinha tray start` num terminal normal; o ícone se recusa a rodar elevado.
+Para testar um build com uma Telinha rodando, copie o `telinha-tray.exe` para `<telinha-folder>\bin` e inicie com `telinha tray start` num terminal normal; o ícone se recusa a rodar elevado.
 
 ## Este site
 

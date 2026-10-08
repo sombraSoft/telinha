@@ -100,7 +100,7 @@ unless specifically requested by the user. (Este programa não transfere
 nenhuma informação para outros sistemas em rede a menos que o usuário peça
 especificamente.)
 
-A Telinha é um servidor: hospedar salas de compartilhamento de tela para o seu
+A Telinha é um app web auto-hospedado: hospedar salas de compartilhamento de tela para o seu
 servidor do Discord é o que você pede para ela fazer. Estes são todos os
 sistemas com que uma Telinha configurada fala para isso, cada um com a chave do
 `telinha.env` que controla ele.

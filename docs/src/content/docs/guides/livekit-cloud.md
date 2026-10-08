@@ -164,7 +164,7 @@ They travel encrypted, but a company other than you handles them, under
 LiveKit's own terms and privacy policy. The room tokens Telinha signs also
 carry each person's Discord display name, user id and avatar, as they do with
 the bundled LiveKit, and the room names are the room codes. With `MEDIA=self`
-none of this reaches anyone else's server.
+none of this reaches anyone else's machine.
 
 ## Switching back
 

@@ -123,7 +123,7 @@ exactly, port included. If you change `PUBLIC_URL`, add the new redirect.
 ## Invite the bot
 
 When the bot is in no Discord server yet, or not in the one you want (*Another
-server (add the bot)*), the setup shows an invite link and offers to open it
+Discord server (add the bot)*), the setup shows an invite link and offers to open it
 in your browser:
 
 <Steps>
@@ -155,7 +155,7 @@ The setup picks everything from lists; nobody copies ids:
 - **Discord server** (`GUILD_ID`): one of the Discord servers the bot is in. One Telinha
   serves one Discord server.
 - **Role** (`ROLE_ID`): members with this role may enter the rooms. The last
-  entry, "Everyone in the server (@everyone)", lets every member in. Roles
+  entry, "Everyone in the Discord server (@everyone)", lets every member in. Roles
   managed by an integration, such as a bot's own role, are not listed.
 - **Channels** (`CHANNEL_IDS`): text or announcement channels, grouped by
   category. The slash command works only in these. Pick at least one.
@@ -188,7 +188,7 @@ the same checks without asking: it reads the client id from the token,
 switches the intents on, checks the client secret, and checks that the bot
 is in `--guild` (printing the invite link when it is not) and that the role
 and channels exist. A missing redirect is only a warning there; doctor
-checks it again. For everyone in the Discord server, pass the Discord server's own id as
+checks it again. For everyone in the Discord server, pass its own id as
 `--role`.
 
 Secrets never go on the command line. `--discord-token` and
