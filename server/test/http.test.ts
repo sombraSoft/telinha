@@ -11,6 +11,9 @@ interface TokenReply {
   identity: string;
   user: { id: string; name: string; avatar: string | null; locale: string };
   group: string;
+  topic: string | null;
+  server: string | null;
+  version: string;
 }
 
 const setCookies = (r: Response) => r.headers.getSetCookie();
@@ -235,8 +238,8 @@ describe('/auth/token', () => {
     }
   });
 
-  test('200: token, identity, user, group', async () => {
-    const s = setup();
+  test('200: token, identity, user, group, topic, server, version', async () => {
+    const s = setup({ topics: { 'lamofu-tibare': 'Filme' }, server: 'Gurizada Medonha' });
     const r = await s.get('/auth/token?room=lamofu-tibare', { cookie: s.sessionCookie({ locale: 'en-GB' }) });
     expect(r.status).toBe(200);
     expect(r.headers.get('cache-control')).toBe('no-store');
@@ -245,6 +248,9 @@ describe('/auth/token', () => {
     expect(body.identity).toMatch(/^1:[0-9a-f]{6}$/);
     expect(body.user).toEqual({ id: '1', name: 'Zé', avatar: 'abc', locale: 'en' });
     expect(body.group).toBe('Crew');
+    expect(body.topic).toBe('Filme');
+    expect(body.server).toBe('Gurizada Medonha');
+    expect(body.version).toBe(VERSION);
     const p = jwtPayload(body.token);
     expect(p.sub).toBe(body.identity);
     expect(p.name).toBe('Zé');
@@ -298,6 +304,12 @@ describe('/auth/token', () => {
       const r = await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie() });
       expect([r.status, await r.json()]).toEqual([status, { error }]);
     }
+  });
+
+  test('no topic and no server seen yet: both null', async () => {
+    const body = (await (await setup().member('/auth/token?room=bafo-kiru')).json()) as TokenReply;
+    expect(body.topic).toBeNull();
+    expect(body.server).toBeNull();
   });
 
   test("admits the session's member in their locale (a dev room opens under them)", async () => {

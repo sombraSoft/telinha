@@ -20,10 +20,13 @@
   let {
     rc,
     clearance = $bindable(0),
+    reserve = $bindable(0),
   }: {
     rc: RoomSession;
     /** Room the stage keeps free at its bottom (px), so the dock at home hides no tile controls. */
     clearance?: number;
+    /** What the dock takes at home (px), wherever it is now. */
+    reserve?: number;
   } = $props();
 
   // Phones can't capture the screen: no dock at all there.
@@ -69,7 +72,8 @@
 
   // Only at home: dragged elsewhere, the user already moved it off what it covered.
   $effect(() => {
-    clearance = canShare && !frac && dockH ? dockH + 2 * DOCK_MARGIN : 0;
+    reserve = canShare && dockH ? dockH + 2 * DOCK_MARGIN : 0;
+    clearance = frac ? 0 : reserve;
   });
 
   // Share turns into Stop when the share starts: focus left there (the modal

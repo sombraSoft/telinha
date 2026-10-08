@@ -73,6 +73,17 @@ test('screen share reaches a second tab at 720p and >= 20 fps', async ({ browser
         { timeout: 15_000 },
       )
       .toMatch(/^720p\d+ · [A-Z0-9]+$/);
+
+    // Stop watching: back to a Watch card, and the streamer sees nobody watching.
+    await tile.hover();
+    await tile.getByTestId('unwatch').click();
+    await expect(tile.getByTestId('watch')).toBeVisible();
+    await expect(own.getByTestId('tile-viewers')).toHaveCount(0, { timeout: 15_000 });
+    // The card is the Watch button: the stream plays again.
+    await tile.getByTestId('watch').click();
+    await expect
+      .poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth), { timeout: 30_000 })
+      .toBeGreaterThan(0);
   } finally {
     await pubCtx.close();
     await subCtx.close();

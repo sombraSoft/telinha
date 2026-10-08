@@ -4,7 +4,7 @@ import { loadConfig } from '../src/config.ts';
 import { createHandler, type Deps, type Fetch } from '../src/http.ts';
 import type { Locale } from '../src/i18n.ts';
 import { devIsMember } from '../src/roles.ts';
-import type { Rooms } from '../src/rooms.ts';
+import type { RoomRecord, Rooms } from '../src/rooms.ts';
 import { type StaticFiles, staticFromEntries } from '../src/static.ts';
 
 export const PROD_ENV = {
@@ -59,6 +59,10 @@ export interface Setup {
   rooms?: string[];
   /** Overrides the fake Room module's answer. */
   admit?: Rooms['admit'];
+  /** Topics of the open rooms by code; unset = none. */
+  topics?: Record<string, string>;
+  /** The Discord server's name; unset = not seen yet. */
+  server?: string;
   /** The bot's member directory; unset = not ready yet. */
   directory?: Deps['members'];
   upgrade?: Deps['upgrade'];
@@ -91,8 +95,11 @@ export function setup(o: Setup = {}) {
         return o.admit ? o.admit(room, member) : open.includes(room) ? 'ok' : 'unknown';
       },
       openRooms: () => open,
+      // Only the topic is read off a room record here.
+      get: (room) => (open.includes(room) ? ({ what: o.topics?.[room] ?? null } as RoomRecord) : null),
     },
     group: (l: Locale) => (l === 'pt-BR' ? 'Galera' : 'Crew'),
+    server: () => o.server ?? null,
     discordReady: () => true,
     members: o.directory,
     fetch:

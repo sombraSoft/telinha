@@ -23,14 +23,15 @@ export async function openRoom(page: Page, room: string): Promise<string> {
 }
 
 /**
- * Init script: getDisplayMedia returns an animated 1280x720 canvas at 30 fps
- * (video only). Canvas tracks report no capture settings and may reject
+ * Init script: getDisplayMedia returns an animated 1280x720 canvas at 30 fps,
+ * video only unless `withSound` (then a tone too, when the page asks for
+ * sound). Canvas tracks report no capture settings and may reject
  * applyConstraints, so the track is patched to look like a screen capture.
  */
-export function fakeDisplayMedia() {
+export function fakeDisplayMedia(withSound = false) {
   const W = 1280;
   const H = 720;
-  navigator.mediaDevices.getDisplayMedia = async () => {
+  navigator.mediaDevices.getDisplayMedia = async (options?: DisplayMediaStreamOptions) => {
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -59,6 +60,23 @@ export function fakeDisplayMedia() {
       }) as MediaTrackCapabilities;
     track.applyConstraints = async () => {};
     Object.defineProperty(track, 'label', { value: 'e2e-canvas', configurable: true });
+    if (withSound && options?.audio) {
+      const ac = new AudioContext();
+      const tone = ac.createOscillator();
+      const out = ac.createMediaStreamDestination();
+      tone.connect(out);
+      tone.start();
+      stream.addTrack(out.stream.getAudioTracks()[0]!);
+    }
     return stream;
   };
+}
+
+/** Goes live from the dock with the share modal's defaults (1080p60 with sound). */
+export async function goLive(page: Page) {
+  await page.getByTestId('share-button').click();
+  await expect(page.getByTestId('share-modal')).toBeVisible();
+  await page.getByTestId('share-go-live').click();
+  await expect(page.getByTestId('share-modal')).toBeHidden();
+  await expect(page.locator('[data-testid="tile"][data-local="true"]')).toBeVisible();
 }

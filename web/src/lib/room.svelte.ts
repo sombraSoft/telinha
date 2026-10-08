@@ -26,10 +26,33 @@ import type { ShareSettings } from './share';
 import { type ByteSample, streamLabel, summarize, type VideoStats } from './stats';
 
 export type TokenUser = { id: string; name: string; avatar: string | null; locale: Locale };
-export type TokenResponse = { url: string; token: string; identity: string; user: TokenUser; group: string };
+export type TokenResponse = {
+  url: string;
+  token: string;
+  identity: string;
+  user: TokenUser;
+  group: string;
+  /** What the opener gave /telinha; null when they gave nothing. */
+  topic: string | null;
+  /** The Discord server's name; null in dev or before the bot has seen it. */
+  server: string | null;
+  /** The running Telinha's version. */
+  version: string;
+};
+
+/** What the page is called after: the room's topic, else the Discord server's name. */
+export function roomLabel(topic: string | null, server: string | null): string {
+  return topic?.trim() || server?.trim() || '';
+}
+
+/** The tab title: "Telinha - <label>", or just "Telinha" with nothing to name. */
+export function pageTitle(label: string): string {
+  return label ? `Telinha - ${label}` : 'Telinha';
+}
 
 export type Stream = {
-  video: LocalVideoTrack | RemoteVideoTrack;
+  /** Null while a remote stream isn't watched, or its video hasn't arrived yet. */
+  video: LocalVideoTrack | RemoteVideoTrack | null;
   /** remote only: where the viewer's quality pick goes */
   pub: RemoteTrackPublication | null;
   /** remote only: the game audio, once subscribed */
@@ -49,6 +72,10 @@ export type Participant = {
   /** identities of the tiles this participant has on screen */
   watching: string[];
   stream: Stream | null;
+  /** This page watches the stream: always for its own, by choice for the others'. */
+  watched: boolean;
+  /** Another tab or device of this page's person: their own stream's sound starts muted. */
+  mine: boolean;
 };
 
 /** A message key (re-localized when the language changes) or literal text. */
@@ -69,7 +96,7 @@ export interface LiveRoom {
   readonly remoteParticipants: ReadonlyMap<string, RoomParticipant>;
   readonly canPlaybackAudio: boolean;
   on<E extends keyof RoomEventCallbacks>(event: E, listener: RoomEventCallbacks[E]): unknown;
-  connect(url: string, token: string): Promise<void>;
+  connect(url: string, token: string, opts?: { autoSubscribe?: boolean }): Promise<void>;
   startAudio(): Promise<void>;
 }
 
@@ -164,7 +191,9 @@ function participantOf(p: RoomParticipant, local: boolean): Participant {
   const meta = parseMeta(p.metadata);
   const id = meta.id || discordIdOf(p.identity);
   const name = p.name || p.identity;
-  const video = p.getTrackPublication(Track.Source.ScreenShare)?.videoTrack;
+  // A remote stream is there once published, watched or not; this page's own once its track is.
+  const vpub = p.getTrackPublication(Track.Source.ScreenShare);
+  const video = vpub?.videoTrack ?? null;
   const apub = p.getTrackPublication(Track.Source.ScreenShareAudio);
   return {
     identity: p.identity,
@@ -174,13 +203,15 @@ function participantOf(p: RoomParticipant, local: boolean): Participant {
     avatar: avatarUrl(id, meta.avatar),
     local,
     watching: (p.attributes?.watching || '').split(',').filter(Boolean),
-    stream: video
+    stream: (local ? video : vpub)
       ? {
           video,
-          pub: local ? null : (p.getTrackPublication(Track.Source.ScreenShare) as RemoteTrackPublication),
+          pub: local ? null : (vpub as RemoteTrackPublication),
           audio: local ? null : ((apub?.audioTrack as RemoteAudioTrack | undefined) ?? null),
         }
       : null,
+    watched: local,
+    mine: false,
   };
 }
 
@@ -208,6 +239,9 @@ function labelTiles(list: { p: Participant; joined: number }[]): Participant[] {
 export class RoomSession {
   roomCode = $state('');
   group = $state('');
+  /** See roomLabel; empty until the token arrives. */
+  label = $state('');
+  version = $state('');
   user = $state.raw<TokenUser | null>(null);
   connected = $state(false);
   /** Everyone in the room, one entry per tab; this page's own first. */
@@ -232,6 +266,8 @@ export class RoomSession {
   #lastStreamAt = -Infinity;
   /** When the page last rejoined after an unexpected disconnect. */
   #rejoinedAt = -Infinity;
+  /** Whether this page watches each remote stream, by identity; unset until it first shows up. */
+  #want = new Map<string, boolean>();
   #prevBytes = new Map<string, ByteSample>();
   #cancelToast: (() => void) | undefined;
   #toastId = 0;
@@ -279,9 +315,11 @@ export class RoomSession {
 
     const tok = await this.#token();
     if (!tok) return;
-    const { url, token, user, group } = tok;
+    const { url, token, user, group, topic, server, version } = tok;
     this.user = user;
     this.group = group;
+    this.label = roomLabel(topic, server);
+    this.version = version;
     setUserLocale(user.locale);
 
     const room = this.#deps.room();
@@ -292,7 +330,9 @@ export class RoomSession {
     room.on(RoomEvent.Reconnected, () => this.notify({ key: 'conn.reconnected' }));
     room.on(RoomEvent.Disconnected, (reason) => void this.#disconnected(room, reason));
 
-    await room.connect(url, token);
+    // Streams are watched by choice (see #subscribe): nobody downloads, and
+    // with dynacast nobody encodes, a stream no one has open.
+    await room.connect(url, token, { autoSubscribe: false });
     this.connected = true;
     this.canPlaybackAudio = room.canPlaybackAudio;
     this.refresh();
@@ -332,7 +372,7 @@ export class RoomSession {
     try {
       const tok = await this.#token();
       if (!tok) return;
-      await room.connect(tok.url, tok.token);
+      await room.connect(tok.url, tok.token, { autoSubscribe: false });
     } catch (e) {
       console.error(e);
       return this.#fail({ key: 'fatal.disconnected' }, true);
@@ -374,9 +414,52 @@ export class RoomSession {
       { p: participantOf(lp, true), joined: joined(lp) },
       ...[...room.remoteParticipants.values()].map((p) => ({ p: participantOf(p, false), joined: joined(p) })),
     ]);
-    if (this.focusId && !participants.some((p) => p.stream && p.identity === this.focusId)) this.focusId = null;
+    this.#subscribe(room, participants);
+    const myId = participantOf(lp, true).id;
+    for (const p of participants) {
+      if (p.local) continue;
+      p.watched = this.#want.get(p.identity) === true;
+      p.mine = p.id === myId;
+    }
+    if (this.focusId && !participants.some((p) => p.watched && p.stream && p.identity === this.focusId)) {
+      this.focusId = null;
+    }
     this.participants = participants;
     this.#publishWatching();
+  }
+
+  /**
+   * Decides on streams seen for the first time and tells LiveKit what to
+   * subscribe to. A stream that shows up alone plays at once; one that shows
+   * up next to another waits for Watch. Stopped streams are forgotten, so a
+   * restarted one is decided again.
+   */
+  #subscribe(room: LiveRoom, participants: Participant[]) {
+    const remote = participants.filter((p) => !p.local && p.stream);
+    const live = new Set(remote.map((p) => p.identity));
+    for (const id of this.#want.keys()) if (!live.has(id)) this.#want.delete(id);
+    for (const p of remote) if (!this.#want.has(p.identity)) this.#want.set(p.identity, remote.length === 1);
+    for (const p of room.remoteParticipants.values()) {
+      const want = this.#want.get(p.identity) === true;
+      for (const source of [Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) {
+        const pub = p.getTrackPublication(source) as RemoteTrackPublication | undefined;
+        // Each call is a message to LiveKit: only on a change.
+        if (pub && pub.isDesired !== want) pub.setSubscribed(want);
+      }
+    }
+  }
+
+  /** Opens a remote stream: subscribes to its video and sound. */
+  watch(identity: string) {
+    this.#want.set(identity, true);
+    this.refresh();
+  }
+
+  /** Closes a remote stream back to its Watch card: nothing of it is downloaded. */
+  unwatch(identity: string) {
+    this.#want.set(identity, false);
+    if (this.focusId === identity) this.focusId = null;
+    this.refresh();
   }
 
   setFocus(identity: string | null) {
@@ -388,9 +471,9 @@ export class RoomSession {
     this.setFocus(this.focusId === identity ? null : identity);
   }
 
-  /** The tile keyboard shortcuts act on: the focused one, else the only one. */
+  /** The watched tile keyboard shortcuts act on: the focused one, else the only one. */
   target(remoteOnly: boolean): Participant | null {
-    const list = remoteOnly ? this.tiles.filter((p) => !p.local) : this.tiles;
+    const list = this.tiles.filter((p) => p.watched && !(remoteOnly && p.local));
     const focused = list.find((p) => p.identity === this.focusId);
     if (focused) return focused;
     return !this.focusId && list.length === 1 ? (list[0] ?? null) : null;
@@ -401,7 +484,7 @@ export class RoomSession {
     const room = this.#room;
     if (!room || !this.connected) return;
     const me = room.localParticipant.identity;
-    const visible = this.focusId ? [this.focusId] : this.tiles.map((p) => p.identity);
+    const visible = this.focusId ? [this.focusId] : this.tiles.filter((p) => p.watched).map((p) => p.identity);
     const value = visible
       .filter((id) => id !== me)
       .sort()
@@ -457,7 +540,7 @@ export class RoomSession {
   async #updateStats() {
     const next: Record<string, VideoStats> = {};
     for (const p of this.tiles) {
-      const report = await p.stream?.video.getRTCStatsReport().catch(() => undefined);
+      const report = await p.stream?.video?.getRTCStatsReport().catch(() => undefined);
       if (!report) continue;
       const r = summarize(report, this.#prevBytes.get(p.identity));
       if (!r) continue;

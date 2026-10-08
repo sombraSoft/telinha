@@ -16,8 +16,11 @@
     stats: VideoStats | undefined;
     onfocus: () => void;
     onstop: () => void;
+    /** remote only: open the stream / close it back to its Watch card */
+    onwatch: () => void;
+    onunwatch: () => void;
   };
-  let { participant, watchers, focused, strip, stats, onfocus, onstop }: Props = $props();
+  let { participant, watchers, focused, strip, stats, onfocus, onstop, onwatch, onunwatch }: Props = $props();
 
   // Deriveds keep the same track/publication object across snapshots, so the
   // effects below only re-run when the track itself changes.
@@ -25,7 +28,7 @@
   const audio = $derived(participant.stream?.audio ?? null);
   const pub = $derived(participant.stream?.pub ?? null);
   const volume = $derived(prefs.volume(participant.identity));
-  const muted = $derived(prefs.muted(participant.identity));
+  const muted = $derived(prefs.muted(participant.identity, participant.mine));
   const badge = $derived(qualityLabel(stats));
 
   let tileEl = $state<HTMLElement>();
@@ -35,11 +38,18 @@
   let fullscreen = $state(false);
   let pip = $state(false);
   const pipSupported = typeof document !== 'undefined' && document.pictureInPictureEnabled === true;
+  let windowFocused = $state(typeof document === 'undefined' || document.hasFocus());
+
+  // A remote stream not watched is a card: nothing of it is downloaded.
+  const card = $derived(!participant.local && !participant.watched);
+  // This page's own preview costs drawing only: hidden on request, and while
+  // the window is in the background (the streamer is in their game).
+  const previewOff = $derived(participant.local && (!prefs.preview || !windowFocused));
 
   $effect(() => {
     const track = video;
     const el = videoEl;
-    if (!track || !el) return;
+    if (!track || !el || previewOff) return;
     track.attach(el);
     el.muted = true; // sound plays through its own <audio>
     return () => void track.detach(el);
@@ -103,6 +113,7 @@
 </script>
 
 <svelte:document onfullscreenchange={() => (fullscreen = !!tileEl && document.fullscreenElement === tileEl)} />
+<svelte:window onfocus={() => (windowFocused = true)} onblur={() => (windowFocused = false)} />
 
 <div
   bind:this={tileEl}
@@ -110,6 +121,7 @@
   class:focused
   class:strip
   class:local={participant.local}
+  class:card
   data-testid="tile"
   data-identity={participant.identity}
   data-local={participant.local ? 'true' : 'false'}
@@ -127,18 +139,41 @@
     <audio bind:this={audioEl} autoplay></audio>
   {/if}
 
-  <button
-    type="button"
-    class="hit"
-    aria-pressed={focused}
-    aria-label={focused ? t('tile.unfocus') : t('tile.focus', { name: participant.label })}
-    onclick={(e) => {
-      // A mouse click should not leave the overlays pinned by :focus-within.
-      if (e.detail > 0) e.currentTarget.blur();
-      onfocus();
-    }}
-    ondblclick={() => toggleFullscreen(tileEl)}
-  ></button>
+  {#if card}
+    <!-- The whole card is the Watch button, as in Discord. -->
+    <button
+      type="button"
+      class="hit"
+      data-testid="watch"
+      aria-label={t('tile.watch', { name: participant.label })}
+      onclick={onwatch}
+    ></button>
+    <div class="center" aria-hidden="true">
+      <img class="big-avatar" src={participant.avatar} alt="" />
+      {#if !strip}
+        <span class="watch-pill">{t('tile.watchButton')}</span>
+      {/if}
+    </div>
+  {:else}
+    <button
+      type="button"
+      class="hit"
+      aria-pressed={focused}
+      aria-label={focused ? t('tile.unfocus') : t('tile.focus', { name: participant.label })}
+      onclick={(e) => {
+        // A mouse click should not leave the overlays pinned by :focus-within.
+        if (e.detail > 0) e.currentTarget.blur();
+        onfocus();
+      }}
+      ondblclick={() => toggleFullscreen(tileEl)}
+    ></button>
+  {/if}
+
+  {#if previewOff}
+    <div class="center muted-note" data-testid="preview-off">
+      <span>{prefs.preview ? t('tile.previewPaused') : t('tile.previewHidden')}</span>
+    </div>
+  {/if}
 
   <span class="live">{t('tile.live')}</span>
 
@@ -169,78 +204,105 @@
       <span class="quality" data-testid="tile-quality">{badge}</span>
     </div>
 
-    <div class="controls overlay">
-      {#if participant.local}
-        <button type="button" class="btn danger" aria-label={t('tile.stop')} title={t('tile.stop')} onclick={onstop}>
-          <span aria-hidden="true">⏹</span>
-          {#if !strip}
-            <span aria-hidden="true">{t('tile.stop')}</span>
-          {/if}
-        </button>
-      {:else}
-        {#if audio}
-          <div class="volume">
-            <button
-              type="button"
-              class="btn icon"
-              aria-label={muted ? t('tile.unmute') : t('tile.mute')}
-              title={muted ? t('tile.unmute') : t('tile.mute')}
-              aria-pressed={muted}
-              onclick={() => prefs.toggleMute(participant.identity)}
-            >
-              {muted ? '🔇' : '🔊'}
-            </button>
-            {#if !strip}
-              <input
-                type="range"
-                name="volume"
-                min="0"
-                max="100"
-                value={volume}
-                aria-label={t('tile.volume', { name: participant.label })}
-                oninput={(e) => prefs.setVolume(participant.identity, Number(e.currentTarget.value))}
-              />
-            {/if}
-          </div>
-        {/if}
-        {#if !strip}
-          <select
-            class="select"
-            name="quality"
-            data-testid="quality-select"
-            value={quality}
-            aria-label={t('tile.quality')}
-            title={t('tile.quality')}
-            onchange={pickQuality}
-          >
-            {#each QUALITY_CHOICES as q (q)}
-              <option value={q}>{t(`quality.${q}`)}</option>
-            {/each}
-          </select>
-        {/if}
-        {#if pipSupported}
+    {#if !card}
+      <div class="controls overlay">
+        {#if participant.local}
           <button
             type="button"
             class="btn icon"
-            aria-label={t('tile.pip')}
-            title={t('tile.pip')}
-            aria-pressed={pip}
-            onclick={togglePip}
+            data-testid="preview-toggle"
+            aria-label={t('tile.preview')}
+            title={t('tile.preview')}
+            aria-pressed={prefs.preview}
+            onclick={() => prefs.setPreview(!prefs.preview)}
           >
-            ⧉
+            {prefs.preview ? '👁' : '🙈'}
           </button>
+          <button type="button" class="btn danger" aria-label={t('tile.stop')} title={t('tile.stop')} onclick={onstop}>
+            <span aria-hidden="true">⏹</span>
+            {#if !strip}
+              <span aria-hidden="true">{t('tile.stop')}</span>
+            {/if}
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="btn"
+            data-testid="unwatch"
+            aria-label={t('tile.unwatch')}
+            title={t('tile.unwatch')}
+            onclick={onunwatch}
+          >
+            <span aria-hidden="true">✕</span>
+            {#if !strip}
+              <span aria-hidden="true">{t('tile.unwatch')}</span>
+            {/if}
+          </button>
+          {#if audio}
+            <div class="volume">
+              <button
+                type="button"
+                class="btn icon"
+                data-testid="mute"
+                aria-label={muted ? t('tile.unmute') : t('tile.mute')}
+                title={muted ? t('tile.unmute') : t('tile.mute')}
+                aria-pressed={muted}
+                onclick={() => prefs.toggleMute(participant.identity, participant.mine)}
+              >
+                {muted ? '🔇' : '🔊'}
+              </button>
+              {#if !strip}
+                <input
+                  type="range"
+                  name="volume"
+                  min="0"
+                  max="100"
+                  value={volume}
+                  aria-label={t('tile.volume', { name: participant.label })}
+                  oninput={(e) => prefs.setVolume(participant.identity, Number(e.currentTarget.value))}
+                />
+              {/if}
+            </div>
+          {/if}
+          {#if !strip}
+            <select
+              class="select"
+              name="quality"
+              data-testid="quality-select"
+              value={quality}
+              aria-label={t('tile.quality')}
+              title={t('tile.quality')}
+              onchange={pickQuality}
+            >
+              {#each QUALITY_CHOICES as q (q)}
+                <option value={q}>{t(`quality.${q}`)}</option>
+              {/each}
+            </select>
+          {/if}
+          {#if pipSupported}
+            <button
+              type="button"
+              class="btn icon"
+              aria-label={t('tile.pip')}
+              title={t('tile.pip')}
+              aria-pressed={pip}
+              onclick={togglePip}
+            >
+              ⧉
+            </button>
+          {/if}
         {/if}
-      {/if}
-      <button
-        type="button"
-        class="btn icon"
-        aria-label={fullscreen ? t('tile.exitFullscreen') : t('tile.fullscreen')}
-        title={fullscreen ? t('tile.exitFullscreen') : t('tile.fullscreen')}
-        onclick={() => toggleFullscreen(tileEl)}
-      >
-        ⛶
-      </button>
-    </div>
+        <button
+          type="button"
+          class="btn icon"
+          aria-label={fullscreen ? t('tile.exitFullscreen') : t('tile.fullscreen')}
+          title={fullscreen ? t('tile.exitFullscreen') : t('tile.fullscreen')}
+          onclick={() => toggleFullscreen(tileEl)}
+        >
+          ⛶
+        </button>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -282,6 +344,41 @@
   }
   audio {
     display: none;
+  }
+
+  /* Centred over the tile, under its overlays; clicks go through to .hit. */
+  .center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px;
+    pointer-events: none;
+    text-align: center;
+  }
+  .big-avatar {
+    width: clamp(40px, 22%, 88px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+  }
+  .watch-pill {
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .card:hover .watch-pill,
+  .card:has(.hit:focus-visible) .watch-pill {
+    background: var(--accent-hover);
+  }
+  .muted-note {
+    color: var(--text-muted);
+    font-size: 13px;
   }
 
   .hit {

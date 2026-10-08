@@ -244,6 +244,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   // Filled by the bot; stays "not ready" (an empty list) in dev, where http.ts serves a fixed one.
   const directory = createDirectory();
   let groupFallback = (): string | undefined => undefined;
+  let serverName = (): string | null => null;
   // GROUP_NAME, else once the bot sees the guild the gate role's name (the
   // guild's for @everyone), else "members".
   const group = (l: Locale) => config.groupName ?? groupFallback() ?? t(l, 'members');
@@ -269,6 +270,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     const client = startBot({ config, rest, group, log, rooms, render: (rec) => render(rec), directory });
     discordReady = () => client.isReady();
     groupFallback = () => defaultGroupName(client.guilds.cache.get(config.guildId), config.roleId);
+    serverName = () => client.guilds.cache.get(config.guildId)?.name ?? null;
     editMessage = editCard(rest);
   }
 
@@ -404,6 +406,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     isMember,
     files,
     group,
+    server: () => serverName(),
     rooms,
     discordReady: () => discordReady(),
     members: () => directory.list(),

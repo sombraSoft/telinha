@@ -137,6 +137,7 @@ test('the dock drags inside the stage, persists, and double-click sends it home'
   await expect(grip).toHaveAttribute('title', /double-click/);
   const home = await dockBox(page);
   const stage = (await page.locator('.stage').boundingBox())!;
+  const emptyY = (await page.getByTestId('empty-state').boundingBox())!.y;
   // Home: bottom, centred on the window even with the people list open beside the stage.
   expect(Math.abs(home.x + home.width / 2 - page.viewportSize()!.width / 2)).toBeLessThan(2);
 
@@ -150,6 +151,8 @@ test('the dock drags inside the stage, persists, and double-click sends it home'
   expect(moved.x).toBeGreaterThanOrEqual(stage.x);
   expect(moved.y).toBeGreaterThanOrEqual(stage.y);
   expect(moved.y).toBeLessThan(home.y - 100);
+  // The empty state keeps its place: it doesn't re-centre as the dock leaves home.
+  expect((await page.getByTestId('empty-state').boundingBox())!.y).toBe(emptyY);
 
   // Remembered across a reload.
   await page.reload();

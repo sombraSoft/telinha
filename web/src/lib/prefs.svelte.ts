@@ -18,6 +18,8 @@ class Prefs {
   people = $state<boolean | null>(parsePeople(load('people', null)));
   /** The Offline section of the people list is open (collapsed by default). */
   offline = $state<boolean>(load<unknown>('offline', false) === true);
+  /** The streamer sees their own share on its tile (shown by default). */
+  preview = $state<boolean>(load<unknown>('preview', true) !== false);
   // Volume/mute per stream identity; read through to storage on first use.
   #volume = $state<Record<string, number>>({});
   #muted = $state<Record<string, boolean>>({});
@@ -46,6 +48,10 @@ class Prefs {
     this.offline = v;
     save('offline', v);
   }
+  setPreview(v: boolean) {
+    this.preview = v;
+    save('preview', v);
+  }
 
   /** Last quality picked on any tile; new tiles start with it. */
   quality(): QualityChoice {
@@ -63,11 +69,12 @@ class Prefs {
     this.#volume[identity] = v;
     save(`vol.${identity}`, v);
   }
-  muted(identity: string): boolean {
-    return this.#muted[identity] ?? load<unknown>(`mute.${identity}`, false) === true;
+  /** byDefault: muted until the user unmutes it (a person's own stream, heard from another tab). */
+  muted(identity: string, byDefault = false): boolean {
+    return this.#muted[identity] ?? load<unknown>(`mute.${identity}`, byDefault) === true;
   }
-  toggleMute(identity: string) {
-    const v = !this.muted(identity);
+  toggleMute(identity: string, byDefault = false) {
+    const v = !this.muted(identity, byDefault);
     this.#muted[identity] = v;
     save(`mute.${identity}`, v);
   }

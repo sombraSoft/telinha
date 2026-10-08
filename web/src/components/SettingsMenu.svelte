@@ -4,6 +4,11 @@
   import { codecCaps } from '../lib/stats';
   import { THEME_CHOICES } from '../lib/theme';
 
+  /** The running Telinha's version; empty until the token arrives. */
+  let { version }: { version: string } = $props();
+
+  const REPO_URL = 'https://github.com/sombraSoft/telinha';
+
   // Language names stay in their own language so anyone can find theirs.
   const LANGS: { value: LangChoice; label?: string }[] = [
     { value: 'auto' },
@@ -148,6 +153,19 @@
         {#if prefs.stats}
           <p class="caps" data-testid="codec-caps">{capsLine}</p>
         {/if}
+      </section>
+
+      <section aria-labelledby="{id}-about">
+        <h3 id="{id}-about">{t('settings.about')}</h3>
+        <p class="about">
+          {#if version}
+            <span data-testid="app-version">{t('settings.version', { version })}</span>
+            <span aria-hidden="true">·</span>
+          {/if}
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer" data-testid="repo-link"
+            >{t('settings.source')}</a
+          >
+        </p>
       </section>
     </div>
   {/if}
@@ -330,6 +348,20 @@
   .caps {
     margin: 8px 0 0;
     overflow-wrap: anywhere;
+  }
+
+  .about {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  /* No theme has a link colour that reads on every menu; text plus underline does. */
+  .about a {
+    color: var(--text);
+    text-underline-offset: 2px;
   }
 
   /* High contrast drops shadows and flattens borders and backgrounds, which
