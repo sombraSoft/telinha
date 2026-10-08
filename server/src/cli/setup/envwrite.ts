@@ -2,6 +2,7 @@
 // the wizard's answers filled in, everything else the file held kept under
 // "Other settings", written atomically and readable by its owner only.
 import { posix, win32 } from 'node:path';
+import { present } from '../../present.ts';
 import type { SpawnFn } from '../../service/index.ts';
 
 /**
@@ -245,16 +246,16 @@ function rawLines(text: string): Map<string, string> {
  * values with no place in the template, land under "Other settings".
  */
 export function renderEnvFile(values: Record<string, string>, previous: PreviousEnv | null): string {
-  const set = (k: string) => values[k] !== undefined && values[k] !== '';
   const placed = new Set<string>();
   const lines = ENV_TEMPLATE.replace(/\n$/, '')
     .split('\n')
     .map((line) => {
       const m = KEY_LINE.exec(line);
       if (!m) return line;
-      const key = m[2]!;
+      const key = present(m[2], 'a template key');
       placed.add(key);
-      return set(key) ? `${key}=${quoteValue(key, values[key]!)}` : line;
+      const value = values[key];
+      return value ? `${key}=${quoteValue(key, value)}` : line;
     });
 
   const other: string[] = [];

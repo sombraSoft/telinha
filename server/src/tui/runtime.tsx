@@ -22,8 +22,8 @@ export interface TuiHandle {
 
 /** The process surface the runtime hooks into; injectable for tests. */
 export interface ProcLike {
-  on(event: string, fn: (...args: any[]) => void): unknown;
-  off(event: string, fn: (...args: any[]) => void): unknown;
+  on(event: string, fn: (...args: unknown[]) => void): unknown;
+  off(event: string, fn: (...args: unknown[]) => void): unknown;
   exit(code: number): void;
 }
 
@@ -105,7 +105,7 @@ export async function runTui<T>(o: {
   const stderr = d.stderr ?? ((s: string) => void process.stderr.write(s));
   const renderer = await (d.createRenderer ?? createCliRenderer)(RENDERER_CONFIG);
 
-  const hooks: [string, (...args: any[]) => void][] = [];
+  const hooks: [string, (...args: unknown[]) => void][] = [];
   let destroyed = false;
   const destroy = () => {
     if (destroyed) return;
@@ -117,7 +117,7 @@ export async function runTui<T>(o: {
       // Already torn down by OpenTUI itself: nothing left to restore.
     }
   };
-  const hook = (event: string, fn: (...args: any[]) => void) => {
+  const hook = (event: string, fn: (...args: unknown[]) => void) => {
     hooks.push([event, fn]);
     proc.on(event, fn);
   };

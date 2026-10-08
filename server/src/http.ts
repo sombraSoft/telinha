@@ -12,6 +12,7 @@ import type { Control } from './control.ts';
 import { DOCTOR_COOKIE } from './doctor/phone-test-store.ts';
 import { fromAcceptLanguage, type Locale, resolveLocale } from './i18n.ts';
 import { createToken, newIdentity } from './livekit.ts';
+import { createLogger } from './log.ts';
 import { type DirMember, devMembers } from './members.ts';
 import * as pages from './pages.ts';
 import type { LivekitProxy, ProxyData } from './proxy.ts';
@@ -123,7 +124,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
   const doFetch: Fetch = deps.fetch ?? ((input, init) => fetch(input, init));
   const now = deps.now ?? Date.now;
   const random = deps.random ?? ((n: number) => randomBytes(n));
-  const log = deps.log ?? ((...a: unknown[]) => console.log(new Date().toISOString(), ...a));
+  const log = deps.log ?? createLogger().log;
   const redirectUri = `${c.publicUrl}/auth/callback`;
   const ck = (name: string, value: string, o: { maxAge?: number; path?: string } = {}) =>
     cookie(name, value, { ...o, secure: c.secureCookies });
@@ -216,9 +217,8 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
       const fail = (why: string) => log('login failed', why, `ua=${uaFamily(req.headers.get('user-agent'))}`);
       const discordError = url.searchParams.get('error');
       if (discordError) {
-        fail(
-          `discord ${discordError}${url.searchParams.get('error_description') ? `: ${url.searchParams.get('error_description')!.slice(0, 120)}` : ''}`,
-        );
+        const description = url.searchParams.get('error_description');
+        fail(`discord ${discordError}${description ? `: ${description.slice(0, 120)}` : ''}`);
         return html(400, pages.expired(acceptLocale));
       }
       if (!st || !code || url.searchParams.get('state') !== st.s) {

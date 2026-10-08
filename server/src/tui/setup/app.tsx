@@ -10,6 +10,7 @@ import type { SetupUiContext, SetupUiResult } from '../../cli/setup/ui.ts';
 import type { Locale } from '../../cli/strings.ts';
 import { CHECKS } from '../../doctor/checks.ts';
 import type { Check } from '../../doctor/types.ts';
+import { present } from '../../present.ts';
 import { DoctorScreen } from '../doctor/screen.tsx';
 import { isCtrlC, useKeys } from '../keys.ts';
 import { LocaleCtx, useT } from '../strings.ts';
@@ -189,7 +190,7 @@ function Root(p: SetupAppProps & { store: StateStore; apply: ApplyStore }) {
     if (sc === 'apply') return apply.stage() === 'running' ? [quit] : [move, select, quit];
     if (sc === 'doctor') return doctorKeys();
     const v = store.view();
-    const kind = v && v.actions.length && (v.kind === 'text' || v.kind === 'secret') ? 'select' : v?.kind;
+    const kind = v?.actions.length && (v.kind === 'text' || v.kind === 'secret') ? 'select' : v?.kind;
     if (kind === 'multi')
       return [move, ['space', t('keys.toggle')], ['a', t('keys.all')], ['enter', t('keys.confirm')], back, steps];
     if (kind === 'text') return [['enter', t('keys.confirm')], ['ctrl+u', t('keys.clear')], back, steps, quit];
@@ -280,7 +281,7 @@ function Root(p: SetupAppProps & { store: StateStore; apply: ApplyStore }) {
                   active={cardActive}
                   onDecide={(d) => void apply.choose(d)}
                   onDoctor={() => setPlace('doctor')}
-                  onExit={() => finish({ kind: 'applied', result: result()! })}
+                  onExit={() => finish({ kind: 'applied', result: present(result(), 'apply result') })}
                 />
               </Match>
               <Match when={screen() === 'doctor' && p.c.doctor}>

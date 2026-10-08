@@ -2,6 +2,7 @@
 // mapper that keeps telinha's ports forwarded while it runs.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { present } from '../present.ts';
 import { defaultRoute, localIpFor } from './gateway.ts';
 import { addPortMapping, deletePortMapping, getExternalIp, getSpecificEntry } from './igd.ts';
 import type {
@@ -277,7 +278,10 @@ export function createPortMapper(
     const file: StateFile = {
       ...s,
       updatedAt: d.now(),
-      mappings: s.mappings.map((m, i) => ({ ...m, ...(entries[i]!.nonce ? { nonce: entries[i]!.nonce } : {}) })),
+      mappings: s.mappings.map((m, i) => {
+        const nonce = entries[i]?.nonce;
+        return { ...m, ...(nonce ? { nonce } : {}) };
+      }),
     };
     try {
       mkdirSync(dirname(o.statePath), { recursive: true });
@@ -461,7 +465,7 @@ export function createPortMapper(
     for (const e of list) e.state = 'pending';
     const results = await Promise.allSettled(list.map((e) => remove(gw, e.m, e.nonce)));
     results.forEach((r, i) => {
-      const e = list[i]!;
+      const e = present(list[i], 'mapping entry');
       if (r.status === 'rejected') {
         e.state = 'mapped';
         o.log(`upnp: could not remove ${label(e.m)}: ${msg(r.reason)}`);

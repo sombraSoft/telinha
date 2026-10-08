@@ -4,9 +4,10 @@
 pre-commit:
   jobs:
     # Formats and safe-fixes the staged files and stages the result; fails on
-    # what it cannot fix. Unknown and ignored files are skipped.
+    # what it cannot fix, warnings included (as CI does). Unknown and ignored
+    # files are skipped.
     - name: biome
-      run: biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      run: biome check --write --error-on-warnings --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
       stage_fixed: true
 
 commit-msg:

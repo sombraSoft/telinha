@@ -43,9 +43,10 @@ export async function readTrayState(
   if (!text) return null;
   try {
     const v = JSON.parse(text) as Partial<TrayState>;
-    if (!Number.isInteger(v.pid) || v.pid! <= 0) return null;
+    const pid = v.pid;
+    if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return null;
     return {
-      pid: v.pid!,
+      pid,
       version: typeof v.version === 'string' ? v.version : '',
       startedAt: typeof v.startedAt === 'number' ? v.startedAt : 0,
       exe: typeof v.exe === 'string' ? v.exe : '',
@@ -64,8 +65,7 @@ export function trayRunning(state: TrayState | null, processInfo: ProcessInfo): 
 
 /** `reg query` prints `    Telinha    REG_SZ    "C:\...\telinha-tray.exe"`. */
 export function parseRunValue(stdout: string): string | null {
-  const m = new RegExp(`^\\s*${RUN_VALUE}\\s+REG_\\w+\\s+(.*?)\\s*$`, 'mi').exec(stdout);
-  return m ? m[1]! : null;
+  return new RegExp(`^\\s*${RUN_VALUE}\\s+REG_\\w+\\s+(.*?)\\s*$`, 'mi').exec(stdout)?.[1] ?? null;
 }
 
 /** The Run value exists and starts this exe (another path is someone else's install). */

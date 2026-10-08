@@ -213,21 +213,6 @@
     font-size: 12px;
     cursor: pointer;
   }
-  .swatch:hover,
-  .swatch[aria-pressed='true'] {
-    color: var(--text);
-  }
-  .swatch:hover .preview {
-    border-color: var(--text-muted);
-  }
-  /* --focus-ring, not --accent: the accent misses 3:1 against Ash's menu. */
-  .swatch[aria-pressed='true'] .preview {
-    border-color: var(--focus-ring);
-    box-shadow: 0 0 0 1px var(--focus-ring);
-  }
-  .swatch[aria-pressed='true'] .name {
-    font-weight: 700;
-  }
   .swatch .name {
     max-width: 100%;
     overflow: hidden;
@@ -242,6 +227,21 @@
     overflow: hidden;
     border-radius: 50%;
     border: 2px solid var(--border);
+  }
+  .swatch:hover,
+  .swatch[aria-pressed='true'] {
+    color: var(--text);
+  }
+  .swatch:hover .preview {
+    border-color: var(--text-muted);
+  }
+  /* --focus-ring, not --accent: the accent misses 3:1 against Ash's menu. */
+  .swatch[aria-pressed='true'] .preview {
+    border-color: var(--focus-ring);
+    box-shadow: 0 0 0 1px var(--focus-ring);
+  }
+  .swatch[aria-pressed='true'] .name {
+    font-weight: 700;
   }
   /* A mini window: panel colour, one stage-coloured bar, an accent dot.
      --bg-2 rather than --bg-0 so Dark and Onyx don't read as the same black. */

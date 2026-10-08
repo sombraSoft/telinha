@@ -8,6 +8,7 @@
 import type { Config } from '../../config.ts';
 import type { CheckResult } from '../../doctor/types.ts';
 import { helpersOf } from '../../footprint.ts';
+import { present } from '../../present.ts';
 import type { Out } from '../term.ts';
 import { type AKey, at } from './apply-strings.ts';
 import { checkDiscord } from './discord.ts';
@@ -156,13 +157,13 @@ export interface SummaryRow {
 }
 
 /** What runApply tells its TaskList. */
-type TaskEvent =
-  | { kind: 'plan'; plan: readonly TaskId[] }
+type RowEvent =
   | { kind: 'attempt'; id: TaskId }
   | { kind: 'detail'; id: TaskId; text: string }
   | { kind: 'line'; id: TaskId; line: TaskLine }
   | { kind: 'progress'; id: TaskId; progress: TaskProgress }
   | { kind: 'end'; id: TaskId; status: TaskStatus };
+type TaskEvent = { kind: 'plan'; plan: readonly TaskId[] } | RowEvent;
 
 /** runApply's way in: nothing else changes a TaskList. */
 let feed!: (list: TaskList, e: TaskEvent) => void;
@@ -239,35 +240,39 @@ export class TaskList {
 
   #fold(e: TaskEvent): void {
     if (e.kind === 'plan') this.#rows = e.plan.map((id) => fresh(id, 'pending'));
-    else {
-      const i = this.#rows.findIndex((r) => r.id === e.id);
-      const r = this.#rows[i];
-      if (!r) return;
-      switch (e.kind) {
-        case 'attempt':
-          // A retry's row starts clean.
-          this.#rows[i] = fresh(e.id, 'running');
-          break;
-        case 'detail':
-          r.detail = e.text;
-          r.spinning = true;
-          break;
-        case 'line':
-          // The first line after a spinner is how it ended.
-          if (r.spinning) r.result = e.line;
-          r.spinning = false;
-          r.lines.push(e.line);
-          break;
-        case 'progress':
-          r.progress = { ...e.progress };
-          break;
-        case 'end':
-          r.status = e.status;
-          if (e.id === 'config' && (e.status === 'ok' || e.status === 'warn')) this.#wroteAny = true;
-          break;
-      }
-    }
+    else if (!this.#foldRow(e)) return;
     for (const fn of [...this.#listeners]) fn();
+  }
+
+  /** False when the event's task has no row. */
+  #foldRow(e: RowEvent): boolean {
+    const i = this.#rows.findIndex((r) => r.id === e.id);
+    const r = this.#rows[i];
+    if (!r) return false;
+    switch (e.kind) {
+      case 'attempt':
+        // A retry's row starts clean.
+        this.#rows[i] = fresh(e.id, 'running');
+        break;
+      case 'detail':
+        r.detail = e.text;
+        r.spinning = true;
+        break;
+      case 'line':
+        // The first line after a spinner is how it ended.
+        if (r.spinning) r.result = e.line;
+        r.spinning = false;
+        r.lines.push(e.line);
+        break;
+      case 'progress':
+        r.progress = { ...e.progress };
+        break;
+      case 'end':
+        r.status = e.status;
+        if (e.id === 'config' && (e.status === 'ok' || e.status === 'warn')) this.#wroteAny = true;
+        break;
+    }
+    return true;
   }
 }
 
@@ -383,7 +388,8 @@ function taskOut(sink: Out, id: TaskId, tell: (e: TaskEvent) => void, seen: Task
 /** Fills in the generated secrets, reusing what this setup run made before. */
 function applySecrets(values: Values, random: (n: number) => Uint8Array, rotate: boolean, memo: SecretMemo): void {
   const reuse = (key: string, need: boolean) => {
-    if (need && memo.made[key]) values[key] = memo.made[key]!;
+    const made = memo.made[key];
+    if (need && made) values[key] = made;
   };
   if (rotate && memo.rotated) values.COOKIE_SECRET = memo.rotated;
   else if (!rotate) reuse('COOKIE_SECRET', !values.COOKIE_SECRET);
@@ -392,7 +398,7 @@ function applySecrets(values: Values, random: (n: number) => Uint8Array, rotate:
   const rotateNow = rotate && !memo.rotated;
   for (const k of generateSecrets(values, random, rotateNow)) {
     if (k === 'COOKIE_SECRET' && rotateNow) memo.rotated = values[k];
-    else memo.made[k] = values[k]!;
+    else memo.made[k] = present(values[k], k);
   }
 }
 
@@ -447,7 +453,10 @@ export async function runApply(
       return problems.length ? { status: 'fail', error: problems.join('\n') } : { status: 'ok' };
     },
     async duckdns(tw) {
-      const ddns = deps.ddns({ domain: values.DUCKDNS_DOMAIN!, token: values.DUCKDNS_TOKEN! });
+      const ddns = deps.ddns({
+        domain: present(values.DUCKDNS_DOMAIN, 'DUCKDNS_DOMAIN'),
+        token: present(values.DUCKDNS_TOKEN, 'DUCKDNS_TOKEN'),
+      });
       await ddns.update(w.host.publicIp ?? '');
       const last = ddns.last();
       if (!last?.ok) {
@@ -474,7 +483,7 @@ export async function runApply(
       }
     },
     async binaries(tw) {
-      return { status: (await downloadBinaries(tw, config!)) ? 'ok' : 'warn' };
+      return { status: (await downloadBinaries(tw, present(config, 'the written config'))) ? 'ok' : 'warn' };
     },
     async service(tw) {
       await running();
@@ -487,7 +496,7 @@ export async function runApply(
       return { status: installed ? 'ok' : 'fail' };
     },
     async tray(tw) {
-      await trayStep(tw, o.tray!);
+      await trayStep(tw, present(o.tray, 'the tray choice'));
       return { status: 'ok' };
     },
     async router(tw) {

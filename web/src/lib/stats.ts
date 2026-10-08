@@ -1,7 +1,42 @@
 // Turns a WebRTC stats report into the numbers the 📊 overlay shows.
 
+/**
+ * The fields of a WebRTC stats entry that this file and the doctor read. All
+ * but id and type are optional: each stats type carries its own subset, and
+ * browsers differ (Firefox has no transport stats, no relayProtocol).
+ */
+export type Stat = {
+  id: string;
+  type: string;
+  timestamp?: number;
+  kind?: string;
+  frameWidth?: number;
+  frameHeight?: number;
+  framesPerSecond?: number;
+  bytesSent?: number;
+  bytesReceived?: number;
+  packetsLost?: number;
+  codecId?: string;
+  mimeType?: string;
+  encoderImplementation?: string;
+  decoderImplementation?: string;
+  qualityLimitationReason?: string;
+  selectedCandidatePairId?: string;
+  selected?: boolean;
+  nominated?: boolean;
+  state?: string;
+  localCandidateId?: string;
+  remoteCandidateId?: string;
+  currentRoundTripTime?: number;
+  candidateType?: string;
+  protocol?: string;
+  relayProtocol?: string;
+  address?: string;
+  ip?: string;
+};
+
 /** Minimal view of RTCStatsReport (a maplike), so tests can pass a plain Map. */
-export type StatsLike = { forEach(cb: (stat: any) => void): void };
+export type StatsLike = { forEach(cb: (stat: Stat) => void): void };
 export type ByteSample = { bytes: number; t: number };
 
 export type VideoStats = {
@@ -21,8 +56,6 @@ export type VideoStats = {
   rttMs: number | null;
 };
 
-type Stat = Record<string, any> & { id: string; type: string };
-
 export function summarize(report: StatsLike, prev?: ByteSample): { stats: VideoStats; sample: ByteSample } | null {
   const all: Stat[] = [];
   const byId = new Map<string, Stat>();
@@ -30,6 +63,7 @@ export function summarize(report: StatsLike, prev?: ByteSample): { stats: VideoS
     all.push(s);
     byId.set(s.id, s);
   });
+  const get = (id: string | undefined) => (id === undefined ? undefined : byId.get(id));
 
   // Simulcast sends several outbound-rtp streams: report the biggest one.
   let best: Stat | undefined;
@@ -55,7 +89,7 @@ export function summarize(report: StatsLike, prev?: ByteSample): { stats: VideoS
   // Firefox has no transport stats; it flags the pair itself.
   pair ??= all.find((s) => s.type === 'candidate-pair' && (s.selected || (s.nominated && s.state === 'succeeded')));
   const relay = pair
-    ? [byId.get(pair.localCandidateId), byId.get(pair.remoteCandidateId)].some((c) => c?.candidateType === 'relay')
+    ? [get(pair.localCandidateId), get(pair.remoteCandidateId)].some((c) => c?.candidateType === 'relay')
     : null;
 
   return {
@@ -65,7 +99,7 @@ export function summarize(report: StatsLike, prev?: ByteSample): { stats: VideoS
       height: best.frameHeight || 0,
       fps: Math.round(best.framesPerSecond || 0),
       mbps: Math.max(0, mbps),
-      codec: String(byId.get(best.codecId)?.mimeType || '').replace('video/', ''),
+      codec: String(get(best.codecId)?.mimeType || '').replace('video/', ''),
       impl: String((out ? best.encoderImplementation : best.decoderImplementation) || ''),
       limitation: String(best.qualityLimitationReason || '-'),
       lost: Number(best.packetsLost ?? 0),

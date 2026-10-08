@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { basename } from 'node:path';
 import { type RunLoopChild, type RunLoopOptions, runLoop } from '../src/service/runloop.ts';
-import type { UpdateFs } from '../src/update/types.ts';
+import type { UpdateFs, UpdateState } from '../src/update/types.ts';
 
 const T0 = 1_700_000_000_000;
 const enc = new TextEncoder();
@@ -80,7 +80,7 @@ function memFs() {
     text,
     names,
     has: (p: string) => files.has(n(p)),
-    state: () => JSON.parse(text(STATE) ?? '{}') as Record<string, any>,
+    state: () => JSON.parse(text(STATE) ?? '{}') as UpdateState,
   };
 }
 
@@ -270,7 +270,7 @@ describe('runLoop', () => {
     await settle();
     h.children[0]!.exit(1);
     await settle();
-    expect(h.m.state().staged.failedStarts).toBe(1);
+    expect(h.m.state().staged?.failedStarts).toBe(1);
     expect(h.m.text(`${PATHS.bin}/telinha`)).toBe('bad v0.8.0');
     expect(h.logs).toContain('service: v0.8.0 failed to start (exit 1); one more try before rolling back');
     h.wake();
@@ -303,7 +303,7 @@ describe('runLoop', () => {
     await settle();
     expect(h.m.text(`${PATHS.bin}/telinha.exe`)).toBe('newest');
     expect(h.m.text(`${PATHS.bin}/telinha.failed-v0.8.0.exe`)).toBe('bad');
-    expect(h.m.state().failed.tag).toBe('v0.8.0');
+    expect(h.m.state().failed?.tag).toBe('v0.8.0');
     expect(h.m.state().staged).toBeUndefined();
     h.wake();
     await settle();
@@ -318,10 +318,10 @@ describe('runLoop', () => {
     await settle();
     h.children[0]!.exit(3);
     await settle();
-    expect(h.m.state().staged.failedStarts).toBe(0);
+    expect(h.m.state().staged?.failedStarts).toBe(0);
     h.children[1]!.exit(0);
     expect(await done).toBe(0);
-    expect(h.m.state().staged.failedStarts).toBe(0);
+    expect(h.m.state().staged?.failedStarts).toBe(0);
   });
 
   test('Linux: SIGTERM is forwarded; the loop exits with the child code', async () => {

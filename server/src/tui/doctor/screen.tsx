@@ -243,13 +243,13 @@ function DoctorBody(p: DoctorScreenProps) {
         const cut = row.status !== 'running' && Bun.stringWidth(row.summary) > summaryWidth(inner());
         for (const d of cut ? [row.summary, ...row.detail] : row.detail)
           for (const l of wrap(d, w)) out.push({ kind: 'text', text: ' '.repeat(INDENT) + l, fg: c.muted });
-        const showFix = row.fix && row.status !== 'ok' && row.status !== 'running';
-        if (showFix) {
+        const fix = row.status !== 'ok' && row.status !== 'running' ? row.fix : undefined;
+        if (fix) {
           out.push({ kind: 'text', text: `${' '.repeat(INDENT)}└ ${t('doctor.fix')}`, fg: c.text, bold: true });
-          for (const l of wrap(row.fix!, w - 2))
+          for (const l of wrap(fix, w - 2))
             out.push({ kind: 'text', text: `${' '.repeat(INDENT + 2)}${l}`, fg: c.text });
         }
-        if (!row.detail.length && !showFix)
+        if (!row.detail.length && !fix)
           out.push({ kind: 'text', text: `${' '.repeat(INDENT)}${t('doctor.nothing')}`, fg: c.muted });
         out.push(blank);
       }

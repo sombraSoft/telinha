@@ -117,7 +117,7 @@ export function HintPane(props: {
       for (const w of wrap(extra.head, inner)) out.push({ text: w, fg: c.text, bold: true });
       for (const item of extra.items) for (const w of wrap(item, inner)) out.push({ text: w, fg: c.accent });
     }
-    while (out.length && out[out.length - 1]!.text === '') out.pop();
+    while (out.at(-1)?.text === '') out.pop();
     if (props.maxRows === undefined) return out;
     const room = Math.max(1, props.maxRows - 2);
     return out.length <= room ? out : [...out.slice(0, room - 1), { text: '…', fg: c.muted }];
@@ -194,6 +194,12 @@ export function Picker(props: {
     setHi(i);
     props.onMove?.(i);
   };
+  /** The highlighted option's value; undefined only while the list is empty. */
+  const hiValue = () => props.options[hi()]?.value;
+  const confirmHi = () => {
+    const v = hiValue();
+    if (v !== undefined) props.onConfirm(v);
+  };
   const confirmMulti = () => {
     if (picked().length < (props.min ?? 0)) return setErr(props.minError ?? t('common.pickOne'));
     props.onConfirm(props.options.filter((o) => picked().includes(o.value)).map((o) => o.value));
@@ -206,12 +212,12 @@ export function Picker(props: {
       if (isDown(k)) return go((hi() + 1) % n()), true;
       if (/^[1-9]$/.test(k.name ?? '') && Number(k.name) <= n()) {
         go(Number(k.name) - 1);
-        if (!props.multi) props.onConfirm(props.options[hi()]!.value);
+        if (!props.multi) confirmHi();
         return true;
       }
       if (props.multi && isSpace(k)) {
-        const v = props.options[hi()]!.value;
-        setPicked((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
+        const v = hiValue();
+        if (v !== undefined) setPicked((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
         setErr('');
         return true;
       }
@@ -222,7 +228,7 @@ export function Picker(props: {
       }
       if (isEnter(k)) {
         if (props.multi) confirmMulti();
-        else props.onConfirm(props.options[hi()]!.value);
+        else confirmHi();
         return true;
       }
       return false;
@@ -271,7 +277,8 @@ export function Picker(props: {
     if (props.maxRows === undefined || full.length + status.length <= props.maxRows) return [...full, ...status];
 
     // Tight: one line per option, the description only under the highlighted one.
-    const hiDesc = descLines(opts[hi()]!);
+    const hiOpt = opts[hi()];
+    const hiDesc = hiOpt ? descLines(hiOpt) : [];
     const room = Math.max(1, props.maxRows - status.length - hiDesc.length);
     const out: Part[][] = [];
     if (opts.length <= room) {
@@ -287,9 +294,9 @@ export function Picker(props: {
     prevStart = start;
     const end = Math.min(opts.length, start + size);
     out.push(start > 0 ? [{ text: `  ${t('common.moreAbove', { n: start })}`, fg: c.muted }] : []);
-    for (let i = start; i < end; i++) {
-      out.push(row(opts[i]!, i));
-      if (i === hi()) for (const d of hiDesc) out.push(desc(d));
+    for (const [j, o] of opts.slice(start, end).entries()) {
+      out.push(row(o, start + j));
+      if (start + j === hi()) for (const d of hiDesc) out.push(desc(d));
     }
     if (end < opts.length) out.push([{ text: `  ${t('common.moreBelow', { n: opts.length - end })}`, fg: c.muted }]);
     return [...out, ...status];

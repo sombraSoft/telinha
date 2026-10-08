@@ -13,7 +13,7 @@
         var c = 'system';
         try {
           c = JSON.parse(localStorage.getItem('telinha.theme')) || 'system';
-        } catch (e) {}
+        } catch {}
         if (['dark', 'ash', 'onyx', 'light'].indexOf(c) < 0) {
           c = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
         }

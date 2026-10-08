@@ -9,6 +9,7 @@ import {
   Locale as DLocale,
   GatewayIntentBits,
   type GuildMember,
+  type Interaction,
   InteractionContextType,
   MessageFlags,
   Options,
@@ -23,6 +24,7 @@ import { uniqueRoomCode } from './codes.ts';
 import type { Config } from './config.ts';
 import { dicts, type Locale, resolveLocale, t } from './i18n.ts';
 import { type Directory, memberData } from './members.ts';
+import { present } from './present.ts';
 import type { RoomRecord, Rooms } from './rooms.ts';
 
 export function buildCommand(name: string) {
@@ -179,7 +181,8 @@ export function startBot(o: {
 
   async function registerCommand() {
     try {
-      await rest.put(Routes.applicationGuildCommands(client.application!.id, c.guildId), { body: [command] });
+      const appId = present(client.application, 'client application').id;
+      await rest.put(Routes.applicationGuildCommands(appId, c.guildId), { body: [command] });
       log(`/${c.commandName} registered`);
     } catch (e) {
       log(`/${c.commandName} not registered yet (bot not in guild?)`, (e as Error).message);
@@ -254,7 +257,9 @@ export function startBot(o: {
     if (m) upsert(m);
   });
 
-  client.on('interactionCreate', async (i) => {
+  // Every failure is caught and logged inside.
+  client.on('interactionCreate', (i) => void onInteraction(i));
+  async function onInteraction(i: Interaction) {
     if (!i.isChatInputCommand() || i.commandName !== c.commandName) return;
     try {
       const roles = i.member?.roles;
@@ -294,7 +299,7 @@ export function startBot(o: {
     } catch (e) {
       log('command error', (e as Error).message);
     }
-  });
+  }
 
   void client.login(c.discordToken);
   return client;

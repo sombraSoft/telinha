@@ -6,6 +6,7 @@
 import { type Ingress, IPV4_RE, turnAutoHost, turnIneligibility } from '../../config.ts';
 import { firewallCommands } from '../../doctor/checks.ts';
 import { isCgnatIpv4, isPrivateIpv4 } from '../../netinfo.ts';
+import { present } from '../../present.ts';
 import type { Locale } from '../strings.ts';
 import { pickableRoles, SNOWFLAKE_RE, validCommand } from './discord.ts';
 import {
@@ -268,9 +269,10 @@ export function portsValues(a: Answers, env: Pick<ModelEnv, 'file' | 'host'>): V
 
 /** Why TURN over TLS on 443 cannot run with these values (loadConfig's rule), or null when it can. */
 export function turnBlocked(v: Values): string | null {
+  const publicUrl = v.PUBLIC_URL ?? '';
   let publicHost: string;
   try {
-    publicHost = new URL(v.PUBLIC_URL ?? '').hostname;
+    publicHost = new URL(publicUrl).hostname;
   } catch {
     return 'no address yet';
   }
@@ -279,7 +281,7 @@ export function turnBlocked(v: Values): string | null {
     ingress: (v.INGRESS || 'direct') as Ingress,
     hosting: v.HOSTING === 'home' || v.HOSTING === 'vps' ? v.HOSTING : null,
     httpsPort: Number(v.HTTPS_PORT || '443'),
-    publicUrl: v.PUBLIC_URL!,
+    publicUrl,
     publicHost,
   });
 }
@@ -338,7 +340,7 @@ function upnpHint(a: Answers, env: ModelEnv): Text[] {
   // media ports, the high HTTPS port joins them, and 80/443 are never asked of the router.
   const first =
     choice === 'duckdns-home'
-      ? txt('upnpHelpHttps', { port: v.HTTPS_PORT! })
+      ? txt('upnpHelpHttps', { port: present(v.HTTPS_PORT, 'HTTPS_PORT') })
       : directLow(choice)
         ? txt('advUpnpHelp')
         : txt('upnpHelp');
@@ -416,8 +418,10 @@ export const trayHere = (env: Pick<ModelEnv, 'platform' | 'compiled' | 'docker'>
 const trayKnown = (env: ModelEnv) => !!env.tray && (env.tray.installed || env.tray.optedOut);
 const choiceIs =
   (...c: AddressChoice[]) =>
-  (a: Answers) =>
-    c.includes(addressChoice(a)!);
+  (a: Answers) => {
+    const choice = addressChoice(a);
+    return choice !== null && c.includes(choice);
+  };
 
 export const QUESTIONS: readonly QuestionDef[] = [
   // --- where
@@ -584,10 +588,10 @@ export const QUESTIONS: readonly QuestionDef[] = [
       return [txt('httpsPortHint', { port }), raw(''), txt('httpsPortUrl', { name: str(a.duckName) || 'name', port })];
     },
     // The previous high port when the file has one; 80/443 would only be refused.
-    default: (_a, env) =>
-      env.file.ACME_DNS === 'duckdns' && highPortOk(env.file.HTTPS_PORT)
-        ? env.file.HTTPS_PORT!
-        : DEFAULT_HOME_HTTPS_PORT,
+    default: (_a, env) => {
+      const port = env.file.HTTPS_PORT;
+      return env.file.ACME_DNS === 'duckdns' && port !== undefined && highPortOk(port) ? port : DEFAULT_HOME_HTTPS_PORT;
+    },
     validate: (v, _a, env) => {
       const s = str(v);
       if (!/^\d+$/.test(s) || Number(s) > 65535) return txt('portBad');
@@ -1031,8 +1035,8 @@ function domainPreview(env: ModelEnv): Text {
   return ip ? txt('choiceDomainPreview', { ip }) : txt('choiceDomainPreviewNoIp');
 }
 
-function highPortOk(p: string | undefined): boolean {
-  return !!p && /^\d+$/.test(p) && Number(p) >= 1024 && Number(p) <= 65535;
+function highPortOk(p: string): boolean {
+  return /^\d+$/.test(p) && Number(p) >= 1024 && Number(p) <= 65535;
 }
 
 /** The chosen server's name as Discord lists it; '' when not loaded (or offline). */

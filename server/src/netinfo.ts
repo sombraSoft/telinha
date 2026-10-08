@@ -86,7 +86,7 @@ export function tlsInfo(host: string, port: number, timeoutMs = 10_000, connectT
     const timer = setTimeout(() => finish(fail(`timed out after ${timeoutMs} ms`)), timeoutMs);
     socket.once('secureConnect', () => {
       const cert = socket.getPeerCertificate() as PeerCertificate | undefined;
-      if (!cert || !cert.valid_to) return finish(fail('no certificate'));
+      if (!cert?.valid_to) return finish(fail('no certificate'));
       const nameError = checkServerIdentity(host, cert);
       const chainError = socket.authorized ? undefined : String(socket.authorizationError ?? 'untrusted certificate');
       const error = chainError ?? nameError?.message;

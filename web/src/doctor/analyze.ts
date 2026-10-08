@@ -2,10 +2,7 @@
 // the report the page posts, and the plain-language hints for a result.
 // No DOM, so bun test runs them.
 
-/** Minimal view of RTCStatsReport (a maplike), so tests can pass a plain Map. */
-export type StatsLike = { forEach(cb: (stat: any) => void): void };
-
-type Stat = Record<string, any> & { id: string; type: string };
+import type { Stat, StatsLike } from '../lib/stats';
 
 export type Path = {
   /** 'udp' | 'tcp' (the local candidate's transport). */
@@ -34,14 +31,14 @@ export function selectedPath(report: StatsLike): Path | null {
   // Firefox has no transport stats; it flags the pair itself.
   pair ??= all.find((s) => s.type === 'candidate-pair' && (s.selected || (s.nominated && s.state === 'succeeded')));
   if (!pair) return null;
-  const local = byId.get(pair.localCandidateId);
-  const remote = byId.get(pair.remoteCandidateId);
+  const local = pair.localCandidateId === undefined ? undefined : byId.get(pair.localCandidateId);
+  const remote = pair.remoteCandidateId === undefined ? undefined : byId.get(pair.remoteCandidateId);
   const protocol = String(local?.protocol ?? remote?.protocol ?? '').toLowerCase();
   if (!protocol) return null;
   const rtt = typeof pair.currentRoundTripTime === 'number' ? Math.round(pair.currentRoundTripTime * 1000) : null;
   return {
     protocol,
-    candidateIp: (remote?.address ?? remote?.ip ?? null) as string | null,
+    candidateIp: remote?.address ?? remote?.ip ?? null,
     rttMs: rtt,
     relay: [local, remote].some((c) => c?.candidateType === 'relay'),
     relayProtocol: typeof local?.relayProtocol === 'string' ? local.relayProtocol.toLowerCase() : null,

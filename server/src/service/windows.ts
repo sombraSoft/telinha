@@ -103,8 +103,8 @@ export function parseWhoami(csv: string): { user: string; sid: string } | null {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)[1];
-  const m = row ? /^"([^"]*)","(S-[^"]*)"/.exec(row) : null;
-  return m ? { user: m[1]!, sid: m[2]! } : null;
+  const [, user, sid] = (row ? /^"([^"]*)","(S-[^"]*)"/.exec(row) : null) ?? [];
+  return user !== undefined && sid !== undefined ? { user, sid } : null;
 }
 
 /**
@@ -119,8 +119,11 @@ export function parseTaskQuery(csv: string): { taskName: string; status: string;
     .map((l) => l.trim())
     .filter((l) => l.startsWith('"'));
   const row = rows[1];
-  const m = row ? /^"([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)"/.exec(row) : null;
-  return m ? { taskName: m[2]!, status: m[4]!, lastResult: m[7]! } : null;
+  const [, , taskName, , status, , , lastResult] =
+    (row ? /^"([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)","([^"]*)"/.exec(row) : null) ?? [];
+  return taskName !== undefined && status !== undefined && lastResult !== undefined
+    ? { taskName, status, lastResult }
+    : null;
 }
 
 /** "267009" -> "0x41301"; "0" stays. Task Scheduler codes read better in hex. */

@@ -192,8 +192,8 @@ export function defaultProcessInfo(platform: NodeJS.Platform = process.platform)
           stdout: 'pipe',
           stderr: 'ignore',
         }).stdout.toString();
-        const m = /^"([^"]*)","(\d+)"/m.exec(out);
-        return m && Number(m[2]) === pid ? { alive: true, exe: m[1]! } : dead;
+        const [, exe, listed] = /^"([^"]*)","(\d+)"/m.exec(out) ?? [];
+        return exe !== undefined && Number(listed) === pid ? { alive: true, exe } : dead;
       } catch {
         return dead;
       }
@@ -308,9 +308,11 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
 
   function writePidfile() {
     if (!pidfile) return;
-    const entries: PidEntry[] = children
-      .filter((c) => c.handle && c.exitCode === undefined)
-      .map((c) => ({ name: c.spec.name, pid: c.handle!.pid, exe: basename(c.spec.cmd[0] ?? '') }));
+    const entries: PidEntry[] = children.flatMap((c) =>
+      c.handle && c.exitCode === undefined
+        ? [{ name: c.spec.name, pid: c.handle.pid, exe: basename(c.spec.cmd[0] ?? '') }]
+        : [],
+    );
     try {
       mkdirSync(dirname(pidfile), { recursive: true });
       writeFileSync(`${pidfile}.tmp`, JSON.stringify(entries));
@@ -543,7 +545,7 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     // Rule 2: mark, cancel every pending backoff and in-flight respawn, then
     // stop the live children in parallel. Repeat calls share the promise.
     stop() {
-      if (stopped) return stopped;
+      if (stopped !== null) return stopped;
       stopping = true;
       stopCtl.abort();
       for (const child of children) {

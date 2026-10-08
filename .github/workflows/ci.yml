@@ -703,10 +703,10 @@ jobs:
       # check is off and why.
       - name: editorconfig
         run: editorconfig-checker
-      # Formatting, lint rules and import order (biome.jsonc); errors fail the
-      # job, warnings show up as annotations on the PR.
+      # Formatting, lint rules and import order (biome.jsonc); any diagnostic,
+      # warning or error, fails the job and shows up as an annotation on the PR.
       - name: biome
-        run: biome ci --reporter=default --reporter=github .
+        run: biome ci --error-on-warnings --reporter=default --reporter=github .
       # Structure and every asset hash present; a stale hash fails the image job.
       - name: versions.json
         run: bun scripts/versions.ts check

@@ -82,8 +82,11 @@ export function createPhoneTestStore(o: {
   const store: PhoneTestStore = {
     create(now = clock()) {
       store.gc(now);
-      // Map order is insertion order: the first one is the oldest.
-      while (phoneTests.size >= MAX_PHONE_TESTS) drop(phoneTests.values().next().value!);
+      // Map order is insertion order: the oldest go first.
+      for (const old of phoneTests.values()) {
+        if (phoneTests.size < MAX_PHONE_TESTS) break;
+        drop(old);
+      }
       const id = Buffer.from(random(16)).toString('hex');
       const token = Buffer.from(random(32)).toString('base64url');
       const e: Entry = {
@@ -121,7 +124,7 @@ export function createPhoneTestStore(o: {
     verifyCookie(value, now = clock()) {
       const p = verify<{ typ?: unknown; d?: unknown; exp: number }>(doctorKey, value, now);
       // typ and the strict id shape keep any other signed payload out, even under the same key.
-      if (!p || p.typ !== 'doctor' || typeof p.d !== 'string' || !ID_RE.test(p.d)) return null;
+      if (p?.typ !== 'doctor' || typeof p.d !== 'string' || !ID_RE.test(p.d)) return null;
       return live(phoneTests.get(p.d), now) ? { id: p.d } : null;
     },
 
@@ -156,7 +159,8 @@ export function createPhoneTestStore(o: {
     async wait(id, maxMs) {
       const first = store.state(id);
       if (first.state === 'done' || first.state === 'expired') return first;
-      const e = phoneTests.get(id)!;
+      const e = phoneTests.get(id);
+      if (!e) return first;
       // Woken early when the phone opens the link, reports, or the link goes.
       await new Promise<void>((resolve) => {
         const done = () => {

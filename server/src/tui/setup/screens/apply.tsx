@@ -72,10 +72,7 @@ export function ApplyScreen(p: ApplyProps) {
       const todo = p.store.rows
         .filter((r) => {
           if (r.id === 'router') return r.todo.length > 0;
-          return (
-            r.status === 'warn' &&
-            (r.todo.length > 1 || (r.todo.length === 1 && Bun.stringWidth(r.todo[0]!.text) > detailW()))
-          );
+          return r.status === 'warn' && (r.todo.length > 1 || r.todo.some((l) => Bun.stringWidth(l.text) > detailW()));
         })
         .map((r) => r.id);
       setBrief(todo.filter((id) => !open().includes(id)));
@@ -88,12 +85,17 @@ export function ApplyScreen(p: ApplyProps) {
     const sel = selectable();
     const cur = rowSel();
     if (cur === null) {
-      if (isUp(k) && pickHi() === 0 && sel.length) return setRowSel(sel[sel.length - 1]!), true;
+      const lastRow = sel.at(-1);
+      if (isUp(k) && pickHi() === 0 && lastRow !== undefined) return setRowSel(lastRow), true;
       return false;
     }
     const pos = sel.indexOf(cur);
-    if (isUp(k)) return pos > 0 && setRowSel(sel[pos - 1]!), true;
-    if (isDown(k)) return setRowSel(pos >= 0 && pos < sel.length - 1 ? sel[pos + 1]! : null), true;
+    if (isUp(k)) {
+      const prev = pos > 0 ? sel[pos - 1] : undefined;
+      if (prev !== undefined) setRowSel(prev);
+      return true;
+    }
+    if (isDown(k)) return setRowSel(pos >= 0 ? (sel[pos + 1] ?? null) : null), true;
     if (isEnter(k) || isSpace(k) || k.name === 'right') {
       const id = p.store.rows[cur]?.id;
       if (!id) return true;
@@ -328,7 +330,8 @@ function TaskRowView(p: { row: TaskRow; sel: boolean; width: number }) {
     return g?.total ? Math.max(0, Math.min(100, Math.floor((g.done / g.total) * 100))) : 0;
   };
   const progressText = () => {
-    const g = progress()!;
+    const g = progress();
+    if (!g) return '';
     if (g.unit === 'bytes') {
       const amount = g.total ? `${String(pct()).padStart(3)}%  ${mb(g.done)} / ${mb(g.total)} MB` : `${mb(g.done)} MB`;
       return g.label ? `${amount}  ${g.label}` : amount;
@@ -343,8 +346,10 @@ function TaskRowView(p: { row: TaskRow; sel: boolean; width: number }) {
         return { text: '', fg: c.muted };
       case 'running':
         return { text: r.detail, fg: c.muted };
-      case 'skipped':
-        return { text: last()?.kind === 'info' ? last()!.text : s('apply.skipped'), fg: c.muted };
+      case 'skipped': {
+        const l = last();
+        return { text: l?.kind === 'info' ? l.text : s('apply.skipped'), fg: c.muted };
+      }
       case 'fail': {
         const bad = [...r.lines].reverse().find((l) => l.kind === 'fail') ?? last();
         return { text: bad?.text ?? '', fg: c.fail };

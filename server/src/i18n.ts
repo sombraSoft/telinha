@@ -5,7 +5,7 @@ export const LOCALES: readonly Locale[] = ['pt-BR', 'en'];
 
 // Same rule as web/src/lib/i18n: anything Portuguese -> pt-BR, else en.
 export function resolveLocale(tag: string | null | undefined): Locale {
-  return tag && tag.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
+  return tag?.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
 }
 
 // Highest-q entry that maps to a supported locale (pt* or en*); else en.
@@ -98,5 +98,5 @@ export const dicts: Record<Locale, Dict> = { en, 'pt-BR': ptBR };
 // Single pass, so a {placeholder} inside a param value is never expanded.
 export function t(locale: Locale, key: Key, params: Record<string, string> = {}): string {
   const s = dicts[locale][key] ?? en[key];
-  return s.replace(/\{(\w+)\}/g, (m, k: string) => (Object.hasOwn(params, k) ? params[k]! : m));
+  return s.replace(/\{(\w+)\}/g, (m, k: string) => (Object.hasOwn(params, k) ? (params[k] ?? m) : m));
 }

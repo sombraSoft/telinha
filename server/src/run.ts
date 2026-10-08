@@ -129,7 +129,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
 
   // Signals, fatal errors, the control endpoint and the updater all end here.
   const exit = (code: number, why: string) => {
-    if (shutdown) {
+    if (shutdown !== null) {
       // A second Ctrl+C: stop waiting; the 'exit' handler still kills the children.
       if (code === 130) process.exit(code);
       return;
@@ -226,7 +226,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     await supervisor.start();
   } catch (e) {
     // A signal during start-up: its handler is already stopping and exits.
-    if (shutdown) return;
+    if (shutdown !== null) return;
     // A broken config or binary: exit and let the service loop, compose or the
     // operator see it; backoff is for crashes of a running service. Siblings stop
     // gracefully first. A staged update counts this exit as a failed start.

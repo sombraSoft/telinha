@@ -187,7 +187,8 @@ export type EnsureOptions = {
   versions?: Versions;
   /** Required when caddy is among the helpers. */
   release?: CaddyRelease;
-  log?: (msg: string) => void;
+  /** Progress lines; scripts/bins.ts prints them, the service logs them. */
+  log: (msg: string) => void;
   /** Download progress per helper (bytes); optional, nothing else changes without it. */
   progress?: (helper: Helper, received: number, total: number | null) => void;
   fetch?: FetchFn;
@@ -202,7 +203,7 @@ export type EnsureResult = {
 
 export async function ensureBinaries(names: Helper[], o: EnsureOptions): Promise<EnsureResult> {
   const versions = o.versions ?? loadVersions();
-  const log = o.log ?? ((m: string) => console.log(m));
+  const { log } = o;
   const platform = `${o.os}-${o.arch}` as Platform;
   if (!PLATFORMS.includes(platform)) throw new Error(`no binaries for ${platform}`);
   await mkdir(o.outDir, { recursive: true });
@@ -212,9 +213,12 @@ export async function ensureBinaries(names: Helper[], o: EnsureOptions): Promise
   for (const name of names) {
     // Caddy's "version" is the release tag: a telinha update re-fetches its Caddy.
     let version: string;
+    let release: CaddyRelease | undefined;
     if (isPinned(name)) version = versions[name].version;
-    else if (o.release) version = o.release.tag;
-    else
+    else if (o.release) {
+      release = o.release;
+      version = release.tag;
+    } else
       throw new Error(
         'caddy comes from a Telinha release: pass the release tag (bun scripts/bins.ts --release vX.Y.Z caddy)',
       );
@@ -240,8 +244,8 @@ export async function ensureBinaries(names: Helper[], o: EnsureOptions): Promise
         throw new Error(
           `${name}: no sha256 for ${spec.hashKey} in versions.json (run: bun scripts/versions.ts refresh)`,
         );
-    } else {
-      expected = (await o.release!.sums())[spec.asset];
+    } else if (release) {
+      expected = (await release.sums())[spec.asset];
       if (!expected) throw new Error(`SHA256SUMS of ${version} has no ${spec.asset}`);
     }
     log(`[bins] downloading ${spec.asset}`);

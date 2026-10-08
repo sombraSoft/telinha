@@ -18,7 +18,7 @@ export const commandName =
 
 /** Same rule as Telinha: any Portuguese tag -> pt-BR, everything else -> en. */
 export function resolveLocale(tag: string | null | undefined): Locale {
-  return tag && tag.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
+  return tag?.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
 }
 
 export function format(locale: Locale, key: MessageKey, params?: Params): string {

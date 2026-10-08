@@ -6,8 +6,8 @@ import type { KeyEvent } from '@opentui/core';
 import { createContext, onCleanup, useContext } from 'solid-js';
 
 export interface KeyHandler {
-  key?: (k: KeyEvent) => boolean | void;
-  paste?: (text: string) => boolean | void;
+  key?: (k: KeyEvent) => boolean | undefined;
+  paste?: (text: string) => boolean | undefined;
 }
 export type KeyStack = KeyHandler[];
 

@@ -57,8 +57,9 @@ export function createIpWatch(o: {
       return;
     }
     failing = false;
-    if (!observed) {
+    if (!observed || ip === null) {
       // First observation: LiveKit just started with this IP, nothing to restart.
+      // From here on ip is set.
       observed = true;
       if (found === ip) return;
       if (ip !== null) o.log(`public IP ${ip} -> ${found} while telinha was down, ${o.labels.startedWith}`);
@@ -67,7 +68,7 @@ export function createIpWatch(o: {
       return;
     }
     if (found === ip) return;
-    const previous = ip!;
+    const previous = ip;
     o.log(`public IP ${previous} -> ${found}, ${o.labels.changed}`);
     try {
       await o.onChange(found, previous);

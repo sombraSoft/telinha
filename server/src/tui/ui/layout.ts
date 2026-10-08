@@ -43,13 +43,12 @@ export function pad(text: string, max: number): string {
 export function fitTail(text: string, max: number): string {
   if (max <= 0) return '';
   if (width(text) <= max) return text;
-  const chars = [...text];
   let out = '';
   let w = 0;
-  for (let i = chars.length - 1; i >= 0; i--) {
-    const cw = width(chars[i]!);
+  for (const ch of [...text].reverse()) {
+    const cw = width(ch);
     if (w + cw > max - 1) break;
-    out = chars[i]! + out;
+    out = ch + out;
     w += cw;
   }
   return `…${out}`;
