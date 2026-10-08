@@ -27,6 +27,7 @@ import {
   answered,
   catalogIndex,
   flowIds,
+  groupFallback,
   guildName,
   HIDDEN_IDS,
   kindOf,
@@ -925,7 +926,7 @@ export class SetupState {
       const key = SECRET_ANSWERS[id];
       return this.#t(txt(key && this.#init.base.file[key] === v ? 'reviewKept' : 'reviewSet'));
     }
-    if (id === 'group' && !str(v)) return guildName(eff, env) || this.#t(txt('groupDefault'));
+    if (id === 'group' && !str(v)) return groupFallback(eff, env) || this.#t(txt('groupDefault'));
     if (kind === 'text') return Array.isArray(v) ? v.join(',') : str(v);
     const opts = qd.options?.(eff, env) ?? [];
     const label = (x: string) => {

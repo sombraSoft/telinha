@@ -128,6 +128,19 @@ export async function handleCommand(i: CommandInput, d: CommandDeps): Promise<vo
   }
 }
 
+/**
+ * The group's name when GROUP_NAME is unset: the gate role's, or the Discord
+ * server's when the role is @everyone (its id is the guild's) or not in the
+ * cache; undefined until the bot sees the guild.
+ */
+export function defaultGroupName(
+  guild: { id: string; name: string; roles: { cache: { get(id: string): { name: string } | undefined } } } | undefined,
+  roleId: string,
+): string | undefined {
+  if (!guild) return undefined;
+  return (roleId !== guild.id && guild.roles.cache.get(roleId)?.name) || guild.name;
+}
+
 /** Card edits go through REST: the interaction token behind the reply expires after 15 min. */
 export function editCard(rest: REST) {
   return async (channelId: string, messageId: string, card: Card): Promise<void> => {

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import type { WebSocketHandler } from 'bun';
 import { REST } from 'discord.js';
 import { ensureBinariesForConfig } from './bins.ts';
-import { editCard, startBot } from './bot.ts';
+import { defaultGroupName, editCard, startBot } from './bot.ts';
 import { type Card, renderCard } from './card.ts';
 import { childBaseEnv, childSpecs } from './children.ts';
 import type { CliContext } from './cli/args.ts';
@@ -243,9 +243,10 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
   let discordReady = () => false;
   // Filled by the bot; stays "not ready" (an empty list) in dev, where http.ts serves a fixed one.
   const directory = createDirectory();
-  let guildName = (): string | undefined => undefined;
-  // GROUP_NAME, else the guild's name once the bot sees it, else "members".
-  const group = (l: Locale) => config.groupName ?? guildName() ?? t(l, 'members');
+  let groupFallback = (): string | undefined => undefined;
+  // GROUP_NAME, else once the bot sees the guild the gate role's name (the
+  // guild's for @everyone), else "members".
+  const group = (l: Locale) => config.groupName ?? groupFallback() ?? t(l, 'members');
   const render = (
     rec: Parameters<typeof renderCard>[0],
     live: Parameters<typeof renderCard>[1] = { streamers: [], viewers: [] },
@@ -267,7 +268,7 @@ export async function run(ctx: CliContext, o: RunOptions): Promise<void> {
     });
     const client = startBot({ config, rest, group, log, rooms, render: (rec) => render(rec), directory });
     discordReady = () => client.isReady();
-    guildName = () => client.guilds.cache.get(config.guildId)?.name;
+    groupFallback = () => defaultGroupName(client.guilds.cache.get(config.guildId), config.roleId);
     editMessage = editCard(rest);
   }
 
