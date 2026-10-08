@@ -128,7 +128,9 @@ jobs:
       # Every OS/CPU's native packages: the arm64 cross build embeds that target's OpenTUI library.
       - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - run: bun run build
-      # Tests first: dotnet test rebuilds the tray without -p:Version.
+      # Tests first: dotnet test rebuilds the tray without -p:Version. Both
+      # restores are locked to the tray's packages.lock.json files (CI is set,
+      # see tray/Directory.Build.props).
       - name: tray
         shell: bash
         env:

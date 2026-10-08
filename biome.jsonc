@@ -6,7 +6,10 @@
   // .gitignore decides what is skipped: node_modules, build output, the docs
   // site's generated.json.
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true, "defaultBranch": "main" },
-  "files": { "ignoreUnknown": true },
+  // The tray's packages.lock.json files are NuGet's output, written without a
+  // final newline (Renovate's too), so Biome and editorconfig-checker
+  // (.editorconfig-checker.json) leave them as NuGet wrote them.
+  "files": { "ignoreUnknown": true, "includes": ["**", "!**/packages.lock.json"] },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120, "lineEnding": "lf" },
   "javascript": { "formatter": { "quoteStyle": "single", "trailingCommas": "all", "arrowParentheses": "always" } },
   "css": { "formatter": { "quoteStyle": "single" } },
