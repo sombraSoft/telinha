@@ -16,7 +16,7 @@ const BIN_DIR = join(HOME, 'bin');
 export interface StackOptions {
   /** Origin the browser opens (PUBLIC_URL); must be http://localhost or 127.0.0.1. */
   publicUrl: string;
-  /** Signaling URL for the browser; unset = the server derives PUBLIC_URL + /livekit (its gated relay). */
+  /** Signaling URL for the browser; unset = the server derives PUBLIC_URL + /livekit (its gated signaling proxy). */
   livekitPublicUrl?: string;
   /** "<id>:<name>" fake login. */
   devUser?: string;
@@ -226,8 +226,9 @@ if (import.meta.main) {
     console.error('usage: bun scripts/stack.ts --e2e   (for local development use `bun run dev`)');
     process.exit(2);
   }
-  // Production-like: the server serves the built page at /r/ and relays the
-  // browser's LiveKit signaling at /livekit, behind its login gate.
+  // Production-like: the server serves the built page at /r/ and carries the
+  // browser's LiveKit signaling through its signaling proxy at /livekit,
+  // behind its login gate.
   if (!(await Bun.file(join(ROOT, 'web', 'dist', 'index.html')).exists())) {
     console.error('web/dist is missing: run bun run build first');
     process.exit(1);

@@ -1,7 +1,7 @@
 // The phone test, run from the CLI side: ask the running service for a
 // one-time link, long-poll until the phone reports (or the link expires, the
 // wait runs out, or the user skips), then turn the report into rows that carry
-// their status and the hint explaining them. Framework-free like SetupSession:
+// their status and the hint explaining them. Framework-free like SetupState:
 // the plain doctor awaits finished(), the screens subscribe() and re-read state.
 import type { ControlClient, DoctorReport, PhoneTestPoll } from '../cli/control.ts';
 import { type DoctorStrKey, doctorStrings } from '../cli/doctor-strings.ts';
@@ -10,7 +10,7 @@ import type { Config, Media } from '../config.ts';
 import type { CheckStatus } from './types.ts';
 
 /** What the doctor needs from the running service: its status for the checks, the phone test's link and long-poll. */
-export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'doctorSession' | 'doctorWait'>;
+export type DoctorControl = Pick<ControlClient, 'available' | 'status' | 'phoneTestLink' | 'phoneTestWait'>;
 
 /** How long the doctor waits for the phone. */
 export const PHONE_WAIT_MS = 10 * 60_000;
@@ -127,7 +127,7 @@ export class PhoneTest {
     if (!up) return this.#set({ kind: 'notRunning' });
     let link: { id: string; url: string };
     try {
-      link = await ctl.doctorSession();
+      link = await ctl.phoneTestLink();
     } catch (e) {
       if (!stale()) this.#set({ kind: 'error', message: (e as Error).message });
       return;
@@ -139,7 +139,7 @@ export class PhoneTest {
     try {
       while (!cancelled && this.#now() < deadline) {
         const next = await Promise.race([
-          ctl.doctorWait(link.id, Math.min(PHONE_POLL_MS, deadline - this.#now())),
+          ctl.phoneTestWait(link.id, Math.min(PHONE_POLL_MS, deadline - this.#now())),
           interrupted,
         ]);
         if (!next || stale()) return;

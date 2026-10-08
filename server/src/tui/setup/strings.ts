@@ -1,5 +1,5 @@
 // The setup screens' own texts (EN + pt-BR): the welcome card, the Review,
-// the install list and its last card. Question texts come from the session
+// the install list and its last card. Question texts come from the setup state
 // (qstrings.ts), shared chrome from tui/strings.ts.
 import { useContext } from 'solid-js';
 import { defineStrings, type Params } from '../../cli/strings.ts';
@@ -22,7 +22,7 @@ export const setupStrings = defineStrings(
     'review.file': 'They go to {file}.',
     'review.apply': 'Apply',
     'review.applyDesc': 'Write telinha.env, install and start Telinha',
-    'review.applyDescDocker': 'Write telinha.env; the host starts the container',
+    'review.applyDescDocker': 'Write telinha.env; the machine starts the container',
     'review.rotate': 'Apply with a new cookie secret',
     'review.rotateDesc': 'Logs everyone out of the pages',
     'review.back': 'Back to the questions',
@@ -68,7 +68,7 @@ export const setupStrings = defineStrings(
     'review.file': 'Elas vão para {file}.',
     'review.apply': 'Aplicar',
     'review.applyDesc': 'Gravar o telinha.env, instalar e iniciar a Telinha',
-    'review.applyDescDocker': 'Gravar o telinha.env; o host inicia o container',
+    'review.applyDescDocker': 'Gravar o telinha.env; a máquina inicia o container',
     'review.rotate': 'Aplicar com um novo segredo de cookie',
     'review.rotateDesc': 'Desconecta todo mundo das páginas',
     'review.back': 'Voltar pras perguntas',

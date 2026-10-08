@@ -1,5 +1,5 @@
 // The setup screens driven with keys on OpenTUI's test renderer, wired to the
-// real setup (session, lookups, apply, file write) on a fake machine.
+// real setup (setup state, lookups, apply, file write) on a fake machine.
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { TaskId, TaskRow } from '../src/cli/setup/apply.ts';
 import type { SetupUiContext } from '../src/cli/setup/ui.ts';
@@ -136,7 +136,7 @@ describe('answering with keys writes telinha.env', () => {
   test('VPS, own domain: the DNS answer is a note, the file serves 80/443', async () => {
     const r = await startSetup(QUIET, { nat: VPS_NAT });
     // Detected as a VPS: that is the highlighted answer now.
-    expect(await at(r, 'hosting')).toContain('❯ 2. A rented server (VPS)');
+    expect(await at(r, 'hosting')).toContain('❯ 2. A rented machine (VPS)');
     await press(r.s, 'enter');
     await at(r, 'vpsAddress');
     await press(r.s, '1');
@@ -210,7 +210,7 @@ describe('moving around', () => {
     await press(r.s, 'tab', 'down', 'down', 'down', 'enter');
     f = await until(r.s, 'Answer the earlier steps first');
     // Still on the first question, the sidebar still has the keys.
-    expect(r.session().current().id).toBe('hosting');
+    expect(r.state().current().id).toBe('hosting');
     await press(r.s, 'down', 'enter');
     expect(await until(r.s, 'Answer the earlier steps first')).toContain('Pick a step to jump to');
     await press(r.s, 'escape');
@@ -395,7 +395,7 @@ describe('the install', () => {
     );
     await press(r.s, 'ctrl+c');
     f = await until(r.s, 'Press Ctrl+C again to stop: the install may be left half done.');
-    expect(r.session().screen()).toBe('review');
+    expect(r.state().screen()).toBe('review');
     await press(r.s, 'ctrl+c');
     expect(await r.code).toBe(130);
     // The file was written before the download: the summary says so.
@@ -420,7 +420,7 @@ describe('the install', () => {
     await press(r.s, 'left');
     f = await until(r.s, '! The install has run: going back is disabled.');
     expect(f).toContain('Telinha is running');
-    expect(r.session().screen()).toBe('review');
+    expect(r.state().screen()).toBe('review');
     expect(await exit(r, f)).toBe(0);
   });
 
@@ -609,7 +609,7 @@ describe('lookups on the cards', () => {
     expect(f).toContain('Redirects -> Add Redirect, paste this, then Save Changes:');
     await press(r.s, '1');
     f = await until(r.s, '! Not there yet (did you press Save Changes?).');
-    expect(r.session().current().id).toBe('redirect');
+    expect(r.state().current().id).toBe('redirect');
     await press(r.s, '2');
     await at(r, 'guild');
     await press(r.s, 'enter');
@@ -636,7 +636,7 @@ describe('lookups on the cards', () => {
     r.world.hold = null;
     open();
     f = await until(r.s, '✖ Discord rejected the token; copy it again and paste it here.');
-    expect(r.session().current().id).toBe('discordToken');
+    expect(r.state().current().id).toBe('discordToken');
     // Typing hides the error until the next Enter.
     await press(r.s, 'ctrl+u');
     await paste(r.s, TOKEN);
@@ -658,15 +658,15 @@ describe('lookups on the cards', () => {
     await paste(r.s, SECRET);
     await press(r.s, 'enter');
     let f = await at(r, 'guild');
-    expect(f).toContain('! The bot is not in any server yet.');
+    expect(f).toContain('! The bot is not in any Discord server yet.');
     expect(f).toContain('https://discord.com/oauth2/authorize?client_id=111111111111111111');
     expect(f).toContain('❯ 1. Open the link in the browser');
     expect(f).toContain('2. I added the bot: check again');
-    expect(f).toContain('Add the bot to your server with this link');
+    expect(f).toContain('Add the bot to your Discord server with this link');
     r.world.guilds = [{ id: GUILD, name: 'Gurizada' }];
     await press(r.s, '2');
     f = await until(r.s, '1. Gurizada');
-    expect(f).toContain('2. Another server (add the bot)');
+    expect(f).toContain('2. Another Discord server (add the bot)');
     expect(f).not.toContain('Open the link');
     await press(r.s, 'enter');
     await at(r, 'role');
@@ -699,8 +699,8 @@ describe('lookups on the cards', () => {
     expect(f).toContain('[ ] #geral');
     await press(r.s, 'enter');
     await at(r, 'command');
-    expect(r.session().answers().channels).toEqual(['444444444444444442', '444444444444444443']);
-    expect(r.session().answers().role).toBe(GUILD);
+    expect(r.state().answers().channels).toEqual(['444444444444444442', '444444444444444443']);
+    expect(r.state().answers().role).toBe(GUILD);
     await press(r.s, 'ctrl+c');
     await r.code;
   });
@@ -826,12 +826,12 @@ describe('small terminals, Docker and progress', () => {
     await discordKeys(r);
     let f = await defaultsToReview(r);
     expect(f).toContain('They go to /srv/telinha/config/telinha.env.');
-    expect(f).toContain('Write telinha.env; the host starts the container');
+    expect(f).toContain('Write telinha.env; the machine starts the container');
     await press(r.s, 'enter');
-    f = await until(r.s, 'Start it on the host:');
+    f = await until(r.s, 'Start it on the machine:');
     expect(f).toContain('Writing the configuration');
     expect(f).toContain('✔ Wrote /srv/telinha/config/telinha.env');
-    expect(f).toContain('Start it on the host:  cd /opt/telinha && docker compose up -d');
+    expect(f).toContain('Start it on the machine:  cd /opt/telinha && docker compose up -d');
     expect(f).not.toContain('Download the programs');
     expect(f).not.toContain('Show the doctor report');
     expect(await exit(r, f)).toBe(0);

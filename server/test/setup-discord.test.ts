@@ -271,7 +271,7 @@ describe("checkDiscord (the install's Discord task)", () => {
     const problems = await checkDiscord(wizard(term, { calls: [] }), values, URL_);
     expect(values.DISCORD_CLIENT_ID).toBe(APP);
     expect(problems).toEqual([
-      'Role 999999999999999999 does not exist in the server.',
+      'Role 999999999999999999 does not exist in the Discord server.',
       'Channel 444444444444444442 is not a text channel the bot can see.',
     ]);
     expect(term.text_()).toContain(`Login will fail until ${URL_}/auth/callback`);

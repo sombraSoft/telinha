@@ -4,7 +4,7 @@ import type { CliContext } from '../src/cli/args.ts';
 import type { ApplyHooks, TaskId } from '../src/cli/setup/apply.ts';
 import { createDiscordSetup } from '../src/cli/setup/discord.ts';
 import type { QuestionId } from '../src/cli/setup/model.ts';
-import type { Notice, QuestionView, ReviewRow, SetupSession } from '../src/cli/setup/session.ts';
+import type { Notice, QuestionView, ReviewRow, SetupState } from '../src/cli/setup/state.ts';
 import {
   elevationCommand,
   generateSecrets,
@@ -33,7 +33,7 @@ const URL_ = 'https://telinha.example.com';
 const DUCK_URL = 'https://my-group.duckdns.org:8443';
 const TUNNEL = Buffer.from(JSON.stringify({ a: 'acct', t: 'tunnel-id', s: 'c2VjcmV0' })).toString('base64');
 const HOME_NEEDS_ADVANCED =
-  'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps';
+  'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps';
 
 /** What the plain run printed, one entry per line. */
 class FakeTerm implements Term {
@@ -68,8 +68,8 @@ class FakeTerm implements Term {
   }
 }
 
-/** Lets the session's lookups (and the background list reads) finish. */
-async function settle(s: SetupSession): Promise<void> {
+/** Lets the setup state's lookups (and the background list reads) finish. */
+async function settle(s: SetupState): Promise<void> {
   for (let i = 0; i < 100; i++) {
     await Bun.sleep(1);
     if (s.screen() !== 'question' || s.current().lookup.state !== 'running') return;
@@ -86,7 +86,7 @@ interface UiScript {
   decide?: (id: TaskId, error: string) => 'retry' | 'skip' | 'back' | 'abort';
 }
 
-/** The setup screens, scripted: answers through the session, then apply, its task rows written down as they change. */
+/** The setup screens, scripted: answers through the setup state, then apply, its task rows written down as they change. */
 class FakeUi implements SetupUi {
   context: SetupUiContext | null = null;
   first: QuestionView | null = null;
@@ -136,7 +136,7 @@ class FakeUi implements SetupUi {
 
   async run(c: SetupUiContext): Promise<SetupUiResult> {
     this.context = c;
-    const s = c.session;
+    const s = c.state;
     await settle(s);
     this.notice = s.notice();
     if (s.screen() === 'question') this.first = s.current();
@@ -344,8 +344,8 @@ function fakeDeps(term: FakeTerm, o: Opts = {}) {
       available: async () => o.available ?? false,
       shutdown: async () => {},
       status: async () => ({ supervised: true }) as Awaited<ReturnType<SetupDeps['control']['status']>>,
-      doctorSession: async () => ({ id: 's', url: 'https://telinha.example.com/doctor/s', expiresAt: 0 }),
-      doctorWait: async () => ({ state: 'expired' }),
+      phoneTestLink: async () => ({ id: 's', url: 'https://telinha.example.com/doctor/s', expiresAt: 0 }),
+      phoneTestWait: async () => ({ state: 'expired' }),
     },
     bins: async (config) => void rec.bins.push({ media: config.media, ingress: config.ingress }),
     spawn: async (cmd) => {
@@ -1046,7 +1046,7 @@ describe('non-interactive', () => {
       const { deps, files } = fakeDeps(new FakeTerm());
       expect(await go(ctx, deps)).toBe(2);
       expect(err).toEqual([
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ]);
       expect(err[0]).toContain('--host vps');
       expect(files.size).toBe(0);
@@ -1325,7 +1325,7 @@ describe('non-interactive', () => {
       const no = fakeDeps(new FakeTerm(), { files: { [ENV]: HOME_DUCK_FILE } });
       expect(await go(ctx, no.deps)).toBe(2);
       expect(err).toEqual([
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ]);
 
       const yes = fakeDeps(new FakeTerm(), { files: { [ENV]: HOME_DUCK_FILE } });

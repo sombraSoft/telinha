@@ -1,4 +1,4 @@
-// The /livekit relay end to end: a fake LiveKit on one Bun.serve, the real
+// The /livekit signaling proxy end to end: a fake LiveKit on one Bun.serve, the real
 // handler (gate + proxy) on another, real WebSocket clients.
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { Server } from 'bun';

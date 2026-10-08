@@ -31,8 +31,8 @@ export const t = defineStrings(
     secretRejected: 'Discord rejected the client secret.',
     secretUnchecked: 'Could not check the client secret ({error}); keeping it.',
     redirectSkipped: 'Login will fail until {uri} is a redirect of the app (telinha doctor checks it).',
-    guildMissingInvite: 'The bot is not in server {id}; add it with {url}',
-    roleMissing: 'Role {id} does not exist in the server.',
+    guildMissingInvite: 'The bot is not in Discord server {id}; add it with {url}',
+    roleMissing: 'Role {id} does not exist in the Discord server.',
     channelMissing: 'Channel {id} is not a text channel the bot can see.',
     clientIdMismatch: "--client-id {given} does not match the token's application {id}; using {id}.",
 
@@ -110,7 +110,7 @@ export const t = defineStrings(
     nextNative:
       'Open {url} or type /{command} in one of the chosen Discord channels.\nSettings live in {file}: run {telinha} setup again to change them, {telinha} doctor to check them.',
     nextDocker:
-      'Start it on the host:  cd /opt/telinha && docker compose up -d\nKeep it updated:       systemctl enable --now telinha-update.timer\nCheck it:              docker exec -it telinha bun server/src/index.ts doctor',
+      'Start it on the machine:  cd /opt/telinha && docker compose up -d\nKeep it updated:          systemctl enable --now telinha-update.timer\nCheck it:                 docker exec -it telinha bun server/src/index.ts doctor',
   },
   {
     failed: 'o setup falhou: {error}',
@@ -136,8 +136,8 @@ export const t = defineStrings(
     secretRejected: 'O Discord recusou o client secret.',
     secretUnchecked: 'Não deu pra verificar o client secret ({error}); mantendo.',
     redirectSkipped: 'O login vai falhar até {uri} ser um redirect do app (o telinha doctor verifica).',
-    guildMissingInvite: 'O bot não está no servidor {id}; adicione com {url}',
-    roleMissing: 'O cargo {id} não existe no servidor.',
+    guildMissingInvite: 'O bot não está no servidor do Discord {id}; adicione com {url}',
+    roleMissing: 'O cargo {id} não existe no servidor do Discord.',
     channelMissing: 'O canal {id} não é um canal de texto que o bot vê.',
     clientIdMismatch: '--client-id {given} não bate com a aplicação do token {id}; usando {id}.',
 
@@ -213,7 +213,7 @@ export const t = defineStrings(
     nextNative:
       'Abra {url} ou digite /{command} num dos canais escolhidos do Discord.\nAs configurações ficam em {file}: rode {telinha} setup de novo pra mudar, {telinha} doctor pra verificar.',
     nextDocker:
-      'Inicie no host:          cd /opt/telinha && docker compose up -d\nMantenha atualizada:     systemctl enable --now telinha-update.timer\nVerifique:               docker exec -it telinha bun server/src/index.ts doctor',
+      'Inicie na máquina:       cd /opt/telinha && docker compose up -d\nMantenha atualizada:     systemctl enable --now telinha-update.timer\nVerifique:               docker exec -it telinha bun server/src/index.ts doctor',
   },
 );
 

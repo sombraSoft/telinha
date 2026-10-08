@@ -59,8 +59,8 @@ export interface Footprint {
   /** Everything bound here, telinha's LISTEN included; no two may share a number. */
   ports: BoundPort[];
   exposures: Exposure[];
-  /** Telinha relays LiveKit signaling at /livekit (Cloud: browsers dial LiveKit Cloud). */
-  relay: boolean;
+  /** Telinha runs the signaling proxy at /livekit (Cloud: browsers dial LiveKit Cloud). */
+  signalingProxy: boolean;
   /** Watch the public IP: LiveKit, the router mappings and DuckDNS follow it. */
   ipWatch: boolean;
 }
@@ -117,7 +117,7 @@ export function footprintOf(c: FootprintInput): Footprint {
       ...turn,
     ],
     exposures: names.flatMap((name) => exposed[name]),
-    relay: runs('livekit'),
+    signalingProxy: runs('livekit'),
     // A static IP never changes.
     ipWatch: c.ipWatchSeconds > 0 && !c.livekitNodeIp,
   };

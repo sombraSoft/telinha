@@ -38,14 +38,14 @@ export interface Config {
   channelIds: string[];
   publicUrl: string;
   cookieSecret: string;
-  host: string;
+  listenHost: string;
   port: number;
   sessionSeconds: number;
   roleTtlMs: number;
   livekitKey: string;
   livekitSecret: string;
   livekitUrl: string;
-  /** LiveKit HTTP API (RoomService) as the server reaches it. */
+  /** LiveKit room API (HTTP) as the server reaches it. */
   livekitApiUrl: string;
   /** cloud: the remote LiveKit's host (wss URL without scheme), e.g. myproject-abc123.livekit.cloud; undefined for self. */
   livekitCloudHost?: string;
@@ -449,7 +449,7 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
       .filter(Boolean),
     publicUrl,
     cookieSecret: get('COOKIE_SECRET'),
-    host,
+    listenHost: host,
     port,
     sessionSeconds: num('SESSION_DAYS', '7') * 86400,
     roleTtlMs: num('ROLE_CACHE_SECONDS', '300') * 1000,

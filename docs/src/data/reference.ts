@@ -190,7 +190,7 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
   LISTEN: {
     section: 'ingress',
     required: no,
-    probe: (c) => `${c.host}:${c.port}`,
+    probe: (c) => `${c.listenHost}:${c.port}`,
     default: '127.0.0.1:8081',
     notes: {
       en: "Telinha's own listener; Caddy, cloudflared or your proxy forward here. Loopback only, never forwarded on the router.",

@@ -1,6 +1,6 @@
-// The phone test page against the E2E stack: a session from the control
+// The phone test page against the E2E stack: a phone test from the control
 // endpoint (as `telinha doctor` gets it), the one-time link, the page's run
-// through the /livekit relay, and the report the CLI would print.
+// through the /livekit signaling proxy, and the report the CLI would print.
 //
 // Needs the local control endpoint (/internal/*, token in <data>/run/control.token)
 // in the server the stack runs; without it the spec skips itself.
@@ -17,9 +17,9 @@ const control = createControlClient({
 });
 
 test('doctor link: one use, the page runs the test and reports', async ({ page, request }) => {
-  test.skip(!(await control.available()), 'the server has no control endpoint to create doctor sessions');
-  const session = await control.doctorSession();
-  const link = new URL(session.url);
+  test.skip(!(await control.available()), 'the server has no control endpoint to create phone tests');
+  const phoneTest = await control.phoneTestLink();
+  const link = new URL(phoneTest.url);
 
   // Nothing under /doctor without the link's cookie.
   expect((await request.get('/doctor', { maxRedirects: 0 })).status()).toBe(404);
@@ -28,7 +28,7 @@ test('doctor link: one use, the page runs the test and reports', async ({ page, 
   await expect(page).toHaveURL(/\/doctor$/);
   await expect(page.locator('.footer .done')).toBeVisible({ timeout: 60_000 });
 
-  const state = await control.doctorWait(session.id, 1000);
+  const state = await control.phoneTestWait(phoneTest.id, 1000);
   expect(state.state).toBe('done');
   expect(state.report?.signaling.ok).toBe(true);
   expect(state.report?.publish.ok).toBe(true);

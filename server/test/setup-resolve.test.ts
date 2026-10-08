@@ -257,7 +257,7 @@ const FIXTURES: Fixture[] = [
         '--host: moon is not valid (want home | vps)',
         '--ingress: magic is not valid (want direct | tunnel | external)',
         '--upnp: maybe is not valid (want auto | off)',
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -313,7 +313,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -372,7 +372,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -436,7 +436,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -468,7 +468,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -500,7 +500,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -661,7 +661,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -831,7 +831,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -977,7 +977,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -1363,7 +1363,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -1501,7 +1501,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -1870,7 +1870,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -3407,7 +3407,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'em casa a Telinha nunca depende das portas 80/443: use --duckdns-domain (HTTPS numa porta alta), --ingress tunnel, ou --advanced pra confirmar que você mesmo abriu a 80 e a 443 (ou tem seu próprio proxy); num servidor alugado passe --host vps',
+        'em casa a Telinha nunca depende das portas 80/443: use --duckdns-domain (HTTPS numa porta alta), --ingress tunnel, ou --advanced pra confirmar que você mesmo abriu a 80 e a 443 (ou tem seu próprio proxy); numa máquina alugada passe --host vps',
       ],
       missing: [],
     },
@@ -3673,7 +3673,7 @@ const FIXTURES: Fixture[] = [
         UPNP: 'auto',
       },
       errors: [
-        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+        'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       ],
       missing: [],
     },
@@ -4015,7 +4015,7 @@ describe('answersFromFlags: flags next to a terminal (lenient)', () => {
   test('a rule error is reported (a notice on screen) and its flags are left out of the defaults', () => {
     const r = lenient({ host: 'home', 'public-url': URL_, guild: '12', command: 'sala' });
     expect(r.errors.map((t) => text('en', t))).toEqual([
-      'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented server pass --host vps',
+      'at home Telinha never relies on ports 80/443: use --duckdns-domain (HTTPS on a high port), --ingress tunnel, or --advanced to confirm you opened 80 and 443 yourself (or run your own proxy); on a rented machine pass --host vps',
       '--guild: 12 is not valid (want a Discord id: 17-20 digits)',
     ]);
     expect(r.answers).toEqual({ hosting: 'home', command: 'sala' });

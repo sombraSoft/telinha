@@ -49,7 +49,7 @@ import { defaultOsName, detectHost, type HostInfo, routerLabel } from './setup/h
 import { type ModelEnv, type Text, type TrayState, trayHere } from './setup/model.ts';
 import { q } from './setup/qstrings.ts';
 import { answersFromFlags, type ResolveBase, resolveValues, trayFromFlags } from './setup/resolve.ts';
-import { SetupSession } from './setup/session.ts';
+import { SetupState } from './setup/state.ts';
 import {
   nextSteps,
   SetupAbort,
@@ -496,7 +496,7 @@ async function interactive(
     docker,
     compiled: ctx.compiled,
   };
-  const session = new SetupSession({
+  const state = new SetupState({
     env: envBase,
     host: null,
     base,
@@ -508,7 +508,7 @@ async function interactive(
     rerun: l.previous !== null,
   });
   const host = detecting.then((h) => {
-    session.setHost(h);
+    state.setHost(h);
     return h;
   });
   host.catch(() => {});
@@ -519,8 +519,8 @@ async function interactive(
   let applied: Values | null = null;
   const apply = async (a: { rotateCookie: boolean }, hooks: ApplyHooks): Promise<ApplyResult> => {
     const h = await host;
-    const values = session.values();
-    const chosen = session.applyOptions();
+    const values = state.values();
+    const chosen = state.applyOptions();
     const opts = applyOptions(ctx, flags, docker, {
       sysctl: chosen.sysctl ?? 'auto',
       rotateCookie: a.rotateCookie,
@@ -529,7 +529,7 @@ async function interactive(
       tray: chosen.tray,
     });
     applied = values;
-    const w = makeWizard(ctx, deps, session.locale, h, { docker, out: silentOut() });
+    const w = makeWizard(ctx, deps, state.locale, h, { docker, out: silentOut() });
     return runApply(w, l, values, planTasks(values, opts), opts, hooks, tasks);
   };
   const doctor =
@@ -538,7 +538,7 @@ async function interactive(
       : {
           buildContext: async () =>
             (await import('./doctor.ts')).buildCheckContext(
-              { ...ctx, locale: session.locale },
+              { ...ctx, locale: state.locale },
               { local: false, control: deps.control },
             ),
           control: deps.control,
@@ -558,7 +558,7 @@ async function interactive(
       ctx,
       version: ctx.version,
       docker,
-      session,
+      state,
       tasks,
       apply,
       offer: o.offer,
@@ -566,11 +566,11 @@ async function interactive(
       shownFile: l.shown,
     });
   } finally {
-    session.dispose();
+    state.dispose();
   }
 
   // The screens are gone: what stays in the terminal is plain.
-  const locale = session.locale;
+  const locale = state.locale;
   const out = deps.term(locale);
   if (result.kind === 'declined') return null;
   // The last attempt did not get to the file, an earlier one did: say so instead of "nothing was written".

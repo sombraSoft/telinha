@@ -4,10 +4,10 @@ import { avatarUrl, discordIdOf, parseMeta } from './avatar';
 import { isValidRoom, ROOM_RE } from './room-name';
 
 describe('room codes', () => {
-  test('same rule as the server', () => {
+  test('same rule as Telinha', () => {
     expect(ROOM_RE.source).toBe(SERVER_ROOM_RE.source);
   });
-  test('every code the server makes is valid', () => {
+  test('every code Telinha makes is valid', () => {
     const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
     for (let i = 0; i < 200; i++) {
       expect(isValidRoom(newRoomCode(random))).toBe(true);
