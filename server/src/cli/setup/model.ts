@@ -588,10 +588,10 @@ export const QUESTIONS: readonly QuestionDef[] = [
       return [txt('httpsPortHint', { port }), raw(''), txt('httpsPortUrl', { name: str(a.duckName) || 'name', port })];
     },
     // The previous high port when the file has one; 80/443 would only be refused.
-    default: (_a, env) =>
-      env.file.ACME_DNS === 'duckdns' && highPortOk(env.file.HTTPS_PORT)
-        ? env.file.HTTPS_PORT
-        : DEFAULT_HOME_HTTPS_PORT,
+    default: (_a, env) => {
+      const port = env.file.HTTPS_PORT;
+      return env.file.ACME_DNS === 'duckdns' && port !== undefined && highPortOk(port) ? port : DEFAULT_HOME_HTTPS_PORT;
+    },
     validate: (v, _a, env) => {
       const s = str(v);
       if (!/^\d+$/.test(s) || Number(s) > 65535) return txt('portBad');
@@ -1035,8 +1035,8 @@ function domainPreview(env: ModelEnv): Text {
   return ip ? txt('choiceDomainPreview', { ip }) : txt('choiceDomainPreviewNoIp');
 }
 
-function highPortOk(p: string | undefined): p is string {
-  return !!p && /^\d+$/.test(p) && Number(p) >= 1024 && Number(p) <= 65535;
+function highPortOk(p: string): boolean {
+  return /^\d+$/.test(p) && Number(p) >= 1024 && Number(p) <= 65535;
 }
 
 /** The chosen server's name as Discord lists it; '' when not loaded (or offline). */

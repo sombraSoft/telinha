@@ -208,7 +208,12 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
  */
 export async function checkDiscord(w: Wizard, values: Values, publicUrl: string): Promise<string[]> {
   const { out, s } = w;
-  const client = w.deps.discord(present(values.DISCORD_TOKEN, 'DISCORD_TOKEN'));
+  // The steps before this one always fill these; a missing one is a bug, not a Discord problem.
+  const token = present(values.DISCORD_TOKEN, 'DISCORD_TOKEN');
+  const secret = present(values.DISCORD_CLIENT_SECRET, 'DISCORD_CLIENT_SECRET');
+  const guildId = present(values.GUILD_ID, 'GUILD_ID');
+  const roleId = present(values.ROLE_ID, 'ROLE_ID');
+  const client = w.deps.discord(token);
   let app: DiscordApplication;
   try {
     app = await client.application();
@@ -234,8 +239,7 @@ export async function checkDiscord(w: Wizard, values: Values, publicUrl: string)
     else out.warn(s('intentsGiveUp'));
   }
   try {
-    if (!(await client.checkClientSecret(app.id, present(values.DISCORD_CLIENT_SECRET, 'DISCORD_CLIENT_SECRET'))))
-      problems.push(s('secretRejected'));
+    if (!(await client.checkClientSecret(app.id, secret))) problems.push(s('secretRejected'));
   } catch (e) {
     out.warn(s('secretUnchecked', { error: errMsg(e) }));
   }
@@ -243,19 +247,13 @@ export async function checkDiscord(w: Wizard, values: Values, publicUrl: string)
   if (!app.redirectUris.includes(redirect)) out.warn(s('redirectSkipped', { uri: redirect }));
   try {
     const guilds = await client.guilds();
-    const guild = guilds.find((g) => g.id === values.GUILD_ID);
+    const guild = guilds.find((g) => g.id === guildId);
     if (!guild) {
-      problems.push(
-        s('guildMissingInvite', {
-          id: present(values.GUILD_ID, 'GUILD_ID'),
-          url: client.inviteUrl(app.id, values.GUILD_ID),
-        }),
-      );
+      problems.push(s('guildMissingInvite', { id: guildId, url: client.inviteUrl(app.id, guildId) }));
       return problems;
     }
     const roles = await client.roles(guild.id);
-    if (values.ROLE_ID !== guild.id && !roles.some((r) => r.id === values.ROLE_ID))
-      problems.push(s('roleMissing', { id: present(values.ROLE_ID, 'ROLE_ID') }));
+    if (roleId !== guild.id && !roles.some((r) => r.id === roleId)) problems.push(s('roleMissing', { id: roleId }));
     const text = new Set(sortChannels(await client.channels(guild.id)).map((c) => c.channel.id));
     for (const c of (values.CHANNEL_IDS ?? '')
       .split(',')
