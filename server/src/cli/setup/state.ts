@@ -3,6 +3,7 @@
 // answered step, the read-only lookups and the Review. Framework-free: the
 // screens subscribe() and re-read the views, whose strings are already in the
 // current language. Secret values never leave it except through values().
+import { present } from '../../present.ts';
 import type { Locale } from '../strings.ts';
 import { type DiscordSetup, inviteUrl } from './discord.ts';
 import type { HostInfo } from './host.ts';
@@ -198,11 +199,11 @@ export class SetupState {
     this.#preset = { ...init.preset };
     if (init.presetErrors.length) this.#notice = { kind: 'presetErrors', text: [...init.presetErrors] };
     const nav = this.#nav();
-    this.#cur = nav[0]!;
+    this.#cur = present(nav[0], 'a first question');
     if (init.acceptDefaults) {
-      const f = this.frontier();
-      if (f >= nav.length) this.#screen = 'review';
-      else this.#cur = nav[f]!;
+      const next = nav[this.frontier()];
+      if (next === undefined) this.#screen = 'review';
+      else this.#cur = next;
     }
     this.#enter();
   }
@@ -335,7 +336,7 @@ export class SetupState {
         jumpable = all;
       } else if (id !== 'install') {
         const ids = nav.filter((x) => question(x).step === id);
-        const first = ids.length ? nav.indexOf(ids[0]!) : -1;
+        const first = nav.findIndex((x) => question(x).step === id);
         jumpable = first !== -1 && first <= f;
         if (this.#screen === 'review') state = 'done';
         else if (curStep === id) state = 'current';
@@ -510,16 +511,17 @@ export class SetupState {
     this.#clearNotice();
     const nav = this.#nav();
     if (this.#screen === 'review') {
-      this.#moveTo(nav[nav.length - 1]!);
+      this.#moveTo(present(nav[nav.length - 1], 'a last question'));
       this.#emit();
       return true;
     }
     const i = nav.indexOf(this.#cur);
-    if (i <= 0) {
+    const prev = i > 0 ? nav[i - 1] : undefined;
+    if (prev === undefined) {
       this.#emit();
       return false;
     }
-    this.#moveTo(nav[i - 1]!);
+    this.#moveTo(prev);
     this.#emit();
     return true;
   }
@@ -530,10 +532,11 @@ export class SetupState {
     if (step === 'review') return this.toReview();
     const nav = this.#nav();
     const first = step === 'install' ? -1 : nav.findIndex((id) => question(id).step === step);
-    if (first === -1 || first > this.frontier()) return this.#locked();
+    const target = nav[first];
+    if (target === undefined || first > this.frontier()) return this.#locked();
     this.#cancel();
     this.#clearNotice();
-    this.#moveTo(nav[first]!);
+    this.#moveTo(target);
     this.#emit();
     return true;
   }
@@ -614,7 +617,7 @@ export class SetupState {
           apply: () => {
             env.lookups.app = r.app;
             // Online the client id comes from the token: counted although not asked.
-            this.#user.clientId = r.app!.id;
+            this.#user.clientId = present(r.app, "the token's application").id;
             if (r.intentsOff) this.#notes.set(id, txt('intentsOff'));
             else this.#notes.delete(id);
             void this.#loadGuilds(s);
@@ -785,7 +788,8 @@ export class SetupState {
     if (this.#screen !== 'question') return;
     const nav = this.#nav();
     if (nav.includes(this.#cur)) return;
-    const next = nav.find((x) => catalogIndex(x) > catalogIndex(this.#cur)) ?? nav[nav.length - 1]!;
+    const next =
+      nav.find((x) => catalogIndex(x) > catalogIndex(this.#cur)) ?? present(nav[nav.length - 1], 'a last question');
     this.#moveTo(next);
   }
 
@@ -849,16 +853,17 @@ export class SetupState {
       const gen = this.#gen;
       const r = await loadGuilds(this.#client(token));
       if (gen !== this.#gen) return null;
-      if (r.state.state === 'error') return { state: r.state, actions: ['retry'] };
+      // Only an error comes without the list.
+      if (r.state.state === 'error' || !r.guilds) return { state: r.state, actions: ['retry'] };
       this.#env.lookups.guilds = r.guilds;
       const appId = await this.#appId();
       if (gen !== this.#gen) return null;
       const wanted = str(this.#preset.guild);
-      if (!r.guilds!.length) {
+      if (!r.guilds.length) {
         this.#invite = { url: inviteUrl(appId ?? ''), why: 'none' };
         return { state: r.state, actions: [] };
       }
-      if (wanted && !this.#user.guild && !r.guilds!.some((g) => g.id === wanted)) {
+      if (wanted && !this.#user.guild && !r.guilds.some((g) => g.id === wanted)) {
         // --guild names a server the bot is not in: the invite goes straight there.
         this.#invite = { url: inviteUrl(appId ?? '', wanted), why: 'missing' };
         return { state: { state: 'warn', note: txt('guildMissing', { id: wanted }) }, actions: [] };
@@ -873,9 +878,9 @@ export class SetupState {
     if (!token || !guild) return Promise.resolve();
     return this.#load(`roles:${guild}`, 'role', txt('rolesLoading'), async () => {
       const r = await loadRoles(this.#client(token), guild);
-      if (r.state.state === 'error') return { state: r.state, actions: ['retry'] };
+      if (r.state.state === 'error' || !r.roles) return { state: r.state, actions: ['retry'] };
       this.#env.lookups.roles ??= {};
-      this.#env.lookups.roles[guild] = r.roles!;
+      this.#env.lookups.roles[guild] = r.roles;
       return null;
     });
   }
@@ -886,9 +891,9 @@ export class SetupState {
     if (!token || !guild) return Promise.resolve();
     return this.#load(`channels:${guild}`, 'channels', txt('channelsLoading'), async () => {
       const r = await loadChannels(this.#client(token), guild, guildName(eff, this.#env) || guild);
-      if (r.state.state === 'error') return { state: r.state, actions: ['retry'] };
+      if (r.state.state === 'error' || !r.channels) return { state: r.state, actions: ['retry'] };
       this.#env.lookups.channels ??= {};
-      this.#env.lookups.channels[guild] = r.channels!;
+      this.#env.lookups.channels[guild] = r.channels;
       return r.state.state === 'rejected' ? { state: r.state, actions: ['check'] } : null;
     });
   }

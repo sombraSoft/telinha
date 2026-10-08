@@ -62,7 +62,7 @@ function fit(l: Locale, parts: (string | List)[]): string {
         typeof p === 'string'
           ? p
           : p.items.length
-            ? t(l, p.key, { list: listText(p.items, shown[lists.indexOf(p)]!) })
+            ? t(l, p.key, { list: listText(p.items, shown[lists.indexOf(p)] ?? p.items.length) })
             : null,
       )
       .filter((s): s is string => s !== null)
@@ -70,8 +70,9 @@ function fit(l: Locale, parts: (string | List)[]): string {
   let out = build();
   while (out.length > MAX_CONTENT) {
     const i = shown.indexOf(Math.max(0, ...shown));
-    if (i < 0 || !shown[i]) break;
-    shown[i]!--;
+    const n = shown[i];
+    if (!n) break;
+    shown[i] = n - 1;
     out = build();
   }
   return out;

@@ -4,6 +4,7 @@
 // file; answersFromFlags() turns the command line (flags over environment over
 // file) into answers with the non-interactive rules and messages.
 
+import { present } from '../../present.ts';
 import type { Locale } from '../strings.ts';
 import { SNOWFLAKE_RE, validCommand } from './discord.ts';
 import {
@@ -518,8 +519,9 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
     ['GUILD_ID', 'guild'],
     ['ROLE_ID', 'role'],
   ] as const) {
-    if (values[key] && !SNOWFLAKE_RE.test(values[key]!))
-      err(txt('badFlagValue', { flag: `--${flag}`, value: values[key]!, allowed: s('idAllowed') }), flag);
+    const value = values[key];
+    if (value && !SNOWFLAKE_RE.test(value))
+      err(txt('badFlagValue', { flag: `--${flag}`, value, allowed: s('idAllowed') }), flag);
   }
   if (values.CHANNEL_IDS && !values.CHANNEL_IDS.split(',').every((c) => SNOWFLAKE_RE.test(c))) {
     err(txt('badFlagValue', { flag: '--channels', value: values.CHANNEL_IDS, allowed: s('idAllowed') }), 'channels');
@@ -529,8 +531,13 @@ function collect(flags: SetupFlagValues, env: ModelEnv, o: FlagOptions): Collect
   const need = (key: string, what: string) => {
     if (!values[key]) missing.push(what);
   };
-  const secret = (key: SecretKey) =>
-    s('missingSecret', { env: key, flag: `--${SECRETS.find(([k]) => k === key)![1]}` });
+  const secret = (key: SecretKey) => {
+    const [, flag] = present(
+      SECRETS.find(([k]) => k === key),
+      key,
+    );
+    return s('missingSecret', { env: key, flag: `--${flag}` });
+  };
   need('PUBLIC_URL', '--public-url');
   need('DISCORD_TOKEN', secret('DISCORD_TOKEN'));
   need('DISCORD_CLIENT_SECRET', secret('DISCORD_CLIENT_SECRET'));
@@ -627,18 +634,24 @@ function answersOf(values: Values, hosting: Hosting, env: ModelEnv): Answers {
  */
 function presetOf(flags: SetupFlagValues, o: FlagOptions, blamed: Set<string>): Answers {
   const a: Answers = {};
-  const ok = (f: keyof SetupFlagValues) => flags[f] !== undefined && flags[f] !== '' && !blamed.has(f);
+  /** A string flag that is given, not blank and not blamed. */
+  const ok = (f: keyof SetupFlagValues): string | undefined => {
+    const v = flags[f];
+    return typeof v === 'string' && v !== '' && !blamed.has(f) ? v : undefined;
+  };
   const put = (id: AnswerId, v: string | string[] | undefined | null) => {
     if (v !== undefined && v !== null && v !== '') a[id] = v;
   };
-  if (ok('host')) put('hosting', flags.host);
+  put('hosting', ok('host'));
   const advanced = !!(flags.advanced || o.advanced);
-  const ingress = ok('ingress') ? flags.ingress : undefined;
-  const duck = ok('duckdns-domain') ? parseDuckDomain(flags['duckdns-domain']!) : null;
-  const url = ok('public-url') ? flags['public-url']!.trim().replace(/\/$/, '') : '';
+  const ingress = ok('ingress');
+  const duckFlag = ok('duckdns-domain');
+  const duck = duckFlag ? parseDuckDomain(duckFlag) : null;
+  const url = ok('public-url')?.trim().replace(/\/$/, '') ?? '';
+  const domain = url ? parseHost(url) : null;
   if (ingress === 'tunnel') {
     Object.assign(a, { homeCf: 'yes', vpsAddress: 'tunnel' });
-    put('tunnelHost', url && parseHost(url));
+    put('tunnelHost', domain);
   } else if (ingress === 'external') {
     a.vpsAddress = 'external';
     if (advanced) Object.assign(a, { homeCf: 'advanced', homeAdvanced: 'proxy' });
@@ -651,41 +664,44 @@ function presetOf(flags: SetupFlagValues, o: FlagOptions, blamed: Set<string>): 
     );
   } else if (url && SSLIP_RE.test(url)) {
     a.vpsAddress = 'sslip';
-  } else if (url && parseHost(url)) {
-    Object.assign(a, { domain: parseHost(url)!, vpsAddress: 'domain' });
+  } else if (domain) {
+    Object.assign(a, { domain, vpsAddress: 'domain' });
     if (advanced) Object.assign(a, { homeCf: 'advanced', homeAdvanced: 'ports', advancedAddress: 'domain' });
   }
-  const https = flags['https-port'];
-  if (ok('https-port') && /^\d+$/.test(https!) && Number(https) >= 1024 && Number(https) <= 65535) a.httpsPort = https;
-  if (ok('node-ip')) put('nodeIp', flags['node-ip']!.trim());
-  if (ok('media-tcp') || ok('media-udp')) {
+  const https = ok('https-port');
+  if (https && /^\d+$/.test(https) && Number(https) >= 1024 && Number(https) <= 65535) a.httpsPort = https;
+  put('nodeIp', ok('node-ip')?.trim());
+  const tcp = ok('media-tcp');
+  const udp = ok('media-udp');
+  if (tcp || udp) {
     a.mediaPorts = 'change';
-    if (ok('media-tcp')) a.mediaTcp = flags['media-tcp'];
-    if (ok('media-udp')) a.mediaUdp = flags['media-udp'];
+    if (tcp) a.mediaTcp = tcp;
+    if (udp) a.mediaUdp = udp;
   }
-  if (ok('media')) put('media', flags.media);
-  if (ok('cloud-url')) put('cloudUrl', cloudUrl(flags['cloud-url']!) ?? flags['cloud-url']!.trim());
-  if (ok('livekit-key')) put('cloudKey', flags['livekit-key']!.trim());
+  put('media', ok('media'));
+  const cloud = ok('cloud-url');
+  if (cloud) put('cloudUrl', cloudUrl(cloud) ?? cloud.trim());
+  put('cloudKey', ok('livekit-key')?.trim());
   put('cloudSecret', o.secrets.LIVEKIT_API_SECRET);
   // auto is no answer: the question's own default stands.
-  if (ok('turn') && flags.turn !== 'auto') put('turn', flags.turn);
-  if (ok('upnp')) put('upnp', flags.upnp);
-  if (ok('auto-update')) put('autoUpdate', flags['auto-update']);
+  const turn = ok('turn');
+  if (turn !== 'auto') put('turn', turn);
+  put('upnp', ok('upnp'));
+  put('autoUpdate', ok('auto-update'));
   if (flags['no-tray']) a.tray = 'no';
   else if (flags['tray-autostart']) Object.assign(a, { tray: 'yes', trayAutostart: 'yes' });
-  if (ok('command')) put('command', flags.command!.trim());
+  put('command', ok('command')?.trim());
   if (flags.group !== undefined) a.group = flags.group.trim();
-  if (ok('client-id')) put('clientId', flags['client-id']!.trim());
-  if (ok('guild')) put('guild', flags.guild!.trim());
-  if (ok('role')) put('role', flags.role!.trim());
-  if (ok('channels'))
-    put(
-      'channels',
-      flags
-        .channels!.split(',')
-        .map((c) => c.trim())
-        .filter(Boolean),
-    );
+  put('clientId', ok('client-id')?.trim());
+  put('guild', ok('guild')?.trim());
+  put('role', ok('role')?.trim());
+  put(
+    'channels',
+    ok('channels')
+      ?.split(',')
+      .map((c) => c.trim())
+      .filter(Boolean),
+  );
   put('discordToken', o.secrets.DISCORD_TOKEN);
   put('clientSecret', o.secrets.DISCORD_CLIENT_SECRET);
   put('duckToken', o.secrets.DUCKDNS_TOKEN);
@@ -707,5 +723,5 @@ export function answersFromFlags(
   const r = collect(flags, env, o);
   const errors = r.errors.map((e) => e.text);
   if (o.lenient) return { answers: presetOf(flags, o, new Set(r.errors.flatMap((e) => e.blame))), errors, missing: [] };
-  return { answers: answersOf(r.values, r.hosting!, env), errors, missing: r.missing };
+  return { answers: answersOf(r.values, present(r.hosting, 'the hosting'), env), errors, missing: r.missing };
 }

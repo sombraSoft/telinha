@@ -78,7 +78,8 @@ export function parseArgs<const S extends ArgSpec>(
   let rest: string[] = [];
 
   const set = (name: string, flag: string, inline: string | undefined, next: () => string | undefined) => {
-    if (Object.hasOwn(rejected, name)) throw new UsageError(rejected[name]!);
+    const why = Object.hasOwn(rejected, name) ? rejected[name] : undefined;
+    if (why !== undefined) throw new UsageError(why);
     const def = spec.flags[name];
     if (def === undefined) throw new UsageError(ts(locale, 'argUnknownFlag', { flag }));
     const kind = kindOf(def);
@@ -96,7 +97,8 @@ export function parseArgs<const S extends ArgSpec>(
   };
 
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
+    const a = argv[i];
+    if (a === undefined) break;
     // A value may be "-" (stdin) but never another flag.
     const next = () => {
       const v = argv[i + 1];
@@ -113,12 +115,13 @@ export function parseArgs<const S extends ArgSpec>(
       const name = eq < 0 ? a.slice(2) : a.slice(2, eq);
       const inline = eq < 0 ? undefined : a.slice(eq + 1);
       const base = name.slice(3);
+      const baseDef = Object.hasOwn(spec.flags, base) ? spec.flags[base] : undefined;
       // --no-x: an explicit flag of that name wins, else it turns boolean x off.
       if (
         name.startsWith('no-') &&
         !Object.hasOwn(spec.flags, name) &&
-        Object.hasOwn(spec.flags, base) &&
-        kindOf(spec.flags[base]!) === 'boolean'
+        baseDef !== undefined &&
+        kindOf(baseDef) === 'boolean'
       ) {
         if (inline !== undefined) throw new UsageError(ts(locale, 'argNoValue', { flag: `--${name}` }));
         flags[base] = false;

@@ -125,7 +125,7 @@ function printInstall(ctx: CliContext, r: InstallResult): void {
   }
 }
 
-export async function run(args: ParsedArgs, ctx: CliContext, deps: ServiceCliDeps = {}): Promise<number> {
+export async function run(_args: ParsedArgs, ctx: CliContext, deps: ServiceCliDeps = {}): Promise<number> {
   const platform = deps.platform ?? process.platform;
   const spec = serviceSpec(platform);
   let parsed: { flags: Flags; positionals: string[] };

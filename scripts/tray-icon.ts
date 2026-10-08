@@ -9,6 +9,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { deflateSync } from 'node:zlib';
+import { present } from '../server/src/present.ts';
 
 const ROOT = resolve(import.meta.dir, '..');
 export const OUT = resolve(ROOT, 'tray', 'telinha.ico');
@@ -99,19 +100,20 @@ export function bmpEntry(size: number, rgba: Rgba): Buffer {
   buf.writeUInt16LE(32, 14);
   buf.writeUInt32LE(0, 16);
   buf.writeUInt32LE(xor + mask, 20);
+  const src = Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength);
   for (let y = 0; y < size; y++) {
     const row = size - 1 - y;
     for (let x = 0; x < size; x++) {
       const s = (y * size + x) * 4;
       const d = 40 + (row * size + x) * 4;
-      const alpha = rgba[s + 3]!;
-      buf[d] = rgba[s + 2]!;
-      buf[d + 1] = rgba[s + 1]!;
-      buf[d + 2] = rgba[s]!;
-      buf[d + 3] = alpha;
+      const alpha = src.readUInt8(s + 3);
+      buf.writeUInt8(src.readUInt8(s + 2), d);
+      buf.writeUInt8(src.readUInt8(s + 1), d + 1);
+      buf.writeUInt8(src.readUInt8(s), d + 2);
+      buf.writeUInt8(alpha, d + 3);
       if (alpha < 128) {
         const m = 40 + xor + row * maskStride + (x >> 3);
-        buf[m] = buf[m]! | (0x80 >> (x & 7));
+        buf.writeUInt8(buf.readUInt8(m) | (0x80 >> (x & 7)), m);
       }
     }
   }
@@ -130,7 +132,7 @@ const CRC_TABLE = (() => {
 
 export function crc32(data: Uint8Array): number {
   let c = 0xffffffff;
-  for (const byte of data) c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8);
+  for (const byte of data) c = present(CRC_TABLE[(c ^ byte) & 0xff], 'CRC table entry') ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 

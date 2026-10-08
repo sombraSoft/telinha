@@ -122,7 +122,7 @@ function report(ctx: CliContext, r: UpdateResult, viaService: boolean): number {
   }
 }
 
-export async function run(args: ParsedArgs, ctx: CliContext, deps: UpdateCliDeps = {}): Promise<number> {
+export async function run(_args: ParsedArgs, ctx: CliContext, deps: UpdateCliDeps = {}): Promise<number> {
   let flags: { check?: boolean; now?: boolean };
   try {
     flags = parseArgs(ctx.argv, UPDATE_SPEC, { locale: ctx.locale }).flags;

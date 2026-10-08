@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { qualityLabel, streamLabel, summarize, type VideoStats } from './stats';
+import { qualityLabel, type Stat, streamLabel, summarize, type VideoStats } from './stats';
 
-const report = (stats: Record<string, unknown>[]) => new Map(stats.map((s) => [s.id as string, s]));
+const report = (stats: Stat[]) => new Map(stats.map((s) => [s.id, s]));
 
 describe('summarize', () => {
   const outbound = (ts: number, bytes: [number, number]) =>

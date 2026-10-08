@@ -26,10 +26,11 @@ function parseArgs(argv: string[]) {
   let outDir = process.env.BIN_DIR || join(ROOT, '.cache', 'telinha', 'bin');
   let release: string | undefined;
   const names: Helper[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
+  // value() pulls the next argument off the same iterator the loop walks.
+  const args = argv.values();
+  for (const a of args) {
     const value = () => {
-      const v = argv[++i];
+      const v = args.next().value;
       if (!v) throw new Error(`${a} needs a value`);
       return v;
     };
@@ -63,7 +64,8 @@ function parseArgs(argv: string[]) {
 
 if (import.meta.main) {
   try {
-    const { names, explicit, release: given, ...o } = parseArgs(process.argv.slice(2));
+    const { names, explicit, release: given, ...args } = parseArgs(process.argv.slice(2));
+    const o = { ...args, log: (m: string) => console.log(m) };
     // The pinned helpers first: caddy depends on a release that has its asset,
     // and its failure must not cost the others.
     const pinned = names.filter((n) => n !== 'caddy');

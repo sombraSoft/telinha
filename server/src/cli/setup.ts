@@ -260,7 +260,7 @@ function makeWizard(
 /** Managed keys from the file, overridden by the environment (the rule `run` applies). */
 function currentValues(fileVars: Record<string, string>, env: Record<string, string | undefined>): Values {
   const merged = mergeEnv(fileVars, Object.fromEntries(MANAGED_KEYS.map((k) => [k, env[k]])));
-  return Object.fromEntries(MANAGED_KEYS.filter((k) => merged[k]).map((k) => [k, merged[k]!]));
+  return Object.fromEntries(MANAGED_KEYS.flatMap((k) => (merged[k] ? [[k, merged[k]]] : [])));
 }
 
 function hostLine(w: Wizard): string {

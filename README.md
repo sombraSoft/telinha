@@ -560,7 +560,7 @@ PSScriptAnalyzer run of `deploy/install.ps1`, jactionlint (the maintained
 actionlint fork; shellcheck on `run:` blocks too), hadolint of the
 `Dockerfile` (`.hadolint.yaml` lists the rules it ignores and why),
 editorconfig-checker, Biome (`biome ci`: formatting, lint rules, import
-order), a `mise.lock` freshness check and
+order; a warning fails it too), a `mise.lock` freshness check and
 `bun scripts/versions.ts check`; the linters are the ones `mise.toml` pins), `gitleaks` (the commits a PR or push adds,
 with the gitleaks `mise.toml` pins) and `image` (builds both architectures,
 smoke-tests amd64). `pr-title` (`pr-title.yml`) checks the

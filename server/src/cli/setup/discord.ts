@@ -3,6 +3,7 @@
 // the client id comes from the token, the intents are switched on, and the
 // server, role and channels must be ones the bot can see.
 import { COMMAND_RE } from '../../config.ts';
+import { present } from '../../present.ts';
 import type { Values, Wizard } from './steps.ts';
 
 const API = 'https://discord.com/api/v10';
@@ -184,7 +185,7 @@ export function validCommand(v: string): boolean {
 /** Text/announcement channels in Discord's order: uncategorised first, then each category's. */
 export function sortChannels(all: DiscordChannel[]): { channel: DiscordChannel; category: string | null }[] {
   const cats = new Map(all.filter((c) => c.type === CATEGORY).map((c) => [c.id, c]));
-  const catPos = (c: DiscordChannel) => (c.parentId && cats.has(c.parentId) ? cats.get(c.parentId)!.position : -1);
+  const catPos = (c: DiscordChannel) => (c.parentId ? (cats.get(c.parentId)?.position ?? -1) : -1);
   return all
     .filter((c) => TEXT_TYPES.has(c.type))
     .sort(
@@ -207,7 +208,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
  */
 export async function checkDiscord(w: Wizard, values: Values, publicUrl: string): Promise<string[]> {
   const { out, s } = w;
-  const client = w.deps.discord(values.DISCORD_TOKEN!);
+  const client = w.deps.discord(present(values.DISCORD_TOKEN, 'DISCORD_TOKEN'));
   let app: DiscordApplication;
   try {
     app = await client.application();
@@ -233,7 +234,8 @@ export async function checkDiscord(w: Wizard, values: Values, publicUrl: string)
     else out.warn(s('intentsGiveUp'));
   }
   try {
-    if (!(await client.checkClientSecret(app.id, values.DISCORD_CLIENT_SECRET!))) problems.push(s('secretRejected'));
+    if (!(await client.checkClientSecret(app.id, present(values.DISCORD_CLIENT_SECRET, 'DISCORD_CLIENT_SECRET'))))
+      problems.push(s('secretRejected'));
   } catch (e) {
     out.warn(s('secretUnchecked', { error: errMsg(e) }));
   }
@@ -243,12 +245,17 @@ export async function checkDiscord(w: Wizard, values: Values, publicUrl: string)
     const guilds = await client.guilds();
     const guild = guilds.find((g) => g.id === values.GUILD_ID);
     if (!guild) {
-      problems.push(s('guildMissingInvite', { id: values.GUILD_ID!, url: client.inviteUrl(app.id, values.GUILD_ID) }));
+      problems.push(
+        s('guildMissingInvite', {
+          id: present(values.GUILD_ID, 'GUILD_ID'),
+          url: client.inviteUrl(app.id, values.GUILD_ID),
+        }),
+      );
       return problems;
     }
     const roles = await client.roles(guild.id);
     if (values.ROLE_ID !== guild.id && !roles.some((r) => r.id === values.ROLE_ID))
-      problems.push(s('roleMissing', { id: values.ROLE_ID! }));
+      problems.push(s('roleMissing', { id: present(values.ROLE_ID, 'ROLE_ID') }));
     const text = new Set(sortChannels(await client.channels(guild.id)).map((c) => c.channel.id));
     for (const c of (values.CHANNEL_IDS ?? '')
       .split(',')

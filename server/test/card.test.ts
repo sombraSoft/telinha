@@ -75,7 +75,7 @@ describe('open card', () => {
     const open = renderCard(rec, NOBODY, OPTS).content.split('\n')[0];
     // (the emoji stays out of String.raw: Bun's transpiler turns it into "\u{...}" there)
     expect(open).toBe(
-      '📺 ' + String.raw`**a\_b\*\*c\*\*** abriu uma telinha: \[Abrir telinha](https://evil.example) \<@&5> \`x\``,
+      `📺 ${String.raw`**a\_b\*\*c\*\*** abriu uma telinha: \[Abrir telinha](https://evil.example) \<@&5> \`x\``}`,
     );
     const closed = renderCard({ ...rec, closedAt: REC.createdAt }, NOBODY, OPTS).content.split('\n')[0];
     expect(closed).toContain(String.raw`**a\_b\*\*c\*\***`);

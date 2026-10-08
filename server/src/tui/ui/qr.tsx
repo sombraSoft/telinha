@@ -38,8 +38,9 @@ export function qrRows(text: string, blocks: boolean): Run[][] {
     );
   const out: Run[][] = [];
   for (let y = 0; y < m.length; y += 2) {
-    const top = m[y]!;
+    const top = m[y];
     const bottom = m[y + 1];
+    if (!top) break;
     out.push(
       runs(
         top.map((d, x) => ({ fg: color(d), bg: color(bottom?.[x] ?? false) })),

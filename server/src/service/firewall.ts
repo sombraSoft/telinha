@@ -9,6 +9,7 @@
 import { loadConfig } from '../config.ts';
 import { loadEnvFile, mergeEnv } from '../envfile.ts';
 import { type ExposedKey, type FootprintInput, footprintOf } from '../footprint.ts';
+import { present } from '../present.ts';
 import type { SpawnFn } from './index.ts';
 
 export interface FirewallRule {
@@ -29,12 +30,18 @@ const RULE_FOR: Record<ExposedKey, (typeof RULE_NAMES)[number]> = {
 /** One Allow rule per exposure, scoped to the helper's program in bin. */
 export function firewallRules(bin: string, c: FootprintInput): FirewallRule[] {
   const { helpers, exposures } = footprintOf(c);
-  return exposures.map((e) => ({
-    name: RULE_FOR[e.key],
-    program: `${bin}\\${helpers.find((h) => h.name === e.helper)!.binary}.exe`,
-    protocol: e.protocol === 'tcp' ? 'TCP' : 'UDP',
-    port: e.port,
-  }));
+  return exposures.map((e) => {
+    const helper = present(
+      helpers.find((h) => h.name === e.helper),
+      `helper ${e.helper}`,
+    );
+    return {
+      name: RULE_FOR[e.key],
+      program: `${bin}\\${helper.binary}.exe`,
+      protocol: e.protocol === 'tcp' ? 'TCP' : 'UDP',
+      port: e.port,
+    };
+  });
 }
 
 /**

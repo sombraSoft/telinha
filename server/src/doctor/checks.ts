@@ -12,6 +12,7 @@ import { parseEnvFile } from '../envfile.ts';
 import { footprintOf } from '../footprint.ts';
 import type { Locale } from '../i18n.ts';
 import * as netinfo from '../netinfo.ts';
+import { present } from '../present.ts';
 import { TRAY_EXE } from '../release.ts';
 import { SYSCTL_SCRIPT } from '../service/systemd.ts';
 import { defaultProcessInfo, sameExe } from '../supervisor.ts';
@@ -669,7 +670,7 @@ const realSys: SysLike = {
       const out = await new Response(p.stdout).text();
       if ((await p.exited) !== 0) return null;
       // "    Telinha    REG_SZ    "C:\...\telinha-tray.exe""
-      const m = new RegExp('^\\s*' + name + '\\s+REG_SZ\\s+(.*?)\\s*$', 'im').exec(out);
+      const m = new RegExp(`^\\s*${name}\\s+REG_SZ\\s+(.*?)\\s*$`, 'im').exec(out);
       return m?.[1] || null;
     } catch {
       return null;
@@ -793,9 +794,7 @@ function discordConfig(ctx: CheckContext, id: string): Config | CheckResult {
 }
 
 /** The application, or the skip/fail result to return instead. */
-async function discordApp(ctx: CheckContext, id: string): Promise<DiscordApp | CheckResult> {
-  const c = discordConfig(ctx, id);
-  if (!('discordToken' in c)) return c;
+async function discordApp(ctx: CheckContext, c: Config, id: string): Promise<DiscordApp | CheckResult> {
   let r: DiscordReply<DiscordApp>;
   try {
     r = await discordGet<DiscordApp>(ctx, c, '/applications/@me');
@@ -870,7 +869,10 @@ export function compareVersions(a: string, b: string): number | null {
   const x = parse(a);
   const y = parse(b);
   if (!x || !y) return null;
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i]! > y[i]! ? 1 : -1;
+  for (let i = 0; i < 3; i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d !== 0) return d > 0 ? 1 : -1;
+  }
   return 0;
 }
 
@@ -1039,9 +1041,10 @@ const discordToken: Check = {
   id: 'discord-token',
   internet: true,
   async run(ctx) {
-    const app = await discordApp(ctx, 'discord-token');
+    const c = discordConfig(ctx, 'discord-token');
+    if (isResult(c)) return c;
+    const app = await discordApp(ctx, c, 'discord-token');
     if (isResult(app)) return app;
-    const c = ctx.config!;
     if (c.clientId && app.id && c.clientId !== app.id) {
       return make(
         ctx,
@@ -1061,7 +1064,9 @@ const discordIntents: Check = {
   id: 'discord-intents',
   internet: true,
   async run(ctx) {
-    const app = await discordApp(ctx, 'discord-intents');
+    const c = discordConfig(ctx, 'discord-intents');
+    if (isResult(c)) return c;
+    const app = await discordApp(ctx, c, 'discord-intents');
     if (isResult(app)) return app;
     const L = ctx.locale;
     const flags = app.flags ?? 0;
@@ -1076,9 +1081,7 @@ const discordIntents: Check = {
 };
 
 /** The bot's guild entry, or the result to return instead. */
-async function botGuild(ctx: CheckContext, id: string): Promise<DiscordGuild | CheckResult> {
-  const c = discordConfig(ctx, id);
-  if (!('discordToken' in c)) return c;
+async function botGuild(ctx: CheckContext, c: Config, id: string): Promise<DiscordGuild | CheckResult> {
   const L = ctx.locale;
   let r: DiscordReply<DiscordGuild[]>;
   try {
@@ -1092,7 +1095,7 @@ async function botGuild(ctx: CheckContext, id: string): Promise<DiscordGuild | C
   const g = r.body.find((x) => x.id === c.guildId);
   if (g) return g;
   if (id !== 'discord-guild') return make(ctx, id, 'skip', tr(L, 'needGuild'));
-  const app = await discordApp(ctx, 'discord-guild');
+  const app = await discordApp(ctx, c, 'discord-guild');
   const clientId = isResult(app) ? c.clientId : app.id;
   return make(ctx, id, 'fail', tr(L, 'guildMissing', { id: c.guildId }), {
     fix: tr(L, 'guildMissingFix', { url: inviteUrl(clientId, c.guildId) }),
@@ -1103,7 +1106,9 @@ const discordGuild: Check = {
   id: 'discord-guild',
   internet: true,
   async run(ctx) {
-    const g = await botGuild(ctx, 'discord-guild');
+    const c = discordConfig(ctx, 'discord-guild');
+    if (isResult(c)) return c;
+    const g = await botGuild(ctx, c, 'discord-guild');
     if (isResult(g)) return g;
     return make(ctx, 'discord-guild', 'ok', tr(ctx.locale, 'guildOk', { name: g.name }));
   },
@@ -1113,10 +1118,11 @@ const discordRole: Check = {
   id: 'discord-role',
   internet: true,
   async run(ctx) {
-    const g = await botGuild(ctx, 'discord-role');
+    const c = discordConfig(ctx, 'discord-role');
+    if (isResult(c)) return c;
+    const g = await botGuild(ctx, c, 'discord-role');
     if (isResult(g)) return g;
     const L = ctx.locale;
-    const c = ctx.config!;
     const r = await discordGet<DiscordRole[]>(ctx, c, `/guilds/${c.guildId}/roles`);
     if (!r.body) return make(ctx, 'discord-role', 'warn', tr(L, 'discordHttp', { status: r.status }));
     const role = r.body.find((x) => x.id === c.roleId);
@@ -1129,10 +1135,11 @@ const discordChannels: Check = {
   id: 'discord-channels',
   internet: true,
   async run(ctx) {
-    const g = await botGuild(ctx, 'discord-channels');
+    const c = discordConfig(ctx, 'discord-channels');
+    if (isResult(c)) return c;
+    const g = await botGuild(ctx, c, 'discord-channels');
     if (isResult(g)) return g;
     const L = ctx.locale;
-    const c = ctx.config!;
     if (!c.channelIds.length) return make(ctx, 'discord-channels', 'ok', tr(L, 'channelsAll'));
     const r = await discordGet<DiscordChannel[]>(ctx, c, `/guilds/${c.guildId}/channels`);
     if (!r.body) return make(ctx, 'discord-channels', 'warn', tr(L, 'discordHttp', { status: r.status }));
@@ -1158,10 +1165,12 @@ const discordRedirect: Check = {
   id: 'discord-redirect',
   internet: true,
   async run(ctx) {
-    const app = await discordApp(ctx, 'discord-redirect');
+    const c = discordConfig(ctx, 'discord-redirect');
+    if (isResult(c)) return c;
+    const app = await discordApp(ctx, c, 'discord-redirect');
     if (isResult(app)) return app;
     const L = ctx.locale;
-    const uri = `${ctx.config!.publicUrl}/auth/callback`;
+    const uri = `${c.publicUrl}/auth/callback`;
     const have = app.redirect_uris ?? [];
     if (have.includes(uri)) return make(ctx, 'discord-redirect', 'ok', tr(L, 'redirectOk', { uri }));
     return make(ctx, 'discord-redirect', 'fail', tr(L, 'redirectMissing', { uri }), {
@@ -1230,7 +1239,7 @@ const dnsCheck: Check = {
     const list = ips.join(', ');
     // Cloudflare answers with its own anycast addresses for a tunnel.
     if (c.ingress === 'tunnel') return make(ctx, 'dns', 'ok', tr(L, 'dnsTunnelOk', { host, ips: list }));
-    const duck = await duckDnsToken(ctx, c, host, ips[0]!);
+    const duck = await duckDnsToken(ctx, c, host, present(ips[0], 'first A record'));
     if (duck && 'rejected' in duck)
       return make(ctx, 'dns', 'fail', tr(L, 'dnsDuckToken', { host }), { fix: tr(L, 'dnsDuckTokenFix', { host }) });
     const detail = duck ? [duck.line] : [];
@@ -1530,14 +1539,16 @@ const tray: Check = {
 
 const KIND: Record<string, string> = { igd: 'UPnP', pcp: 'PCP', natpmp: 'NAT-PMP' };
 
-/** A host whose own address is public (a VPS) has no router to ask. */
-const publicHost = (p: NatProbeLike) =>
+/** A host whose own address is public (a VPS) has no router to ask: that address, else null. */
+const publicHostIp = (p: NatProbeLike): string | null =>
   !p.gateway &&
   p.localIp &&
   !netinfo.isPrivateIpv4(p.localIp) &&
   !netinfo.isCgnatIpv4(p.localIp) &&
   !p.localIp.startsWith('127.') &&
-  !p.localIp.startsWith('169.254.');
+  !p.localIp.startsWith('169.254.')
+    ? p.localIp
+    : null;
 
 const gateway: Check = {
   id: 'gateway',
@@ -1545,7 +1556,8 @@ const gateway: Check = {
     const L = ctx.locale;
     const p = await natProbe(ctx);
     if (!p) return make(ctx, 'gateway', 'skip', tr(L, 'natNone'));
-    if (publicHost(p)) return make(ctx, 'gateway', 'ok', tr(L, 'natPublicHost', { ip: p.localIp! }));
+    const hostIp = publicHostIp(p);
+    if (hostIp) return make(ctx, 'gateway', 'ok', tr(L, 'natPublicHost', { ip: hostIp }));
     const g = p.gateway;
     if (!g) {
       const list = ctx.config ? portList(neededPorts(ctx.config)) : '';
@@ -1566,7 +1578,8 @@ const cgnat: Check = {
     const L = ctx.locale;
     const p = await natProbe(ctx);
     if (!p) return make(ctx, 'cgnat', 'skip', tr(L, 'natNone'));
-    if (publicHost(p)) return make(ctx, 'cgnat', 'ok', tr(L, 'natPublicHost', { ip: p.localIp! }));
+    const hostIp = publicHostIp(p);
+    if (hostIp) return make(ctx, 'cgnat', 'ok', tr(L, 'natPublicHost', { ip: hostIp }));
     const ext = p.externalIp;
     if (!p.gateway || !ext) return make(ctx, 'cgnat', 'skip', tr(L, 'cgnatSkip'));
     const list = ctx.config ? portList(neededPorts(ctx.config)) : '';
@@ -1630,7 +1643,7 @@ const mappings: Check = {
     const byHand = needed.filter((n) => !owned.some((o) => o.protocol === n.protocol && o.external === n.external));
     const byHandLine = byHand.length ? [tr(L, 'mapByHand', { list: portList(byHand) })] : [];
     const p = await natProbe(ctx);
-    if (!p || publicHost(p) || !p.gateway) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoGw'));
+    if (!p || publicHostIp(p) || !p.gateway) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoGw'));
     if (!c.upnp) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipOff', { list: portList(needed) }));
     const st = (await controlStatus(ctx))?.upnp ?? readMapperFile(ctx);
     if (!st) return make(ctx, 'mappings', 'skip', tr(L, 'mapSkipNoStatus'));

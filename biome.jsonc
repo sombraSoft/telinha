@@ -22,15 +22,15 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      // The rules below start as warnings; each is fixed across the code and
-      // then raised to an error in its own PR.
-      "suspicious": { "noConsole": "warn", "noExplicitAny": "warn" },
-      "style": { "noNonNullAssertion": "warn" },
+      // Stricter than the preset. Values the types can't see go through
+      // present() (server/src/present.ts, web/src/lib/present.ts), not `!`.
+      "suspicious": { "noConsole": "error", "noExplicitAny": "error" },
+      "style": { "noNonNullAssertion": "error" },
       // `(a(), b())` in arrow bodies is deliberate here: it keeps one-line
       // callbacks one line.
       "complexity": { "noCommaOperator": "off" },
       // Type-aware rules: they turn on Biome's type inference.
-      "nursery": { "noFloatingPromises": "warn", "noMisusedPromises": "warn", "useExhaustiveSwitchCases": "warn" }
+      "nursery": { "noFloatingPromises": "error", "noMisusedPromises": "error", "useExhaustiveSwitchCases": "error" }
     }
   },
   "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } },
@@ -39,6 +39,23 @@
       // Build and dev scripts and the e2e tests talk to whoever runs them.
       "includes": ["scripts/**", "docs/scripts/**", "e2e/**"],
       "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+    },
+    {
+      // The console is the product here: the CLI's default stdout/stderr, the
+      // logger's sink, start's one-line config error and the TUI build smoke.
+      "includes": [
+        "server/src/cli/args.ts",
+        "server/src/cli/main.ts",
+        "server/src/log.ts",
+        "server/src/run.ts",
+        "server/src/tui/smoke.tsx"
+      ],
+      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+    },
+    {
+      // The page shows only the message; console.error keeps the stack.
+      "includes": ["web/src/lib/room.svelte.ts", "web/src/doctor/main.ts"],
+      "linter": { "rules": { "suspicious": { "noConsole": { "level": "error", "options": { "allow": ["error"] } } } } }
     },
     {
       // noUncheckedIndexedAccess makes `!` the plain way for a test to say

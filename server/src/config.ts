@@ -183,11 +183,12 @@ export const turnAutoHost = (publicHost: string): boolean => TURN_AUTO_SUFFIXES.
 
 export function parseListen(v: string): { host: string; port: number } {
   const m = /^\[([^\]]+)\]:(\d+)$/.exec(v) ?? /^([^:[\]]+):(\d+)$/.exec(v);
+  const host = m?.[1];
   const port = Number(m?.[2]);
-  if (!m || !Number.isInteger(port) || port < 1 || port > 65535) {
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`bad LISTEN ${v} (want host:port or [::1]:port)`);
   }
-  return { host: m[1]!, port };
+  return { host, port };
 }
 
 /** Why TURN over TLS on 443 cannot run with this config, or null when it can. */
@@ -246,13 +247,13 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
   let dev: DevUser | null = null;
   const devRaw = opt('DEV_USER');
   if (devRaw) {
-    const m = /^(\d+):(.+)$/.exec(devRaw);
-    if (!m) throw new Error('bad DEV_USER (want "<digits>:<name>")');
+    const [, id, name] = /^(\d+):(.+)$/.exec(devRaw) ?? [];
+    if (!id || !name) throw new Error('bad DEV_USER (want "<digits>:<name>")');
     // Fake login must never be reachable from outside this machine.
     if (!DEV_URL_RE.test(publicUrl))
       throw new Error('DEV_USER requires PUBLIC_URL http://localhost[:port] or http://127.0.0.1[:port]');
     if (!LOOPBACK.has(host)) throw new Error('DEV_USER requires a loopback LISTEN host');
-    dev = { id: m[1]!, name: m[2]! };
+    dev = { id, name };
   }
   const discord = (k: string) => (dev ? (env[k] ?? '') : get(k));
 
@@ -370,7 +371,7 @@ export function loadConfig(env: Env, o: { compiled?: boolean } = {}): Config {
     const secure = u?.protocol === 'wss:' || u?.protocol === 'https:';
     // Plain ws/http only for a dev run against a local stand-in for Cloud.
     const plain = u?.protocol === 'ws:' || u?.protocol === 'http:';
-    if (!u || !u.hostname || !(secure || (plain && dev))) {
+    if (!u?.hostname || !(secure || (plain && dev))) {
       throw new Error(`bad LIVEKIT_CLOUD_URL ${raw} (want wss://<project>.livekit.cloud)`);
     }
     // The project URL is the host alone: a pasted path, query or trailing slash is dropped.

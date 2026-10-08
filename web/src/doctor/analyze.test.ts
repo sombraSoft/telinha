@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import type { Stat } from '../lib/stats';
 import { hints, type Path, selectedPath, tcpFromForced, turnFromForced, udpFromInitial } from './analyze';
 import { pickLocale, tr } from './strings';
 
-const report = (stats: Record<string, unknown>[]) => new Map(stats.map((s) => [s.id as string, s]));
+const report = (stats: Stat[]) => new Map(stats.map((s) => [s.id, s]));
 
 const pairStats = (o: {
   protocol: string;

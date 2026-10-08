@@ -139,7 +139,7 @@ export async function buildCheckContext(
   };
 }
 
-export async function run(args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps = {}): Promise<number> {
+export async function run(_args: ParsedArgs, ctx: CliContext, deps: DoctorCliDeps = {}): Promise<number> {
   let flags: { json?: boolean; phone?: boolean; local?: boolean };
   try {
     flags = parseArgs(ctx.argv, DOCTOR_SPEC, { locale: ctx.locale }).flags;
@@ -264,6 +264,8 @@ async function phoneTest(o: {
 /** Prints what changed since the last state; the rows as the checks' table draws them, each hint under the row it explains. */
 function printPhone(term: Term, s: Say, qr: (url: string) => string, st: PhoneTestState, prev: PhoneTestState | null) {
   switch (st.kind) {
+    case 'starting':
+      return;
     case 'notRunning':
       return term.warn(s('phoneNotRunning'));
     case 'error':

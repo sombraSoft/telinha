@@ -7,6 +7,7 @@
 import { type LocalTrackPublication, Room, RoomEvent, Track } from 'livekit-client';
 import '../styles/themes.css';
 import '../styles/base.css';
+import { present } from '../lib/present';
 import {
   hints,
   type Media,
@@ -42,7 +43,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
 
 // ---------------------------------------------------------------- view
 
-const app = document.getElementById('app')!;
+const app = present(document.getElementById('app'), '#app');
 document.documentElement.lang = L;
 document.title = s('title');
 
@@ -62,6 +63,8 @@ main.append(footer);
 app.append(main);
 
 const rows = new Map<StepId, { icon: HTMLElement; label: HTMLElement; detail: HTMLElement; li: HTMLElement }>();
+// Every row is added before it is marked (TURN's once the token offers it).
+const row = (id: StepId) => present(rows.get(id), `${id} row`);
 const LABELS: Record<StepId, Key> = {
   https: 'stepHttps',
   signaling: 'stepSignaling',
@@ -87,7 +90,7 @@ function addRow(id: StepId, before?: HTMLElement) {
 for (const id of Object.keys(LABELS) as StepId[]) if (id !== 'turn') addRow(id);
 
 function mark(id: StepId, status: Status, detail?: string) {
-  const r = rows.get(id)!;
+  const r = row(id);
   r.li.dataset.status = status;
   r.icon.textContent = ICON[status];
   r.detail.textContent =
@@ -125,7 +128,7 @@ function canvasTrack(): { track: MediaStreamTrack; stop: () => void } {
   const canvas = document.createElement('canvas');
   canvas.width = 16;
   canvas.height = 16;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = present(canvas.getContext('2d'), 'canvas 2d context');
   let n = 0;
   const paint = () => {
     ctx.fillStyle = `hsl(${(n++ * 47) % 360} 80% 50%)`;
@@ -134,7 +137,7 @@ function canvasTrack(): { track: MediaStreamTrack; stop: () => void } {
   paint();
   // A timer: requestAnimationFrame stalls when the phone dims the page.
   const timer = setInterval(paint, 500);
-  const track = canvas.captureStream(2).getVideoTracks()[0]!;
+  const track = present(canvas.captureStream(2).getVideoTracks()[0], 'canvas video track');
   return { track, stop: () => (clearInterval(timer), track.stop()) };
 }
 
@@ -215,9 +218,9 @@ async function runTest(): Promise<void> {
     media = tok.media === 'cloud' ? 'cloud' : 'self';
     turnHost = tok.turn?.host ?? null;
     // No ports means LiveKit Cloud: nothing on this side to name.
-    rows.get('udp')!.label.textContent = ports ? s('stepUdp', { port: ports.udp }) : s('stepUdpCloud');
-    rows.get('tcp')!.label.textContent = ports ? s('stepTcp', { port: ports.tcp }) : s('stepTcpCloud');
-    if (turnHost) addRow('turn', rows.get('report')!.li);
+    row('udp').label.textContent = ports ? s('stepUdp', { port: ports.udp }) : s('stepUdpCloud');
+    row('tcp').label.textContent = ports ? s('stepTcp', { port: ports.tcp }) : s('stepTcpCloud');
+    if (turnHost) addRow('turn', row('report').li);
     room = new Room({ adaptiveStream: false, dynacast: false });
     await withTimeout(room.connect(tok.url, tok.token), 20_000, 'connect');
     report.signaling = { ok: true };

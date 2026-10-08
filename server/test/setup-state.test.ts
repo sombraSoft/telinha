@@ -90,7 +90,7 @@ function discordFetch(w: World) {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input).replace('https://discord.com/api/v10', '');
     w.calls.push(url);
-    if (w.gate) await w.gate;
+    if (w.gate !== null) await w.gate;
     if (w.down) return json({ message: 'Service Unavailable' }, 503);
     const auth = new Headers(init?.headers).get('authorization');
     if (url === '/oauth2/token')

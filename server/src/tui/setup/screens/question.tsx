@@ -68,13 +68,14 @@ export function hintRows(lines: string[], extra: { head: string; items: string[]
 /** A "Ports to forward:" line followed by indented ports becomes the pane's highlighted block. */
 export function splitExtra(lines: string[]): { lines: string[]; extra?: { head: string; items: string[] } } {
   const at = lines.findIndex((l, i) => l.endsWith(':') && lines[i + 1]?.startsWith('  '));
-  if (at < 0) return { lines };
+  const head = lines[at];
+  if (head === undefined) return { lines };
   let end = at + 1;
   while (lines[end]?.startsWith('  ')) end++;
   const rest = [...lines.slice(0, at), ...lines.slice(end)];
   // Two blank lines meet where the block was.
   const cleaned = rest.filter((l, i) => !(l === '' && (i === 0 || rest[i - 1] === '')));
-  return { lines: cleaned, extra: { head: lines[at]!.slice(0, -1), items: lines.slice(at + 1, end) } };
+  return { lines: cleaned, extra: { head: head.slice(0, -1), items: lines.slice(at + 1, end) } };
 }
 
 const ACTION = '\u0000';
@@ -125,7 +126,10 @@ function QuestionCard(p: QuestionProps) {
   const separateActions = () => actions().length > 0 && (textual() || options().length === 0);
 
   const qLines = createMemo(() => paint(view().question, inner(), c.muted));
-  const linkLines = createMemo(() => (view().link ? paint(view().link!, inner(), c.accent, true) : []));
+  const linkLines = createMemo(() => {
+    const link = view().link;
+    return link ? paint(link, inner(), c.accent, true) : [];
+  });
   const lookupLines = createMemo<Line[]>(() => {
     const l = view().lookup;
     const w = inner();
