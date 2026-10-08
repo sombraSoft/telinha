@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { newRoomCode, ROOM_RE as SERVER_ROOM_RE } from '../../../server/src/codes';
 import { avatarUrl, discordIdOf, parseMeta } from './avatar';
-import { isValidRoom, ROOM_RE } from './room-name';
+import { isRoomCode, ROOM_RE } from './room-code';
 
 describe('room codes', () => {
   test('same rule as Telinha', () => {
@@ -10,12 +10,12 @@ describe('room codes', () => {
   test('every code Telinha makes is valid', () => {
     const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
     for (let i = 0; i < 200; i++) {
-      expect(isValidRoom(newRoomCode(random))).toBe(true);
-      expect(isValidRoom(newRoomCode(random, 6))).toBe(true);
+      expect(isRoomCode(newRoomCode(random))).toBe(true);
+      expect(isRoomCode(newRoomCode(random, 6))).toBe(true);
     }
   });
   test('anything else is not', () => {
-    for (const ok of ['lamo-futi', 'bafo-kiru', 'lamofu-tibare']) expect(isValidRoom(ok)).toBe(true);
+    for (const ok of ['lamo-futi', 'bafo-kiru', 'lamofu-tibare']) expect(isRoomCode(ok)).toBe(true);
     for (const bad of [
       null,
       undefined,
@@ -46,7 +46,7 @@ describe('room codes', () => {
       '../etc',
       'sala!',
     ])
-      expect(isValidRoom(bad)).toBe(false);
+      expect(isRoomCode(bad)).toBe(false);
   });
 });
 

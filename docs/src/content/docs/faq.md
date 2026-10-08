@@ -39,9 +39,9 @@ Yes, with two pieces. With CGNAT your provider shares one public IPv4 between cu
 
 Some networks (offices, schools, some mobile carriers) only let browsers reach port 443, which blocks the media ports. On a VPS on port 443, Telinha serves [TURN over TLS on port 443](/telinha/guides/turn/): the browser falls back to relaying the video through `turn.<host>:443`, which looks like any HTTPS site to the network. It is on by itself with a DuckDNS or sslip.io name; with your own domain it takes one DNS record and `TURN=on`. At home Telinha serves no TURN (home connections do not let port 443 in), but a [LiveKit Cloud](/telinha/guides/livekit-cloud/) project brings LiveKit's own TURN servers, wherever Telinha runs.
 
-## Can two deployments share a Discord server?
+## Can two installs share a Discord server?
 
-Yes, give each one a different `COMMAND_NAME` (and its own Discord application), so the slash commands do not collide. Each deployment serves one Discord server and one role.
+Yes, give each one a different `COMMAND_NAME` (and its own Discord application), so the slash commands do not collide. Each install serves one Discord server and one role.
 
 ## How do I change settings?
 

@@ -6,8 +6,8 @@ const VOWELS = 'aeiou';
 
 export const SYLLABLES: readonly string[] = [...CONSONANTS].flatMap((c) => [...VOWELS].map((v) => c + v));
 
-// Exactly what newRoomCode makes: 2+2 or 3+3 syllables. The only room names
-// the server accepts (web/src/lib/room-name.ts has the same rule).
+// Exactly what newRoomCode makes: 2+2 or 3+3 syllables. The only room codes
+// Telinha accepts (web/src/lib/room-code.ts has the same rule).
 const S = `(?:[${CONSONANTS}][${VOWELS}])`;
 export const ROOM_RE = new RegExp(`^(?:${S}{2}-${S}{2}|${S}{3}-${S}{3})$`);
 
