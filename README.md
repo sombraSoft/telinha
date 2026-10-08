@@ -331,9 +331,11 @@ snapshots (`bun test server/test/tui-setup-frames.test.tsx -u` rewrites them aft
 intended change to a screen). `TELINHA_THEME=light|dark` forces the colour mode when
 you look at the screens in a terminal whose background the screens cannot read, and
 `TELINHA_SMOKE_TUI=1 bun server/src/index.ts --version` runs the terminal UI smoke from
-source. The OpenTUI packages and `solid-js` (which follows OpenTUI's exact peer pin)
-are one Renovate group, `opentui`, updated by hand: OpenTUI is 0.x, so a minor can
-break, and the terminal smokes reach only the first setup screen.
+source. The OpenTUI packages are one Renovate group, `opentui`, updated by hand:
+OpenTUI is 0.x, so a minor can break, and the terminal smokes reach only the first
+setup screen. `solid-js` must equal `@opentui/solid`'s exact peer pin (a second copy
+leaves OpenTUI without its renderer), so Renovate never proposes it: raise it by hand
+in the `opentui` PR when the peer moves; `scripts/toolchain.test.ts` checks they agree.
 
 `bun run dev` always runs the bundled LiveKit. To run against LiveKit Cloud
 from a clone, start Telinha itself (`bun server/src/index.ts`) with a
@@ -629,8 +631,9 @@ git commit -am "fix(deps): refresh versions.json hashes" && git push
 Caddy (with xcaddy and the modules) and cloudflared bumps come as one `child-binaries` PR, LiveKit's in the
 `livekit` group, Astro and Starlight in the `docs-site` group (merged by hand:
 Starlight is 0.x, and a minor can change the site while the `docs` build still
-passes), OpenTUI, its Solid binding and `solid-js` in the `opentui` group
-(merged by hand too: the terminal smokes reach only the first setup screen); all `versions.json` bumps are `fix` commits so they cut a
+passes), OpenTUI and its Solid binding in the `opentui` group (merged by hand
+too: the terminal smokes reach only the first setup screen; `solid-js` follows
+their peer by hand); all `versions.json` bumps are `fix` commits so they cut a
 release, and native installs download the new helper binaries on their next
 start.
 

@@ -98,3 +98,17 @@ describe('every Biome copy equals mise.toml', () => {
     expect(schema).toBe(tools.biome as string);
   });
 });
+
+// Renovate never proposes solid-js (renovate.json): it must be the exact
+// version @opentui/solid peers, or Bun installs a second Solid for OpenTUI and
+// the screens lose their renderer. An opentui PR that moves the peer fails here
+// until solid-js is raised to match by hand.
+describe("solid-js equals OpenTUI's peer", () => {
+  test('server/package.json', () => {
+    const server = JSON.parse(read('server/package.json')) as { dependencies: Record<string, string> };
+    const opentui = JSON.parse(read('node_modules/@opentui/solid/package.json')) as {
+      peerDependencies: Record<string, string>;
+    };
+    expect(server.dependencies['solid-js']).toBe(opentui.peerDependencies['solid-js']);
+  });
+});
