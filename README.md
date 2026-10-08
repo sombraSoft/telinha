@@ -306,7 +306,7 @@ is `http://localhost` or `http://127.0.0.1`, `LISTEN` is a loopback address and
 every request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` gets a
 421, so a reverse proxy in front of it (or a DNS-rebinding page) never reaches
 the fake login. Set `DEV_LOCALE=en` or `pt-BR` to force the locale. There is
-no slash command in dev, so any valid room code (`/r/test1`, `/r/lamo-futi`)
+no slash command in dev, so any valid room code (`/r/lamo-futi`, `/r/bada-kodi`)
 opens a room on first use, and the member list is a fixed preview (the dev
 user plus seven made-up members, some offline); a room still closes like a
 real one (`CLOSE_EMPTY_SECONDS=30 bun run dev` to watch that happen). The dev
