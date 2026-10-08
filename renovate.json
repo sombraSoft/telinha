@@ -115,13 +115,13 @@
       "automerge": false
     },
     {
-      "description": "The docs site's framework moves as one (Starlight pins its Astro peer) and Starlight is 0.x, so a minor can break the build; the docs CI job is not a required check, so the group is merged by hand",
+      "description": "The docs site's framework moves as one (Starlight pins its Astro peer) and Starlight is 0.x, so a minor can change the site while the docs job's build still passes; the group is merged by hand",
       "matchPackageNames": ["astro", "@astrojs/**", "starlight-links-validator"],
       "groupName": "docs-site",
       "automerge": false
     },
     {
-      "description": "solid-js follows OpenTUI's exact peer and is never bumped alone; OpenTUI is 0.x so a minor can break, and the terminal smokes are not part of the required test job, so the group is merged by hand",
+      "description": "solid-js follows OpenTUI's exact peer and is never bumped alone; OpenTUI is 0.x so a minor can break, and the terminal smokes reach only the first setup screen, so the group is merged by hand",
       "matchPackageNames": ["@opentui/core", "@opentui/solid", "solid-js"],
       "groupName": "opentui",
       "automerge": false
