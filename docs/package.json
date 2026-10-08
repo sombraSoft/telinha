@@ -13,6 +13,6 @@
     "@types/bun": "1.4.2",
     "astro": "^7.3.5",
     "starlight-links-validator": "^0.26.0",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.0"
   }
 }
