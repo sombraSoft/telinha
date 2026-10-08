@@ -1106,7 +1106,7 @@ export const DOCTOR_CHECK_DOCS: Record<string, CheckDoc> = {
 };
 
 /** Column headers and small labels of the components. */
-export const UI: Record<string, L> = {
+export const UI = {
   key: { en: 'Key', 'pt-BR': 'Chave' },
   default: { en: 'Default', 'pt-BR': 'Padrão' },
   required: { en: 'Required', 'pt-BR': 'Obrigatória' },
@@ -1129,7 +1129,8 @@ export const UI: Record<string, L> = {
   linux: { en: 'Linux', 'pt-BR': 'Linux' },
   windows: { en: 'Windows', 'pt-BR': 'Windows' },
   none: { en: 'none', 'pt-BR': 'nenhum' },
-};
+} satisfies Record<string, L>;
+export type UiKey = keyof typeof UI;
 
 /** The text of an L in a locale; a plain string is the same in both. */
 export function pick(text: string | L, locale: Locale): string {

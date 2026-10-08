@@ -30,10 +30,11 @@ function parseArgs(argv: string[]) {
   const root = resolve(import.meta.dir, '..');
   let out = resolve(process.env.BIN_DIR || join(root, '.cache', 'telinha', 'bin'));
   let versions = join(root, 'versions.json');
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
+  // value() pulls the next argument off the same iterator the loop walks.
+  const args = argv.values();
+  for (const a of args) {
     const value = () => {
-      const v = argv[++i];
+      const v = args.next().value;
       if (!v) throw new Error(`${a} needs a value\n${USAGE}`);
       return v;
     };

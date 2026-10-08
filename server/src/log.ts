@@ -32,42 +32,44 @@ export function createLogger(o: LoggerOptions = {}): Logger {
   let closed = false;
   let failed = false;
 
-  const open = () => {
-    mkdirSync(dirname(file!), { recursive: true });
-    fd = openSync(file!, 'a');
-    size = fstatSync(fd).size;
+  const open = (path: string): number => {
+    mkdirSync(dirname(path), { recursive: true });
+    const opened = openSync(path, 'a');
+    fd = opened;
+    size = fstatSync(opened).size;
+    return opened;
   };
 
-  const rotate = () => {
-    closeSync(fd!);
+  const rotate = (path: string, current: number): number => {
+    closeSync(current);
     fd = null;
     // Best effort: on Windows a reader holding a rotated file open blocks the rename;
     // appending to the current file beats losing lines.
     try {
-      rmSync(`${file}.${keep}`, { force: true });
+      rmSync(`${path}.${keep}`, { force: true });
       for (let i = keep - 1; i >= 1; i--) {
         try {
-          renameSync(`${file}.${i}`, `${file}.${i + 1}`);
+          renameSync(`${path}.${i}`, `${path}.${i + 1}`);
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
         }
       }
-      if (keep > 0) renameSync(file!, `${file}.1`);
-      else rmSync(file!, { force: true });
+      if (keep > 0) renameSync(path, `${path}.1`);
+      else rmSync(path, { force: true });
     } catch {
       // keep appending below
     }
-    open();
+    return open(path);
   };
 
   const toFile = (line: string) => {
     if (!file || closed) return;
     try {
-      if (fd === null) open();
+      let out = fd ?? open(file);
       const bytes = Buffer.from(line, 'utf8');
       // A whole line per write, rotated before it would cross the limit: no split lines.
-      if (size > 0 && size + bytes.length > maxBytes) rotate();
-      writeSync(fd!, bytes);
+      if (size > 0 && size + bytes.length > maxBytes) out = rotate(file, out);
+      writeSync(out, bytes);
       size += bytes.length;
     } catch (e) {
       // A full disk or a vanished directory must not take the service down; say it once.

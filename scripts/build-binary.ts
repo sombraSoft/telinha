@@ -21,6 +21,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import solidPlugin from '@opentui/solid/bun-plugin';
 import { type Entry, writeArchive } from '../server/src/archive.ts';
+import { present } from '../server/src/present.ts';
 import {
   archiveContents,
   archiveFiles,
@@ -103,7 +104,7 @@ export function parseArgs(argv: string[], platform: string = process.platform): 
   let pack = true;
   const wanted: Target[] = [];
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
+    const a = present(argv[i], 'argument');
     const value = () => {
       const v = argv[++i];
       if (!v) throw new Error(`${a} needs a value\n${usage}`);
@@ -186,7 +187,7 @@ export function buildConfig(t: Target, o: { version: string; commit: string; out
         windows: {
           title: 'Telinha',
           publisher: 'sombraSoft',
-          version: `${o.version.split('-')[0]!}.0`,
+          version: `${o.version.replace(/-.*$/, '')}.0`,
           description: 'Telinha screen share server',
           copyright: 'MIT',
         },
@@ -284,15 +285,17 @@ async function packCaddy(t: Target, from: string, out: string): Promise<string> 
 async function main(argv: string[]): Promise<void> {
   const o = parseArgs(argv);
   if (o.mode === 'pack-caddy') {
-    await packCaddy(o.targets[0]!, o.from!, o.out);
+    // parseArgs makes pack-caddy carry exactly one target and a --from.
+    await packCaddy(present(o.targets[0], 'pack-caddy target'), present(o.from, '--from'), o.out);
     return;
   }
   if (o.mode === 'pack') {
+    const from = present(o.from, '--from');
     await mkdir(o.out, { recursive: true });
     const assets: string[] = [];
     for (const t of o.targets) {
       step(`pack ${t}`);
-      await pack(t, packSources(t, o.from!, o.tray), o.out);
+      await pack(t, packSources(t, from, o.tray), o.out);
       assets.push(assetName(t));
     }
     step('SHA256SUMS');

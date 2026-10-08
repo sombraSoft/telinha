@@ -110,7 +110,7 @@ export function createTerm(o: TermOptions): Term {
     line: (msg = '') => println(msg),
 
     spinner(label) {
-      const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+      const frames = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
       let current = label;
       let extra = '';
       let n = 0;
@@ -118,7 +118,7 @@ export function createTerm(o: TermOptions): Term {
       const animated = colors && (o.spinnerMs ?? 80) > 0;
       const paint = () =>
         write(
-          `\r${ESC}[2K${style.cyan(frames[n++ % frames.length]!)} ${current}${extra ? ` ${style.dim(extra)}` : ''}`,
+          `\r${ESC}[2K${style.cyan(frames.charAt(n++ % frames.length))} ${current}${extra ? ` ${style.dim(extra)}` : ''}`,
         );
       const self = {
         suffix: (s: string) => {
@@ -163,7 +163,7 @@ export function createTerm(o: TermOptions): Term {
       }
       for (const r of rows) {
         println(
-          `  ${r.map((c, i) => (i === r.length - 1 ? c : c + ' '.repeat(widths[i]! - visibleLength(c)))).join('  ')}`.trimEnd(),
+          `  ${r.map((c, i) => (i === r.length - 1 ? c : c + ' '.repeat((widths[i] ?? 0) - visibleLength(c)))).join('  ')}`.trimEnd(),
         );
       }
     },

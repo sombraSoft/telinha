@@ -253,11 +253,14 @@
     position: relative;
     padding: 4px 8px;
   }
-  li.member .name {
+  .member .name {
     /* Also holds the status text inside the clipped name: placed after the
        full name it would make the sidebar scroll sideways. */
     position: relative;
     min-width: 0;
+  }
+  .av .avatar {
+    display: block;
   }
   /* Greyed like Discord's, but the name only goes muted so it keeps its
      contrast, and the dot keeps its own (only the picture fades). */
@@ -284,9 +287,6 @@
   }
   li:hover .av {
     --ring-tint: var(--hover);
-  }
-  .av .avatar {
-    display: block;
   }
   .dot {
     position: absolute;

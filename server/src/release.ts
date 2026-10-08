@@ -24,8 +24,8 @@ export const releaseAssetUrl = (tag: string, name: string, repo = REPO): string 
 export function tagFromRedirect(res: { status: number; headers: Headers }): string | null {
   if (res.status < 300 || res.status > 399) return null;
   const location = res.headers.get('location') ?? '';
-  const m = TAG_RE.exec(location);
-  return m ? decodeURIComponent(m[1]!) : null;
+  const tag = TAG_RE.exec(location)?.[1];
+  return tag === undefined ? null : decodeURIComponent(tag);
 }
 
 /**
@@ -114,8 +114,8 @@ export function formatSums(sums: Record<string, string>): string {
 export function parseSums(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const raw of text.split(/\r?\n/)) {
-    const m = /^([0-9a-fA-F]{64})\s+\*?(\S.*)$/.exec(raw.trim());
-    if (m) out[m[2]!.trim()] = m[1]!.toLowerCase();
+    const [, hex, file] = /^([0-9a-fA-F]{64})\s+\*?(\S.*)$/.exec(raw.trim()) ?? [];
+    if (hex && file) out[file.trim()] = hex.toLowerCase();
   }
   return out;
 }

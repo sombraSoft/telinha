@@ -17,6 +17,7 @@ import {
   SETUP_FLAG_DOCS,
   TRAY_ACTION_DOCS,
   UI,
+  type UiKey,
   UPDATE_FLAG_DOCS,
 } from '../data/reference.ts';
 
@@ -38,7 +39,7 @@ const cli = generated.cli as unknown as {
   service: { actions: string[]; linux: Record<string, Spec>; windows: Record<string, Spec> };
   tray: { actions: string[] };
 };
-const t = (k: string) => UI[k]![locale];
+const t = (k: UiKey) => UI[k][locale];
 const actionDocs: Record<string, { en: string; 'pt-BR': string; internal?: boolean }> =
   command === 'tray' ? TRAY_ACTION_DOCS : SERVICE_ACTION_DOCS;
 const actionRows = actions

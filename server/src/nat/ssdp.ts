@@ -64,21 +64,22 @@ export function parseXml(xml: string): XmlNode {
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_, t: string) => escapeXml(t))
     .replace(/<[?!][^>]*>/g, '');
   const token = /<(\/?)([^\s>/]+)[^>]*?(\/?)>|([^<]+)/g;
-  for (const m of src.matchAll(token)) {
-    const top = stack[stack.length - 1]!;
-    if (m[4] !== undefined) {
-      top.text += decodeEntities(m[4]);
+  for (const [, close, tag, selfClose, text] of src.matchAll(token)) {
+    const top = stack.at(-1) ?? root;
+    if (text !== undefined) {
+      top.text += decodeEntities(text);
       continue;
     }
-    const name = m[2]!.replace(/^.*:/, '');
-    if (m[1]) {
+    if (tag === undefined) continue;
+    const name = tag.replace(/^.*:/, '');
+    if (close) {
       const at = stack.findLastIndex((n, i) => i > 0 && n.name.toLowerCase() === name.toLowerCase());
       if (at > 0) stack.length = at;
       continue;
     }
     const node: XmlNode = { name, children: [], text: '' };
     top.children.push(node);
-    if (!m[3]) stack.push(node);
+    if (!selfClose) stack.push(node);
   }
   return root;
 }

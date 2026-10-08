@@ -26,10 +26,12 @@ function cstr(buf: Uint8Array, off: number, len: number): string {
 }
 
 function octal(buf: Uint8Array, off: number, len: number): number {
+  const field = buf.subarray(off, off + len);
+  const first = field[0] ?? 0;
   // GNU base-256 for values that do not fit the octal field.
-  if (buf[off]! & 0x80) {
-    let n = buf[off]! & 0x7f;
-    for (let i = 1; i < len; i++) n = n * 256 + buf[off + i]!;
+  if (first & 0x80) {
+    let n = first & 0x7f;
+    for (const b of field.subarray(1)) n = n * 256 + b;
     return n;
   }
   const s = cstr(buf, off, len).trim();
@@ -65,9 +67,9 @@ export function readTarGz(data: Uint8Array): Entry[] {
     if (h.every((b) => b === 0)) break;
     const stored = octal(h, 148, 8);
     let sum = 0;
-    for (let i = 0; i < BLOCK; i++) sum += i >= 148 && i < 156 ? 0x20 : h[i]!;
+    for (const [i, b] of h.entries()) sum += i >= 148 && i < 156 ? 0x20 : b;
     if (sum !== stored) throw new Error(`tar: bad header checksum at offset ${off}`);
-    const type = String.fromCharCode(h[156]!);
+    const type = String.fromCharCode(new DataView(h.buffer, h.byteOffset, BLOCK).getUint8(156));
     let size = octal(h, 124, 12);
     if (pax.size) size = Number(pax.size);
     const body = off + BLOCK;
@@ -178,7 +180,8 @@ const CRC_TABLE = (() => {
 
 export function crc32(data: Uint8Array): number {
   let c = 0xffffffff;
-  for (const b of data) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8);
+  // The index is a byte, so the 256-entry table always has it.
+  for (const b of data) c = (CRC_TABLE[(c ^ b) & 0xff] ?? 0) ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 

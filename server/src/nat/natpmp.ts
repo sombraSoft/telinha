@@ -87,8 +87,9 @@ interface Common {
   budgetMs?: number;
 }
 
-const u16 = (d: Uint8Array, at: number) => (d[at]! << 8) | d[at + 1]!;
-const u32 = (d: Uint8Array, at: number) => ((d[at]! << 24) | (d[at + 1]! << 16) | (d[at + 2]! << 8) | d[at + 3]!) >>> 0;
+const view = (d: Uint8Array) => new DataView(d.buffer, d.byteOffset, d.byteLength);
+const u16 = (d: Uint8Array, at: number) => view(d).getUint16(at);
+const u32 = (d: Uint8Array, at: number) => view(d).getUint32(at);
 
 export async function natpmpExternalAddress(o: Common): Promise<string> {
   const r = await udpRequest({

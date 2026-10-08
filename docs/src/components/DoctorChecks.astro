@@ -1,7 +1,7 @@
 ---
 // Check | Title | What it looks at | What fixes it, in the order the doctor runs them.
 import generated from '../data/generated.json';
-import { codeSegments, DOCTOR_CHECK_DOCS, type Locale, UI } from '../data/reference.ts';
+import { codeSegments, DOCTOR_CHECK_DOCS, type Locale, UI, type UiKey } from '../data/reference.ts';
 
 interface Props {
   locale: Locale;
@@ -13,7 +13,7 @@ const rows = checks.map((c) => {
   const doc = DOCTOR_CHECK_DOCS[c.id];
   return { id: c.id, title: c.title[locale], looksAt: doc?.looksAt[locale] ?? '', fixes: doc?.fixes[locale] ?? '' };
 });
-const t = (k: string) => UI[k]![locale];
+const t = (k: UiKey) => UI[k][locale];
 ---
 
 <table>

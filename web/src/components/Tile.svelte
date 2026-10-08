@@ -327,6 +327,10 @@
     opacity: 0;
     transition: opacity 0.15s ease;
   }
+  /* The bottom row's overlays sit in its flex row instead. */
+  .bottom .overlay {
+    position: static;
+  }
   .tile:hover .overlay,
   .tile:has(:focus-visible) .overlay,
   .tile:has(select:focus) .overlay {
@@ -348,9 +352,6 @@
     align-items: center;
     gap: 6px;
     pointer-events: none;
-  }
-  .bottom .overlay {
-    position: static;
   }
 
   .label {

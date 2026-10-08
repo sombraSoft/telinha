@@ -78,7 +78,7 @@ describe('phone test store', () => {
     store.claim(s.token);
     const value = store.cookieFor(s.id);
     expect(store.verifyCookie(value)).toEqual({ id: s.id });
-    expect(store.verifyCookie(value + 'x')).toBeNull();
+    expect(store.verifyCookie(`${value}x`)).toBeNull();
     expect(store.verifyCookie(undefined)).toBeNull();
     store.gc(NOW + COOKIE_TTL_MS + 1);
     expect(store.verifyCookie(value, NOW)).toBeNull();

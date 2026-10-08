@@ -131,6 +131,17 @@ export function setup(o: Setup = {}) {
   return { config, handler, call, get, member, logs, sessionCookie, admitted };
 }
 
-export function jwtPayload(token: string): Record<string, any> {
+/** A LiveKit access token's claims; the doctor's token carries no name or metadata. */
+export interface JwtClaims {
+  sub: string;
+  exp: number;
+  nbf: number;
+  name?: string;
+  metadata?: string;
+  /** LiveKit's video grant, sources as their JWT strings. */
+  video: { canPublishSources?: string[]; [grant: string]: unknown };
+}
+
+export function jwtPayload(token: string): JwtClaims {
   return JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
 }

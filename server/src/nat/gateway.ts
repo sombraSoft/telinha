@@ -17,7 +17,7 @@ export function ipv4ToInt(ip: string): number | null {
   if (!m) return null;
   const parts = m.slice(1).map(Number);
   if (parts.some((p) => p > 255)) return null;
-  return ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
+  return parts.reduce((n, p) => n * 256 + p, 0);
 }
 
 /**
@@ -60,9 +60,10 @@ export function parseProcNetRoute(text: string): { iface: string; gatewayIp: str
 export function parseRoutePrint(text: string): DefaultRoute | null {
   const row = /^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)\s*$/gm;
   let best: (DefaultRoute & { metric: number }) | null = null;
-  for (const m of text.matchAll(row)) {
-    const metric = Number(m[3]);
-    if (!best || metric < best.metric) best = { gatewayIp: m[1]!, localIp: m[2]!, metric };
+  for (const [, gatewayIp, localIp, metricStr] of text.matchAll(row)) {
+    if (!gatewayIp || !localIp) continue;
+    const metric = Number(metricStr);
+    if (!best || metric < best.metric) best = { gatewayIp, localIp, metric };
   }
   return best && { gatewayIp: best.gatewayIp, localIp: best.localIp };
 }

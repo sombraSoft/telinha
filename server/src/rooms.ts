@@ -9,6 +9,8 @@ import { TrackSource } from 'livekit-server-sdk';
 import type { Live } from './card.ts';
 import type { Locale } from './i18n.ts';
 import { type LiveParticipant, type RoomService, roomTimeouts } from './livekit.ts';
+import { createLogger } from './log.ts';
+import { present } from './present.ts';
 
 export interface NewRoom {
   room: string;
@@ -127,17 +129,12 @@ function presence(ps: LiveParticipant[], order: string[]): { ids: string[]; live
     const i = order.indexOf(id);
     return i < 0 ? order.length : i;
   };
-  const ids = [...users.keys()].sort((a, b) => rank(a) - rank(b));
+  const sorted = [...users].sort(([a], [b]) => rank(a) - rank(b));
   return {
-    ids,
+    ids: sorted.map(([id]) => id),
     live: {
-      streamers: ids
-        .filter((id) => users.get(id)!.streaming)
-        .map((id) => {
-          const q = users.get(id)!.quality;
-          return q ? { id, quality: q } : { id };
-        }),
-      viewers: ids.filter((id) => !users.get(id)!.streaming),
+      streamers: sorted.filter(([, u]) => u.streaming).map(([id, { quality }]) => (quality ? { id, quality } : { id })),
+      viewers: sorted.filter(([, u]) => !u.streaming).map(([id]) => id),
     },
   };
 }
@@ -156,7 +153,7 @@ export function createRooms(o: {
   const { livekit } = o;
   const registry = openRegistry(o.path);
   const now = o.now ?? Date.now;
-  const log = o.log ?? ((...a: unknown[]) => console.log(new Date().toISOString(), ...a));
+  const log = o.log ?? createLogger().log;
   const emptyMs = o.closeEmptySeconds * 1000;
   // LiveKit keeps an empty room longer than we do (livekit.ts).
   const timeouts = roomTimeouts(o.closeEmptySeconds);
@@ -255,7 +252,8 @@ export function createRooms(o: {
           .ensureRoom(room, timeouts)
           .catch((e: unknown) => log('lifecycle ensureRoom', room, (e as Error).message));
       }
-      const cur = registry.get(room)!;
+      // Rows are never deleted.
+      const cur = present(registry.get(room), `room ${room}`);
       // Ordered by the updated first-seen list, so newcomers keep their place next poll.
       return { record: cur, live: cur.closedAt === null ? presence(ps, cur.seen).live : NOBODY };
     },
@@ -423,7 +421,7 @@ function openRegistry(path: string): Registry {
   return {
     create(r, createdAt) {
       insertQ.run({ ...r, createdAt });
-      return get(r.room)!;
+      return present(get(r.room), `room ${r.room}`);
     },
     get,
     open: () => openQ.all().map(fromRow),

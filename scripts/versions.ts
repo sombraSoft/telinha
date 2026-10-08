@@ -36,36 +36,41 @@ export function assets(helper: Helper, version: string): { key: Platform; spec: 
   return [...seen].map(([key, spec]) => ({ key, spec }));
 }
 
+const asRecord = (x: unknown): Record<string, unknown> | undefined =>
+  typeof x === 'object' && x !== null ? (x as Record<string, unknown>) : undefined;
+
 export function validate(v: unknown): string[] {
   const errors: string[] = [];
   if (typeof v !== 'object' || v === null) return ['versions.json is not an object'];
-  const rec = v as Record<string, any>;
+  const rec = v as Record<string, unknown>;
   for (const helper of HELPERS) {
-    const e = rec[helper];
-    if (!e || typeof e.version !== 'string' || !e.version) {
+    const e = asRecord(rec[helper]);
+    const version = e?.version;
+    if (!e || typeof version !== 'string' || !version) {
       errors.push(`${helper}: missing version`);
       continue;
     }
     if (!isPinned(helper)) {
-      errors.push(...validateBuild(helper, e));
+      errors.push(...validateBuild(helper, version, e));
       continue;
     }
-    const keys = assets(helper, e.version).map((a) => a.key);
+    const keys = assets(helper, version).map((a) => a.key);
+    const sums = asRecord(e.sha256) ?? {};
     for (const key of keys) {
-      const h = e.sha256?.[key];
+      const h = sums[key];
       if (typeof h !== 'string' || !HEX64.test(h))
         errors.push(`${helper}: sha256 for ${key} missing or not 64 hex chars`);
     }
-    for (const key of Object.keys(e.sha256 ?? {})) {
+    for (const key of Object.keys(sums)) {
       if (!keys.includes(key as Platform)) errors.push(`${helper}: sha256 for ${key} matches no asset`);
     }
   }
   return errors;
 }
 
-function validateBuild(helper: Helper, e: Record<string, any>): string[] {
+function validateBuild(helper: Helper, version: string, e: Record<string, unknown>): string[] {
   const errors: string[] = [];
-  if (!SEMVER.test(e.version)) errors.push(`${helper}: version ${e.version} is not x.y.z`);
+  if (!SEMVER.test(version)) errors.push(`${helper}: version ${version} is not x.y.z`);
   if (typeof e.xcaddy !== 'string' || !TAG.test(e.xcaddy)) errors.push(`${helper}: xcaddy must be a tag like v0.4.7`);
   const mods = e.modules;
   if (typeof mods !== 'object' || mods === null || Array.isArray(mods) || !Object.keys(mods).length) {
@@ -125,8 +130,8 @@ async function refresh(): Promise<void> {
     const entry = versions[helper];
     const upstream = await upstreamChecksums(helper, entry.version);
     const list = assets(helper, entry.version);
-    const hashes = new Map<Platform, string>();
-    await Promise.all(
+    // Promise.all keeps the input order: the fixed platform order keeps the diff of versions.json stable.
+    const hashes = await Promise.all(
       list.map(async ({ key, spec }) => {
         console.log(`[versions] ${spec.asset}`);
         const data = await download(spec.url);
@@ -135,11 +140,10 @@ async function refresh(): Promise<void> {
         const computed = sha256(data);
         if (listed && computed !== listed)
           throw new Error(`${spec.asset}: computed sha256 ${computed}, upstream says ${listed}`);
-        hashes.set(key, computed);
+        return [key, computed] as const;
       }),
     );
-    // Fixed platform order keeps the diff of versions.json stable.
-    entry.sha256 = Object.fromEntries(list.map(({ key }) => [key, hashes.get(key)!]));
+    entry.sha256 = Object.fromEntries(hashes);
     console.log(
       `[versions] ${helper} ${entry.version}: ${upstream ? 'cross-checked against upstream' : 'upstream publishes no checksums, pinned as downloaded'}`,
     );

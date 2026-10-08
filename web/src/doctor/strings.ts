@@ -104,7 +104,7 @@ const ptBR: Record<Key, string> = {
 const dicts: Record<Locale, Record<Key, string>> = { en, 'pt-BR': ptBR };
 
 export const pickLocale = (tag: string | null | undefined): Locale =>
-  tag && tag.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
+  tag?.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
 
 export function tr(locale: Locale, key: Key, params: Params = {}): string {
   return (dicts[locale][key] ?? en[key]).replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m));

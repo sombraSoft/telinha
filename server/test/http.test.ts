@@ -4,6 +4,15 @@ import { type Deps, type Fetch, uaFamily } from '../src/http.ts';
 import type { ProxyData } from '../src/proxy.ts';
 import { DEV_ENV, jwtPayload, NOW, PROD_ENV, setup, VERSION } from './helpers.ts';
 
+/** GET /auth/token's body. */
+interface TokenReply {
+  url: string;
+  token: string;
+  identity: string;
+  user: { id: string; name: string; avatar: string | null; locale: string };
+  group: string;
+}
+
 const setCookies = (r: Response) => r.headers.getSetCookie();
 const cookieValue = (r: Response, name: string) => {
   const c = setCookies(r).find((v) => v.startsWith(`${name}=`));
@@ -231,7 +240,7 @@ describe('/auth/token', () => {
     const r = await s.get('/auth/token?room=lamofu-tibare', { cookie: s.sessionCookie({ locale: 'en-GB' }) });
     expect(r.status).toBe(200);
     expect(r.headers.get('cache-control')).toBe('no-store');
-    const body = (await r.json()) as Record<string, any>;
+    const body = (await r.json()) as TokenReply;
     expect(body.url).toBe('wss://telinha.example.com/livekit');
     expect(body.identity).toMatch(/^1:[0-9a-f]{6}$/);
     expect(body.user).toEqual({ id: '1', name: 'Zé', avatar: 'abc', locale: 'en' });
@@ -239,7 +248,7 @@ describe('/auth/token', () => {
     const p = jwtPayload(body.token);
     expect(p.sub).toBe(body.identity);
     expect(p.name).toBe('Zé');
-    expect(JSON.parse(p.metadata)).toEqual({ id: '1', avatar: 'abc' });
+    expect(JSON.parse(p.metadata ?? '')).toEqual({ id: '1', avatar: 'abc' });
     expect(p.video).toMatchObject({
       room: 'lamofu-tibare',
       roomJoin: true,
@@ -257,25 +266,25 @@ describe('/auth/token', () => {
       cookie: s.sessionCookie({ avatar: null }),
       'accept-language': 'pt-BR,en;q=0.5',
     });
-    const body = (await r.json()) as Record<string, any>;
+    const body = (await r.json()) as TokenReply;
     expect(body.user).toEqual({ id: '1', name: 'Zé', avatar: null, locale: 'pt-BR' });
     expect(body.group).toBe('Galera');
-    expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: null });
+    expect(JSON.parse(jwtPayload(body.token).metadata ?? '')).toEqual({ id: '1', avatar: null });
   });
 
   test('name and avatar from the member directory win over the session ones', async () => {
     const dir = [{ id: '1', name: 'Zé da Galera', avatar: 'fresh', status: 'online' as const }];
     const fresh = setup({ directory: () => dir });
     const r = await fresh.get('/auth/token?room=bafo-kiru', { cookie: fresh.sessionCookie({ avatar: null }) });
-    const body = (await r.json()) as Record<string, any>;
+    const body = (await r.json()) as TokenReply;
     expect(body.user).toMatchObject({ name: 'Zé da Galera', avatar: 'fresh' });
     expect(jwtPayload(body.token).name).toBe('Zé da Galera');
-    expect(JSON.parse(jwtPayload(body.token).metadata)).toEqual({ id: '1', avatar: 'fresh' });
+    expect(JSON.parse(jwtPayload(body.token).metadata ?? '')).toEqual({ id: '1', avatar: 'fresh' });
     // Not in the directory (or the bot not ready): the session's avatar.
     const s = setup({ directory: () => [] });
     const kept = (await (
       await s.get('/auth/token?room=bafo-kiru', { cookie: s.sessionCookie({ avatar: 'old' }) })
-    ).json()) as Record<string, any>;
+    ).json()) as TokenReply;
     expect(kept.user).toMatchObject({ name: 'Zé', avatar: 'old' });
   });
 
@@ -562,7 +571,7 @@ describe('DEV_USER mode', () => {
       cookie: `telinha=${encodeURIComponent(cookieValue(r, 'telinha')!)}`,
     });
     expect(tok.status).toBe(200);
-    const body = (await tok.json()) as Record<string, any>;
+    const body = (await tok.json()) as TokenReply;
     expect(body.identity).toMatch(/^1:[0-9a-f]{6}$/);
     expect(body.url).toBe('ws://localhost:8081/livekit');
     expect(body.user.locale).toBe('pt-BR');

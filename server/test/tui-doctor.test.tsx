@@ -53,7 +53,7 @@ interface Spec {
 const fake = (s: Spec): Check => ({
   id: s.id,
   async run(ctx) {
-    if (s.wait) await s.wait;
+    if (s.wait !== undefined) await s.wait;
     return {
       id: s.id,
       title: checkTitle(s.id, ctx.locale),

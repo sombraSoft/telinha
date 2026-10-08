@@ -83,7 +83,7 @@ export function discordFetch(world: DiscordWorld): typeof fetch {
         ? json({})
         : json({ error: 'invalid_client' }, 401);
     // Held before the answer, whichever token asks: a frame catches the check running.
-    if (url === '/applications/@me' && world.hold) await world.hold;
+    if (url === '/applications/@me' && world.hold !== null) await world.hold;
     if (auth !== `Bot ${TOKEN}`) return json({ message: '401: Unauthorized' }, 401);
     if (url === '/applications/@me') {
       return json({ id: APP, name: 'Telinha Bot', flags: (1 << 13) | (1 << 15), redirect_uris: world.redirects });
@@ -293,7 +293,7 @@ export function machine(o: MachineOptions = {}) {
     bins: async (_config, _paths, _log, progress) => {
       const total = 22_020_096;
       progress?.('livekit', Math.round(total * 0.52), total);
-      if (o.binsHold) await o.binsHold;
+      if (o.binsHold !== undefined) await o.binsHold;
       progress?.('livekit', total, total);
     },
     spawn: async () => ({ code: 0, stdout: '', stderr: '' }),

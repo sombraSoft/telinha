@@ -2,6 +2,7 @@
 // and closes an empty room for good) and keeps the /telinha message up to date
 // as a card, paced and retried, down to the closed card.
 import type { Card, Live } from './card.ts';
+import { createLogger } from './log.ts';
 import type { RoomRecord, Rooms } from './rooms.ts';
 
 export interface LifecycleDeps {
@@ -61,7 +62,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
   const { rooms, render, editMessage } = deps;
   const now = deps.now ?? Date.now;
   const gap = deps.editGapMs ?? 5000;
-  const log = deps.log ?? ((...a: unknown[]) => console.log(new Date().toISOString(), ...a));
+  const log = deps.log ?? createLogger().log;
   const cards = new Map<string, CardState>();
   let running = false;
 

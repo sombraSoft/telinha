@@ -59,9 +59,10 @@ const named = (entries: Entry[], name: string) => entries.filter((e) => basename
 
 function findExecutable(entries: Entry[], name: string): Entry {
   const hits = named(entries, name);
-  if (hits.length !== 1)
+  const [hit] = hits;
+  if (!hit || hits.length !== 1)
     throw new FailedError(hits.length ? `archive has ${hits.length} entries named ${name}` : `archive has no ${name}`);
-  return hits[0]!;
+  return hit;
 }
 
 /** Optional (older releases have no tray), but two of them is a bad archive. */

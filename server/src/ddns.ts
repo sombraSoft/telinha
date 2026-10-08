@@ -115,7 +115,7 @@ export function startDdnsLoop(o: {
       lookupFailing = false;
     }
     const last = o.ddns.last();
-    if (!last || !last.ok || last.ip !== ip || now() - last.at >= DAY_MS) await o.ddns.update(ip);
+    if (!last?.ok || last.ip !== ip || now() - last.at >= DAY_MS) await o.ddns.update(ip);
   };
 
   // A chain, not setInterval: a slow lookup or update delays the next tick.

@@ -16,8 +16,10 @@ const LIMIT = 225;
 
 function syllable(random: (n: number) => Uint8Array): string {
   for (;;) {
-    const b = random(1)[0]!;
-    if (b < LIMIT) return SYLLABLES[b % SYLLABLES.length]!;
+    const [b] = random(1);
+    if (b === undefined) throw new Error('random gave no byte');
+    const s = SYLLABLES[b % SYLLABLES.length];
+    if (b < LIMIT && s) return s;
   }
 }
 

@@ -107,7 +107,7 @@ async function map(
       const v4 = ip.subarray(0, 10).every((b) => b === 0) && ip[10] === 0xff && ip[11] === 0xff;
       const externalIp = v4 ? `${ip[12]}.${ip[13]}.${ip[14]}.${ip[15]}` : null;
       return {
-        code: d[3]!,
+        code: dv.getUint8(3),
         lifetime: dv.getUint32(4),
         externalPort: dv.getUint16(42),
         externalIp: externalIp === '0.0.0.0' ? null : externalIp,

@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createToken } from '../src/livekit.ts';
+import type { JwtClaims } from './helpers.ts';
 
-const payload = (jwt: string): Record<string, any> =>
-  JSON.parse(Buffer.from(jwt.split('.')[1]!, 'base64url').toString());
+const payload = (jwt: string): JwtClaims => JSON.parse(Buffer.from(jwt.split('.')[1]!, 'base64url').toString());
 
 test('token: 10 min, screen share only, identity and metadata', async () => {
   const p = payload(
@@ -20,7 +20,7 @@ test('token: 10 min, screen share only, identity and metadata', async () => {
   expect(p.exp - p.nbf).toBe(600);
   expect(p.sub).toBe('1:abcdef');
   expect(p.name).toBe('Zé');
-  expect(JSON.parse(p.metadata)).toEqual({ id: '1', avatar: null });
+  expect(JSON.parse(p.metadata ?? '')).toEqual({ id: '1', avatar: null });
   expect(p.video).toEqual({
     room: 'lamo-futi',
     roomJoin: true,

@@ -31,7 +31,8 @@ const TYPES: Record<string, string> = {
   txt: 'text/plain; charset=utf-8',
 };
 
-export const contentType = (name: string) => TYPES[name.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream';
+export const contentType = (name: string) =>
+  TYPES[(name.split('.').pop() ?? '').toLowerCase()] ?? 'application/octet-stream';
 
 // Vite puts hashed files under assets/, so those can be cached forever.
 const cacheFor = (rel: string) => (rel.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');

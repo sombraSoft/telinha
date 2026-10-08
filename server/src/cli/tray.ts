@@ -152,11 +152,11 @@ export async function run(_args: ParsedArgs, ctx: CliContext, deps: TrayCliDeps 
       case 'status': {
         const installed = await fs.exists(exe);
         const state = await readTrayState(fs, paths);
-        const running = installed && trayRunning(state, processInfo);
+        const running = installed && state !== null && trayRunning(state, processInfo);
         const autostart = await autostartEnabled(spawn, exe);
         say('statusLine', {
           state: running
-            ? t(locale, 'stateRunning', { pid: state!.pid, version: state!.version || '?' })
+            ? t(locale, 'stateRunning', { pid: state.pid, version: state.version || '?' })
             : t(locale, installed ? 'stateStopped' : 'stateMissing'),
           autostart: t(locale, autostart ? 'yes' : 'no'),
         });

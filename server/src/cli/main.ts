@@ -64,8 +64,8 @@ interface Globals {
 export function scanGlobals(argv: string[]): Globals {
   const g: Globals = { command: null, positionals: [], yes: false, nonInteractive: false, help: false, version: false };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
-    if (a === '--') break;
+    const a = argv[i];
+    if (a === undefined || a === '--') break;
     const m = /^--(home|lang)(?:=(.*))?$/.exec(a);
     if (m) {
       const value = m[2] ?? argv[++i];
@@ -173,8 +173,8 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number 
   // run takes the global flags only.
   try {
     const parsed = parseArgs(argv, { flags: GLOBAL_FLAGS }, { locale: ctx.locale });
-    const extra = parsed.positionals.filter((p, i) => !(i === 0 && p === 'run'));
-    if (extra.length) throw new UsageError(ts(ctx.locale, 'unknownCommand', { cmd: extra[0]! }));
+    const [extra] = parsed.positionals.filter((p, i) => !(i === 0 && p === 'run'));
+    if (extra !== undefined) throw new UsageError(ts(ctx.locale, 'unknownCommand', { cmd: extra }));
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
     stderr(e.message);
