@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0](https://github.com/sombraSoft/telinha/compare/v0.7.0...v0.8.0) (2026-10-08)
+
+
+### Features
+
+* card says who is in the room, and the page tells a person's streams apart ([#50](https://github.com/sombraSoft/telinha/issues/50)) ([76bdc91](https://github.com/sombraSoft/telinha/commit/76bdc9149a5404ce30ee5407418c3b90ca83302d))
+* the plain doctor shows phone test rows like the terminal UI ([#59](https://github.com/sombraSoft/telinha/issues/59)) ([37f5061](https://github.com/sombraSoft/telinha/commit/37f5061577c2d325e8ec7f56847a9007daf09d5c))
+
+
+### Bug Fixes
+
+* **deps:** update dependency caddyserver/caddy to v2.11.7 ([#81](https://github.com/sombraSoft/telinha/issues/81)) ([dc0894a](https://github.com/sombraSoft/telinha/commit/dc0894a8da096a9d94eb5944109c3a1eac7a0bc7))
+* **deps:** update go to v1.27.1 ([#84](https://github.com/sombraSoft/telinha/issues/84)) ([aa56352](https://github.com/sombraSoft/telinha/commit/aa56352a07ddffab0caa3f37d646e0f93ae630d0))
+* name the group after its gate role when GROUP_NAME is unset ([#71](https://github.com/sombraSoft/telinha/issues/71)) ([07cc6b5](https://github.com/sombraSoft/telinha/commit/07cc6b509613764d4b01c1aaba808b89be546a6d))
+* say Discord server or machine instead of a bare server in setup and doctor ([#72](https://github.com/sombraSoft/telinha/issues/72)) ([02993d5](https://github.com/sombraSoft/telinha/commit/02993d5da3d1c1082bede91feb5ee41fdff870b7))
+* the stats overlay says via TURN or to LiveKit ([#67](https://github.com/sombraSoft/telinha/issues/67)) ([ae1ae8a](https://github.com/sombraSoft/telinha/commit/ae1ae8a03d499e0df236b61d94ce7f0861a8e592))
+
 ## [0.7.0](https://github.com/sombraSoft/telinha/compare/v0.6.0...v0.7.0) (2026-10-07)
 
 
