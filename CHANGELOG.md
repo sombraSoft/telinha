@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/sombraSoft/telinha/compare/v0.8.0...v0.9.0) (2026-10-08)
+
+
+### Features
+
+* name the page after the room, opt-in watching, about section ([#95](https://github.com/sombraSoft/telinha/issues/95)) ([19e209c](https://github.com/sombraSoft/telinha/commit/19e209ccc69c8889f10da2eca58891f6ce66a76a))
+
 ## [0.8.0](https://github.com/sombraSoft/telinha/compare/v0.7.0...v0.8.0) (2026-10-08)
 
 
