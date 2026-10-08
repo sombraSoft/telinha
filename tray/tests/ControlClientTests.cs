@@ -97,7 +97,7 @@ namespace Telinha.Tray.Tests
             using (var c = new ControlClient(() => "127.0.0.1:8081", TokenFile("secret-looking-but-wrong"), handler))
             {
                 Assert.IsNull(c.Status());
-                var e = Assert.ThrowsException<ControlException>(() => c.Shutdown("stop"));
+                var e = Assert.ThrowsExactly<ControlException>(() => c.Shutdown("stop"));
                 StringAssert.Contains(e.Message, "not running");
             }
             Assert.AreEqual(0, handler.Requests.Count);
@@ -188,7 +188,7 @@ namespace Telinha.Tray.Tests
             handler = new FakeHandler { Answer = r => new HttpResponseMessage(HttpStatusCode.OK) };
             using (var c = new ControlClient(() => null, TokenFile(Token), handler))
             {
-                var e = Assert.ThrowsException<ControlException>(() => c.Shutdown("stop"));
+                var e = Assert.ThrowsExactly<ControlException>(() => c.Shutdown("stop"));
                 StringAssert.Contains(e.Message, "200");
             }
         }
@@ -212,7 +212,7 @@ namespace Telinha.Tray.Tests
             handler = new FakeHandler { Answer = r => JsonResponse(HttpStatusCode.BadRequest, @"{ ""error"": ""mode must be one of check, scheduled, now"" }") };
             using (var c = new ControlClient(() => null, TokenFile(Token), handler))
             {
-                var e = Assert.ThrowsException<ControlException>(() => c.Update("later"));
+                var e = Assert.ThrowsExactly<ControlException>(() => c.Update("later"));
                 Assert.AreEqual("mode must be one of check, scheduled, now", e.Message);
             }
         }
