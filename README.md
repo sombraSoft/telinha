@@ -389,8 +389,9 @@ it into `<telinha-folder>\bin`.
 **Image.** `bun run image` picks docker, else podman (starting the podman
 machine if it is stopped). Caddy is compiled inside the build by the
 `caddy-build` stage (`golang` alpine plus the bun binary running
-`scripts/caddy-build.ts`, `GOTOOLCHAIN=auto` so a Caddy that needs a newer Go
-still builds), on the build platform for the target one. The smoke test
+`scripts/caddy-build.ts`, `GOTOOLCHAIN=local` so Caddy builds only with the
+pinned Go, and a Caddy that needs a newer one fails until the `go` Renovate group
+catches up), on the build platform for the target one. The smoke test
 (`scripts/smoke.sh`, also run by the CI `image` job) runs inside the image:
 the server tests, the terminal UI smoke from source (`TELINHA_SMOKE_TUI=1`, which proves the
 musl OpenTUI library loads and a key re-renders), the built page, `--version` of the three binaries, the

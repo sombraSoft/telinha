@@ -105,14 +105,15 @@ function goBin(env: Record<string, string | undefined>): string {
 async function main(argv: string[]): Promise<void> {
   const o = parseArgs(argv);
   const recipe = await readRecipe(o.versions);
-  // Same toolchain settings for both commands. The official golang images pin
-  // GOTOOLCHAIN=local; auto lets a Caddy whose go directive is newer than the
-  // image fetch the toolchain it needs (checked against Go's checksum database).
+  // Same toolchain settings for both commands. GOTOOLCHAIN=local builds with the
+  // Go that mise.toml and the Dockerfile pin (Renovate's go group moves them
+  // together): a Caddy whose go directive is newer fails here until that group
+  // catches up, instead of quietly fetching that directive's go1.x.0.
   const toolEnv: Record<string, string | undefined> = {
     ...process.env,
     CGO_ENABLED: '0',
     GOFLAGS: '-trimpath',
-    GOTOOLCHAIN: 'auto',
+    GOTOOLCHAIN: 'local',
   };
   // xcaddy runs here, so it is built for this host whatever GOOS/GOARCH say.
   delete toolEnv.GOOS;
