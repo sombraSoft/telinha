@@ -175,7 +175,9 @@ jobs:
         with:
           version: 2026.10.3
           install_args: bun
-          cache_save: ${{ github.event_name == 'push' }}
+          # The test job saves this entry (same tools, same key); a second
+          # save would only race it.
+          cache_save: false
       # Bun's package cache, restored here and saved by pushes to main only (see
       # the test job).
       - id: bun-cache
@@ -273,7 +275,9 @@ jobs:
         with:
           version: 2026.10.3
           install_args: bun
-          cache_save: ${{ github.event_name == 'push' }}
+          # The test job saves this entry (same tools, same key); a second
+          # save would only race it.
+          cache_save: false
       # The compile targets (bun-<target>-v<version>) land in the install cache
       # too: they change with Bun, the packages with bun.lock. As in the test
       # job, PRs restore both and only pushes to main save them. The packages
@@ -677,8 +681,9 @@ jobs:
           scripts/smoke.sh
       # The runner's pwsh parses it; Write-Host is how the bootstrap talks to
       # the person running it. PSScriptAnalyzer is pinned here (Renovate bumps
-      # it) and loaded at that exact version over whatever the image ships; a
-      # failed install fails the job.
+      # it), saved outside the module path and imported from there, so the
+      # copy the image ships never gets in the way; a failed download fails
+      # the job.
       - name: install.ps1
         shell: pwsh
         run: |
@@ -686,8 +691,8 @@ jobs:
           $errs = $null
           $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errs)
           if ($errs) { $errs; exit 1 }
-          $psa = Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser -PassThru -ErrorAction Stop
-          $loaded = Import-Module PSScriptAnalyzer -RequiredVersion $psa.Version -PassThru -ErrorAction Stop
+          Save-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Path $env:RUNNER_TEMP -Force -ErrorAction Stop
+          $loaded = Import-Module (Join-Path $env:RUNNER_TEMP PSScriptAnalyzer) -PassThru -ErrorAction Stop
           Write-Host "PSScriptAnalyzer $($loaded.Version)"
           $issues = Invoke-ScriptAnalyzer -Path $path -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
           if ($issues) { $issues | Format-Table -AutoSize | Out-String -Width 200; exit 1 }
@@ -725,7 +730,9 @@ jobs:
         with:
           version: 2026.10.3
           install_args: bun
-          cache_save: ${{ github.event_name == 'push' }}
+          # The test job saves this entry (same tools, same key); a second
+          # save would only race it.
+          cache_save: false
       # Bun's package cache, restored here and saved by pushes to main only (see
       # the test job).
       - id: bun-cache
@@ -810,7 +817,8 @@ jobs:
           # Local checkout, not the default git context, so the PR's tree is built.
           context: .
           platforms: linux/amd64,linux/arm64
-          push: false
+          # The result stays in the builder only; the call below loads amd64.
+          outputs: type=cacheonly
           cache-from: type=gha,scope=telinha-image
           cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=telinha-image,ignore-error=true' || '' }}
       # amd64 again, loaded into the daemon for the smoke test. The builder

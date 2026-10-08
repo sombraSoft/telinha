@@ -61,10 +61,10 @@
       "datasourceTemplate": "docker"
     },
     {
-      "description": "PSScriptAnalyzer that the lint job installs to check install.ps1 (ci.yml), looked up on the PowerShell Gallery",
+      "description": "PSScriptAnalyzer that the lint job downloads to check install.ps1 (ci.yml), looked up on the PowerShell Gallery",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
-      "matchStrings": ["Install-Module (?<depName>PSScriptAnalyzer) -RequiredVersion (?<currentValue>\\S+)"],
+      "matchStrings": ["Save-Module (?<depName>PSScriptAnalyzer) -RequiredVersion (?<currentValue>\\S+)"],
       "datasourceTemplate": "nuget",
       "registryUrlTemplate": "https://www.powershellgallery.com/api/v2/"
     },
