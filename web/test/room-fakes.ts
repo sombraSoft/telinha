@@ -80,6 +80,9 @@ export function tokenFor(identity: string, name = 'Ana'): TokenResponse {
     identity,
     user: { id, name, avatar: null, locale: 'en' },
     group: 'Gurizada',
+    topic: 'Filme',
+    server: 'Gurizada Medonha',
+    version: '9.9.9',
   };
 }
 
@@ -208,11 +211,37 @@ export class FakeVideoTrack {
 
 type Pub = { source: Track.Source; videoTrack?: FakeVideoTrack; audioTrack?: { mediaStreamTrack: FakeMediaTrack } };
 
+/**
+ * A remote screen as this page sees it: published, with its video only while
+ * subscribed. Subscribing lands at once and tells the room, as LiveKit's
+ * TrackSubscribed would.
+ */
+export class FakeRemotePub {
+  isDesired = false;
+  /** Every setSubscribed call, in order. */
+  subscribes: boolean[] = [];
+  onChange: () => void = () => {};
+  constructor(
+    public source: Track.Source,
+    private track: FakeVideoTrack,
+  ) {}
+  get videoTrack() {
+    return this.isDesired ? this.track : undefined;
+  }
+  setSubscribed(v: boolean) {
+    this.isDesired = v;
+    this.subscribes.push(v);
+    this.onChange();
+  }
+}
+
 export class FakeParticipant implements RoomParticipant {
   attributes: Record<string, string> = {};
   metadata: string | undefined;
   joinedAt: Date;
-  pubs = new Map<Track.Source, Pub>();
+  pubs = new Map<Track.Source, Pub | FakeRemotePub>();
+  /** Called when this page subscribes or unsubscribes (the room's TrackSubscribed). */
+  changed: () => void = () => {};
   constructor(
     public identity: string,
     public name: string,
@@ -224,12 +253,19 @@ export class FakeParticipant implements RoomParticipant {
   getTrackPublication(source: Track.Source) {
     return this.pubs.get(source) as unknown as TrackPublication | undefined;
   }
-  /** A remote participant starts streaming (as subscribed by this page). */
+  /** A remote participant starts streaming; its video is there once this page subscribes. */
   stream(height = 1080, fps = 60): FakeVideoTrack {
     const video = new FakeVideoTrack(new FakeMediaTrack('video'), {}, []);
     video.stats = videoStats(false, height, fps);
-    this.pubs.set(Track.Source.ScreenShare, { source: Track.Source.ScreenShare, videoTrack: video });
+    const pub = new FakeRemotePub(Track.Source.ScreenShare, video);
+    pub.onChange = () => this.changed();
+    this.pubs.set(Track.Source.ScreenShare, pub);
     return video;
+  }
+  /** The remote screen's publication. */
+  get screenPub(): FakeRemotePub | undefined {
+    const pub = this.pubs.get(Track.Source.ScreenShare);
+    return pub instanceof FakeRemotePub ? pub : undefined;
   }
 }
 
@@ -262,6 +298,7 @@ export class FakeLocalParticipant extends FakeParticipant implements RoomLocalPa
   }
   async unpublishTrack(track: unknown) {
     for (const [source, pub] of this.pubs) {
+      if (pub instanceof FakeRemotePub) continue;
       const tracks = [
         pub.videoTrack,
         pub.audioTrack,
@@ -290,7 +327,7 @@ type Listener = (...args: never[]) => void;
 export class FakeRoom implements LiveRoom {
   remoteParticipants = new Map<string, FakeParticipant>();
   canPlaybackAudio = true;
-  connects: { url: string; token: string }[] = [];
+  connects: { url: string; token: string; autoSubscribe?: boolean }[] = [];
   log: Log = [];
   localParticipant: FakeLocalParticipant;
   #listeners = new Map<string, Listener[]>();
@@ -305,8 +342,8 @@ export class FakeRoom implements LiveRoom {
   emit<E extends keyof RoomEventCallbacks>(event: E, ...args: Parameters<RoomEventCallbacks[E]>) {
     for (const fn of this.#listeners.get(event) ?? []) (fn as (...a: unknown[]) => void)(...args);
   }
-  async connect(url: string, token: string) {
-    this.connects.push({ url, token });
+  async connect(url: string, token: string, opts?: { autoSubscribe?: boolean }) {
+    this.connects.push({ url, token, ...opts });
   }
   async startAudio() {}
 }

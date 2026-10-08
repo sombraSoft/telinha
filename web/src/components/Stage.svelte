@@ -14,7 +14,7 @@
   const canShare = canShareScreen();
 </script>
 
-<section class="stage">
+<section class="stage" class:idle={tiles.length === 0}>
   {#if rc.connected && tiles.length === 0}
     <div class="empty" data-testid="empty-state">
       <img class="mascot" src={mascot} alt="" width="480" height="490" draggable="false" />
@@ -40,6 +40,8 @@
           stats={rc.stats[p.identity]}
           onfocus={() => rc.toggleFocus(p.identity)}
           onstop={() => void rc.stopShare()}
+          onwatch={() => rc.watch(p.identity)}
+          onunwatch={() => rc.unwatch(p.identity)}
         />
       {/each}
     </div>
@@ -53,11 +55,17 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* Keeps the bottom free for the share dock at home (App sets both). */
+    --dock-pad: var(--dock-clear, 0px);
     padding: 16px;
-    /* Keeps the bottom free for the share dock at home (App sets it). */
-    padding-bottom: max(16px, var(--dock-clear, 0px));
+    padding-bottom: max(16px, var(--dock-pad));
     overflow: auto;
     background: var(--bg-0);
+  }
+  /* The empty state is centred in what is left: keeping the dock's space even
+     when it is dragged away stops the mascot jumping as the dock moves. */
+  .stage.idle {
+    --dock-pad: var(--dock-reserve, 0px);
   }
 
   .empty {
@@ -123,7 +131,7 @@
     .stage {
       padding: 8px;
       /* The people list's tab pokes 20px up into the stage's bottom edge. */
-      padding-bottom: max(28px, var(--dock-clear, 0px));
+      padding-bottom: max(28px, var(--dock-pad));
     }
     .tiles {
       grid-template-columns: minmax(0, 1fr);

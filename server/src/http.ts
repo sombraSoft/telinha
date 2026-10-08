@@ -27,9 +27,11 @@ export interface Deps {
   config: Config;
   isMember: IsMember;
   files: StaticFiles;
-  rooms: Pick<Rooms, 'admit' | 'openRooms'>;
+  rooms: Pick<Rooms, 'admit' | 'openRooms' | 'get'>;
   /** Display name of the group in the given locale. */
   group: (locale: Locale) => string;
+  /** The Discord server's name once the bot has seen it; null in dev or before that. */
+  server?: () => string | null;
   discordReady?: () => boolean;
   /** Role members with their status (members.ts); null until the bot has fetched them. */
   members?: () => DirMember[] | null;
@@ -46,7 +48,7 @@ export interface Deps {
   openRooms?: () => number;
   /** /healthz: child process states (supervisor), e.g. { livekit: 'up' }. */
   children?: () => Record<string, string>;
-  /** /healthz; default version.ts. */
+  /** /healthz and the room page's settings; default version.ts. */
   version?: string;
   /** /internal/*: the local control endpoint; unset = 404. */
   control?: Pick<Control, 'handle'> & Partial<Pick<Control, 'authorized'>>;
@@ -120,6 +122,7 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
   const members = deps.members ?? (() => null);
   const openRooms = deps.openRooms ?? (() => rooms.openRooms().length);
   const children = deps.children ?? (() => ({}));
+  const server = deps.server ?? (() => null);
   const version = deps.version ?? programVersion();
   const doFetch: Fetch = deps.fetch ?? ((input, init) => fetch(input, init));
   const now = deps.now ?? Date.now;
@@ -322,6 +325,10 @@ export function createHandler(deps: Deps): (req: Request) => Promise<Response | 
         identity,
         user: { id: s.id, name, avatar, locale },
         group: group(locale),
+        // The page's title: the room's topic, else the Discord server's name.
+        topic: rooms.get(room)?.what ?? null,
+        server: server(),
+        version,
       });
     }
 

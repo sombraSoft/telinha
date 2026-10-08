@@ -8,13 +8,15 @@
   import { currentLocale, t } from './lib/i18n/i18n.svelte';
   import { MembersFeed } from './lib/members.svelte';
   import { prefs } from './lib/prefs.svelte';
-  import { browserClock, livekitRoom, noticeText, RoomSession, serverTokens } from './lib/room.svelte';
+  import { browserClock, livekitRoom, noticeText, pageTitle, RoomSession, serverTokens } from './lib/room.svelte';
   import { resolveTheme } from './lib/theme';
 
   const rc = new RoomSession({ room: livekitRoom, tokens: serverTokens(), clock: browserClock, prefs });
   const members = new MembersFeed();
   /** Space the share dock needs at the stage bottom while it sits at home. */
   let dockClear = $state(0);
+  /** The same space wherever the dock is: the empty stage keeps it so it never jumps. */
+  let dockReserve = $state(0);
 
   const lightQuery = matchMedia('(prefers-color-scheme: light)');
   let prefersLight = $state(lightQuery.matches);
@@ -37,6 +39,9 @@
   });
   $effect(() => {
     document.documentElement.lang = currentLocale();
+  });
+  $effect(() => {
+    document.title = pageTitle(rc.label);
   });
 
   onMount(() => {
@@ -77,7 +82,7 @@
       case 'm':
       case 'M': {
         const p = rc.target(true);
-        if (p) prefs.toggleMute(p.identity);
+        if (p) prefs.toggleMute(p.identity, p.mine);
         break;
       }
     }
@@ -92,9 +97,9 @@
   <main class="body" class:people-open={peopleOpen}>
     <!-- The dock floats over the stage only, never over the people list; toasts
          sit just above the dock's home spot there. -->
-    <div class="stage-col" style:--dock-clear="{dockClear}px">
+    <div class="stage-col" style:--dock-clear="{dockClear}px" style:--dock-reserve="{dockReserve}px">
       <Stage {rc} />
-      <ShareDock {rc} bind:clearance={dockClear} />
+      <ShareDock {rc} bind:clearance={dockClear} bind:reserve={dockReserve} />
       <!-- The live region exists from the start; screen readers often skip a
            role=status element that is inserted together with its text. -->
       <div class="toast-region" role="status" aria-live="polite">

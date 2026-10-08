@@ -15,7 +15,7 @@ import {
   tokenFor,
   videoStats,
 } from '../../test/room-fakes';
-import { RoomSession } from './room.svelte';
+import { pageTitle, RoomSession, roomLabel } from './room.svelte';
 import type { ShareSettings } from './share';
 
 const ROOM = 'lamo-futi';
@@ -60,6 +60,7 @@ function factorsOf(lp: FakeRoom['localParticipant']) {
 
 /** A remote participant joins. */
 function arrive(room: FakeRoom, p: FakeParticipant) {
+  p.changed = () => room.emit(RoomEvent.TrackSubscribed, {} as never, {} as never, p as never);
   room.remoteParticipants.set(p.identity, p);
   room.emit(RoomEvent.ParticipantConnected, p as never);
 }
@@ -98,11 +99,22 @@ describe('joining', () => {
 
   test('a good token connects with its url', async () => {
     const { s, room } = await joined();
-    expect(room.connects).toEqual([{ url: 'wss://livekit.test', token: 'token-100:a' }]);
+    expect(room.connects).toEqual([{ url: 'wss://livekit.test', token: 'token-100:a', autoSubscribe: false }]);
     expect(s.connected).toBe(true);
     expect(s.roomCode).toBe(ROOM);
     expect(s.user?.name).toBe('Ana');
     expect(s.me?.identity).toBe('100:a');
+    expect(s.label).toBe('Filme');
+    expect(s.version).toBe('9.9.9');
+  });
+
+  test('named after the topic, else the Discord server, else just Telinha', () => {
+    expect(roomLabel('Filme', 'Gurizada')).toBe('Filme');
+    expect(roomLabel(null, 'Gurizada')).toBe('Gurizada');
+    expect(roomLabel('  ', 'Gurizada')).toBe('Gurizada');
+    expect(roomLabel(null, null)).toBe('');
+    expect(pageTitle('Filme')).toBe('Telinha - Filme');
+    expect(pageTitle('')).toBe('Telinha');
   });
 });
 
@@ -147,6 +159,9 @@ describe('watching attribute', () => {
       arrive(room, p);
     }
     clock.paint();
+    s.watch('200:x');
+    s.watch('300:y');
+    clock.paint();
     // More events, same tiles: nothing new to say.
     room.emit(RoomEvent.ParticipantAttributesChanged, {}, bia as never);
     clock.paint();
@@ -159,6 +174,90 @@ describe('watching attribute', () => {
       { watching: '300:y' },
       { watching: '200:x,300:y' },
     ]);
+  });
+});
+
+describe('watching streams', () => {
+  /** Bia streaming, arrived and painted. */
+  function streamer(room: FakeRoom, clock: ManualClock, identity = '200:x', name = 'Bia') {
+    const p = new FakeParticipant(identity, name, 1);
+    p.stream();
+    arrive(room, p);
+    clock.paint();
+    clock.paint();
+    return p;
+  }
+  const watched = (s: RoomSession) => s.tiles.map((p) => [p.identity, p.watched, !!p.stream?.video]);
+
+  test('a stream alone plays at once; the next one waits for Watch', async () => {
+    const { s, room, clock } = await joined();
+    const bia = streamer(room, clock);
+    expect(bia.screenPub?.subscribes).toEqual([true]);
+    const caio = streamer(room, clock, '300:y', 'Caio');
+    expect(caio.screenPub?.subscribes).toEqual([]);
+    expect(watched(s)).toEqual([
+      ['200:x', true, true],
+      ['300:y', false, false],
+    ]);
+  });
+
+  test('streams that show up together all wait; Watch and Stop watching subscribe and unsubscribe', async () => {
+    const { s, room, clock, lp } = await joined();
+    const bia = new FakeParticipant('200:x', 'Bia', 1);
+    const caio = new FakeParticipant('300:y', 'Caio', 2);
+    for (const p of [bia, caio]) {
+      p.stream();
+      arrive(room, p);
+    }
+    clock.paint();
+    expect(watched(s)).toEqual([
+      ['200:x', false, false],
+      ['300:y', false, false],
+    ]);
+    s.watch('300:y');
+    clock.paint();
+    clock.paint();
+    expect(caio.screenPub?.subscribes).toEqual([true]);
+    expect(watched(s)[1]).toEqual(['300:y', true, true]);
+    s.setFocus('300:y');
+    s.unwatch('300:y');
+    clock.paint();
+    expect(caio.screenPub?.subscribes).toEqual([true, false]);
+    expect(s.focusId).toBeNull();
+    // Only watched tiles count as on screen.
+    expect(lp.attributeWrites.filter((w) => 'watching' in w).at(-1)).toEqual({ watching: '' });
+  });
+
+  test("another tab of this page's person is marked mine (its sound starts muted)", async () => {
+    const { s, room, clock } = await joined();
+    streamer(room, clock, '100:b', 'Ana');
+    streamer(room, clock, '200:x', 'Bia');
+    expect(s.tiles.map((p) => [p.identity, p.mine])).toEqual([
+      ['100:b', true],
+      ['200:x', false],
+    ]);
+  });
+
+  test('a stopped stream is decided again when it restarts', async () => {
+    const { s, room, clock } = await joined();
+    const bia = new FakeParticipant('200:x', 'Bia', 1);
+    const caio = new FakeParticipant('300:y', 'Caio', 2);
+    for (const p of [bia, caio]) {
+      p.stream();
+      arrive(room, p);
+    }
+    clock.paint();
+    caio.pubs.clear();
+    room.emit(RoomEvent.TrackUnpublished, {} as never, caio as never);
+    clock.paint();
+    bia.pubs.clear();
+    room.emit(RoomEvent.TrackUnpublished, {} as never, bia as never);
+    clock.paint();
+    bia.stream();
+    room.emit(RoomEvent.TrackPublished, {} as never, bia as never);
+    clock.paint();
+    clock.paint();
+    expect(watched(s)).toEqual([['200:x', true, true]]);
   });
 });
 

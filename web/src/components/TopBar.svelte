@@ -2,7 +2,7 @@
   import head from '../assets/telinha-head.webp';
   import { avatarUrl } from '../lib/avatar';
   import { t } from '../lib/i18n/i18n.svelte';
-  import type { RoomSession } from '../lib/room.svelte';
+  import { pageTitle, type RoomSession } from '../lib/room.svelte';
   import { PEOPLE_ID } from './PeopleList.svelte';
   import SettingsMenu from './SettingsMenu.svelte';
 
@@ -29,9 +29,13 @@
     </button>
   </div>
 
-  <div class="brand">
+  <div class="brand" title={rc.label ? pageTitle(rc.label) : undefined}>
     <img class="logo" src={head} alt="" width="106" height="112" draggable="false" />
     <span class="title">Telinha</span>
+    {#if rc.label}
+      <span class="label-sep" aria-hidden="true">-</span>
+      <span class="room-label" data-testid="room-label">{rc.label}</span>
+    {/if}
   </div>
 
   <div class="right">
@@ -55,7 +59,7 @@
         </g>
       </svg>
     </button>
-    <SettingsMenu />
+    <SettingsMenu version={rc.version} />
     {#if rc.user}
       <div class="me" data-testid="me">
         <img class="avatar" src={avatarUrl(rc.user.id, rc.user.avatar)} alt="" />
@@ -88,14 +92,31 @@
     position: relative;
     justify-content: flex-end;
   }
+  /* A long topic shrinks to an ellipsis before it crowds out the side groups. */
   .brand {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+    max-width: min(420px, 40vw);
   }
-  .title {
+  .title,
+  .label-sep,
+  .room-label {
     font-weight: 700;
     font-size: 16px;
+  }
+  .label-sep {
+    margin: 0 -2px;
+  }
+  .room-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .logo,
+  .title {
+    flex: none;
   }
   .logo {
     display: block;
@@ -140,7 +161,9 @@
       padding: 8px 12px;
     }
     .room,
-    .label {
+    .label,
+    .label-sep,
+    .room-label {
       display: none;
     }
     /* Hidden visually but still read, so the chip isn't an unnamed avatar. */
