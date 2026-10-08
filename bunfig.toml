@@ -2,6 +2,10 @@
 # Plain flat node_modules: the runtime is Bun now, but hoisted keeps one flat
 # node_modules that the image copies as-is to /app/node_modules.
 linker = "hoisted"
+# Resolve only versions at least 3 days old (seconds), as renovate.json's
+# minimumReleaseAge does for the updates it proposes. Renovate's lock file
+# maintenance re-resolves bun.lock here, which its own gate doesn't cover.
+minimumReleaseAge = 259200
 
 [test]
 # Without this bun test loads Solid's server build: the first frame renders but

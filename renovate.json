@@ -121,10 +121,15 @@
       "automerge": false
     },
     {
-      "description": "solid-js follows OpenTUI's exact peer and is never bumped alone; OpenTUI is 0.x so a minor can break, and the terminal smokes reach only the first setup screen, so the group is merged by hand",
-      "matchPackageNames": ["@opentui/core", "@opentui/solid", "solid-js"],
+      "description": "OpenTUI is 0.x so a minor can break, and the terminal smokes reach only the first setup screen, so the group is merged by hand; solid-js moves with it by hand (next rule)",
+      "matchPackageNames": ["@opentui/core", "@opentui/solid"],
       "groupName": "opentui",
       "automerge": false
+    },
+    {
+      "description": "solid-js must equal @opentui/solid's exact solid-js peer: a second copy gives OpenTUI its own Solid and its renderer context goes missing. npm's latest runs ahead of that peer, so Renovate never proposes solid-js; raise it by hand in the opentui PR when the peer moves (scripts/toolchain.test.ts checks they agree)",
+      "matchPackageNames": ["solid-js"],
+      "enabled": false
     },
     {
       "description": "Bumps in versions.json: the downloaded ones stay red until `bun scripts/versions.ts refresh`, the Caddy recipe needs the image job green; neither automerges or blocks the allNonMajor group",
@@ -145,7 +150,7 @@
       "automerge": false
     },
     {
-      "description": "global.json's sdk.version is a floor, not a pin: rollForward latestFeature already uses the newest installed 10.0.x SDK, and raising the floor breaks tray builds on machines with an older SDK (10.0.300 locally), so a bump is a deliberate choice made by hand, kept out of the allNonMajor group",
+      "description": "global.json's sdk.version is a floor, not a pin: rollForward latestFeature already uses the newest installed 10.0.x SDK, and raising the floor breaks tray builds on machines with an older SDK, so a bump is a deliberate choice made by hand, kept out of the allNonMajor group",
       "matchDepNames": ["dotnet-sdk"],
       "groupName": "dotnet-sdk",
       "automerge": false
@@ -180,6 +185,12 @@
       "description": "versions.json pins the binaries baked into the image, so its bumps must cut a release",
       "matchFileNames": ["versions.json"],
       "semanticCommitType": "fix"
+    },
+    {
+      "description": "TypeScript 7 (the Go port) has no JS API, and svelte-check (the web typecheck) peers typescript ^5 || ^6 (sveltejs/language-tools#3063), so a TypeScript major waits on the Dependency Dashboard until svelte-check supports it",
+      "matchPackageNames": ["typescript"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
     }
   ]
 }
