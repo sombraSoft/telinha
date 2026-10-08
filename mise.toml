@@ -21,7 +21,7 @@ lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
 # The workflows install bun from this pin through mise-action.
 bun = "1.4.2"
 # For go: the Dockerfile's golang image, which builds Caddy.
-go = "1.25.14"
+go = "1.27.1"
 # The linters the CI lint and gitleaks jobs run, at the same versions locally.
 # jactionlint is the maintained actionlint fork the mise registry points to:
 # upstream actionlint has stopped releasing and does not know newer workflow
