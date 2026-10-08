@@ -86,7 +86,7 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
     section: 'discord',
     required: yes,
     notes: {
-      en: 'The one Discord server this deployment serves.',
+      en: 'The one Discord server this install serves.',
       'pt-BR': 'O único servidor do Discord que esta instalação atende.',
     },
   },
@@ -113,7 +113,7 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDoc> = {
     probe: (c) => c.commandName,
     default: 'telinha',
     notes: {
-      en: 'Slash command name: lowercase, 1-32 letters, digits, `-` or `_`. Two deployments in one Discord server need different names.',
+      en: 'Slash command name: lowercase, 1-32 letters, digits, `-` or `_`. Two installs in one Discord server need different names.',
       'pt-BR':
         'Nome do comando de barra: minúsculas, 1-32 letras, dígitos, `-` ou `_`. Duas instalações no mesmo servidor do Discord precisam de nomes diferentes.',
     },

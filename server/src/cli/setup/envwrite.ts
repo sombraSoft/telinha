@@ -26,7 +26,7 @@ DISCORD_TOKEN=''
 # OAuth2 page: Client ID + Client Secret. Add the redirect <PUBLIC_URL>/auth/callback
 DISCORD_CLIENT_ID=
 DISCORD_CLIENT_SECRET=''
-# The one Discord server (guild) this deployment serves
+# The one Discord server (guild) this install serves
 GUILD_ID=
 # Members with this role may enter
 ROLE_ID=

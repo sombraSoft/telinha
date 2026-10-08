@@ -21,7 +21,7 @@ import { avatarUrl, discordIdOf, parseMeta } from './avatar';
 import { commandName, type Locale, type MessageKey, type Params } from './i18n';
 import { setUserLocale, t } from './i18n/i18n.svelte';
 import { LocalShare, type Publisher } from './local-share.svelte';
-import { isValidRoom } from './room-name';
+import { isRoomCode } from './room-code';
 import type { ShareSettings } from './share';
 import { type ByteSample, streamLabel, summarize, type VideoStats } from './stats';
 
@@ -73,7 +73,7 @@ export interface LiveRoom {
   startAudio(): Promise<void>;
 }
 
-/** Where the room name and the LiveKit tokens come from: the page URL and Telinha, or fixed answers in tests. */
+/** Where the room code and the LiveKit tokens come from: the page URL and Telinha, or fixed answers in tests. */
 export interface TokenSource {
   /** The room this page is for; null when it names none. */
   readonly room: string | null;
@@ -206,7 +206,7 @@ function labelTiles(list: { p: Participant; joined: number }[]): Participant[] {
 }
 
 export class RoomSession {
-  roomName = $state('');
+  roomCode = $state('');
   group = $state('');
   user = $state.raw<TokenUser | null>(null);
   connected = $state(false);
@@ -273,9 +273,9 @@ export class RoomSession {
 
   async #start() {
     // Rooms only come from the slash command; there is nothing to join without one.
-    const name = this.#deps.tokens.room;
-    if (!isValidRoom(name)) return this.#fail({ key: 'notice.noRoom', params: CMD }, false);
-    this.roomName = name;
+    const code = this.#deps.tokens.room;
+    if (!isRoomCode(code)) return this.#fail({ key: 'notice.noRoom', params: CMD }, false);
+    this.roomCode = code;
 
     const tok = await this.#token();
     if (!tok) return;
@@ -301,7 +301,7 @@ export class RoomSession {
 
   /** A token for this room, or null when the page already shows why not (or went to log in). */
   async #token(): Promise<TokenResponse | null> {
-    const { status, token } = await this.#deps.tokens.request(this.roomName);
+    const { status, token } = await this.#deps.tokens.request(this.roomCode);
     if (status === 401) {
       this.#deps.tokens.login();
       return null;

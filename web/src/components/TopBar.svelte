@@ -14,8 +14,8 @@
      title sits in the middle of the viewport whatever is beside it. -->
 <header class="top">
   <div class="left">
-    {#if rc.roomName}
-      <span class="muted room">{t('top.room', { name: rc.roomName })}</span>
+    {#if rc.roomCode}
+      <span class="muted room">{t('top.room', { name: rc.roomCode })}</span>
     {/if}
     <button
       type="button"

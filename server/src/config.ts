@@ -58,7 +58,7 @@ export interface Config {
   webDir: string;
   /** Secure cookie flag; off only for plain-http (dev) PUBLIC_URL. */
   secureCookies: boolean;
-  /** Slash command name, configurable so two deployments can share a guild. */
+  /** Slash command name, configurable so two installs can share a guild. */
   commandName: string;
   ingress: Ingress;
   /** Where telinha runs, as answered in setup; the wizard and the doctor read it, run does not. */

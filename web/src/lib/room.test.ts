@@ -87,9 +87,9 @@ describe('joining', () => {
     expect(s.fatal).toBeNull();
   });
 
-  test('a page without a room name asks for the slash command and fetches nothing', async () => {
-    for (const name of [null, 'not-a-room']) {
-      const tokens = new FixedTokens(name, { status: 200, token: tokenFor('100:a') });
+  test('a page without a room code asks for the slash command and fetches nothing', async () => {
+    for (const code of [null, 'not-a-room']) {
+      const tokens = new FixedTokens(code, { status: 200, token: tokenFor('100:a') });
       const { s } = await joined(tokens);
       expect(s.fatal).toMatchObject({ notice: { key: 'notice.noRoom' }, reload: false });
       expect(tokens.requests).toEqual([]);
@@ -100,7 +100,7 @@ describe('joining', () => {
     const { s, room } = await joined();
     expect(room.connects).toEqual([{ url: 'wss://livekit.test', token: 'token-100:a' }]);
     expect(s.connected).toBe(true);
-    expect(s.roomName).toBe(ROOM);
+    expect(s.roomCode).toBe(ROOM);
     expect(s.user?.name).toBe('Ana');
     expect(s.me?.identity).toBe('100:a');
   });
