@@ -10,7 +10,7 @@
     }
   },
   "caddy": {
-    "version": "2.11.4",
+    "version": "2.11.7",
     "xcaddy": "v0.4.7",
     "modules": {
       "github.com/caddy-dns/duckdns": "v0.5.0",
