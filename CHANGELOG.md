@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/sombraSoft/telinha/compare/v0.9.0...v0.9.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* admit the whole server when ROLE_ID is [@everyone](https://github.com/everyone) ([#97](https://github.com/sombraSoft/telinha/issues/97)) ([dc30822](https://github.com/sombraSoft/telinha/commit/dc3082243d62824b3b2212b5d310740cd94eebc5))
+
 ## [0.9.0](https://github.com/sombraSoft/telinha/compare/v0.8.0...v0.9.0) (2026-10-08)
 
 
