@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createRoleChecker, devIsMember } from '../src/roles.ts';
+import { createRoleChecker, devIsMember, restGetMember } from '../src/roles.ts';
 
 const err = (status: number) => Object.assign(new Error(`status ${status}`), { status });
 
@@ -56,4 +56,19 @@ test('devIsMember: only the dev user', async () => {
   const m = devIsMember('1');
   expect(await m('1')).toBe(true);
   expect(await m('2')).toBe(false);
+});
+
+test('restGetMember: every member holds @everyone (the guild id), which REST leaves out', async () => {
+  const paths: string[] = [];
+  const rest = {
+    get: async (path: string) => {
+      paths.push(path);
+      return { roles: ['R'] };
+    },
+  };
+  const getMember = restGetMember(rest as never, 'G');
+  expect(await getMember('1')).toEqual({ roles: ['R', 'G'] });
+  expect(paths).toEqual(['/guilds/G/members/1']);
+  const everyone = createRoleChecker({ getMember: async () => getMember('1'), roleId: 'G', ttlMs: 0 });
+  expect(await everyone('1')).toBe(true);
 });
