@@ -263,7 +263,10 @@ export function startBot(o: {
     if (!i.isChatInputCommand() || i.commandName !== c.commandName) return;
     try {
       const roles = i.member?.roles;
-      const hasRole = Array.isArray(roles) ? roles.includes(c.roleId) : Boolean(roles?.cache.has(c.roleId));
+      // A raw member's roles leave out @everyone (id = the guild's); the cached one has it.
+      const hasRole = Array.isArray(roles)
+        ? c.roleId === c.guildId || roles.includes(c.roleId)
+        : Boolean(roles?.cache.has(c.roleId));
       const member = i.member && 'displayName' in i.member ? i.member.displayName : null;
       await handleCommand(
         {

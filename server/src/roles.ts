@@ -31,8 +31,13 @@ export function createRoleChecker(opts: {
   };
 }
 
-export function restGetMember(rest: REST, guildId: string): GetMember {
-  return async (userId) => (await rest.get(Routes.guildMember(guildId, userId))) as { roles: string[] };
+// The REST member's roles leave out @everyone (whose id is the guild's), though
+// every member holds it: add it so ROLE_ID=@everyone admits the whole server.
+export function restGetMember(rest: Pick<REST, 'get'>, guildId: string): GetMember {
+  return async (userId) => {
+    const m = (await rest.get(Routes.guildMember(guildId, userId))) as { roles: string[] };
+    return { roles: [...m.roles, guildId] };
+  };
 }
 
 // DEV_USER mode: only the fake user is a member.
