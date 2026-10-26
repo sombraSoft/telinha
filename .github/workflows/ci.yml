@@ -111,9 +111,9 @@ jobs:
       # records (the action installs with --locked). The Actions cache is at its
       # size cap, so only pushes to main save the mise cache; PRs restore it.
       - id: mise
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
-          version: 2026.10.3
+          version: 2026.10.17
           install_args: bun
           cache_save: ${{ github.event_name == 'push' }}
       # Bun's package cache, under the same rule: every job restores the newest
@@ -171,9 +171,9 @@ jobs:
         with:
           persist-credentials: false
       - id: mise
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
-          version: 2026.10.3
+          version: 2026.10.17
           install_args: bun
           # The test job saves this entry (same tools, same key); a second
           # save would only race it.
@@ -271,9 +271,9 @@ jobs:
         with:
           persist-credentials: false
       - id: mise
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
-          version: 2026.10.3
+          version: 2026.10.17
           install_args: bun
           # The test job saves this entry (same tools, same key); a second
           # save would only race it.
@@ -648,9 +648,9 @@ jobs:
           persist-credentials: false
       # mise only, no tools yet: a --locked install of a tool mise.lock lacks
       # would fail before the freshness check below can say why.
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
-          version: 2026.10.3
+          version: 2026.10.17
           install: false
           install_args: bun github:jdx/jactionlint shellcheck hadolint editorconfig-checker biome
           cache_save: ${{ github.event_name == 'push' }}
@@ -726,9 +726,9 @@ jobs:
         with:
           persist-credentials: false
       - id: mise
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
-          version: 2026.10.3
+          version: 2026.10.17
           install_args: bun
           # The test job saves this entry (same tools, same key); a second
           # save would only race it.
@@ -763,9 +763,9 @@ jobs:
           persist-credentials: false
       # bun too: mise install runs mise.toml's postinstall hook, which is a bun
       # script (a no-op in CI).
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
-          version: 2026.10.3
+          version: 2026.10.17
           install_args: bun gitleaks
           cache_save: ${{ github.event_name == 'push' }}
       # A push whose previous tip is unknown here (zeros, or rewritten away)
