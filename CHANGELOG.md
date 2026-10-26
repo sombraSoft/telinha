@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/sombraSoft/telinha/compare/v0.9.1...v0.9.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **deps:** update go to v1.27.3 ([#103](https://github.com/sombraSoft/telinha/issues/103)) ([be63951](https://github.com/sombraSoft/telinha/commit/be63951512292f99987c128148e76e53d1e6eb45))
+
 ## [0.9.1](https://github.com/sombraSoft/telinha/compare/v0.9.0...v0.9.1) (2026-10-12)
 
 
