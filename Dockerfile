@@ -64,7 +64,7 @@ FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS bun-tool
 # without ports 80/443) and layer4, built from versions.json by scripts/caddy-build.ts.
 # Go cross-compiles, so this runs on the build platform; CADDY_OS/CADDY_ARCH
 # default to the target and release.yml overrides them for the Windows assets.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS caddy-build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS caddy-build
 ARG TARGETOS TARGETARCH
 ARG CADDY_OS=$TARGETOS
 ARG CADDY_ARCH=$TARGETARCH
