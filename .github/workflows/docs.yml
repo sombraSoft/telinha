@@ -29,9 +29,9 @@ jobs:
           persist-credentials: false
       # No cache: this deploys the site, and release.yml calls it, so it starts
       # from a clean runner like the release builds.
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          version: 2026.10.17
+          version: 2026.10.23
           install_args: bun
           cache: false
       - run: bun install --frozen-lockfile

@@ -77,9 +77,9 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          version: 2026.10.17
+          version: 2026.10.23
           install_args: bun
           cache: false
       # Every OS/CPU's native packages: the cross builds embed the target's OpenTUI library.
@@ -117,9 +117,9 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          version: 2026.10.17
+          version: 2026.10.23
           install_args: bun
           cache: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -181,9 +181,9 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          version: 2026.10.17
+          version: 2026.10.23
           install_args: bun
           cache: false
       # build-binary.ts imports the Solid plugin: install it from the lockfile
@@ -286,9 +286,9 @@ jobs:
             CADDY_ARCH=${{ matrix.arch }}
           outputs: type=local,dest=dist-caddy
           push: false
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          version: 2026.10.17
+          version: 2026.10.23
           install_args: bun
           cache: false
       - run: bun install --frozen-lockfile
@@ -327,7 +327,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -392,9 +392,9 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          version: 2026.10.17
+          version: 2026.10.23
           install_args: bun
           cache: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
