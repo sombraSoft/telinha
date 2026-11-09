@@ -10,7 +10,7 @@
     }
   },
   "caddy": {
-    "version": "2.11.7",
+    "version": "2.11.9",
     "xcaddy": "v0.4.7",
     "modules": {
       "github.com/caddy-dns/duckdns": "v0.5.0",
@@ -18,7 +18,7 @@
     }
   },
   "cloudflared": {
-    "version": "2026.9.3",
+    "version": "2026.10.7",
     "sha256": {
       "linux-amd64": "77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2",
       "linux-arm64": "aaeb2d7d0da3614634c7e03ab13487a1522c2e79165ed2929cfe23d5e95b326d",
