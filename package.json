@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.9.1",
   "type": "module",
-  "packageManager": "bun@1.4.2",
+  "packageManager": "bun@1.4.4",
   "workspaces": [
     "server",
     "web",
@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "@types/bun": "1.4.2",
+    "@types/bun": "1.4.4",
     "typescript": "^6.0.3"
   }
 }
