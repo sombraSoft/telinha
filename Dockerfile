@@ -9,7 +9,7 @@
 
 # The one Bun image every Bun stage uses, so Renovate and the version checks
 # see a single line.
-ARG BUN_IMAGE=oven/bun:1.4.2-alpine@sha256:d888c0ae6c86d7866ff10c5aafdd9077b36aee6455b33dd270fb93c0dd5cef6f
+ARG BUN_IMAGE=oven/bun:1.4.5-alpine@sha256:da816670775f4c2b4e990b6b1847cf5540dcdc721a42033dd331ce7a88ba6a3b
 
 FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS build
 WORKDIR /app
